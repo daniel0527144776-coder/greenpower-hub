@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.netlify.greenpower_hub",
+      "sha256_cert_fingerprints": [
+        "ED:04:24:81:48:A1:F9:30:27:97:C4:76:F7:64:78:33:D5:6B:2A:9C:1F:48:15:30:0C:F2:5D:16:3E:26:A6:13"
+      ]
+    }
+  }
+]
