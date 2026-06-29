@@ -2,6 +2,7 @@
   "name": "greenpower-hub",
   "compatibility_date": "2026-06-29",
   "assets": {
-    "directory": "."
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
   }
 }

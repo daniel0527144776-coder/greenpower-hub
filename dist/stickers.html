@@ -1,0 +1,1655 @@
+﻿<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>עורך מדבקות מקצועי - Green Power (Cloud Sync)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- טוען משקלים כבדים של Heebo עבור "שחור חזק" -->
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="qrcode.min.js"></script>
+    
+    <!-- Cloud sync via the Hub's Supabase session (no external SDK; same-origin token reuse) -->
+    <script>
+        const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
+        const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
+        let currentLayoutId = 'GreenPowerMain';
+        window.__skipNextCloudSave = false;
+
+        function _sbSession() { try { return JSON.parse(localStorage.getItem('gpsync_session') || 'null'); } catch (e) { return null; } }
+        function _sbSub(jwt) { try { return JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sub; } catch (e) { return null; } }
+        function _layoutKey() { return 'sticker_layout_' + currentLayoutId; }
+
+        function showSyncStatus(msg, colorClass) {
+            const el = document.getElementById('sync-status');
+            if (el) { el.innerText = msg; el.className = `text-sm font-bold transition-colors duration-300 ${colorClass}`; }
+        }
+
+        async function _pullLayout() {
+            const s = _sbSession();
+            if (!s || !s.access_token) { showSyncStatus('מקומי בלבד — התחבר במערכת לסנכרון', 'text-gray-500'); return; }
+            try {
+                showSyncStatus('טוען מהענן...', 'text-blue-600');
+                const r = await fetch(`${SB_URL}/rest/v1/hub_state?select=value&key=eq.${encodeURIComponent(_layoutKey())}`,
+                    { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token } });
+                if (r.status === 401) { showSyncStatus('יש להתחבר מחדש דרך הלוח', 'text-orange-500'); return; }
+                if (!r.ok) throw new Error('pull ' + r.status);
+                const rows = await r.json();
+                if (rows.length && rows[0].value && rows[0].value.elements && typeof window.restoreStickerElementsState === 'function') {
+                    window.__skipNextCloudSave = true;
+                    window.restoreStickerElementsState(rows[0].value.elements);
+                    if (typeof window.forceTodayDates === 'function') window.forceTodayDates();
+                    setTimeout(() => { window.__skipNextCloudSave = false; }, 700);
+                    showSyncStatus('מסונכרן ✓', 'text-green-600');
+                } else {
+                    showSyncStatus('מחובר לענן · תבנית חדשה', 'text-gray-500');
+                }
+            } catch (e) { console.error(e); showSyncStatus('שמירה מקומית (אין חיבור ענן)', 'text-gray-500'); }
+        }
+
+        function _debounce(fn, wait) { let t; return function (...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), wait); }; }
+
+        window.saveToCloud = _debounce(async (elementsState) => {
+            if (window.__skipNextCloudSave) return;
+            const s = _sbSession();
+            if (!s || !s.access_token) return; // local-only; localStorage handled by the editor
+            const uid = _sbSub(s.access_token); if (!uid) return;
+            try {
+                showSyncStatus('שומר...', 'text-orange-500');
+                const r = await fetch(`${SB_URL}/rest/v1/hub_state?on_conflict=user_id,key`, {
+                    method: 'POST',
+                    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+                    body: JSON.stringify({ user_id: uid, key: _layoutKey(), value: { elements: elementsState, lastModified: new Date().toISOString() }, updated_at: new Date().toISOString() })
+                });
+                if (!r.ok) throw new Error('save ' + r.status);
+                showSyncStatus('נשמר בענן ✓', 'text-green-600');
+            } catch (e) { console.error(e); showSyncStatus('נשמר מקומית (אין ענן)', 'text-gray-500'); }
+        }, 1200);
+
+        window.changeLayoutId = (newId) => { if (newId && newId !== currentLayoutId) { currentLayoutId = newId; _pullLayout(); } };
+
+        window.saveStickerRecord = async function (rec) {
+            let arr = [];
+            try { arr = JSON.parse(localStorage.getItem('gp_sticker_history') || '[]'); } catch (e) { arr = []; }
+            arr.unshift(rec);
+            if (arr.length > 200) arr.pop();
+            localStorage.setItem('gp_sticker_history', JSON.stringify(arr));
+            if (typeof showNotification === 'function') showNotification('המדבקה נשמרה לאוסף ✓');
+            const s = _sbSession(); if (!s || !s.access_token) return;
+            const uid = _sbSub(s.access_token); if (!uid) return;
+            try {
+                await fetch(`${SB_URL}/rest/v1/hub_state?on_conflict=user_id,key`, {
+                    method: 'POST',
+                    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+                    body: JSON.stringify({ user_id: uid, key: 'sticker_history', value: arr, updated_at: new Date().toISOString() })
+                });
+            } catch (e) { console.error('cloud sticker save failed', e); }
+        };
+
+        async function _pullStickerHistory() {
+            const s = _sbSession(); if (!s || !s.access_token) return;
+            try {
+                const r = await fetch(`${SB_URL}/rest/v1/hub_state?select=value&key=eq.sticker_history`, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token } });
+                if (r.ok) { const rows = await r.json(); if (rows.length && Array.isArray(rows[0].value)) localStorage.setItem('gp_sticker_history', JSON.stringify(rows[0].value)); }
+            } catch (e) { /* offline */ }
+        }
+
+        window.saveDefaultLayout = async function(elementsState) {
+            localStorage.setItem('stickerDefaultLayout', JSON.stringify(elementsState));
+            const s = _sbSession(); if (!s || !s.access_token) { showSyncStatus('ברירת מחדל נשמרה מקומית ✓', 'text-green-600'); return; }
+            const uid = _sbSub(s.access_token); if (!uid) return;
+            try {
+                await fetch(`${SB_URL}/rest/v1/hub_state?on_conflict=user_id,key`, {
+                    method: 'POST',
+                    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+                    body: JSON.stringify({ user_id: uid, key: 'sticker_default_' + currentLayoutId, value: { elements: elementsState }, updated_at: new Date().toISOString() })
+                });
+                showSyncStatus('ברירת מחדל נשמרה בענן ✓', 'text-green-600');
+            } catch(e) { showSyncStatus('ברירת מחדל נשמרה מקומית ✓', 'text-green-600'); }
+        };
+
+        window._getDefaultLayout = async function() {
+            const s = _sbSession();
+            if (s && s.access_token) {
+                try {
+                    const r = await fetch(`${SB_URL}/rest/v1/hub_state?select=value&key=eq.${encodeURIComponent('sticker_default_' + currentLayoutId)}`, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token } });
+                    if (r.ok) { const rows = await r.json(); if (rows.length && rows[0].value && rows[0].value.elements) return rows[0].value.elements; }
+                } catch(e) {}
+            }
+            const saved = localStorage.getItem('stickerDefaultLayout');
+            if (saved) try { return JSON.parse(saved); } catch(e) {}
+            return null;
+        };
+
+        window.addEventListener('load', () => { setTimeout(_pullLayout, 500); setTimeout(_pullStickerHistory, 700); });
+    </script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            green: '#10B981',
+                            'green-dark': '#059669',
+                            'light': '#ECFDF5',
+                            'text': '#000000', // Changed to black
+                        },
+                        dark: {
+                            'primary': '#000000', 
+                            'secondary': '#1f1f1f', 
+                            'light': '#333333', 
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Heebo', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Heebo', sans-serif;
+            background-color: #f0f2f5;
+        }
+
+        .sticker-wrapper {
+            width: 100%;
+            max-width: 1000px; 
+            aspect-ratio: 2 / 1; 
+            position: relative;
+            background-color: white;
+            box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15);
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+            margin: 0 auto;
+        }
+
+        #sticker-to-capture {
+             color: #000000 !important; /* Force Black */
+             font-weight: 900 !important; /* Force Extra Bold/Heavy */
+             background-color: #ffffff;
+        }
+        
+        /* כל הטקסטים בתוך המדבקה יהיו שחורים ועבים */
+        #sticker-to-capture h1, 
+        #sticker-to-capture span, 
+        #sticker-to-capture div, 
+        #sticker-to-capture p {
+             font-weight: 900;
+             color: #000000;
+        }
+
+        [data-editable="true"], div[id*="placeholder"] {
+            cursor: grab;
+            touch-action: none;
+            outline: none;
+            transition: border 0.1s ease-in-out;
+            border-radius: 4px;
+            padding: 2px 4px;
+            position: relative;
+            border: 1px dashed transparent;
+        }
+
+        /* אזור לחיץ לתמונות/QR */
+        div[id*="placeholder"] {
+            cursor: pointer;
+        }
+
+        [data-editable="true"]:hover, div[id*="placeholder"]:hover {
+            background-color: rgba(16, 185, 129, 0.08);
+            border: 1px dashed #10B981;
+        }
+
+        /* מצב עריכה — לחיצה כפולה */
+        [data-editable="true"].editing {
+            cursor: text !important;
+            background-color: rgba(59, 130, 246, 0.08) !important;
+            border: 1.5px solid #3B82F6 !important;
+            outline: none;
+        }
+
+        /* רמז ויזואלי: "לחץ פעמיים לעריכה" */
+        [data-editable="true"]:hover::after {
+            content: '✎';
+            position: absolute;
+            top: -14px;
+            right: 2px;
+            font-size: 10px;
+            color: #10B981;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        [data-editable="true"].editing::after {
+            content: none;
+        }
+        
+        .selected-element {
+            box-shadow: 0 0 0 2px #3B82F6 !important; 
+            border-color: #3B82F6 !important;
+            background-color: rgba(59, 130, 246, 0.05) !important;
+            z-index: 50;
+        }
+        
+        .dragging {
+            opacity: 0.7;
+            z-index: 1000;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+
+        /* מחיקת גלילה בתוך האלמנטים */
+        [data-editable="true"]::-webkit-scrollbar {
+            display: none;
+        }
+        
+        div[id*="icon-placeholder"] {
+            width: 3.5rem; 
+            height: 3.5rem; 
+        }
+         #qr-placeholder {
+            width: 8rem; 
+            height: 8rem; 
+        }
+        
+    </style>
+</head>
+<body class="flex flex-col items-center min-h-screen p-4 sm:p-6 lg:p-8">
+
+    <!-- Cloud Bar -->
+    <div class="w-full max-w-5xl bg-white p-3 rounded-xl shadow-sm mb-4 flex justify-between items-center border border-blue-100">
+        <div class="flex items-center gap-2">
+            <span class="text-blue-800 font-bold">☁️ שמירה בענן:</span>
+            <input type="text" id="layout-id-input" value="GreenPowerMain" class="border border-gray-300 rounded px-2 py-1 text-sm w-40" title="שנה שם כדי ליצור עיצוב חדש או לטעון עיצוב אחר">
+            <button id="load-layout-btn" class="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700">טען/צור</button>
+        </div>
+        <button id="save-default-btn" class="text-sm font-bold bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg transition">💾 שמור ברירת מחדל</button>
+        <button id="top-reset-btn" class="text-sm font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg transition">↩️ אפס לברירת מחדל</button>
+        <a class='text-sm font-bold text-blue-700 hover:text-blue-900 ml-3' href='/' id='back-to-hub'>← חזרה ללוח</a>
+        <div id="sync-status" class="text-sm font-bold text-gray-400">מתחבר...</div>
+    </div>
+
+    <!-- Notification Element -->
+    <div id="notification" class="fixed top-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-md transition-opacity duration-300 opacity-0 z-50 font-bold">
+    </div>
+
+    <!-- Sticker Area -->
+    <div class="sticker-wrapper">
+        <div id="sticker-to-capture" class="w-full h-full flex flex-row bg-white">
+            
+            <!-- Main content on the right -->
+            <div class="flex-grow flex flex-col p-5 pl-4 justify-between h-full">
+                <!-- Logo and slogan section -->
+                <div class="flex flex-col items-start gap-1 pb-2 border-b-2 border-black">
+                    <div class="flex w-full items-center justify-center gap-4">
+                        <div class="flex-grow flex flex-col items-center text-center">
+                            
+                            <!-- Header Container: Title -->
+                            <div class="flex items-center justify-center w-full">
+                                <h1 id="main-title" data-editable="true" contenteditable="false" class="text-6xl lg:text-7xl font-black leading-tight tracking-tight">Green Power</h1>
+                            </div>
+                            
+                            <p id="slogan" data-editable="true" contenteditable="false" class="text-2xl lg:text-3xl font-black mt-1 tracking-wide">הבית שלכם לאנרגיה חשמלית.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- New Battery Specs section — flexbox טהור, תואם html2canvas -->
+                <div class="flex flex-col mt-2 flex-1 min-h-0" id="new-battery-specs">
+                    <!-- Row 1 -->
+                    <div class="flex gap-x-8 flex-1 min-h-0">
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-capacity" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">קיבולת:</span>
+                            <span id="capacity-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-voltage" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">מתח:</span>
+                            <span id="voltage-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                    </div>
+                    <!-- Row 2 -->
+                    <div class="flex gap-x-8 flex-1 min-h-0">
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-discharge" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">זרם פריקה:</span>
+                            <span id="discharge-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-power" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">הספק:</span>
+                            <span id="power-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                    </div>
+                    <!-- Row 3 -->
+                    <div class="flex gap-x-8 flex-1 min-h-0">
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-c-rate" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">קצב C:</span>
+                            <span id="c-rate-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-bms" class="text-lg font-black shrink-0" dir="ltr" data-editable="true" contenteditable="false">BMS:</span>
+                            <span id="bms-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                    </div>
+                    <!-- Row 4 -->
+                    <div class="flex gap-x-8 flex-1 min-h-0">
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-cells" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">תאים:</span>
+                            <span id="cells-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-sku" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">מק"ט:</span>
+                            <span id="sku-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                    </div>
+                    <!-- Row 5 -->
+                    <div class="flex gap-x-8 flex-1 min-h-0">
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-production" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">ת. ייצור:</span>
+                            <span id="production-date-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-warranty" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">תוקף אחריות:</span>
+                            <span id="warranty-end-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Repaired Battery Specs Section -->
+                <div class="flex-grow flex-col mt-4 hidden justify-between h-full" id="repaired-battery-specs-on-sticker">
+                    <div class="flex flex-col gap-2 text-lg h-full relative">
+                        
+                        <div class="grid grid-cols-2 gap-4 flex-grow min-h-0">
+                             <div class="border-2 border-black p-2 rounded-lg bg-red-50 flex flex-col justify-start h-full overflow-hidden">
+                                <span id="label-fault-desc" class="font-black underline text-xl mb-1 block" data-editable="true" contenteditable="false">תיאור תקלה:</span>
+                                <div id="fault-description-display" data-editable="true" contenteditable="false" class="text-lg leading-snug font-black whitespace-pre-wrap break-words"></div>
+                            </div>
+                            
+                            <div class="border-2 border-black p-2 rounded-lg bg-green-50 flex flex-col justify-start h-full overflow-hidden">
+                                <span id="label-repair-details" class="font-black underline text-xl mb-1 block" data-editable="true" contenteditable="false">פירוט התיקון שבוצע:</span>
+                                <div id="repair-details-display" data-editable="true" contenteditable="false" class="text-lg leading-snug font-black whitespace-pre-wrap break-words"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-1 flex-shrink-0 mt-1 border-t-2 border-dashed border-black pt-2">
+                             <div class="flex justify-between items-center border-b border-black pb-1">
+                                <div class="flex items-center gap-2">
+                                    <span id="label-repair-date" class="font-black text-xl" data-editable="true" contenteditable="false">תאריך תיקון:</span>
+                                    <span id="repair-date-display" data-editable="true" contenteditable="false" class="text-2xl font-black"></span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span id="label-repair-warranty" class="font-black text-xl" data-editable="true" contenteditable="false">תוקף אחריות:</span>
+                                    <span id="repair-warranty-end-display" data-editable="true" contenteditable="false" class="text-2xl font-black"></span>
+                                </div>
+                             </div>
+
+                             <div class="flex items-center justify-center py-1">
+                                <span id="label-battery-model" class="font-black text-xl ml-2" data-editable="true" contenteditable="false">דגם סוללה:</span>
+                                <span id="battery-model-display" data-editable="true" contenteditable="false" class="text-3xl font-black tracking-wide">---</span>
+                             </div>
+
+                             <div id="client-info-on-sticker" class="flex justify-between items-end mt-1 hidden w-full border-t-2 border-black pt-1">
+                                 <div class="flex flex-col items-start flex-grow">
+                                     <span id="label-client-for" class="font-black text-sm text-black uppercase" data-editable="true" contenteditable="false">שם לקוח:</span>
+                                     <span id="client-name-display" class="text-4xl font-black leading-none tracking-tight text-black" data-editable="true" contenteditable="false"></span>
+                                 </div>
+                                 <div class="flex flex-col items-end min-w-fit">
+                                     <span id="label-client-ref" class="font-black text-sm text-black uppercase" data-editable="true" contenteditable="false">מספר הזמנה:</span>
+                                     <span id="client-ref-display" class="text-2xl font-black leading-none" data-editable="true" contenteditable="false"></span>
+                                 </div>
+                             </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            
+            <!-- Side content on the left -->
+            <div class="w-1/3 max-w-[340px] flex flex-col items-center justify-between p-4 border-r-2 border-black bg-gray-50">
+                <div class="flex flex-col items-center w-full mb-2 mt-2"> 
+                    <div id="qr-title" data-editable="true" contenteditable="false" class="text-3xl font-black mb-3 text-center text-black"> 
+                        סרוק לאחריות
+                    </div>
+                    <div id="qr-placeholder" class="cursor-pointer relative flex justify-center items-center bg-white rounded-xl shadow-md transform transition hover:scale-105 border-2 border-black">
+                        <img id="qr-image" src="" alt="QR Code" class="p-1 object-contain h-full w-full">
+                    </div>
+                </div>
+                
+                <div class="flex flex-col items-center w-full mb-2 text-center mt-4 flex-grow justify-center"> 
+                    <div id="manufacturer-info" data-editable="true" contenteditable="false" class="text-lg leading-snug mb-2 font-black text-black"> 
+                        <p class="font-black text-2xl mb-1">מעבדת Green Power</p>
+                        <p class="text-xl">עובדיה מברטנורא 12, אלעד, ישראל</p>
+                        <p class="text-xl">053-3224879 | Made in Israel</p>
+                    </div>
+                </div>
+
+                 <div class="w-full mb-4 text-center px-2"> 
+                     <p id="standard-info" data-editable="true" contenteditable="false" class="text-base font-black leading-tight break-words text-black"> 
+                         מיוצר בהתאם לתקן IEC 62133, תקן הבטיחות המחמיר בעולם לסוללות ליתיום.
+                     </p>
+                 </div>
+
+                <div class="flex flex-col items-center w-full mt-auto">
+                     <div class="w-full border-t-2 border-black my-3"></div>
+                    <div class="flex justify-center items-center gap-4 flex-wrap">
+                        <div id="icon-placeholder-1" class="w-14 h-14 cursor-pointer rounded flex items-center justify-center p-0.5 bg-white border-2 border-gray-900 shadow-sm">
+                            <img id="icon-img-1" class="h-full w-full object-contain" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"><path d="M73.5,60a30,30,1,1,0-60,24,24,0,1,0,0,48,6,6,0,1,1,0-12,12,12,0,1,1,0-24,30,30,0,0,1,0,48Z"/><path d="M26.5,60a30,30,0,0,1,0-60h18a30,30,0,0,0,0,60Z"/></svg>' alt="CE">
+                        </div>
+                        <div id="icon-placeholder-2" class="w-14 h-14 cursor-pointer rounded flex items-center justify-center p-0.5 bg-white border-2 border-gray-900 shadow-sm">
+                            <img id="icon-img-2" class="h-full w-full object-contain" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><circle cx="64" cy="64" r="56" fill="none" stroke="%23C00" stroke-width="10"/><path fill="%23C00" d="M37 36h18v70H37z"/><path fill="%23C00" d="M55 36h36a18 18 0 010 36H73v34H55z"/></svg>' alt="UL">
+                        </div>
+                        <div id="icon-placeholder-3" class="w-14 h-14 cursor-pointer rounded flex items-center justify-center p-0.5 bg-white border-2 border-gray-900 shadow-sm">
+                           <img id="icon-img-3" class="h-full w-full object-contain" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="%23fff" viewBox="0 0 350 150"><rect width="350" height="150" fill="%23005eb8" rx="10"/><path d="M50 40 H68 V110 H50z M85 40 H103 V95 H91 V85 H85z M85 75 H91 V65 H85z M85 55 H91 V45 H85z M115 40 H148 V55 H130 V65 H148 V80 H130 V90 H148 V105 H115z M165 40 H200 C220 40 220 110 200 110 H165z M165 50 H195 C205 50 205 100 195 100 H165z"/><g transform="translate(230 50)"><rect width="80" height="8"/><rect y="20" width="80" height="8"/><circle cx="90" cy="24" r="10"/></g></svg>' alt="IEC">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Controls Area -->
+    <div class="controls w-full max-w-5xl mt-8 p-6 bg-white rounded-xl shadow-lg flex flex-col gap-8 mb-10">
+        
+        <!-- Element Design Control -->
+        <div id="element-design-controls" class="control-section bg-blue-50 p-4 rounded-xl border border-blue-200 hidden">
+            <h3 class="text-xl font-bold mb-2 text-blue-800 flex items-center gap-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                עיצוב אלמנט נבחר
+            </h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">גודל גופן (px)</label>
+                    <input type="number" id="design-font-size" class="w-full p-2 border rounded bg-white" min="8" max="100" step="1">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">רוחב (px)</label>
+                    <input type="number" id="design-width" class="w-full p-2 border rounded bg-white" min="10" max="800" step="5">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">הדגשה</label>
+                    <select id="design-font-weight" class="w-full p-2 border rounded bg-white">
+                        <option value="900" selected>שחור חזק (900)</option>
+                        <option value="bold">מודגש (700)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">יישור טקסט</label>
+                    <div class="flex border rounded bg-white overflow-hidden">
+                        <button class="flex-1 py-2 hover:bg-gray-100" onclick="setTextAlign('right')">R</button>
+                        <button class="flex-1 py-2 hover:bg-gray-100 border-x" onclick="setTextAlign('center')">C</button>
+                        <button class="flex-1 py-2 hover:bg-gray-100" onclick="setTextAlign('left')">L</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top row: Sticker Type & History -->
+         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="control-section">
+                <h3 class="text-xl font-bold mb-4 text-dark-primary">בחר סוג מדבקה</h3>
+                <div class="flex justify-center gap-2 bg-gray-100 p-1 rounded-xl">
+                    <button class="mode-button active new-mode w-full py-3 px-4 rounded-lg font-semibold text-white bg-brand-green shadow-md transition-all duration-300" data-mode="new">סוללה חדשה</button>
+                    <button class="mode-button repair-mode w-full py-3 px-4 rounded-lg font-semibold text-dark-secondary hover:bg-gray-200 transition-all duration-300" data-mode="repair">סוללה לאחר תיקון</button>
+                </div>
+            </div>
+            <div class="control-section">
+                <h3 class="text-xl font-bold mb-4 text-dark-primary">היסטוריית מדבקות</h3>
+                <button id="history-btn" class="w-full h-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-xl font-semibold transition-colors duration-200">
+                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>פתח היסטוריה</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Simplified Client Details (For Sticker Only) -->
+        <div class="control-section mt-4 bg-orange-50 p-4 rounded-xl border border-orange-200">
+             <div class="flex justify-between items-center mb-3">
+                 <h3 class="text-lg font-bold text-orange-900">פרטי לקוח (להדפסה על המדבקה)</h3>
+             </div>
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div>
+                    <label id="client-name-label" for="client-name-input" class="font-semibold text-sm text-dark-light mb-1 text-right block">שם לקוח:</label>
+                    <input type="text" id="client-name-input" class="w-full p-2 border border-gray-300 rounded-lg text-sm" placeholder="שם מלא / עסק">
+                 </div>
+                 <div>
+                    <label id="client-ref-label" for="client-ref-input" class="font-semibold text-sm text-dark-light mb-1 text-right block">מספר הזמנה:</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="client-ref-input" class="w-full p-2 border border-gray-300 rounded-lg text-sm" placeholder="לדוגמה: ORD-25-1000">
+                        <button id="auto-generate-ref-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap" title="צור מספר הזמנה חדש">
+                           הזמנה חדשה
+                        </button>
+                    </div>
+                 </div>
+             </div>
+        </div>
+
+        <!-- Automatic Spec Selection -->
+        <div id="new-battery-controls" class="control-section mt-4">
+            <h3 class="text-xl font-bold mb-4 text-dark-primary">מפרט סוללה חדשה</h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="grid grid-cols-2 gap-2">
+                     <div>
+                        <label for="voltage-select" class="block text-sm font-medium text-gray-700 mb-1">מתח</label>
+                        <select id="voltage-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
+                            <option value="48">48V</option>
+                            <option value="52">52V</option>
+                            <option value="60" selected>60V</option>
+                            <option value="72">72V</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="capacity-select" class="block text-sm font-medium text-gray-700 mb-1">קיבולת (Ah)</label>
+                        <select id="capacity-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
+                            <!-- Populated dynamically by JS (5Ah to 200Ah) -->
+                        </select>
+                    </div>
+                </div>
+                 <div>
+                    <label for="cells-select" class="block text-sm font-medium text-gray-700 mb-1">סוג תאים</label>
+                    <select id="cells-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
+                        <option value="EVE 21700 50E" selected>EVE 21700 50E (3C)</option>
+                        <option value="TP 21700 50XG">TP 21700 50XG (18C)</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-1">
+                    <div>
+                        <label for="warranty-duration-input" class="block text-sm font-medium text-gray-700 mb-1">אחריות (חודשים)</label>
+                        <input type="number" id="warranty-duration-input" value="12" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
+                    </div>
+                </div>
+                <!-- שדה זרם פריקה מוסתר כי הוא מחושב אוטומטית עכשיו, אבל נשמר לצורכי לוגיקה -->
+                <div class="hidden">
+                      <label for="discharge-input" class="block text-sm font-medium text-gray-700 mb-1">זרם פריקה (A)</label>
+                      <input type="number" id="discharge-input" value="60" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
+                </div>
+            </div>
+             <div class="mt-4">
+                <label for="bms-select" class="block text-sm font-medium text-gray-700 mb-1">BMS (בחר זרם רציף)</label>
+                <select id="bms-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
+                    <option>DALY 40A</option>
+                    <option>DALY 80A</option>
+                    <option>DALY 120A</option>
+                    <option>DALY 200A</option>
+                    <option>JK 150A</option>
+                    <option>JK 200A</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Repaired Battery Controls -->
+        <div id="repaired-battery-controls" class="control-section hidden mt-4">
+             <h3 class="text-xl font-bold mb-4 text-dark-primary border-b pb-2">פרטי תיקון</h3>
+             
+             <div class="flex flex-col gap-4">
+                 <!-- Model Number Input -->
+                 <div>
+                    <label for="battery-model-input" class="font-semibold text-lg text-dark-light mb-2 text-right">דגם סוללה:</label>
+                    <input type="text" id="battery-model-input" class="w-full p-2 border border-black rounded-lg" placeholder="לדוגמה: TITAN 60V 20Ah">
+                </div>
+
+                 <div class="grid grid-cols-2 gap-4">
+                      <div>
+                        <label for="repair-date-input" class="font-semibold text-lg text-dark-light mb-2 text-right">תאריך תיקון:</label>
+                        <input type="text" id="repair-date-input" class="w-full p-2 border border-black rounded-lg" placeholder="לדוגמה: 25/09/2025">
+                    </div>
+                      <div>
+                        <label for="repair-warranty-duration-input" class="font-semibold text-lg text-dark-light mb-2 text-right">אחריות לתיקון (חודשים):</label>
+                        <input type="number" id="repair-warranty-duration-input" value="6" class="w-full p-2 border border-black rounded-lg">
+                    </div>
+                </div>
+                 <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="fault-description-input" class="font-semibold text-lg text-dark-light mb-2 text-right">תיאור התקלה:</label>
+                        <textarea id="fault-description-input" class="w-full p-2 border border-black rounded-lg" rows="3"></textarea>
+                    </div>
+                    <div>
+                        <label for="repair-details-input" class="font-semibold text-lg text-dark-light mb-2 text-right">פירוט התיקון:</label>
+                        <textarea id="repair-details-input" class="w-full p-2 border border-black rounded-lg" rows="3"></textarea>
+                    </div>
+                </div>
+                 <div>
+                    <label for="common-repair-select" class="font-semibold text-lg text-dark-light mb-2 text-right">הוספת תיקון נפוץ:</label>
+                    <div class="flex gap-2">
+                        <select id="common-repair-select" class="w-full p-2 border border-black rounded-lg bg-gray-50">
+                            <option value="">-- בחר מהרשימה --</option>
+                            <!-- (Common repairs list...) -->
+                            <option value="bms_replacement">החלפת BMS</option>
+                            <option value="row_replacement">החלפת שורת תאים (אחת או יותר)</option>
+                            <option value="row_repair">תיקון שורה (ללא החלפה)</option>
+                            <option value="row_repair_1">שיקום שורת תאים אחת (החלפת תאים)</option>
+                            <option value="row_repair_2">שיקום 2 שורות תאים (החלפת תאים)</option>
+                            <option value="row_repair_3">שיקום 3 שורות תאים (החלפת תאים)</option>
+                            <option value="reinforced_fuse_repair">תיקון פיוז פנימי מחוזק</option>
+                            <option value="cell_balancing">איזון תאים</option>
+                            <option value="cell_replacement">החלפת תא פגום</option>
+                            <option value="contact_repair">תיקון מגעים רופפים (ללא החלפת תאים)</option>
+                            <option value="connector_replacement">החלפת קונקטור טעינה/פריקה</option>
+                            <option value="fuse_replacement">החלפת פיוז</option>
+                            <option value="water_damage">טיפול בנזקי מים/קורוזיה</option>
+                            <option value="software_update">עדכון/כיול תוכנת BMS</option>
+                            <option value="housing_repair">תיקון מארז פלסטיק</option>
+                            <option value="general_checkup">בדיקה ותחזוקה כללית</option>
+                            <option value="wiring_repair">תיקון חיווט פנימי</option>
+                            <option value="capacity_test">בדיקת קיבולת ואבחון</option>
+                            <option value="overheating_repair">טיפול בבעיית התחממות יתר</option>
+                            <option value="short_circuit_repair">תיקון קצר חשמלי</option>
+                            <option value="battery_upgrade">שדרוג קיבולת/מתח סוללה</option>
+                            <option value="isolation_repair">תיקון בידוד פנימי</option>
+                            <option value="switch_replacement">החלפת מפסק ההפעלה</option>
+                            <option value="led_indicator_repair">תיקון חיווי LED</option>
+                            <option value="voltage_calibration">כיול חיישני מתח</option>
+                            <option value="custom">אחר (תיאור מותאם אישית)</option>
+                        </select>
+                        <button id="add-repair-btn" class="bg-green-500 text-white px-4 rounded-lg hover:bg-green-600">הוסף</button>
+                        <button id="clear-repairs-btn" class="bg-red-500 text-white px-4 rounded-lg hover:bg-red-600">נקה</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Editing QR -->
+        <div class="control-section mt-4">
+            <h3 class="text-xl font-bold mb-4 text-dark-primary">קישור QR (נוצר אוטומטית או ידני)</h3>
+            <div class="flex flex-col sm:flex-row items-center gap-4">
+                <input type="text" id="qr-data-input" class="flex-grow w-full p-3 border border-gray-300 rounded-lg bg-white text-gray-800 text-left" placeholder="הזן קישור ידני ל-QR">
+            </div>
+        </div>
+        
+        <!-- Downloading -->
+        <div class="control-section mt-4">
+            <h3 class="text-xl font-bold mb-4 text-dark-primary">הורדת קובץ PDF (300 DPI)</h3>
+            <div class="flex justify-center">
+                 <button class="action-button download-btn flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-lg font-semibold transition-colors duration-200" data-format="pdf">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>
+                    <span>הורד PDF בלבד</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- (Modals remain the same) -->
+    <!-- Icon Library Modal -->
+    <div id="icon-library-modal" class="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 transition-all duration-300 invisible opacity-0">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[90%] flex flex-col p-6 m-4">
+            <div class="flex justify-between items-center pb-4 border-b border-gray-200">
+                <h2 class="text-2xl font-bold text-dark-primary">הספרייה שלי</h2>
+                <button class="close-modal-btn text-3xl text-gray-400 hover:text-gray-800 transition-colors duration-200">&times;</button>
+            </div>
+            <div class="icon-grid flex-grow grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 p-4 overflow-y-auto">
+                
+            </div>
+            <div class="mt-auto pt-4 border-t border-gray-200 flex justify-center items-center">
+                <label class="bg-dark-primary hover:bg-black text-white py-3 px-6 rounded-lg font-semibold transition-colors duration-200 cursor-pointer flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    <span>העלאת סמל חדש</span>
+                    <input type="file" id="modal-upload-input" accept="image/*" class="hidden">
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div id="history-modal" class="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 transition-all duration-300 invisible opacity-0">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[90%] flex flex-col p-6 m-4">
+            <div class="flex justify-between items-center pb-4 border-b border-gray-200">
+                <h2 class="text-2xl font-bold text-dark-primary">היסטוריית מדבקות</h2>
+                <button class="close-modal-btn text-3xl text-gray-400 hover:text-gray-800 transition-colors duration-200">&times;</button>
+            </div>
+            <div id="history-list" class="flex-grow overflow-y-auto pt-4">
+                
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            let currentIconTarget = null;
+            let userIconLibrary = [];
+            let stickerHistory = [];
+            let skuCounter = 1;
+            let orderCounter = 1000; 
+            
+            let currentSelectedElement = null;
+            const designControls = document.getElementById('element-design-controls');
+            const designFontSize = document.getElementById('design-font-size');
+            const designWidth = document.getElementById('design-width');
+            const designFontWeight = document.getElementById('design-font-weight');
+
+            const layoutIdInput = document.getElementById('layout-id-input');
+            const loadLayoutBtn = document.getElementById('load-layout-btn');
+            
+            loadLayoutBtn.addEventListener('click', () => {
+                const newId = layoutIdInput.value.trim();
+                if(newId && window.changeLayoutId) {
+                    window.changeLayoutId(newId);
+                }
+            });
+
+            document.getElementById('save-default-btn').addEventListener('click', () => {
+                if(confirm("לשמור את העיצוב הנוכחי כברירת מחדל לאיפוס?")) {
+                    const elementsState = [];
+                    sticker.querySelectorAll('[data-editable="true"], div[id*="placeholder"], span[id^="label-"], span[id$="-display"]').forEach(el => {
+                        if(!el.id) return;
+                        const state = { id: el.id, transform: el.style.transform || '', width: el.style.width || '', height: el.style.height || '', fontSize: el.style.fontSize || '', fontWeight: el.style.fontWeight || '', textAlign: el.style.textAlign || '' };
+                        if (el.hasAttribute('contenteditable')) state.innerHTML = el.innerHTML;
+                        const img = el.tagName === 'IMG' ? el : el.querySelector('img');
+                        if (img) { let s = img.src; state.imgSrc = s; }
+                        elementsState.push(state);
+                    });
+                    if (window.saveDefaultLayout) window.saveDefaultLayout(elementsState);
+                }
+            });
+
+            document.getElementById('top-reset-btn').addEventListener('click', async () => {
+                if(confirm("לחזור לברירת המחדל השמורה?")) {
+                    localStorage.removeItem('stickerElementStates');
+                    const s = _sbSession();
+                    if (s && s.access_token) {
+                        const uid = _sbSub(s.access_token);
+                        if (uid) {
+                            try {
+                                await fetch(`${SB_URL}/rest/v1/hub_state?user_id=eq.${uid}&key=eq.${encodeURIComponent(_layoutKey())}`, {
+                                    method: 'DELETE',
+                                    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token }
+                                });
+                            } catch(e) {}
+                        }
+                    }
+                    const defaultElements = await window._getDefaultLayout();
+                    if (defaultElements) {
+                        localStorage.setItem('stickerElementStates', JSON.stringify(defaultElements));
+                        // שמור גם בענן כדי ש-_pullLayout לא ידרוס את הברירת המחדל
+                        if (window.saveToCloud) await window.saveToCloud(defaultElements);
+                    }
+                    location.reload();
+                }
+            });
+            
+            // Common repairs data (same as before)
+            const commonRepairs = {
+                bms_replacement: { fault: "BMS תקול, הסוללה אינה נטענת/מתפרקת כראוי.", repair: "הוחלף BMS, בוצע איזון תאים ובדיקת תקינות כללית." },
+                row_repair_1: { fault: "זוהתה חריגה במתח שורת תאים אחת (תאים פגומים).", repair: "הוחלפו תאים פגומים בשורה ובוצע איזון מתחים." },
+                row_repair_2: { fault: "זוהתה חריגה במתח ב-2 שורות תאים (תאים פגומים).", repair: "הוחלפו תאים פגומים בשורות אלו ובוצע איזון מתחים." },
+                row_repair_3: { fault: "זוהתה חריגה במתח ב-3 שורות תאים (תאים פגומים).", repair: "הוחלפו תאים פגומים בשורות אלו ובוצע איזון מתחים." },
+                reinforced_fuse_repair: { fault: "פיוז פנימי נשרף עקב עומס יתר רגעי.", repair: "הותקן פיוז פנימי מחוזק ועמיד יותר לעומסים גבוהים." },
+                cell_balancing: { fault: "חוסר איזון בין התאים גורם לירידה בביצועי הסוללה.", repair: "בוצע איזון תאים מבוקר להשבת הקיבולת האפקטיבית." },
+                contact_repair: { fault: "מגע רופף/מנותק באחד החיבורים הפנימיים.", repair: "החיבור הרופף הולחם מחדש, המגעים נוקו ונבדקו." },
+                connector_replacement: { fault: "קונקטור טעינה או פריקה שבור או שחוק.", repair: "הקונקטור הפגום הוחלף בחדש, בוצעה בדיקת רציפות." },
+                fuse_replacement: { fault: "פיוז שרוף גורם לנתק מוחלט בסוללה.", repair: "הפיוז השרוף הוחלף בפיוז חדש בעל ערך מתאים." },
+                water_damage: { fault: "חדירת נוזלים גרמה לקורוזיה וקצרים.", repair: "נוקו שאריות קורוזיה, הוחלפו רכיבים שניזוקו ונאטם המארז." },
+                software_update: { fault: "תוכנת BMS אינה מעודכנת או מכוילת.", repair: "בוצע עדכון גרסה לתוכנת ה-BMS וכיול מחדש של הפרמטרים." },
+                housing_repair: { fault: "שבר או סדק במארז הסוללה.", repair: "המארז תוקן או הוחלף, בוצעה בדיקת אטימות." },
+                general_checkup: { fault: "הסוללה הגיעה לבדיקה ותחזוקה שגרתית.", repair: "בוצעה בדיקה כללית, ניקוי מגעים ואיזון תאים קל." },
+                wiring_repair: { fault: "נזק או נתק בחיווט הפנימי של הסוללה.", repair: "החיווט הפגום תוקן או הוחלף, בוצע בידוד מחדש." },
+                capacity_test: { fault: "ירידה בטווח הנסיעה, חשד לאובדן קיבולת.", repair: "בוצעה בדיקת קיבולת מבוקרת לאבחון מצב התאים." },
+                overheating_repair: { fault: "הסוללה מתחממת יתר על המידה בזמן עבודה.", repair: "נבדקו ואותרו גורמי ההתחממות, בוצע תיקון ושיפור אוורור." },
+                short_circuit_repair: { fault: "קצר פנימי גורם להתרוקנות מהירה או נתק.", repair: "אותר מקור הקצר, בודד ותוקן, הוחלפו רכיבים שניזוקו." },
+                battery_upgrade: { fault: "בקשת לקוח לשדרוג הסוללה הקיימת.", repair: "הסוללה שודרגה עם תאים בעלי קיבולת גבוהה יותר." },
+                isolation_repair: { fault: "בידוד פנימי פגום בין התאים או הרכיבים.", repair: "הבידוד הפגום הוחלף בחומר בידוד חדש ועמיד." },
+                switch_replacement: { fault: "מפסק ההפעלה של הסוללה אינו מגיב.", repair: "מפסק ההפעלה הוחלף בחדש." },
+                led_indicator_repair: { fault: "חיווי מצב טעינה (נורות LED) אינו תקין.", repair: "רכיב חיווי ה-LED או החיווט אליו תוקנו/הוחלפו." },
+                voltage_calibration: { fault: "קריאות מתח לא מדויקות מה-BMS.", repair: "בוצע כיול מחדש לחיישני המתח ב-BMS." },
+                custom: { fault: "", repair: "" }
+            };
+
+            const sticker = document.getElementById('sticker-to-capture');
+            const modeButtons = document.querySelectorAll('.mode-button');
+            const newBatterySpecs = document.getElementById('new-battery-specs');
+            const repairedBatterySpecsOnSticker = document.getElementById('repaired-battery-specs-on-sticker');
+            const newBatteryControls = document.getElementById('new-battery-controls');
+            const repairedBatteryControls = document.getElementById('repaired-battery-controls');
+            const controlSelects = document.querySelectorAll('#new-battery-controls select, #new-battery-controls input');
+            const productionDateValue = document.getElementById('production-date-value');
+            const repairDateInput = document.getElementById('repair-date-input');
+            const repairWarrantyDurationInput = document.getElementById('repair-warranty-duration-input');
+            const commonRepairSelect = document.getElementById('common-repair-select');
+            const repairDetailsInput = document.getElementById('repair-details-input');
+            const faultDescriptionInput = document.getElementById('fault-description-input');
+            const faultDescriptionDisplay = document.getElementById('fault-description-display');
+            const repairDetailsDisplay = document.getElementById('repair-details-display');
+            const iconLibraryModal = document.getElementById('icon-library-modal');
+            const historyModal = document.getElementById('history-modal');
+            const modalUploadInput = document.getElementById('modal-upload-input');
+            const historyBtn = document.getElementById('history-btn');
+            const addRepairBtn = document.getElementById('add-repair-btn');
+            const clearRepairsBtn = document.getElementById('clear-repairs-btn');
+            const dischargeInput = document.getElementById('discharge-input');
+            const dischargeValue = document.getElementById('discharge-value');
+            const qrDataInput = document.getElementById('qr-data-input');
+            const qrImage = document.getElementById('qr-image');
+            function renderQR(text) {
+                const data = (text && text.trim()) ? text.trim() : 'https://energylabgreen.com/warranty';
+                if (window.QRCodeLib && QRCodeLib.toDataURL) {
+                    QRCodeLib.toDataURL(data, { margin: 1, width: 300, errorCorrectionLevel: 'M' }, (err, url) => { if (!err && qrImage) qrImage.src = url; });
+                }
+            }
+            const batteryModelInput = document.getElementById('battery-model-input');
+            const batteryModelDisplay = document.getElementById('battery-model-display');
+            const clientNameInput = document.getElementById('client-name-input');
+            const clientRefInput = document.getElementById('client-ref-input');
+            const clientInfoOnSticker = document.getElementById('client-info-on-sticker');
+            const clientNameDisplay = document.getElementById('client-name-display');
+            const clientRefDisplay = document.getElementById('client-ref-display');
+            const autoGenerateRefBtn = document.getElementById('auto-generate-ref-btn');
+            
+            // --- פונקציה לאכיפת תאריכים של היום ---
+            window.forceTodayDates = function() {
+                const today = new Date();
+                const day = today.getDate().toString().padStart(2, '0');
+                const month = (today.getMonth() + 1).toString().padStart(2, '0');
+                const year = today.getFullYear();
+                
+                if (productionDateValue) productionDateValue.innerText = `${day}/${month}/${year}`;
+                if (repairDateInput) repairDateInput.value = `${day}/${month}/${year}`;
+                
+                updateAllSpecs();
+                updateRepairWarranty();
+            };
+
+            // --- QR MANUAL INPUT LISTENER ---
+            qrDataInput.addEventListener('input', () => {
+                const customUrl = qrDataInput.value;
+                if (customUrl.trim() !== "") {
+                    renderQR(customUrl);
+                }
+            });
+            
+            
+            function handleElementSelection(e) {
+                const target = e.target.closest('[data-editable="true"], div[id*="placeholder"]');
+                if (!target) {
+                    if (currentSelectedElement) {
+                        currentSelectedElement.classList.remove('selected-element');
+                        currentSelectedElement = null;
+                        designControls.classList.add('hidden');
+                    }
+                    return;
+                }
+                if (currentSelectedElement === target) return;
+                if (currentSelectedElement) currentSelectedElement.classList.remove('selected-element');
+                currentSelectedElement = target;
+                currentSelectedElement.classList.add('selected-element');
+                designControls.classList.remove('hidden');
+                const cs = window.getComputedStyle(currentSelectedElement);
+                designFontSize.value = Math.round(parseFloat(cs.fontSize));
+                designWidth.value = Math.round(parseFloat(currentSelectedElement.style.width || cs.width));
+                const w = cs.fontWeight;
+                designFontWeight.value = (w === '900' || w === '800') ? '900' : 'bold';
+            }
+
+            designFontSize.addEventListener('input', (e) => {
+                if (currentSelectedElement) { currentSelectedElement.style.fontSize = e.target.value + 'px'; saveElementStates(); }
+            });
+            designWidth.addEventListener('input', (e) => {
+                if (currentSelectedElement) currentSelectedElement.style.width = e.target.value + 'px';
+            });
+            designFontWeight.addEventListener('change', (e) => {
+                if (currentSelectedElement) currentSelectedElement.style.fontWeight = e.target.value;
+            });
+            window.setTextAlign = function(align) {
+                if (currentSelectedElement) currentSelectedElement.style.textAlign = align;
+            };
+            sticker.addEventListener('click', handleElementSelection);
+
+            function dragMoveListener (event) {
+                var target = event.target.closest('[data-editable="true"]') || event.target.closest('div[id*="placeholder"]');
+                if (!target) return;
+                if (target.classList.contains('editing')) return;
+                var x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                var y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+                target.style.transform = `translate(${x}px, ${y}px)`;
+                target.setAttribute('data-x', x);
+                target.setAttribute('data-y', y);
+            }
+            
+            function resizeListener(event) {
+                var target = event.target;
+                var x = (parseFloat(target.getAttribute('data-x')) || 0);
+                var y = (parseFloat(target.getAttribute('data-y')) || 0);
+                target.style.width = event.rect.width + 'px';
+                target.style.height = event.rect.height + 'px';
+                x += event.deltaRect.left;
+                y += event.deltaRect.top;
+                target.style.transform = `translate(${x}px, ${y}px)`;
+                target.setAttribute('data-x', x);
+                target.setAttribute('data-y', y);
+                if(currentSelectedElement === target) {
+                    designWidth.value = Math.round(event.rect.width);
+                }
+            }
+
+            function saveElementStates() {
+                const elementsState = [];
+                sticker.querySelectorAll('[data-editable="true"], div[id*="placeholder"], span[id^="label-"], span[id$="-display"]').forEach(el => {
+                    if(!el.id) return;
+
+                    const state = {
+                        id: el.id,
+                        transform: el.style.transform || '',
+                        width: el.style.width || '',
+                        height: el.style.height || '',
+                        fontSize: el.style.fontSize || '',
+                        fontWeight: el.style.fontWeight || '',
+                        textAlign: el.style.textAlign || '',
+                    };
+                    if (el.dataset.editable === 'true') {
+                        state.innerHTML = el.innerHTML;
+                    }
+                    const img = el.tagName === 'IMG' ? el : el.querySelector('img');
+                    if (img) {
+                        state.imgSrc = img.src;
+                    }
+                    elementsState.push(state);
+                });
+
+                if(window.saveToCloud) {
+                    window.saveToCloud(elementsState);
+                }
+                
+                localStorage.setItem('stickerElementStates', JSON.stringify(elementsState));
+            }
+
+            window.restoreStickerElementsState = function(elements) {
+                if (!elements) return;
+                elements.forEach(elState => {
+                    const el = document.getElementById(elState.id);
+                    if (el) {
+                        el.style.transform = elState.transform;
+                        el.style.width = elState.width;
+                        el.style.height = elState.height;
+                        el.style.fontSize = elState.fontSize; 
+                        el.style.fontWeight = elState.fontWeight; 
+                        el.style.textAlign = elState.textAlign; 
+                        
+                        const transformMatch = elState.transform.match(/translate\((.+)px, (.+)px\)/);
+                        if (transformMatch) {
+                            el.setAttribute('data-x', transformMatch[1]);
+                            el.setAttribute('data-y', transformMatch[2]);
+                        } else {
+                            el.removeAttribute('data-x');
+                            el.removeAttribute('data-y');
+                        }
+                        if (elState.innerHTML !== null && el.dataset.editable === 'true') {
+                           el.innerHTML = elState.innerHTML;
+                        }
+                        const img = el.tagName === 'IMG' ? el : el.querySelector('img');
+                        if (img && elState.imgSrc) {
+                            img.src = elState.imgSrc;
+                        }
+                    }
+                });
+            }
+
+            function loadElementStates() {
+                const savedStates = localStorage.getItem('stickerElementStates');
+                if (savedStates) {
+                    const elementsState = JSON.parse(savedStates);
+                    window.restoreStickerElementsState(elementsState);
+                }
+            }
+            
+            function captureStickerElementsState() {
+                const elements = [];
+                sticker.querySelectorAll('[data-editable="true"], div[id*="placeholder"]').forEach(el => {
+                    const elState = {
+                        id: el.id,
+                        transform: el.style.transform || '',
+                        width: el.style.width || '',
+                        height: el.style.height || '',
+                        fontSize: el.style.fontSize || '',
+                        fontWeight: el.style.fontWeight || '',
+                        textAlign: el.style.textAlign || '',
+                        innerHTML: el.hasAttribute('contenteditable') ? el.innerHTML : null,
+                        imgSrc: el.tagName === 'IMG' ? el.src : (el.querySelector('img') ? el.querySelector('img').src : null)
+                    };
+                    elements.push(elState);
+                });
+                return elements;
+            }
+            
+            function saveStickerToHistory() {
+                const state = {
+                    elements: captureStickerElementsState(),
+                    timestamp: new Date().toISOString()
+                };
+                stickerHistory.unshift(state);
+                localStorage.setItem('stickerHistory', JSON.stringify(stickerHistory));
+                skuCounter++;
+                localStorage.setItem('skuCounter', skuCounter);
+            }
+
+            function loadStickerHistory() {
+                const savedHistory = localStorage.getItem('stickerHistory');
+                stickerHistory = savedHistory ? JSON.parse(savedHistory) : [];
+                const savedCounter = localStorage.getItem('skuCounter');
+                
+                const lastSkuDate = localStorage.getItem('lastSkuDate');
+                const today = new Date().toLocaleDateString();
+
+                if (lastSkuDate !== today) {
+                    skuCounter = 1;
+                    localStorage.setItem('skuCounter', '1');
+                    localStorage.setItem('lastSkuDate', today);
+                } else {
+                    skuCounter = savedCounter ? parseInt(savedCounter, 10) : 1;
+                }
+            }
+            
+            function deleteFromHistory(index) {
+                stickerHistory.splice(index, 1);
+                localStorage.setItem('stickerHistory', JSON.stringify(stickerHistory));
+                renderHistory();
+            }
+            
+            function renderHistory() {
+                const historyList = document.getElementById('history-list');
+                historyList.innerHTML = '';
+                if (stickerHistory.length === 0) {
+                    historyList.innerHTML = '<p class="text-center text-gray-500">אין מדבקות שמורות בהיסטוריה.</p>';
+                    return;
+                }
+
+                stickerHistory.forEach((state, index) => {
+                    const skuEl = state.elements.find(el => el.id === 'sku-value');
+                    const sku = skuEl ? skuEl.innerHTML : 'מדבקה ללא מק"ט';
+                    const date = new Date(state.timestamp).toLocaleString('he-IL');
+
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'p-3 mb-2 bg-white rounded-lg shadow-sm border flex justify-between items-center gap-3';
+                    itemEl.innerHTML = `
+                        <div>
+                            <p class="font-bold text-dark-primary">${sku}</p>
+                            <p class="text-sm text-gray-600">נשמר בתאריך: ${date}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="load-history-btn text-sm bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded-md transition">טען</button>
+                            <button class="delete-history-btn text-sm bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded-md transition">מחק</button>
+                        </div>
+                    `;
+                    itemEl.querySelector('.load-history-btn').addEventListener('click', () => {
+                        window.restoreStickerElementsState(state.elements);
+                        // בעת טעינה מהיסטוריה, אנחנו לא קוראים ל-forceTodayDates()
+                        // כדי לשמור על התאריכים המקוריים של המדבקה!
+                    });
+                    itemEl.querySelector('.delete-history-btn').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deleteFromHistory(index)
+                    });
+                    historyList.appendChild(itemEl);
+                });
+            }
+
+            function get300DpiScale() {
+                const physicalWidthMM = 100;
+                const dpi = 300;
+                const elementWidthPX = sticker.offsetWidth;
+                const mmToInches = 0.0393701;
+                const requiredPixels = (physicalWidthMM * mmToInches) * dpi;
+                return (requiredPixels / elementWidthPX); 
+            }
+
+            function showNotification(message) {
+                const notification = document.getElementById('notification');
+                notification.innerText = message;
+                notification.classList.remove('opacity-0');
+                setTimeout(() => {
+                    notification.classList.add('opacity-0');
+                }, 3000); 
+            }
+
+            function saveIconToLibrary(dataURL) {
+                if (!userIconLibrary.includes(dataURL)) {
+                    userIconLibrary.push(dataURL);
+                    localStorage.setItem('userIconLibrary', JSON.stringify(userIconLibrary));
+                    showNotification("הסמל נשמר בספרייה!");
+                }
+            }
+
+            function loadIconsFromLibrary() {
+                try {
+                    const savedIcons = localStorage.getItem('userIconLibrary');
+                    userIconLibrary = savedIcons ? JSON.parse(savedIcons) : [];
+                } catch (e) {
+                    console.error("Failed to load icons from localStorage", e);
+                    userIconLibrary = [];
+                }
+            }
+
+            function populateUserIconGrid() {
+                const iconGrid = document.querySelector('#icon-library-modal .icon-grid');
+                iconGrid.innerHTML = '';
+                if (userIconLibrary.length === 0) {
+                    iconGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">הספרייה שלך ריקה.</p>';
+                    return;
+                }
+                userIconLibrary.forEach(dataURL => {
+                    const iconItem = document.createElement('div');
+                    iconItem.className = 'icon-item cursor-pointer p-2 rounded-lg border border-gray-300 hover:bg-gray-100 flex items-center justify-center aspect-square';
+                    iconItem.innerHTML = `<img src="${dataURL}" alt="Saved Icon" class="max-w-full max-h-full object-contain">`;
+                    iconGrid.appendChild(iconItem);
+                    iconItem.addEventListener('click', () => {
+                        if (currentIconTarget) {
+                            currentIconTarget.src = dataURL;
+                            saveElementStates(); 
+                        }
+                        closeModal(iconLibraryModal);
+                    });
+                });
+            }
+
+            function openModal(modal, targetImgId) {
+                if(targetImgId) {
+                    currentIconTarget = document.getElementById(targetImgId);
+                }
+                if (modal.id === 'icon-library-modal') {
+                    populateUserIconGrid();
+                }
+                if (modal.id === 'history-modal') {
+                    renderHistory();
+                }
+                modal.classList.remove('invisible', 'opacity-0');
+            }
+
+            function closeModal(modal) {
+                modal.classList.add('invisible', 'opacity-0');
+                currentIconTarget = null;
+            }
+
+            function generateSku(voltage, totalCapacity, cellCode) {
+                const uniqueId = String(skuCounter).padStart(2, '0');
+                return `GP-${voltage}V-${totalCapacity}A-${cellCode.replace('EVE 21700 ', '')}-${uniqueId}`;
+            }
+            
+            // Populate capacity options from 5 to 200 jumps of 5
+            const capacitySelectEl = document.getElementById('capacity-select');
+            if (capacitySelectEl) {
+                for (let i = 5; i <= 200; i += 5) {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.text = i + 'Ah';
+                    if (i === 20) opt.selected = true; // Default
+                    capacitySelectEl.appendChild(opt);
+                }
+            }
+
+            function updateAllSpecs() {
+                const voltage = document.getElementById('voltage-select').value;
+                const totalCapacity = parseInt(document.getElementById('capacity-select').value, 10);
+                const cell = document.getElementById('cells-select').value;
+                const bmsText = document.getElementById('bms-select').value; 
+
+                document.getElementById('voltage-value').innerText = `${voltage}V`;
+                document.getElementById('capacity-value').innerText = `${totalCapacity}Ah`;
+                document.getElementById('cells-value').innerText = cell;
+                
+                if (!isNaN(voltage) && !isNaN(totalCapacity)) {
+                    document.getElementById('power-value').innerText = `${parseFloat(voltage) * totalCapacity}Wh`;
+                }
+                
+                // C-Rate Calculation
+                let cRateValue = "";
+                let cRateMultiplier = 3; // Default
+                let cellCode = "50E";
+                
+                if (cell.includes("TP") || cell.includes("50XG")) {
+                    cRateValue = "18C";
+                    cRateMultiplier = 18;
+                    cellCode = "50XG";
+                } else {
+                    // Standard 50E
+                    cRateValue = "3C";
+                    cRateMultiplier = 3;
+                    cellCode = "50E";
+                }
+                document.getElementById('c-rate-value').innerText = cRateValue;
+                
+                // Auto Calculate Discharge based on C-Rate
+                const dischargeCalc = totalCapacity * cRateMultiplier;
+                document.getElementById('discharge-value').innerText = `${dischargeCalc}A`;
+                
+                // BMS Calculation
+                document.getElementById('bms-value').innerText = bmsText;
+                
+                const newSku = generateSku(voltage, totalCapacity, cellCode);
+                document.getElementById('sku-value').innerText = newSku;
+                
+                const warrantyUrl = "https://energylabgreen.com/?mode=warranty";
+                qrDataInput.value = warrantyUrl;
+                renderQR(warrantyUrl);
+
+                updateWarrantyExpiration();
+            }
+            
+            function updateWarrantyExpiration() {
+                const durationMonths = parseInt(document.getElementById('warranty-duration-input').value, 10);
+                const dateText = productionDateValue.innerText;
+                const dateParts = dateText.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                const warrantyEndValue = document.getElementById('warranty-end-value');
+
+                if (!dateParts || isNaN(durationMonths)) {
+                    warrantyEndValue.innerText = "";
+                    return;
+                }
+                
+                const day = parseInt(dateParts[1], 10);
+                const month = parseInt(dateParts[2], 10);
+                const year = parseInt(dateParts[3], 10);
+                
+                const prodDate = new Date(year, month - 1, day);
+                prodDate.setMonth(prodDate.getMonth() + durationMonths);
+                
+                const endDay = prodDate.getDate().toString().padStart(2, '0');
+                const endMonth = (prodDate.getMonth() + 1).toString().padStart(2, '0');
+                const endYear = prodDate.getFullYear();
+                warrantyEndValue.innerText = `${endDay}/${endMonth}/${endYear}`;
+            }
+            
+            function updateRepairWarranty() {
+                const dateText = repairDateInput.value;
+                document.getElementById('repair-date-display').innerText = dateText;
+
+                const durationMonths = parseInt(repairWarrantyDurationInput.value, 10);
+                const dateParts = dateText.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                const repairWarrantyEndDisplay = document.getElementById('repair-warranty-end-display');
+
+                if (!dateParts || isNaN(durationMonths)) {
+                    repairWarrantyEndDisplay.innerText = "";
+                    return;
+                }
+                
+                const day = parseInt(dateParts[1], 10);
+                const month = parseInt(dateParts[2], 10);
+                const year = parseInt(dateParts[3], 10);
+                
+                const repairDate = new Date(year, month - 1, day);
+                repairDate.setMonth(repairDate.getMonth() + durationMonths);
+                
+                const endDay = repairDate.getDate().toString().padStart(2, '0');
+                const endMonth = (repairDate.getMonth() + 1).toString().padStart(2, '0');
+                const endYear = repairDate.getFullYear();
+                repairWarrantyEndDisplay.innerText = `${endDay}/${endMonth}/${endYear}`;
+            }
+
+            function setupInteract(target) {
+                 interact(target)
+                    .draggable({
+                        inertia: true,
+                        modifiers: [interact.modifiers.restrictRect({ restriction: 'parent', endOnly: true })],
+                        autoScroll: true,
+                        listeners: {
+                            start(e) { 
+                                e.target.classList.add('dragging');
+                            },
+                            move: dragMoveListener,
+                            end(e) {
+                                e.target.classList.remove('dragging');
+                                saveElementStates(); // Auto save on drop
+                            }
+                        }
+                    })
+                    .resizable({
+                        edges: { left: true, right: true, bottom: true, top: true },
+                        listeners: {
+                            move: resizeListener,
+                            end(e) {
+                                saveElementStates(); // Auto save on resize end
+                            }
+                        },
+                        modifiers: [interact.modifiers.restrictSize({ min: { width: 20, height: 20 } })],
+                        inertia: false
+                    });
+            }
+
+            // input → save (event delegation, works when editing=true)
+            sticker.addEventListener('input', (e) => {
+                if (e.target.dataset.editable === 'true') saveElementStates();
+            }, true);
+
+            // כניסה למצב עריכה — לחיצה כפולה (מחשב) או הקשה כפולה (מובייל)
+            let _lastTapEl = null, _lastTapTime = 0;
+            function enterEditMode(el) {
+                if (el.classList.contains('editing')) return;
+                el.classList.add('editing');
+                el.setAttribute('contenteditable', 'true');
+                el.focus();
+                // מקם סמן בסוף הטקסט
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                range.collapse(false);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+            function exitEditMode(el) {
+                el.classList.remove('editing');
+                el.setAttribute('contenteditable', 'false');
+                saveElementStates();
+            }
+
+            sticker.addEventListener('dblclick', (e) => {
+                const t = e.target.closest('[data-editable="true"]');
+                if (t) { e.preventDefault(); enterEditMode(t); }
+            });
+            sticker.addEventListener('touchend', (e) => {
+                const t = e.target.closest('[data-editable="true"]');
+                if (!t) return;
+                const now = Date.now();
+                if (_lastTapEl === t && now - _lastTapTime < 380) {
+                    e.preventDefault();
+                    enterEditMode(t);
+                    _lastTapEl = null;
+                } else {
+                    _lastTapEl = t;
+                    _lastTapTime = now;
+                }
+            });
+            sticker.addEventListener('touchstart', (e) => {
+                const t = e.target.closest('[data-editable="true"]');
+                if (t && !t.classList.contains('editing')) e.preventDefault();
+            }, { passive: false });
+            sticker.addEventListener('focusout', (e) => {
+                const t = e.target.closest('[data-editable="true"]');
+                if (t && t.classList.contains('editing')) exitEditMode(t);
+            });
+            // Escape יוצא ממצב עריכה
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && currentSelectedElement && currentSelectedElement.classList.contains('editing')) {
+                    exitEditMode(currentSelectedElement);
+                }
+            });
+
+            setupInteract('.sticker-wrapper [data-editable="true"], .sticker-wrapper div[id*="placeholder"], .sticker-wrapper span[id^="label-"]');
+
+            document.querySelectorAll('.close-modal-btn').forEach(btn => btn.addEventListener('click', () => closeModal(btn.closest('.fixed'))));
+            [iconLibraryModal, historyModal].forEach(modal => {
+                modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(modal); });
+            });
+            
+            document.getElementById('qr-placeholder').addEventListener('click', () => openModal(iconLibraryModal, 'qr-image'));
+            for (let i = 1; i <= 3; i++) { 
+                const placeholder = document.getElementById(`icon-placeholder-${i}`);
+                if(placeholder) {
+                    placeholder.addEventListener('click', () => openModal(iconLibraryModal, `icon-img-${i}`)); 
+                }
+            }
+
+            modalUploadInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file && currentIconTarget) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        currentIconTarget.src = e.target.result;
+                        saveIconToLibrary(e.target.result);
+                        saveElementStates(); 
+                        closeModal(iconLibraryModal);
+                    }
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            modeButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const mode = button.dataset.mode;
+                    modeButtons.forEach(btn => btn.classList.remove('active', 'bg-brand-green', 'text-white', 'shadow-md'));
+                    button.classList.add('active', 'bg-brand-green', 'text-white', 'shadow-md');
+                    newBatterySpecs.classList.toggle('hidden', mode !== 'new');
+                    repairedBatterySpecsOnSticker.classList.toggle('hidden', mode === 'new');
+                    newBatteryControls.classList.toggle('hidden', mode !== 'new');
+                    repairedBatteryControls.classList.toggle('hidden', mode === 'new');
+                });
+            });
+
+            controlSelects.forEach(el => el.addEventListener('change', updateAllSpecs));
+            productionDateValue.addEventListener('input', updateWarrantyExpiration);
+            repairDateInput.addEventListener('input', updateRepairWarranty);
+            repairWarrantyDurationInput.addEventListener('input', updateRepairWarranty);
+            
+            batteryModelInput.addEventListener('input', (e) => {
+                batteryModelDisplay.innerText = e.target.value;
+            });
+
+            function updateClientInfo() {
+                const name = clientNameInput.value;
+                const ref = clientRefInput.value;
+                if (name || ref) {
+                    clientInfoOnSticker.classList.remove('hidden');
+                    clientInfoOnSticker.style.display = 'flex'; 
+                    clientNameDisplay.innerText = name || '-';
+                    clientRefDisplay.innerText = ref || '-';
+                } else {
+                    clientInfoOnSticker.classList.add('hidden');
+                    clientInfoOnSticker.style.display = 'none';
+                }
+            }
+
+            function saveClientDetails() {
+                localStorage.setItem('savedClientName', clientNameInput.value);
+                localStorage.setItem('savedClientRef', clientRefInput.value);
+                updateClientInfo();
+            }
+            
+            clientNameInput.addEventListener('input', saveClientDetails);
+            clientRefInput.addEventListener('input', saveClientDetails);
+
+            function loadClientDetails() {
+                const savedName = localStorage.getItem('savedClientName');
+                const savedRef = localStorage.getItem('savedClientRef');
+                if (savedName) clientNameInput.value = savedName;
+                if (savedRef) clientRefInput.value = savedRef;
+                updateClientInfo();
+            }
+            
+            function generateOrderReference() {
+                const year = new Date().getFullYear().toString().slice(-2); 
+                const newRef = `ORD-${year}-${orderCounter}`;
+                clientRefInput.value = newRef;
+                orderCounter++;
+                localStorage.setItem('orderCounter', orderCounter);
+                saveClientDetails(); 
+            }
+
+            autoGenerateRefBtn.addEventListener('click', generateOrderReference);
+
+            dischargeInput.addEventListener('input', (e) => {
+                dischargeValue.innerText = e.target.value + 'A';
+            });
+            
+            addRepairBtn.addEventListener('click', () => {
+                const selection = commonRepairSelect.value;
+                if (selection && commonRepairs[selection] && selection !== 'custom') {
+                    const faultText = commonRepairs[selection].fault;
+                    const repairText = commonRepairs[selection].repair;
+                    faultDescriptionInput.value += (faultDescriptionInput.value ? '\n- ' : '- ') + faultText;
+                    repairDetailsInput.value += (repairDetailsInput.value ? '\n- ' : '- ') + repairText;
+                    faultDescriptionInput.dispatchEvent(new Event('input'));
+                    repairDetailsInput.dispatchEvent(new Event('input'));
+                }
+            });
+            
+            clearRepairsBtn.addEventListener('click', () => {
+                faultDescriptionInput.value = '';
+                repairDetailsInput.value = '';
+                faultDescriptionInput.dispatchEvent(new Event('input'));
+                repairDetailsInput.dispatchEvent(new Event('input'));
+            });
+
+            faultDescriptionInput.addEventListener('input', (e) => { faultDescriptionDisplay.innerText = e.target.value; });
+            repairDetailsInput.addEventListener('input', (e) => { repairDetailsDisplay.innerText = e.target.value; });
+            
+            document.querySelectorAll('.download-btn').forEach(button => {
+                button.addEventListener('click', async function() {
+                    const currentSku = document.getElementById('sku-value').innerText;
+                    
+                    const wasSelected = currentSelectedElement;
+                    if(wasSelected) wasSelected.classList.remove('selected-element');
+                    
+                    let filename = currentSku;
+                    if (clientNameInput.value) {
+                        const safeClientName = clientNameInput.value.replace(/[/\\?%*:|"<>]/g, '-');
+                        filename += "_" + safeClientName;
+                    }
+                    const dateStr = new Date().toLocaleDateString('he-IL').replace(/\//g, '-');
+                    filename += "_" + dateStr;
+
+                    const format = this.dataset.format;
+                    const scale = get300DpiScale(); 
+
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    // שורש הבעיה: בטלפון הsticker צר (≈375px) → sticker גובה ≈187px
+                    // Green Power title ≈150px → נשאר רק ≈37px ל-5 שורות → overflow
+                    // תיקון: מרחיב את wrapper ל-700px לפני לכידה, מחזיר אחרי
+                    const wrapper = sticker.closest('.sticker-wrapper');
+                    const origWrapW = wrapper ? wrapper.style.width : '';
+                    const origWrapMaxW = wrapper ? wrapper.style.maxWidth : '';
+                    const needsWiden = wrapper && wrapper.offsetWidth < 700;
+                    if (needsWiden) {
+                        wrapper.style.width = '700px';
+                        wrapper.style.maxWidth = 'none';
+                        // 350ms — מבטיח שהדפדפן סיים reflow (כולל שינוי שורת כותרת מ-2 שורות ל-1)
+                        await new Promise(r => setTimeout(r, 350));
+                    }
+
+                    const specsEl = document.getElementById('new-battery-specs');
+                    const specRows = specsEl ? [...specsEl.children] : [];
+
+                    // גבהים מפורשים על שורות הspecs — מאפשר ל-html2canvas לחשב items-end בצורה תקינה
+                    const origStickerH = sticker.style.height;
+                    const origSpecFlex = specsEl ? specsEl.style.flex : '';
+                    const origSpecH = specsEl ? specsEl.style.height : '';
+                    const origRowH = specRows.map(r => ({ h: r.style.height, f: r.style.flex }));
+                    sticker.style.height = sticker.offsetHeight + 'px';
+                    if (specsEl && specRows.length) {
+                        const specsH = specsEl.offsetHeight;
+                        const rowH = Math.floor(specsH / specRows.length);
+                        specsEl.style.height = specsH + 'px'; specsEl.style.flex = 'none';
+                        specRows.forEach(r => { r.style.height = rowH + 'px'; r.style.flex = 'none'; });
+                    }
+
+                    // חישוב scale לפי הsticker הנוכחי (אחרי הרחבה אפשרית)
+                    const captureScale = get300DpiScale();
+
+                    function _restoreAll() {
+                        sticker.style.height = origStickerH;
+                        if (specsEl) { specsEl.style.height = origSpecH; specsEl.style.flex = origSpecFlex; }
+                        specRows.forEach((r, i) => { r.style.height = origRowH[i].h; r.style.flex = origRowH[i].f; });
+                        if (needsWiden && wrapper) {
+                            wrapper.style.width = origWrapW;
+                            wrapper.style.maxWidth = origWrapMaxW;
+                        }
+                    }
+
+                    try {
+                        const canvas = await html2canvas(sticker, {
+                            scale: captureScale,
+                            useCORS: true,
+                            backgroundColor: "#ffffff"
+                        });
+                        _restoreAll();
+
+                        const imgData = canvas.toDataURL('image/png');
+
+                        if (format === 'pdf') {
+                            const { jsPDF } = window.jspdf;
+                            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [100, 50] }); 
+                            pdf.addImage(imgData, 'PNG', 0, 0, 100, 50);
+                            pdf.save(`${filename}.pdf`);
+                        } 
+                        
+                        if(wasSelected) wasSelected.classList.add('selected-element');
+                        saveStickerToHistory();
+
+                        try {
+                            const recType = document.querySelector('.mode-button.active')?.dataset.mode || 'new';
+                            const rec = {
+                                id: 'st' + Date.now(),
+                                date: new Date().toISOString(),
+                                type: recType,
+                                sku: (document.getElementById('sku-value')?.innerText || '').trim(),
+                                client: clientNameInput.value || '',
+                                ref: clientRefInput.value || '',
+                                model: recType === 'repair' ? (batteryModelInput.value || '') : '',
+                                voltage: (document.getElementById('voltage-value')?.innerText || '').trim(),
+                                capacity: (document.getElementById('capacity-value')?.innerText || '').trim(),
+                                cells: (document.getElementById('cells-value')?.innerText || '').trim()
+                            };
+                            if (window.saveStickerRecord) window.saveStickerRecord(rec);
+                        } catch (recErr) { console.error('sticker record save failed', recErr); }
+
+                    } catch (error) {
+                        _restoreAll();
+                        console.error("Error during download:", error);
+                        showNotification("שגיאה ביצירת הקובץ.");
+                    }
+                });
+            });
+            
+            historyBtn.addEventListener('click', () => openModal(historyModal)); 
+            
+            // --- אתחול המערכת ---
+            loadIconsFromLibrary();
+            loadStickerHistory(); 
+            
+            // ניקוי חד-פעמי: גופן 28px — מחיקת ברירות מחדל ישנות
+            if (!localStorage.getItem('stickerMigV_28px')) {
+                localStorage.setItem('stickerMigV_28px', '1');
+                localStorage.removeItem('stickerDefaultLayout');
+                localStorage.removeItem('stickerElementStates');
+            }
+
+            // ניקוי חד-פעמי: מחיקת ברירת מחדל ישנה שכללה לוגו + שמירת ברירת מחדל נקייה
+            if (!localStorage.getItem('stickerMigV_noLogo2')) {
+                localStorage.setItem('stickerMigV_noLogo2', '1');
+                localStorage.removeItem('stickerDefaultLayout');
+                localStorage.removeItem('stickerElementStates');
+                // לכידת מצב ברירת מחדל נקי לפני שכל נתון נטען
+                const _cleanEls = [];
+                document.querySelectorAll('[data-editable="true"], div[id*="placeholder"], span[id^="label-"]').forEach(el => {
+                    if (!el.id) return;
+                    _cleanEls.push({ id: el.id, transform: '', width: '', height: '', fontSize: '', fontWeight: '', textAlign: '', innerHTML: el.innerHTML });
+                });
+                // שמירה לענן אחרי שהאימות נטען (3.5 שניות)
+                setTimeout(async () => {
+                    // ניקוי ענן
+                    const _ms = typeof _sbSession === 'function' ? _sbSession() : null;
+                    if (_ms && _ms.access_token) {
+                        const _mu = _sbSub(_ms.access_token);
+                        if (_mu) {
+                            for (const k of ['sticker_default_GreenPowerMain','sticker_layout_GreenPowerMain']) {
+                                await fetch(`${SB_URL}/rest/v1/hub_state?user_id=eq.${_mu}&key=eq.${k}`, {
+                                    method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + _ms.access_token }
+                                }).catch(() => {});
+                            }
+                        }
+                    }
+                    if (window.saveDefaultLayout) await window.saveDefaultLayout(_cleanEls);
+                }, 3500);
+            }
+
+            // טעינת מיקומים שנשמרו - שים לב, זה קורה לפני דריסת התאריכים
+            loadElementStates();
+            
+            const savedOrderCounter = localStorage.getItem('orderCounter');
+            if(savedOrderCounter) {
+                orderCounter = parseInt(savedOrderCounter);
+            }
+            loadClientDetails();
+            
+            // דריסה חכמה: בכל טעינה של הדף (מלבד דרך היסטוריה), הפעל את תאריך היום וחשב אחריות
+            window.forceTodayDates();
+
+        });
+    </script>
+</body>
+</html>
+<!-- Injection By NetFree -->
+<script src="//netfree.link/injection-script/go-payment.js" type="text/javascript" async ></script>
+<script src="//netfree.link/injection-script/popup-card-init.js" type="text/javascript" async ></script>
