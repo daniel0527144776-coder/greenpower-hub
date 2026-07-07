@@ -1307,7 +1307,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
   <div id="bizReportPreview" style="display:none;">
     <div class="btn-group no-print" style="margin-bottom:10px;">
       <button class="btn btn-secondary" style="flex:1;" onclick="closeBizReport()">← חזרה</button>
-      <button class="btn btn-accent" style="flex:1;background:#25D366;" onclick="bizReportWhatsApp()">💬 שלח</button>
+      <button class="btn btn-accent" style="flex:1;background:#25D366;" onclick="bizReportWhatsApp()">📋 העתק</button>
       <button class="btn btn-primary" style="flex:1;" onclick="printBizReport()">🖨️ הדפס/PDF</button>
     </div>
     <div class="invoice-paper" id="bizReportContent"></div>
@@ -1986,14 +1986,7 @@ function generateWhatsApp() {
   document.getElementById('invoicePreview').style.display = 'none';
   ta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-  // Try to open WhatsApp
-  const phone = document.getElementById('custPhone').value.replace(/\D/g, '');
-  if (phone.length >= 9) {
-    const intlPhone = phone.startsWith('0') ? '972' + phone.substring(1) : phone;
-    if (confirm('פתח את וואטסאפ?')) {
-      openExternal(`https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`, '_blank');
-    }
-  }
+  navigator.clipboard.writeText(msg).then(() => alert('✅ ההודעה הועתקה ללוח! הדבק אותה בוואטסאפ או בכל אפליקציה אחרת.'));
 }
 
 // ---- Invoice generation ----
@@ -2233,15 +2226,13 @@ function openCustomerDetails(idx) {
     })()}
   `;
   openModal(c.name, body, `
-    <button class="btn btn-accent" style="background: #25D366;" onclick="callCustomer('${c.phone}')">💬 וואטסאפ</button>
+    <button class="btn btn-accent" style="background: #25D366;" onclick="callCustomer('${c.phone}')">📋 העתק מספר</button>
     <button class="btn btn-secondary" onclick="closeModal()">סגור</button>
   `);
 }
 
 function callCustomer(phone) {
-  const clean = phone.replace(/\D/g, '');
-  const intl = clean.startsWith('0') ? '972' + clean.substring(1) : clean;
-  openExternal(`https://wa.me/${intl}`, '_blank');
+  navigator.clipboard.writeText(phone).then(() => alert(`✅ מספר הטלפון הועתק ללוח: ${phone}\nחפש את הלקוח באפליקציית וואטסאפ שלך.`));
 }
 
 // ============================================================
@@ -2931,7 +2922,7 @@ function renderOrders() {
         <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div><div class="list-item-subtitle">${o.status || 'הצעה'}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
-        <button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="orderWhatsApp('${o.id}')">💬 שלח</button>
+        <button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="orderWhatsApp('${o.id}')">📋 העתק</button>
         <button class="btn btn-sm btn-secondary" onclick="cycleOrderStatus('${o.id}')">🔁 ${o.status || 'הצעה'}</button>
         <button class="btn btn-sm btn-secondary" onclick="openOrderEditor('${o.id}')">✏️</button>
         <button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')">🗑️</button>
@@ -2944,8 +2935,7 @@ function orderWhatsApp(id) {
   const orders = Store.get('orders') || [], o = orders.find(x => x.id === id); if (!o) return;
   const lines = o.items.map(it => `• ${it.name} ×${it.qty} — ${shek(it.unit * it.qty)}`).join('\n');
   const msg = `שלום ${o.customer || ''} 👋\n\nהצעת מחיר מ-Green Power:\n\n${lines}\n\n💰 *סה"כ: ${shek(o.total)}*${o.isBusiness ? '\n(מחיר עסקי B2B)' : ''}\n\n✅ אחריות מלאה · תאי Grade A\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
-  const phone = (o.phone || '').replace(/\D/g, ''), intl = phone.startsWith('0') ? '972' + phone.substring(1) : phone;
-  openExternal(`https://wa.me/${intl}?text=${encodeURIComponent(msg)}`, '_blank');
+  navigator.clipboard.writeText(msg).then(() => alert('✅ ההצעה הועתקה ללוח! הדבק אותה בוואטסאפ ללקוח.'));
 }
 
 // ============================================================
@@ -3180,8 +3170,7 @@ function bizReportWhatsApp() {
   const total = jobs.reduce((s, j) => s + (j.price || 0), 0);
   const lines = jobs.map(j => `• ${new Date(j.date).toLocaleDateString('he-IL')} · ${j.voltage}V ${j.capacity}Ah · ${(j.jobs || []).map(t => JOB_LABELS[t] || t).join(', ')} — ₪${(j.price || 0).toLocaleString('he-IL')}`).join('\n');
   const msg = `דו"ח תיקונים — ${c.businessName || c.name} 🏢\n\n${lines}\n\nסה"כ ${jobs.length} תיקונים: *₪${total.toLocaleString('he-IL')}*\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
-  const phone = (c.phone || '').replace(/\D/g, ''), intl = phone.startsWith('0') ? '972' + phone.substring(1) : phone;
-  openExternal(`https://wa.me/${intl}?text=${encodeURIComponent(msg)}`, '_blank');
+  navigator.clipboard.writeText(msg).then(() => alert('✅ הדו"ח הועתק ללוח! הדבק אותו בוואטסאפ ללקוח.'));
 }
 
 // ============================================================
