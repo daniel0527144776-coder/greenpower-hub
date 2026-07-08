@@ -3544,10 +3544,15 @@ function boot() {
   } catch (e) { showLogin(); }
 }
 
-// re-sync when the app regains focus
+// re-sync when the app regains focus. Also retries any push left in
+// Sync.dirty from a request that failed (e.g. no network at the moment) --
+// without this, a failed push only got retried on the next full cold boot,
+// so an edit made while briefly offline could stay unsynced to the cloud
+// for the rest of the session even after connectivity returned.
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && Sync.isAuthed()) {
     Sync.pull().then(ch => { if (ch) { init(); } }).catch(() => {});
+    Sync.flush().catch(() => {});
   }
 });
 
@@ -3559,6 +3564,7 @@ document.addEventListener('visibilitychange', () => {
 setInterval(() => {
   if (!document.hidden && Sync.isAuthed()) {
     Sync.pull().then(ch => { if (ch) { init(); } }).catch(() => {});
+    Sync.flush().catch(() => {});
   }
 }, 60000);
 
