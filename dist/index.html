@@ -1437,13 +1437,20 @@ const Store = {
   set(key, val) {
     try {
       localStorage.setItem('gp_' + key, JSON.stringify(val));
-      if (window.Sync && SYNC_KEYS.includes(key)) Sync.push(key, val);
+      if (typeof Sync !== 'undefined' && SYNC_KEYS.includes(key)) Sync.push(key, val);
       return true;
-    } catch (e) { console.error(e); return false; }
+    } catch (e) {
+      console.error(e);
+      // A silent failure here means whatever the user just entered (hours,
+      // a job, a customer...) LOOKS saved in the UI but never reached
+      // storage -- surface it loudly instead of letting data vanish quietly.
+      alert('שגיאה בשמירת הנתונים (ייתכן שהאחסון מלא) — הפעולה האחרונה לא נשמרה. פנה לתמיכה אם זה חוזר.');
+      return false;
+    }
   },
   del(key) {
     try { localStorage.removeItem('gp_' + key); } catch {}
-    if (window.Sync && SYNC_KEYS.includes(key)) Sync.delRemote(key);
+    if (typeof Sync !== 'undefined' && SYNC_KEYS.includes(key)) Sync.delRemote(key);
   },
   all() {
     const out = {};
@@ -1469,6 +1476,8 @@ const Sync = {
   userId: null,
   email: null,
   dirty: new Set(),
+  _pushSeq: {},
+  _pushChain: {},
 
   // ---- session ----
   loadSession() {
@@ -1533,6 +1542,11 @@ const Sync = {
     let changed = false;
     rows.forEach(row => {
       serverKeys.add(row.key);
+      // A key with an unconfirmed local push in flight (or queued while
+      // offline) must never be clobbered by a pull -- the local edit hasn't
+      // reached the server yet, so the server row is stale by definition,
+      // even if its timestamp looks newer-or-equal.
+      if (this.dirty.has(row.key)) return;
       const serverTime = new Date(row.updated_at).getTime();
       const localTime = meta[row.key] || 0;
       if (serverTime >= localTime) {
@@ -1551,18 +1565,33 @@ const Sync = {
   },
 
   // ---- write-through upsert ----
-  async push(key, value) {
-    if (!this.isAuthed() || !this.userId) { this.dirty.add(key); return; }
+  // Pushes for the SAME key are serialized (chained) and superseded pushes
+  // are skipped rather than sent, so a slow earlier request can never land
+  // AFTER a faster later one and overwrite the server with stale data --
+  // which pull() would then happily copy back down as "the latest version",
+  // silently reverting a just-added record (e.g. worktime hours) on reopen.
+  push(key, value) {
+    if (!this.isAuthed() || !this.userId) { this.dirty.add(key); this.touch(key); return Promise.resolve(); }
     const ts = this.touch(key);
-    try {
-      const h = await this._headers();
-      h['Prefer'] = 'resolution=merge-duplicates';
-      const r = await fetch(SB_URL + '/rest/v1/hub_state?on_conflict=user_id,key', {
-        method: 'POST', headers: h,
-        body: JSON.stringify({ user_id: this.userId, key, value, updated_at: new Date(ts).toISOString() })
-      });
-      if (!r.ok) this.dirty.add(key); else this.dirty.delete(key);
-    } catch (e) { this.dirty.add(key); }
+    const seq = (this._pushSeq[key] = (this._pushSeq[key] || 0) + 1);
+    this.dirty.add(key);
+    const prior = this._pushChain[key] || Promise.resolve();
+    const run = prior.then(async () => {
+      if (this._pushSeq[key] !== seq) return; // a newer push for this key already supersedes this one
+      try {
+        const h = await this._headers();
+        if (this._pushSeq[key] !== seq) return; // superseded while awaiting auth headers
+        h['Prefer'] = 'resolution=merge-duplicates';
+        const r = await fetch(SB_URL + '/rest/v1/hub_state?on_conflict=user_id,key', {
+          method: 'POST', headers: h,
+          body: JSON.stringify({ user_id: this.userId, key, value, updated_at: new Date(ts).toISOString() })
+        });
+        if (!r.ok) { this.dirty.add(key); }
+        else if (this._pushSeq[key] === seq) { this.dirty.delete(key); }
+      } catch (e) { this.dirty.add(key); }
+    });
+    this._pushChain[key] = run;
+    return run;
   },
   async delRemote(key) {
     if (!this.isAuthed()) return;
@@ -2944,7 +2973,13 @@ function orderWhatsApp(id) {
 // ============================================================
 function monthKeyOf(d) { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0'); }
 function ensureMonthInput(id) { const el = document.getElementById(id); if (el && !el.value) { const n = new Date(); el.value = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0'); } return document.getElementById(id).value; }
-function ensureDateInput(id) { const el = document.getElementById(id); if (el && !el.value) el.value = new Date().toISOString().slice(0, 10); }
+// Local calendar date as YYYY-MM-DD. NOT new Date().toISOString().slice(0,10) --
+// that converts to UTC first, which rolls back to the previous day for any
+// entry made between midnight and ~2-3am Israel time (UTC+2/+3), silently
+// mis-dating late-night work into the wrong day (and, at a month boundary,
+// the wrong month bucket in the worktime/finances views).
+function todayLocalISO() { const n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0'); }
+function ensureDateInput(id) { const el = document.getElementById(id); if (el && !el.value) el.value = todayLocalISO(); }
 function renderFinances() {
   const mk = ensureMonthInput('finMonth'); ensureDateInput('expDate');
   const jobs = Store.get('jobs') || [], orders = Store.get('orders') || [], expenses = Store.get('expenses') || [];
@@ -2967,7 +3002,7 @@ function addExpense() {
   const amount = parseFloat(document.getElementById('expAmount').value);
   if (!amount || amount <= 0) { alert('הזן סכום'); return; }
   const cat = document.getElementById('expCat').value, note = document.getElementById('expNote').value;
-  const date = document.getElementById('expDate').value || new Date().toISOString().slice(0, 10);
+  const date = document.getElementById('expDate').value || todayLocalISO();
   const expenses = Store.get('expenses') || [];
   expenses.unshift({ id: 'e' + Date.now(), amount, cat, note, date: new Date(date).toISOString() });
   Store.set('expenses', expenses);
@@ -3029,7 +3064,7 @@ function addWorktime() {
   if (!w) { alert('הוסף עובד תחילה (כפתור "ניהול עובדים")'); return; }
   const hours = parseFloat(document.getElementById('wtHours').value);
   if (!hours || hours <= 0) { alert('הזן שעות'); return; }
-  const date = document.getElementById('wtDate').value || new Date().toISOString().slice(0, 10), note = document.getElementById('wtNote').value;
+  const date = document.getElementById('wtDate').value || todayLocalISO(), note = document.getElementById('wtNote').value;
   const wt = Store.get('worktime') || [];
   wt.unshift({ id: 'w' + Date.now(), workerName: w.name, rate: w.rate, hours, note, date: new Date(date).toISOString(), paid: false });
   Store.set('worktime', wt);
