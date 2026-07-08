@@ -43,6 +43,11 @@
                 if (rows.length && rows[0].value && rows[0].value.elements && typeof window.restoreStickerElementsState === 'function') {
                     window.__skipNextCloudSave = true;
                     window.restoreStickerElementsState(rows[0].value.elements);
+                    // Saved layouts freeze the *rendered text* of computed fields
+                    // (c-rate/discharge/BMS) at save time — recompute them fresh
+                    // from the current formula/dropdown state so an old save can
+                    // never silently reintroduce a stale spec format.
+                    if (typeof window.updateAllSpecs === 'function') window.updateAllSpecs();
                     if (typeof window.forceTodayDates === 'function') window.forceTodayDates();
                     setTimeout(() => { window.__skipNextCloudSave = false; }, 700);
                     showSyncStatus('מסונכרן ✓', 'text-green-600');
@@ -976,7 +981,7 @@
                         el.style.fontWeight = elState.fontWeight; 
                         el.style.textAlign = elState.textAlign; 
                         
-                        const transformMatch = elState.transform.match(/translate\((.+)px, (.+)px\)/);
+                        const transformMatch = (elState.transform || '').match(/translate\((.+)px, (.+)px\)/);
                         if (transformMatch) {
                             el.setAttribute('data-x', transformMatch[1]);
                             el.setAttribute('data-y', transformMatch[2]);
@@ -1000,6 +1005,10 @@
                 if (savedStates) {
                     const elementsState = JSON.parse(savedStates);
                     window.restoreStickerElementsState(elementsState);
+                    // Same reasoning as the cloud-default restore above — refresh
+                    // computed fields so a stale local save can't reintroduce an
+                    // old spec format after a code fix.
+                    updateAllSpecs();
                 }
             }
             
@@ -1085,6 +1094,10 @@
                         window.restoreStickerElementsState(state.elements);
                         // בעת טעינה מהיסטוריה, אנחנו לא קוראים ל-forceTodayDates()
                         // כדי לשמור על התאריכים המקוריים של המדבקה!
+                        // אבל כן מרעננים את השדות המחושבים (קצב C / זרם פריקה /
+                        // BMS) לפורמט הנוכחי — לא נוגעים במק"ט או בתאריכים, רק
+                        // בפורמט התצוגה של אותם ערכים עצמם.
+                        refreshComputedSpecDisplay(state.elements);
                     });
                     itemEl.querySelector('.delete-history-btn').addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -1187,6 +1200,49 @@
                 }
             }
 
+            // Single source of truth for the C-rate/discharge formula — used both
+            // by the live dropdown-driven updateAllSpecs() and by the restore-safe
+            // refreshComputedSpecDisplay() below, so a saved layout/history entry
+            // can never silently drift out of sync with this formula again.
+            function getCellRates(cellsText) {
+                if (cellsText.includes("TP") || cellsText.includes("50XG")) {
+                    return { cont: 18, peak: 28, cellCode: "50XG" };
+                }
+                return { cont: 2, peak: 3, cellCode: "50E" };
+            }
+            // Re-derive "brand contA/peakA" from a possibly-stale saved BMS label
+            // (old saves may only have "DALY 40A") using the live dropdown's
+            // data-peak lookup — same rule as updateAllSpecs().
+            function formatBmsWithPeak(bmsText) {
+                const m = (bmsText || '').match(/^(\S+)\s+(\d+)A/);
+                if (!m) return bmsText;
+                const [, brand, cont] = m;
+                const opt = [...document.getElementById('bms-select').options]
+                    .find(o => o.dataset.brand === brand && o.dataset.cont === cont);
+                return (opt && opt.dataset.peak) ? `${brand} ${cont}A/${opt.dataset.peak}A` : bmsText;
+            }
+            // Refreshes ONLY the fields whose display format has changed since a
+            // layout/history snapshot was saved (c-rate, discharge current, BMS) —
+            // deliberately does NOT touch SKU or dates, which a restored record
+            // (especially sticker history — a record of what was actually printed)
+            // must keep exactly as saved.
+            function refreshComputedSpecDisplay(elements) {
+                const strip = (h) => (h || '').replace(/<[^>]*>/g, '').trim();
+                const byText = (id) => { const e = elements.find((x) => x.id === id); return e ? strip(e.innerHTML) : ''; };
+                const totalCapacity = parseInt(byText('capacity-value'), 10);
+                const cellsText = byText('cells-value');
+                if (!isNaN(totalCapacity) && cellsText) {
+                    const { cont, peak } = getCellRates(cellsText);
+                    const crateSpan = document.getElementById('c-rate-value');
+                    if (crateSpan) crateSpan.innerText = `${cont}C/${peak}C`;
+                    const dischargeSpan = document.getElementById('discharge-value');
+                    if (dischargeSpan) dischargeSpan.innerText = `${totalCapacity * cont}A/${totalCapacity * peak}A`;
+                }
+                const bmsSpan = document.getElementById('bms-value');
+                if (bmsSpan) bmsSpan.innerText = formatBmsWithPeak(byText('bms-value'));
+            }
+            window.refreshComputedSpecDisplay = refreshComputedSpecDisplay;
+
             function updateAllSpecs() {
                 const voltage = document.getElementById('voltage-select').value;
                 const totalCapacity = parseInt(document.getElementById('capacity-select').value, 10);
@@ -1205,27 +1261,20 @@
                 document.getElementById('voltage-value').innerText = `${voltage}V`;
                 document.getElementById('capacity-value').innerText = `${totalCapacity}Ah`;
                 document.getElementById('cells-value').innerText = cell;
-                
+
                 if (!isNaN(voltage) && !isNaN(totalCapacity)) {
                     document.getElementById('power-value').innerText = `${parseFloat(voltage) * totalCapacity}Wh`;
                 }
-                
-                // C-Rate Calculation — always show both continuous and peak
-                let cRateContinuous, cRatePeak, cellCode;
 
-                if (cell.includes("TP") || cell.includes("50XG")) {
-                    cRateContinuous = 18; cRatePeak = 28; cellCode = "50XG";
-                } else {
-                    // Standard 50E
-                    cRateContinuous = 2; cRatePeak = 3; cellCode = "50E";
-                }
+                // C-Rate Calculation — always show both continuous and peak
+                const { cont: cRateContinuous, peak: cRatePeak, cellCode } = getCellRates(cell);
                 document.getElementById('c-rate-value').innerText = `${cRateContinuous}C/${cRatePeak}C`;
 
                 // Auto Calculate Discharge based on C-Rate — continuous/peak
                 const dischargeContinuous = totalCapacity * cRateContinuous;
                 const dischargePeak = totalCapacity * cRatePeak;
                 document.getElementById('discharge-value').innerText = `${dischargeContinuous}A/${dischargePeak}A`;
-                
+
                 // BMS Calculation
                 document.getElementById('bms-value').innerText = bmsText;
                 
@@ -1238,7 +1287,8 @@
 
                 updateWarrantyExpiration();
             }
-            
+            window.updateAllSpecs = updateAllSpecs;
+
             function updateWarrantyExpiration() {
                 const durationMonths = parseInt(document.getElementById('warranty-duration-input').value, 10);
                 const dateText = productionDateValue.innerText;
