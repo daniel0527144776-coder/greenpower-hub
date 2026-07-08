@@ -194,13 +194,15 @@
                             <span id="voltage-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
                         </div>
                     </div>
-                    <!-- Row 2 -->
+                    <!-- Row 2 — discharge's label ("זרם פריקה:") and dual-number
+                         value ("720A/1120A") both run longer than power's, so it
+                         gets a bit more of the row than an even 50/50 split. -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-[1.15] min-w-0">
                             <span id="label-discharge" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">זרם פריקה:</span>
                             <span id="discharge-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
                         </div>
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-[0.85] min-w-0">
                             <span id="label-power" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">הספק:</span>
                             <span id="power-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
                         </div>
@@ -216,13 +218,14 @@
                             <span id="bms-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
                         </div>
                     </div>
-                    <!-- Row 4 -->
+                    <!-- Row 4 — SKU text runs longer than the cell-model text next
+                         to it, so it gets a bit more of the row too. -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-[0.92] min-w-0">
                             <span id="label-cells" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">תאים:</span>
                             <span id="cells-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
                         </div>
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
+                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-[1.08] min-w-0">
                             <span id="label-sku" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">מק"ט:</span>
                             <span id="sku-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
                         </div>
@@ -954,6 +957,71 @@
                 }
             }
 
+            // Shared with the PDF-capture shrink logic further down — keep both
+            // in sync if the markup's default value font-size ever changes.
+            const VALUE_SPAN_IDS = ['capacity-value', 'voltage-value', 'discharge-value', 'power-value',
+                'c-rate-value', 'bms-value', 'cells-value', 'sku-value', 'production-date-value', 'warranty-end-value'];
+            const VALUE_SPAN_DEFAULT_SIZE = 24;
+            const LABEL_DEFAULT_SIZE = 18; // matches the label's text-lg class
+
+            // Long dual-number specs (BMS "150A/450A", discharge "720A/1120A")
+            // can be wider than the row has room for — the value spans are
+            // whitespace-nowrap (so they don't wrap to a 2nd line, which was a
+            // worse, previously-fixed bug), so overly-long text overflows
+            // *sideways* out of its row instead. Shrinks the value first; if
+            // it's already at its floor and there's still not enough room (real
+            // 390px-wide phones, not just the widened PDF-capture view), also
+            // shrinks the label — it was fixed-width (shrink-0) purely to stop
+            // *unintentional* CSS flex-shrink squashing, not to forbid a
+            // deliberate, controlled reduction when genuinely needed.
+            function fitCellText(span, cell, label, valueStartSize, valueFloor) {
+                valueFloor = valueFloor || 12;
+                span.style.fontSize = valueStartSize + 'px';
+                label.style.fontSize = LABEL_DEFAULT_SIZE + 'px';
+                // "available" is re-measured every step, not captured once — the
+                // cell can transiently widen right after a reset (flex-1 columns
+                // share the row's width), so a stale pre-loop value can let a
+                // shrink "succeed" against a budget that no longer holds once the
+                // layout settles back down.
+                let size = valueStartSize;
+                while (size > valueFloor) {
+                    const available = cell.clientWidth - label.offsetWidth - 8;
+                    if (available <= 0 || span.scrollWidth <= available) break;
+                    size -= 1;
+                    span.style.fontSize = size + 'px';
+                }
+                let labelSize = LABEL_DEFAULT_SIZE;
+                while (labelSize > 9) {
+                    const available = cell.clientWidth - label.offsetWidth - 8;
+                    if (available <= 0 || span.scrollWidth <= available) break;
+                    labelSize -= 1;
+                    label.style.fontSize = labelSize + 'px';
+                }
+            }
+
+            // Each row holds two flex-1 cells side by side (e.g. c-rate + BMS) —
+            // resetting/shrinking one cell's text can change how much width its
+            // *sibling* cell ends up with, which can un-fit a sibling that was
+            // already finished. A single left-to-right pass over all 10 spans
+            // isn't guaranteed to converge, so run it a few times — it stabilizes
+            // fast since each pass only shrinks (never grows) a still-overflowing
+            // span, and empty/short spans are already at their ceiling after the
+            // first pass and cost nothing on repeats.
+            function fitValueSpansToRow() {
+                for (let pass = 0; pass < 10; pass++) {
+                    VALUE_SPAN_IDS.forEach((id) => {
+                        const span = document.getElementById(id);
+                        const cell = span && span.parentElement;
+                        const label = cell && cell.querySelector('span[id^="label-"]');
+                        if (!span || !cell || !label) return;
+                        // sku-value is a reference code, not a safety-relevant
+                        // number like BMS/discharge — a smaller floor here keeps
+                        // it fully legible-enough while giving it more headroom.
+                        fitCellText(span, cell, label, VALUE_SPAN_DEFAULT_SIZE, (id === 'sku-value' || id === 'cells-value') ? 8 : 10);
+                    });
+                }
+            }
+
             // Single source of truth for the C-rate/discharge formula — used both
             // by the live dropdown-driven updateAllSpecs() and by the restore-safe
             // refreshComputedSpecDisplay() below, so a saved layout/history entry
@@ -994,6 +1062,7 @@
                 }
                 const bmsSpan = document.getElementById('bms-value');
                 if (bmsSpan) bmsSpan.innerText = formatBmsWithPeak(byText('bms-value'));
+                fitValueSpansToRow();
             }
             window.refreshComputedSpecDisplay = refreshComputedSpecDisplay;
 
@@ -1040,6 +1109,7 @@
                 renderQR(warrantyUrl);
 
                 updateWarrantyExpiration();
+                fitValueSpansToRow();
             }
             window.updateAllSpecs = updateAllSpecs;
 
@@ -1336,30 +1406,30 @@
                     const specsEl = document.getElementById('new-battery-specs');
                     const specRows = specsEl ? [...specsEl.children] : [];
 
-                    // ערכי spec ארוכים (למשל "150A/450A" ל-BMS, "18C/28C" ל-קצב C,
-                    // "720A/1120A" לזרם פריקה) יכולים להיות רחבים יותר מהמקום
-                    // שנשאר בשורה — ה-span רשום כ-whitespace-nowrap כדי לא
-                    // להישבר לשתי שורות (שהיה גורם לבעיה ההפוכה), אז כשהטקסט
-                    // רחב מדי הוא "בורח" החוצה משורה. תיקון: אם הטקסט לא נכנס
-                    // ברוחב הזמין, מקטינים בהדרגה את גודל הפונט שלו עד שנכנס.
-                    const VALUE_SPAN_IDS = ['capacity-value', 'voltage-value', 'discharge-value', 'power-value',
-                        'c-rate-value', 'bms-value', 'cells-value', 'sku-value', 'production-date-value', 'warranty-end-value'];
+                    // Long dual-number specs can still be wider than the row even
+                    // at the widened 700px capture width — same fitCellText() logic
+                    // runs live, but here both spans are reset to their ideal
+                    // default size first (the live view may have already shrunk them
+                    // for a *narrower* viewport than this capture uses, so starting
+                    // fresh gives the best possible size for the actual PDF).
                     const shrunkSpans = [];
                     VALUE_SPAN_IDS.forEach(id => {
                         const span = document.getElementById(id);
                         const cell = span && span.parentElement;
                         const label = cell && cell.querySelector('span[id^="label-"]');
                         if (!span || !cell || !label) return;
-                        const available = cell.clientWidth - label.offsetWidth - 8;
-                        if (available <= 0 || span.scrollWidth <= available) return;
-                        const origSize = parseFloat(getComputedStyle(span).fontSize);
-                        shrunkSpans.push({ span, origSize });
-                        let size = origSize;
-                        while (span.scrollWidth > available && size > 12) {
-                            size -= 1;
-                            span.style.fontSize = size + 'px';
-                        }
+                        shrunkSpans.push({
+                            id, span, cell, label,
+                            origValueSize: parseFloat(getComputedStyle(span).fontSize),
+                            origLabelSize: parseFloat(getComputedStyle(label).fontSize),
+                        });
                     });
+                    // Multiple passes — see fitValueSpansToRow() for why a single
+                    // left-to-right pass over sibling cells in the same row isn't
+                    // guaranteed to converge.
+                    for (let pass = 0; pass < 10; pass++) {
+                        shrunkSpans.forEach(({ id, span, cell, label }) => fitCellText(span, cell, label, VALUE_SPAN_DEFAULT_SIZE, (id === 'sku-value' || id === 'cells-value') ? 8 : 10));
+                    }
 
                     // גבהים מפורשים על שורות הspecs — מאפשר ל-html2canvas לחשב items-end בצורה תקינה
                     const origStickerH = sticker.style.height;
@@ -1381,7 +1451,7 @@
                         sticker.style.height = origStickerH;
                         if (specsEl) { specsEl.style.height = origSpecH; specsEl.style.flex = origSpecFlex; }
                         specRows.forEach((r, i) => { r.style.height = origRowH[i].h; r.style.flex = origRowH[i].f; });
-                        shrunkSpans.forEach(({ span, origSize }) => { span.style.fontSize = origSize + 'px'; });
+                        shrunkSpans.forEach(({ span, label, origValueSize, origLabelSize }) => { span.style.fontSize = origValueSize + 'px'; label.style.fontSize = origLabelSize + 'px'; });
                         if (needsWiden && wrapper) {
                             wrapper.style.width = origWrapW;
                             wrapper.style.maxWidth = origWrapMaxW;
