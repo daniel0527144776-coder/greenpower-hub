@@ -573,12 +573,17 @@
              <div class="mt-4">
                 <label for="bms-select" class="block text-sm font-medium text-gray-700 mb-1">BMS (בחר זרם רציף)</label>
                 <select id="bms-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
-                    <option>DALY 40A</option>
-                    <option>DALY 80A</option>
-                    <option>DALY 120A</option>
-                    <option>DALY 200A</option>
-                    <option>JK 150A</option>
-                    <option>JK 200A</option>
+                    <option data-brand="DALY" data-cont="40">DALY 40A</option>
+                    <option data-brand="DALY" data-cont="80">DALY 80A</option>
+                    <option data-brand="DALY" data-cont="120">DALY 120A</option>
+                    <option data-brand="DALY" data-cont="200">DALY 200A</option>
+                    <option data-brand="JK" data-cont="150" data-peak="300">JK 150A</option>
+                    <option data-brand="JK" data-cont="200" data-peak="400">JK 200A</option>
+                    <option data-brand="ANT" data-cont="80" data-peak="200">ANT 80A</option>
+                    <option data-brand="ANT" data-cont="110" data-peak="275">ANT 110A</option>
+                    <option data-brand="ANT" data-cont="130" data-peak="325">ANT 130A</option>
+                    <option data-brand="ANT" data-cont="170" data-peak="425">ANT 170A</option>
+                    <option data-brand="ANT" data-cont="220" data-peak="550">ANT 220A</option>
                 </select>
             </div>
         </div>
@@ -1184,7 +1189,16 @@
                 const voltage = document.getElementById('voltage-select').value;
                 const totalCapacity = parseInt(document.getElementById('capacity-select').value, 10);
                 const cell = document.getElementById('cells-select').value;
-                const bmsText = document.getElementById('bms-select').value; 
+                const bmsSelect = document.getElementById('bms-select');
+                const bmsOpt = bmsSelect.options[bmsSelect.selectedIndex];
+                const bmsPeak = bmsOpt && bmsOpt.dataset.peak;
+                // Peak current isn't documented for every BMS brand (only ANT
+                // and JK have a confirmed continuous/peak spec) — show both
+                // when known, otherwise fall back to the plain option label
+                // rather than guessing a peak number.
+                const bmsText = bmsPeak
+                    ? `${bmsOpt.dataset.brand} ${bmsOpt.dataset.cont}A/${bmsPeak}A`
+                    : bmsSelect.value;
 
                 document.getElementById('voltage-value').innerText = `${voltage}V`;
                 document.getElementById('capacity-value').innerText = `${totalCapacity}Ah`;
