@@ -554,8 +554,8 @@
                  <div>
                     <label for="cells-select" class="block text-sm font-medium text-gray-700 mb-1">סוג תאים</label>
                     <select id="cells-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
-                        <option value="EVE 21700 50E" selected>EVE 21700 50E (3C)</option>
-                        <option value="TP 21700 50XG">TP 21700 50XG (18C)</option>
+                        <option value="EVE 21700 50E" selected>EVE 21700 50E (2C/3C)</option>
+                        <option value="TP 21700 50XG">TP 21700 50XG (18C/28C)</option>
                     </select>
                 </div>
                 <div class="grid grid-cols-1">
@@ -1194,26 +1194,21 @@
                     document.getElementById('power-value').innerText = `${parseFloat(voltage) * totalCapacity}Wh`;
                 }
                 
-                // C-Rate Calculation
-                let cRateValue = "";
-                let cRateMultiplier = 3; // Default
-                let cellCode = "50E";
-                
+                // C-Rate Calculation — always show both continuous and peak
+                let cRateContinuous, cRatePeak, cellCode;
+
                 if (cell.includes("TP") || cell.includes("50XG")) {
-                    cRateValue = "18C";
-                    cRateMultiplier = 18;
-                    cellCode = "50XG";
+                    cRateContinuous = 18; cRatePeak = 28; cellCode = "50XG";
                 } else {
                     // Standard 50E
-                    cRateValue = "3C";
-                    cRateMultiplier = 3;
-                    cellCode = "50E";
+                    cRateContinuous = 2; cRatePeak = 3; cellCode = "50E";
                 }
-                document.getElementById('c-rate-value').innerText = cRateValue;
-                
-                // Auto Calculate Discharge based on C-Rate
-                const dischargeCalc = totalCapacity * cRateMultiplier;
-                document.getElementById('discharge-value').innerText = `${dischargeCalc}A`;
+                document.getElementById('c-rate-value').innerText = `${cRateContinuous}C/${cRatePeak}C`;
+
+                // Auto Calculate Discharge based on C-Rate — continuous/peak
+                const dischargeContinuous = totalCapacity * cRateContinuous;
+                const dischargePeak = totalCapacity * cRatePeak;
+                document.getElementById('discharge-value').innerText = `${dischargeContinuous}A/${dischargePeak}A`;
                 
                 // BMS Calculation
                 document.getElementById('bms-value').innerText = bmsText;

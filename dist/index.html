@@ -1240,6 +1240,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
     <h2 class="page-title">⏱️ שעון עובדים</h2>
     <input type="month" id="wtMonth" class="form-input" style="width:auto;direction:ltr;" onchange="renderWorktime()">
   </div>
+  <div id="worktimeUnpaidBanner" style="display:none;background:var(--danger-light);color:var(--danger);border:1px solid var(--danger);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:600;"></div>
   <div class="card">
     <h3 class="card-title">➕ רישום שעות</h3>
     <div class="form-row"><label>עובד</label>
@@ -2983,16 +2984,45 @@ function renderWorktime() {
   const mk = ensureMonthInput('wtMonth'); ensureDateInput('wtDate');
   const workers = getWorkers(), sel = document.getElementById('wtWorker');
   sel.innerHTML = workers.length ? workers.map(w => `<option value="${w.id}">${w.name} (₪${w.rate}/שעה)</option>`).join('') : '<option value="">הוסף עובד תחילה</option>';
-  const entries = (Store.get('worktime') || []).filter(e => monthKeyOf(e.date) === mk);
+  const allEntries = Store.get('worktime') || [];
+  const entries = allEntries.filter(e => monthKeyOf(e.date) === mk);
+
+  // Unpaid carryover from earlier months — switching to a new (empty) month
+  // must never silently hide money still owed from before.
+  const unpaidPast = allEntries.filter(e => !e.paid && monthKeyOf(e.date) < mk);
+  const banner = document.getElementById('worktimeUnpaidBanner');
+  if (banner) {
+    if (unpaidPast.length) {
+      const owed = unpaidPast.reduce((s, e) => s + e.hours * e.rate, 0);
+      banner.style.display = 'block';
+      banner.textContent = `⚠️ ${unpaidPast.length} רישומים לא שולמו מחודשים קודמים — סה"כ ${shek(owed)}`;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
   const byWorker = {};
-  entries.forEach(e => { (byWorker[e.workerName] = byWorker[e.workerName] || { hours: 0, wage: 0 }); byWorker[e.workerName].hours += e.hours; byWorker[e.workerName].wage += e.hours * e.rate; });
+  entries.forEach(e => {
+    (byWorker[e.workerName] = byWorker[e.workerName] || { hours: 0, wage: 0, unpaidWage: 0 });
+    byWorker[e.workerName].hours += e.hours;
+    byWorker[e.workerName].wage += e.hours * e.rate;
+    if (!e.paid) byWorker[e.workerName].unpaidWage += e.hours * e.rate;
+  });
   const keys = Object.keys(byWorker);
   document.getElementById('worktimeSummary').innerHTML = keys.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין רישומים החודש</div></div>' :
-    keys.map(k => `<div class="price-item"><div class="price-item-name">${k}</div><div class="price-item-cost">${byWorker[k].hours} שע'</div><div class="price-item-final">${shek(byWorker[k].wage)}</div></div>`).join('') +
+    keys.map(k => `<div class="price-item"><div class="price-item-name">${k} <span style="font-size:11px;color:${byWorker[k].unpaidWage > 0 ? 'var(--danger)' : 'var(--success)'};">${byWorker[k].unpaidWage > 0 ? `⚠️ ${shek(byWorker[k].unpaidWage)} לא שולם` : '✓ שולם'}</span></div><div class="price-item-cost">${byWorker[k].hours} שע'</div><div class="price-item-final">${shek(byWorker[k].wage)}</div></div>`).join('') +
     `<div class="price-item" style="border-top:1px solid var(--border);"><div class="price-item-name" style="font-weight:700;">סה"כ שכר</div><div></div><div class="price-item-final" style="color:var(--danger);">${shek(keys.reduce((s, k) => s + byWorker[k].wage, 0))}</div></div>`;
-  const sorted = entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+  const sorted = entries.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
   document.getElementById('worktimeList').innerHTML = sorted.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין רישומים</div></div>' :
-    sorted.map(e => `<div class="price-item"><div class="price-item-name">${e.workerName} · ${e.hours} שע'${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final">${shek(e.hours * e.rate)} <span onclick="deleteWorktime('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
+    sorted.map(e => `<div class="price-item"><div class="price-item-name">${e.workerName} · ${e.hours} שע'${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final">${shek(e.hours * e.rate)} <span onclick="toggleWorktimePaid('${e.id}')" style="cursor:pointer;font-size:11.5px;color:${e.paid ? 'var(--success)' : 'var(--danger)'};" title="לחץ לשינוי סטטוס תשלום">${e.paid ? '✓ שולם' : '⚠ לא שולם'}</span> <span onclick="deleteWorktime('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
+}
+function toggleWorktimePaid(id) {
+  const wt = Store.get('worktime') || [];
+  const e = wt.find(x => x.id === id);
+  if (!e) return;
+  e.paid = !e.paid;
+  Store.set('worktime', wt);
+  renderWorktime();
 }
 function addWorktime() {
   const workers = getWorkers(), wid = document.getElementById('wtWorker').value, w = workers.find(x => x.id === wid);
@@ -3001,7 +3031,7 @@ function addWorktime() {
   if (!hours || hours <= 0) { alert('הזן שעות'); return; }
   const date = document.getElementById('wtDate').value || new Date().toISOString().slice(0, 10), note = document.getElementById('wtNote').value;
   const wt = Store.get('worktime') || [];
-  wt.unshift({ id: 'w' + Date.now(), workerName: w.name, rate: w.rate, hours, note, date: new Date(date).toISOString() });
+  wt.unshift({ id: 'w' + Date.now(), workerName: w.name, rate: w.rate, hours, note, date: new Date(date).toISOString(), paid: false });
   Store.set('worktime', wt);
   document.getElementById('wtHours').value = ''; document.getElementById('wtNote').value = '';
   renderWorktime();
@@ -3485,6 +3515,17 @@ document.addEventListener('visibilitychange', () => {
     Sync.pull().then(ch => { if (ch) { init(); } }).catch(() => {});
   }
 });
+
+// Also re-sync periodically while the tab stays open and visible — the
+// visibilitychange listener above only fires on hidden->visible transitions,
+// so a dashboard left open all day (e.g. the office computer) never picked up
+// changes pushed from another device (e.g. a worker's phone) until someone
+// switched away and back or reloaded.
+setInterval(() => {
+  if (!document.hidden && Sync.isAuthed()) {
+    Sync.pull().then(ch => { if (ch) { init(); } }).catch(() => {});
+  }
+}, 60000);
 
 // Run on load
 window.addEventListener('DOMContentLoaded', boot);
