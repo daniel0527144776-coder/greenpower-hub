@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>עורך מדבקות מקצועי - Green Power (Cloud Sync)</title>
+    <title>עורך מדבקות מקצועי - Green Power</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- טוען משקלים כבדים של Heebo עבור "שחור חזק" -->
@@ -14,125 +14,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="qrcode.min.js"></script>
     
-    <!-- Cloud sync via the Hub's Supabase session (no external SDK; same-origin token reuse) -->
-    <script>
-        const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
-        const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-        let currentLayoutId = 'GreenPowerMain';
-        window.__skipNextCloudSave = false;
-
-        function _sbSession() { try { return JSON.parse(localStorage.getItem('gpsync_session') || 'null'); } catch (e) { return null; } }
-        function _sbSub(jwt) { try { return JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sub; } catch (e) { return null; } }
-        function _layoutKey() { return 'sticker_layout_' + currentLayoutId; }
-
-        function showSyncStatus(msg, colorClass) {
-            const el = document.getElementById('sync-status');
-            if (el) { el.innerText = msg; el.className = `text-sm font-bold transition-colors duration-300 ${colorClass}`; }
-        }
-
-        async function _pullLayout() {
-            const s = _sbSession();
-            if (!s || !s.access_token) { showSyncStatus('מקומי בלבד — התחבר במערכת לסנכרון', 'text-gray-500'); return; }
-            try {
-                showSyncStatus('טוען מהענן...', 'text-blue-600');
-                const r = await fetch(`${SB_URL}/rest/v1/hub_state?select=value&key=eq.${encodeURIComponent(_layoutKey())}`,
-                    { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token } });
-                if (r.status === 401) { showSyncStatus('יש להתחבר מחדש דרך הלוח', 'text-orange-500'); return; }
-                if (!r.ok) throw new Error('pull ' + r.status);
-                const rows = await r.json();
-                if (rows.length && rows[0].value && rows[0].value.elements && typeof window.restoreStickerElementsState === 'function') {
-                    window.__skipNextCloudSave = true;
-                    window.restoreStickerElementsState(rows[0].value.elements);
-                    // Saved layouts freeze the *rendered text* of computed fields
-                    // (c-rate/discharge/BMS) at save time — recompute them fresh
-                    // from the current formula/dropdown state so an old save can
-                    // never silently reintroduce a stale spec format.
-                    if (typeof window.updateAllSpecs === 'function') window.updateAllSpecs();
-                    if (typeof window.forceTodayDates === 'function') window.forceTodayDates();
-                    setTimeout(() => { window.__skipNextCloudSave = false; }, 700);
-                    showSyncStatus('מסונכרן ✓', 'text-green-600');
-                } else {
-                    showSyncStatus('מחובר לענן · תבנית חדשה', 'text-gray-500');
-                }
-            } catch (e) { console.error(e); showSyncStatus('שמירה מקומית (אין חיבור ענן)', 'text-gray-500'); }
-        }
-
-        function _debounce(fn, wait) { let t; return function (...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), wait); }; }
-
-        window.saveToCloud = _debounce(async (elementsState) => {
-            if (window.__skipNextCloudSave) return;
-            const s = _sbSession();
-            if (!s || !s.access_token) return; // local-only; localStorage handled by the editor
-            const uid = _sbSub(s.access_token); if (!uid) return;
-            try {
-                showSyncStatus('שומר...', 'text-orange-500');
-                const r = await fetch(`${SB_URL}/rest/v1/hub_state?on_conflict=user_id,key`, {
-                    method: 'POST',
-                    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
-                    body: JSON.stringify({ user_id: uid, key: _layoutKey(), value: { elements: elementsState, lastModified: new Date().toISOString() }, updated_at: new Date().toISOString() })
-                });
-                if (!r.ok) throw new Error('save ' + r.status);
-                showSyncStatus('נשמר בענן ✓', 'text-green-600');
-            } catch (e) { console.error(e); showSyncStatus('נשמר מקומית (אין ענן)', 'text-gray-500'); }
-        }, 1200);
-
-        window.changeLayoutId = (newId) => { if (newId && newId !== currentLayoutId) { currentLayoutId = newId; _pullLayout(); } };
-
-        window.saveStickerRecord = async function (rec) {
-            let arr = [];
-            try { arr = JSON.parse(localStorage.getItem('gp_sticker_history') || '[]'); } catch (e) { arr = []; }
-            arr.unshift(rec);
-            if (arr.length > 200) arr.pop();
-            localStorage.setItem('gp_sticker_history', JSON.stringify(arr));
-            if (typeof showNotification === 'function') showNotification('המדבקה נשמרה לאוסף ✓');
-            const s = _sbSession(); if (!s || !s.access_token) return;
-            const uid = _sbSub(s.access_token); if (!uid) return;
-            try {
-                await fetch(`${SB_URL}/rest/v1/hub_state?on_conflict=user_id,key`, {
-                    method: 'POST',
-                    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
-                    body: JSON.stringify({ user_id: uid, key: 'sticker_history', value: arr, updated_at: new Date().toISOString() })
-                });
-            } catch (e) { console.error('cloud sticker save failed', e); }
-        };
-
-        async function _pullStickerHistory() {
-            const s = _sbSession(); if (!s || !s.access_token) return;
-            try {
-                const r = await fetch(`${SB_URL}/rest/v1/hub_state?select=value&key=eq.sticker_history`, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token } });
-                if (r.ok) { const rows = await r.json(); if (rows.length && Array.isArray(rows[0].value)) localStorage.setItem('gp_sticker_history', JSON.stringify(rows[0].value)); }
-            } catch (e) { /* offline */ }
-        }
-
-        window.saveDefaultLayout = async function(elementsState) {
-            localStorage.setItem('stickerDefaultLayout', JSON.stringify(elementsState));
-            const s = _sbSession(); if (!s || !s.access_token) { showSyncStatus('ברירת מחדל נשמרה מקומית ✓', 'text-green-600'); return; }
-            const uid = _sbSub(s.access_token); if (!uid) return;
-            try {
-                await fetch(`${SB_URL}/rest/v1/hub_state?on_conflict=user_id,key`, {
-                    method: 'POST',
-                    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
-                    body: JSON.stringify({ user_id: uid, key: 'sticker_default_' + currentLayoutId, value: { elements: elementsState }, updated_at: new Date().toISOString() })
-                });
-                showSyncStatus('ברירת מחדל נשמרה בענן ✓', 'text-green-600');
-            } catch(e) { showSyncStatus('ברירת מחדל נשמרה מקומית ✓', 'text-green-600'); }
-        };
-
-        window._getDefaultLayout = async function() {
-            const s = _sbSession();
-            if (s && s.access_token) {
-                try {
-                    const r = await fetch(`${SB_URL}/rest/v1/hub_state?select=value&key=eq.${encodeURIComponent('sticker_default_' + currentLayoutId)}`, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token } });
-                    if (r.ok) { const rows = await r.json(); if (rows.length && rows[0].value && rows[0].value.elements) return rows[0].value.elements; }
-                } catch(e) {}
-            }
-            const saved = localStorage.getItem('stickerDefaultLayout');
-            if (saved) try { return JSON.parse(saved); } catch(e) {}
-            return null;
-        };
-
-        window.addEventListener('load', () => { setTimeout(_pullLayout, 500); setTimeout(_pullStickerHistory, 700); });
-    </script>
 
     <script>
         tailwind.config = {
@@ -270,17 +151,9 @@
 </head>
 <body class="flex flex-col items-center min-h-screen p-4 sm:p-6 lg:p-8">
 
-    <!-- Cloud Bar -->
-    <div class="w-full max-w-5xl bg-white p-3 rounded-xl shadow-sm mb-4 flex justify-between items-center border border-blue-100">
-        <div class="flex items-center gap-2">
-            <span class="text-blue-800 font-bold">☁️ שמירה בענן:</span>
-            <input type="text" id="layout-id-input" value="GreenPowerMain" class="border border-gray-300 rounded px-2 py-1 text-sm w-40" title="שנה שם כדי ליצור עיצוב חדש או לטעון עיצוב אחר">
-            <button id="load-layout-btn" class="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700">טען/צור</button>
-        </div>
-        <button id="save-default-btn" class="text-sm font-bold bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg transition">💾 שמור ברירת מחדל</button>
-        <button id="top-reset-btn" class="text-sm font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg transition">↩️ אפס לברירת מחדל</button>
-        <a class='text-sm font-bold text-blue-700 hover:text-blue-900 ml-3' href='/' id='back-to-hub'>← חזרה ללוח</a>
-        <div id="sync-status" class="text-sm font-bold text-gray-400">מתחבר...</div>
+    <!-- Top Bar -->
+    <div class="w-full max-w-5xl bg-white p-3 rounded-xl shadow-sm mb-4 flex justify-end items-center border border-blue-100">
+        <a class='text-sm font-bold text-blue-700 hover:text-blue-900' href='/' id='back-to-hub'>← חזרה ללוח</a>
     </div>
 
     <!-- Notification Element -->
@@ -495,21 +368,14 @@
             </div>
         </div>
 
-        <!-- Top row: Sticker Type & History -->
-         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Top row: Sticker Type -->
+         <div class="grid grid-cols-1 gap-8">
             <div class="control-section">
                 <h3 class="text-xl font-bold mb-4 text-dark-primary">בחר סוג מדבקה</h3>
                 <div class="flex justify-center gap-2 bg-gray-100 p-1 rounded-xl">
                     <button class="mode-button active new-mode w-full py-3 px-4 rounded-lg font-semibold text-white bg-brand-green shadow-md transition-all duration-300" data-mode="new">סוללה חדשה</button>
                     <button class="mode-button repair-mode w-full py-3 px-4 rounded-lg font-semibold text-dark-secondary hover:bg-gray-200 transition-all duration-300" data-mode="repair">סוללה לאחר תיקון</button>
                 </div>
-            </div>
-            <div class="control-section">
-                <h3 class="text-xl font-bold mb-4 text-dark-primary">היסטוריית מדבקות</h3>
-                <button id="history-btn" class="w-full h-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-xl font-semibold transition-colors duration-200">
-                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <span>פתח היסטוריה</span>
-                </button>
             </div>
         </div>
         
@@ -707,25 +573,10 @@
         </div>
     </div>
 
-    <!-- History Modal -->
-    <div id="history-modal" class="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 transition-all duration-300 invisible opacity-0">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[90%] flex flex-col p-6 m-4">
-            <div class="flex justify-between items-center pb-4 border-b border-gray-200">
-                <h2 class="text-2xl font-bold text-dark-primary">היסטוריית מדבקות</h2>
-                <button class="close-modal-btn text-3xl text-gray-400 hover:text-gray-800 transition-colors duration-200">&times;</button>
-            </div>
-            <div id="history-list" class="flex-grow overflow-y-auto pt-4">
-                
-            </div>
-        </div>
-    </div>
-
-
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             let currentIconTarget = null;
             let userIconLibrary = [];
-            let stickerHistory = [];
             let skuCounter = 1;
             let orderCounter = 1000; 
             
@@ -735,56 +586,6 @@
             const designWidth = document.getElementById('design-width');
             const designFontWeight = document.getElementById('design-font-weight');
 
-            const layoutIdInput = document.getElementById('layout-id-input');
-            const loadLayoutBtn = document.getElementById('load-layout-btn');
-            
-            loadLayoutBtn.addEventListener('click', () => {
-                const newId = layoutIdInput.value.trim();
-                if(newId && window.changeLayoutId) {
-                    window.changeLayoutId(newId);
-                }
-            });
-
-            document.getElementById('save-default-btn').addEventListener('click', () => {
-                if(confirm("לשמור את העיצוב הנוכחי כברירת מחדל לאיפוס?")) {
-                    const elementsState = [];
-                    sticker.querySelectorAll('[data-editable="true"], div[id*="placeholder"], span[id^="label-"], span[id$="-display"]').forEach(el => {
-                        if(!el.id) return;
-                        const state = { id: el.id, transform: el.style.transform || '', width: el.style.width || '', height: el.style.height || '', fontSize: el.style.fontSize || '', fontWeight: el.style.fontWeight || '', textAlign: el.style.textAlign || '' };
-                        if (el.hasAttribute('contenteditable')) state.innerHTML = el.innerHTML;
-                        const img = el.tagName === 'IMG' ? el : el.querySelector('img');
-                        if (img) { let s = img.src; state.imgSrc = s; }
-                        elementsState.push(state);
-                    });
-                    if (window.saveDefaultLayout) window.saveDefaultLayout(elementsState);
-                }
-            });
-
-            document.getElementById('top-reset-btn').addEventListener('click', async () => {
-                if(confirm("לחזור לברירת המחדל השמורה?")) {
-                    localStorage.removeItem('stickerElementStates');
-                    const s = _sbSession();
-                    if (s && s.access_token) {
-                        const uid = _sbSub(s.access_token);
-                        if (uid) {
-                            try {
-                                await fetch(`${SB_URL}/rest/v1/hub_state?user_id=eq.${uid}&key=eq.${encodeURIComponent(_layoutKey())}`, {
-                                    method: 'DELETE',
-                                    headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token }
-                                });
-                            } catch(e) {}
-                        }
-                    }
-                    const defaultElements = await window._getDefaultLayout();
-                    if (defaultElements) {
-                        localStorage.setItem('stickerElementStates', JSON.stringify(defaultElements));
-                        // שמור גם בענן כדי ש-_pullLayout לא ידרוס את הברירת המחדל
-                        if (window.saveToCloud) await window.saveToCloud(defaultElements);
-                    }
-                    location.reload();
-                }
-            });
-            
             // Common repairs data (same as before)
             const commonRepairs = {
                 bms_replacement: { fault: "BMS תקול, הסוללה אינה נטענת/מתפרקת כראוי.", repair: "הוחלף BMS, בוצע איזון תאים ובדיקת תקינות כללית." },
@@ -828,9 +629,7 @@
             const faultDescriptionDisplay = document.getElementById('fault-description-display');
             const repairDetailsDisplay = document.getElementById('repair-details-display');
             const iconLibraryModal = document.getElementById('icon-library-modal');
-            const historyModal = document.getElementById('history-modal');
             const modalUploadInput = document.getElementById('modal-upload-input');
-            const historyBtn = document.getElementById('history-btn');
             const addRepairBtn = document.getElementById('add-repair-btn');
             const clearRepairsBtn = document.getElementById('clear-repairs-btn');
             const dischargeInput = document.getElementById('discharge-input');
@@ -962,10 +761,6 @@
                     elementsState.push(state);
                 });
 
-                if(window.saveToCloud) {
-                    window.saveToCloud(elementsState);
-                }
-                
                 localStorage.setItem('stickerElementStates', JSON.stringify(elementsState));
             }
 
@@ -1000,53 +795,63 @@
                 });
             }
 
+            // Restoring a saved sticker only puts back the *rendered text* of
+            // voltage/capacity/cells/BMS — the dropdowns that actually drive
+            // updateAllSpecs() aren't part of the snapshot at all, so without
+            // this, calling updateAllSpecs() right after a restore would blow
+            // away whatever the user had chosen (reverting to the dropdowns'
+            // HTML defaults) instead of refreshing it in place. Sync the
+            // dropdowns to match the restored text first.
+            function syncDropdownsFromElements(elements) {
+                const strip = (h) => (h || '').replace(/<[^>]*>/g, '').trim();
+                const byText = (id) => { const e = elements.find((x) => x.id === id); return e ? strip(e.innerHTML) : null; };
+
+                const voltage = byText('voltage-value');
+                const voltageSel = document.getElementById('voltage-select');
+                if (voltage && voltageSel) {
+                    const v = voltage.replace('V', '');
+                    if ([...voltageSel.options].some((o) => o.value === v)) voltageSel.value = v;
+                }
+
+                const capacity = byText('capacity-value');
+                const capSel = document.getElementById('capacity-select');
+                if (capacity && capSel) {
+                    const c = capacity.replace('Ah', '');
+                    if ([...capSel.options].some((o) => o.value === c)) capSel.value = c;
+                }
+
+                const cells = byText('cells-value');
+                const cellSel = document.getElementById('cells-select');
+                if (cells && cellSel && [...cellSel.options].some((o) => o.value === cells)) {
+                    cellSel.value = cells;
+                }
+
+                const bmsText = byText('bms-value');
+                const bmsSel = document.getElementById('bms-select');
+                if (bmsText && bmsSel) {
+                    const m = bmsText.match(/^(\S+)\s+(\d+)A/);
+                    const opt = m && [...bmsSel.options].find((o) => o.dataset.brand === m[1] && o.dataset.cont === m[2]);
+                    if (opt) bmsSel.value = opt.value;
+                }
+            }
+
             function loadElementStates() {
                 const savedStates = localStorage.getItem('stickerElementStates');
                 if (savedStates) {
                     const elementsState = JSON.parse(savedStates);
                     window.restoreStickerElementsState(elementsState);
-                    // Same reasoning as the cloud-default restore above — refresh
-                    // computed fields so a stale local save can't reintroduce an
-                    // old spec format after a code fix.
+                    syncDropdownsFromElements(elementsState);
+                    // Refresh computed fields so a stale local save can't
+                    // reintroduce an old spec format after a code fix — now
+                    // safe since the dropdowns above match what was restored.
                     updateAllSpecs();
                 }
             }
             
-            function captureStickerElementsState() {
-                const elements = [];
-                sticker.querySelectorAll('[data-editable="true"], div[id*="placeholder"]').forEach(el => {
-                    const elState = {
-                        id: el.id,
-                        transform: el.style.transform || '',
-                        width: el.style.width || '',
-                        height: el.style.height || '',
-                        fontSize: el.style.fontSize || '',
-                        fontWeight: el.style.fontWeight || '',
-                        textAlign: el.style.textAlign || '',
-                        innerHTML: el.hasAttribute('contenteditable') ? el.innerHTML : null,
-                        imgSrc: el.tagName === 'IMG' ? el.src : (el.querySelector('img') ? el.querySelector('img').src : null)
-                    };
-                    elements.push(elState);
-                });
-                return elements;
-            }
-            
-            function saveStickerToHistory() {
-                const state = {
-                    elements: captureStickerElementsState(),
-                    timestamp: new Date().toISOString()
-                };
-                stickerHistory.unshift(state);
-                localStorage.setItem('stickerHistory', JSON.stringify(stickerHistory));
-                skuCounter++;
-                localStorage.setItem('skuCounter', skuCounter);
-            }
-
-            function loadStickerHistory() {
-                const savedHistory = localStorage.getItem('stickerHistory');
-                stickerHistory = savedHistory ? JSON.parse(savedHistory) : [];
+            // הסוללה עצמה לא נשמרת יותר בהיסטוריה — נשאר רק המונה היומי למק"ט,
+            // כדי שמספרי מק"ט לא יתנגשו באותו יום.
+            function initSkuCounter() {
                 const savedCounter = localStorage.getItem('skuCounter');
-                
                 const lastSkuDate = localStorage.getItem('lastSkuDate');
                 const today = new Date().toLocaleDateString();
 
@@ -1057,54 +862,6 @@
                 } else {
                     skuCounter = savedCounter ? parseInt(savedCounter, 10) : 1;
                 }
-            }
-            
-            function deleteFromHistory(index) {
-                stickerHistory.splice(index, 1);
-                localStorage.setItem('stickerHistory', JSON.stringify(stickerHistory));
-                renderHistory();
-            }
-            
-            function renderHistory() {
-                const historyList = document.getElementById('history-list');
-                historyList.innerHTML = '';
-                if (stickerHistory.length === 0) {
-                    historyList.innerHTML = '<p class="text-center text-gray-500">אין מדבקות שמורות בהיסטוריה.</p>';
-                    return;
-                }
-
-                stickerHistory.forEach((state, index) => {
-                    const skuEl = state.elements.find(el => el.id === 'sku-value');
-                    const sku = skuEl ? skuEl.innerHTML : 'מדבקה ללא מק"ט';
-                    const date = new Date(state.timestamp).toLocaleString('he-IL');
-
-                    const itemEl = document.createElement('div');
-                    itemEl.className = 'p-3 mb-2 bg-white rounded-lg shadow-sm border flex justify-between items-center gap-3';
-                    itemEl.innerHTML = `
-                        <div>
-                            <p class="font-bold text-dark-primary">${sku}</p>
-                            <p class="text-sm text-gray-600">נשמר בתאריך: ${date}</p>
-                        </div>
-                        <div class="flex gap-2">
-                            <button class="load-history-btn text-sm bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded-md transition">טען</button>
-                            <button class="delete-history-btn text-sm bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-3 rounded-md transition">מחק</button>
-                        </div>
-                    `;
-                    itemEl.querySelector('.load-history-btn').addEventListener('click', () => {
-                        window.restoreStickerElementsState(state.elements);
-                        // בעת טעינה מהיסטוריה, אנחנו לא קוראים ל-forceTodayDates()
-                        // כדי לשמור על התאריכים המקוריים של המדבקה!
-                        // אבל כן מרעננים את השדות המחושבים (קצב C / זרם פריקה /
-                        // BMS) לפורמט הנוכחי — לא נוגעים במק"ט או בתאריכים, רק
-                        // בפורמט התצוגה של אותם ערכים עצמם.
-                        refreshComputedSpecDisplay(state.elements);
-                    });
-                    itemEl.querySelector('.delete-history-btn').addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        deleteFromHistory(index)
-                    });
-                    historyList.appendChild(itemEl);
-                });
             }
 
             function get300DpiScale() {
@@ -1171,9 +928,6 @@
                 }
                 if (modal.id === 'icon-library-modal') {
                     populateUserIconGrid();
-                }
-                if (modal.id === 'history-modal') {
-                    renderHistory();
                 }
                 modal.classList.remove('invisible', 'opacity-0');
             }
@@ -1430,7 +1184,7 @@
             setupInteract('.sticker-wrapper [data-editable="true"], .sticker-wrapper div[id*="placeholder"], .sticker-wrapper span[id^="label-"]');
 
             document.querySelectorAll('.close-modal-btn').forEach(btn => btn.addEventListener('click', () => closeModal(btn.closest('.fixed'))));
-            [iconLibraryModal, historyModal].forEach(modal => {
+            [iconLibraryModal].forEach(modal => {
                 modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(modal); });
             });
             
@@ -1652,24 +1406,8 @@
                         } 
                         
                         if(wasSelected) wasSelected.classList.add('selected-element');
-                        saveStickerToHistory();
-
-                        try {
-                            const recType = document.querySelector('.mode-button.active')?.dataset.mode || 'new';
-                            const rec = {
-                                id: 'st' + Date.now(),
-                                date: new Date().toISOString(),
-                                type: recType,
-                                sku: (document.getElementById('sku-value')?.innerText || '').trim(),
-                                client: clientNameInput.value || '',
-                                ref: clientRefInput.value || '',
-                                model: recType === 'repair' ? (batteryModelInput.value || '') : '',
-                                voltage: (document.getElementById('voltage-value')?.innerText || '').trim(),
-                                capacity: (document.getElementById('capacity-value')?.innerText || '').trim(),
-                                cells: (document.getElementById('cells-value')?.innerText || '').trim()
-                            };
-                            if (window.saveStickerRecord) window.saveStickerRecord(rec);
-                        } catch (recErr) { console.error('sticker record save failed', recErr); }
+                        skuCounter++;
+                        localStorage.setItem('skuCounter', skuCounter);
 
                     } catch (error) {
                         _restoreAll();
@@ -1679,48 +1417,11 @@
                 });
             });
             
-            historyBtn.addEventListener('click', () => openModal(historyModal)); 
-            
             // --- אתחול המערכת ---
             loadIconsFromLibrary();
-            loadStickerHistory(); 
+            initSkuCounter();
             
             // ניקוי חד-פעמי: גופן 28px — מחיקת ברירות מחדל ישנות
-            if (!localStorage.getItem('stickerMigV_28px')) {
-                localStorage.setItem('stickerMigV_28px', '1');
-                localStorage.removeItem('stickerDefaultLayout');
-                localStorage.removeItem('stickerElementStates');
-            }
-
-            // ניקוי חד-פעמי: מחיקת ברירת מחדל ישנה שכללה לוגו + שמירת ברירת מחדל נקייה
-            if (!localStorage.getItem('stickerMigV_noLogo2')) {
-                localStorage.setItem('stickerMigV_noLogo2', '1');
-                localStorage.removeItem('stickerDefaultLayout');
-                localStorage.removeItem('stickerElementStates');
-                // לכידת מצב ברירת מחדל נקי לפני שכל נתון נטען
-                const _cleanEls = [];
-                document.querySelectorAll('[data-editable="true"], div[id*="placeholder"], span[id^="label-"]').forEach(el => {
-                    if (!el.id) return;
-                    _cleanEls.push({ id: el.id, transform: '', width: '', height: '', fontSize: '', fontWeight: '', textAlign: '', innerHTML: el.innerHTML });
-                });
-                // שמירה לענן אחרי שהאימות נטען (3.5 שניות)
-                setTimeout(async () => {
-                    // ניקוי ענן
-                    const _ms = typeof _sbSession === 'function' ? _sbSession() : null;
-                    if (_ms && _ms.access_token) {
-                        const _mu = _sbSub(_ms.access_token);
-                        if (_mu) {
-                            for (const k of ['sticker_default_GreenPowerMain','sticker_layout_GreenPowerMain']) {
-                                await fetch(`${SB_URL}/rest/v1/hub_state?user_id=eq.${_mu}&key=eq.${k}`, {
-                                    method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + _ms.access_token }
-                                }).catch(() => {});
-                            }
-                        }
-                    }
-                    if (window.saveDefaultLayout) await window.saveDefaultLayout(_cleanEls);
-                }, 3500);
-            }
-
             // טעינת מיקומים שנשמרו - שים לב, זה קורה לפני דריסת התאריכים
             loadElementStates();
             
