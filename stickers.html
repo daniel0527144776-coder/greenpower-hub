@@ -164,81 +164,99 @@
     <div class="sticker-wrapper">
         <div id="sticker-to-capture" class="w-full h-full flex flex-row bg-white">
             
-            <!-- Main content on the right -->
-            <div class="flex-grow flex flex-col p-5 pl-4 justify-between h-full">
-                <!-- Logo and slogan section -->
-                <div class="flex flex-col items-start gap-1 pb-2 border-b-2 border-black">
+            <!-- Main content on the right — explicit w-2/3 to mirror the side
+                 column's explicit w-1/3, instead of flex-grow. flex-grow alone
+                 (basis:auto) sizes this column from its own nested content's
+                 hypothetical size rather than a fixed share of the sticker, so
+                 its real rendered width silently depended on whatever font
+                 sizes happened to be in play -- it could shrink OR balloon
+                 unpredictably as the spec text was tuned (at one point it grew
+                 wide enough to push the QR/side column out of frame). w-2/3
+                 makes it a fixed, predictable "sticker width minus the fixed
+                 side column", independent of what's rendered inside. -->
+            <div class="w-2/3 min-w-0 flex flex-col p-5 pl-4 justify-between h-full">
+                <!-- Logo and slogan section — kept small on mobile (lg: unchanged
+                     for desktop preview): at real phone width the header was
+                     eating ~82 of the sticker's ~177px total height, leaving
+                     only ~9px per spec row regardless of value font size. -->
+                <div class="flex flex-col items-start gap-1 pb-1 border-b lg:border-b-2 border-black">
                     <div class="flex w-full items-center justify-center gap-4">
                         <div class="flex-grow flex flex-col items-center text-center">
-                            
+
                             <!-- Header Container: Title -->
                             <div class="flex items-center justify-center w-full">
-                                <h1 id="main-title" data-editable="true" contenteditable="false" class="text-6xl lg:text-7xl font-black leading-tight tracking-tight">Green Power</h1>
+                                <h1 id="main-title" data-editable="true" contenteditable="false" class="text-2xl font-black leading-tight tracking-tight whitespace-nowrap">Green Power</h1>
                             </div>
-                            
-                            <p id="slogan" data-editable="true" contenteditable="false" class="text-2xl lg:text-3xl font-black mt-1 tracking-wide">הבית שלכם לאנרגיה חשמלית.</p>
+
+                            <p id="slogan" data-editable="true" contenteditable="false" class="text-xs font-black tracking-wide">הבית שלכם לאנרגיה חשמלית.</p>
                         </div>
                     </div>
                 </div>
 
                 <!-- New Battery Specs section — flexbox טהור, תואם html2canvas -->
-                <div class="flex flex-col mt-2 flex-1 min-h-0" id="new-battery-specs">
+                <div class="flex flex-col mt-1 flex-1 min-h-0" id="new-battery-specs">
                     <!-- Row 1 -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
-                            <span id="label-capacity" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">קיבולת:</span>
-                            <span id="capacity-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-capacity" class="text-[10px] font-black shrink-0" data-editable="true" contenteditable="false">קיבולת:</span>
+                            <span id="capacity-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
-                            <span id="label-voltage" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">מתח:</span>
-                            <span id="voltage-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0">
+                            <span id="label-voltage" class="text-[10px] font-black shrink-0" data-editable="true" contenteditable="false">מתח:</span>
+                            <span id="voltage-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
                     </div>
                     <!-- Row 2 — discharge's label ("זרם פריקה:") and dual-number
                          value ("720A/1120A") both run longer than power's, so it
                          gets a bit more of the row than an even 50/50 split. -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-[1.15] min-w-0">
-                            <span id="label-discharge" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">זרם פריקה:</span>
-                            <span id="discharge-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-[1.15] min-w-0">
+                            <span id="label-discharge" class="text-[10px] font-black shrink-0" data-editable="true" contenteditable="false">זרם פריקה:</span>
+                            <span id="discharge-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-[0.85] min-w-0">
-                            <span id="label-power" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">הספק:</span>
-                            <span id="power-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-[0.85] min-w-0">
+                            <span id="label-power" class="text-[10px] font-black shrink-0" data-editable="true" contenteditable="false">הספק:</span>
+                            <span id="power-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
                     </div>
-                    <!-- Row 3 -->
+                    <!-- Row 3 — BMS value ("ANT 220A/550A") runs longer than
+                         c-rate's ("18C/28C"), so it gets a bit more of the row. -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
-                            <span id="label-c-rate" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">קצב C:</span>
-                            <span id="c-rate-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-[0.85] min-w-0">
+                            <span id="label-c-rate" class="text-[10px] font-black shrink-0" data-editable="true" contenteditable="false">קצב C:</span>
+                            <span id="c-rate-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
-                            <span id="label-bms" class="text-lg font-black shrink-0" dir="ltr" data-editable="true" contenteditable="false">BMS:</span>
-                            <span id="bms-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-[1.15] min-w-0">
+                            <span id="label-bms" class="text-[10px] font-black shrink-0" dir="ltr" data-editable="true" contenteditable="false">BMS:</span>
+                            <span id="bms-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
                     </div>
                     <!-- Row 4 — SKU text runs longer than the cell-model text next
                          to it, so it gets a bit more of the row too. -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-[0.92] min-w-0">
-                            <span id="label-cells" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">תאים:</span>
-                            <span id="cells-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-[0.8] min-w-0">
+                            <span id="label-cells" class="text-[10px] font-black shrink-0" data-editable="true" contenteditable="false">תאים:</span>
+                            <span id="cells-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-[1.08] min-w-0">
-                            <span id="label-sku" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">מק"ט:</span>
-                            <span id="sku-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-[1.2] min-w-0">
+                            <span id="label-sku" class="text-[10px] font-black shrink-0" data-editable="true" contenteditable="false">מק"ט:</span>
+                            <span id="sku-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
                     </div>
-                    <!-- Row 5 -->
+                    <!-- Row 5 — "תוקף אחריות:" was the single longest label in
+                         the sticker (12 chars) and by itself could exceed an
+                         even 50/50 split's whole cell width, leaving no room
+                         for the date value no matter its font size. Shortened
+                         to the equivalent, shorter "אחריות עד:" (warranty
+                         until:) and given the row's extra ratio too. -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
-                            <span id="label-production" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">ת. ייצור:</span>
-                            <span id="production-date-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-[0.85] min-w-0">
+                            <span id="label-production" class="text-[10px] font-black shrink-0" data-editable="true" contenteditable="false">ת. ייצור:</span>
+                            <span id="production-date-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
-                        <div class="flex justify-between items-end py-1 border-b border-gray-700 flex-1 min-w-0">
-                            <span id="label-warranty" class="text-lg font-black shrink-0" data-editable="true" contenteditable="false">תוקף אחריות:</span>
-                            <span id="warranty-end-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                        <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-[1.15] min-w-0">
+                            <span id="label-warranty" class="text-[10px] font-black shrink-0" data-editable="true" contenteditable="false">אחריות עד:</span>
+                            <span id="warranty-end-value" data-editable="true" contenteditable="false" class="text-[28px] font-black text-left whitespace-nowrap"></span>
                         </div>
                     </div>
                 </div>
@@ -961,8 +979,36 @@
             // in sync if the markup's default value font-size ever changes.
             const VALUE_SPAN_IDS = ['capacity-value', 'voltage-value', 'discharge-value', 'power-value',
                 'c-rate-value', 'bms-value', 'cells-value', 'sku-value', 'production-date-value', 'warranty-end-value'];
-            const VALUE_SPAN_DEFAULT_SIZE = 24;
-            const LABEL_DEFAULT_SIZE = 18; // matches the label's text-lg class
+            const VALUE_SPAN_DEFAULT_SIZE = 28;
+            // Matches the label spans' text-[10px] class. Labels used to default
+            // to 18px (text-lg) and only shrank as a last resort once the value
+            // was already at its floor -- since a long label (e.g. "תוקף אחריות:")
+            // could by itself eat most of a tight row, that left the VALUE (the
+            // actual number a technician needs to read) forced smaller than the
+            // label naming it. Starting labels smaller gives values more of the
+            // row by default; fitCellText() can still shrink a label further
+            // (down to its floor of 9) if a specific row still needs it.
+            // 10px specifically because the row itself is only ~14px tall (see
+            // fitValueSpansToRow()'s header-height comment) -- the shrink loop
+            // only reacts to *width* pressure, so a label with plenty of width
+            // room (e.g. row 1's short "קיבולת:"/"מתח:") never shrinks even
+            // though its line-height at 13px alone exceeded the row's height,
+            // drawing the row's divider line through the text. 10px's
+            // line-height comfortably fits under 14px regardless of width.
+            const LABEL_DEFAULT_SIZE = 10;
+            // Per-field floor for the shrink-to-fit loop. discharge/c-rate/BMS
+            // stay closer to the default floor (10) since they're safety-relevant
+            // current specs; sku/cells/warranty-end are reference info (not a
+            // number a technician needs to read at a glance for safety), so they
+            // can shrink further when a long value (e.g. "ANT 220A/550A",
+            // "GP-72V-40A-50XG-01") needs the extra room to actually fit the row
+            // instead of silently overflowing it.
+            const VALUE_FLOOR_BY_ID = {
+                'bms-value': 9,
+                'sku-value': 6,
+                'cells-value': 7,
+                'warranty-end-value': 7,
+            };
 
             // Long dual-number specs (BMS "150A/450A", discharge "720A/1120A")
             // can be wider than the row has room for — the value spans are
@@ -983,20 +1029,54 @@
                 // share the row's width), so a stale pre-loop value can let a
                 // shrink "succeed" against a budget that no longer holds once the
                 // layout settles back down.
+                // A negative/zero "available" means the label ALONE (at its
+                // current size) already eats the whole cell budget -- that's
+                // exactly the case shrinking is supposed to fix, not bail out
+                // of. Only stop once there's real positive room AND the
+                // content actually fits it; otherwise keep shrinking down to
+                // the floor (previously this bailed the instant available
+                // went <=0, leaving a long label like "תוקף אחריות:" stuck at
+                // its full size with the value never given a chance to fit).
                 let size = valueStartSize;
                 while (size > valueFloor) {
                     const available = cell.clientWidth - label.offsetWidth - 8;
-                    if (available <= 0 || span.scrollWidth <= available) break;
+                    if (available > 0 && span.scrollWidth <= available) break;
                     size -= 1;
                     span.style.fontSize = size + 'px';
                 }
                 let labelSize = LABEL_DEFAULT_SIZE;
                 while (labelSize > 9) {
                     const available = cell.clientWidth - label.offsetWidth - 8;
-                    if (available <= 0 || span.scrollWidth <= available) break;
+                    if (available > 0 && span.scrollWidth <= available) break;
                     labelSize -= 1;
                     label.style.fontSize = labelSize + 'px';
                 }
+            }
+
+            // All 10 value spans share ONE font size, picked from whatever the
+            // tightest row needs — sizing each field independently (every field
+            // maxing out at 28px unless ITS OWN content forced it smaller) made
+            // short fields (72V, 40Ah) stay near 28px while long ones (BMS,
+            // SKU) shrank to ~7px, and that size mismatch made rows visually
+            // overlap instead of reading as a consistent label. A field that
+            // doesn't strictly need to shrink this far just doesn't use its
+            // full headroom.
+            function computeUniformValueSize() {
+                let minSize = VALUE_SPAN_DEFAULT_SIZE;
+                VALUE_SPAN_IDS.forEach((id) => {
+                    const span = document.getElementById(id);
+                    const cell = span && span.parentElement;
+                    const label = cell && cell.querySelector('span[id^="label-"]');
+                    if (!span || !cell || !label) return;
+                    // Find this field's own best-fit size in isolation, purely to
+                    // learn how small the tightest row needs to go -- the actual
+                    // styles applied here get overwritten by the real, uniform
+                    // pass in fitValueSpansToRow() below.
+                    fitCellText(span, cell, label, VALUE_SPAN_DEFAULT_SIZE, VALUE_FLOOR_BY_ID[id] || 10);
+                    const achieved = parseFloat(span.style.fontSize);
+                    if (achieved < minSize) minSize = achieved;
+                });
+                return minSize;
             }
 
             // Each row holds two flex-1 cells side by side (e.g. c-rate + BMS) —
@@ -1008,16 +1088,17 @@
             // span, and empty/short spans are already at their ceiling after the
             // first pass and cost nothing on repeats.
             function fitValueSpansToRow() {
+                const uniformSize = computeUniformValueSize();
                 for (let pass = 0; pass < 10; pass++) {
                     VALUE_SPAN_IDS.forEach((id) => {
                         const span = document.getElementById(id);
                         const cell = span && span.parentElement;
                         const label = cell && cell.querySelector('span[id^="label-"]');
                         if (!span || !cell || !label) return;
-                        // sku-value is a reference code, not a safety-relevant
-                        // number like BMS/discharge — a smaller floor here keeps
-                        // it fully legible-enough while giving it more headroom.
-                        fitCellText(span, cell, label, VALUE_SPAN_DEFAULT_SIZE, (id === 'sku-value' || id === 'cells-value') ? 8 : 10);
+                        // valueFloor == valueStartSize -- the value itself is now
+                        // fixed at the shared size; only the label still shrinks
+                        // per-row (as far as its own floor of 9) to make room for it.
+                        fitCellText(span, cell, label, uniformSize, uniformSize);
                     });
                 }
             }
@@ -1424,11 +1505,21 @@
                             origLabelSize: parseFloat(getComputedStyle(label).fontSize),
                         });
                     });
+                    // Same shared-size approach as the live view's fitValueSpansToRow()
+                    // — find what the tightest row needs, then apply that one size to
+                    // every field so the printed sticker's rows stay visually consistent
+                    // instead of some fields staying large while others shrink hard.
+                    let uniformSize = VALUE_SPAN_DEFAULT_SIZE;
+                    shrunkSpans.forEach(({ id, span, cell, label }) => {
+                        fitCellText(span, cell, label, VALUE_SPAN_DEFAULT_SIZE, VALUE_FLOOR_BY_ID[id] || 10);
+                        const achieved = parseFloat(span.style.fontSize);
+                        if (achieved < uniformSize) uniformSize = achieved;
+                    });
                     // Multiple passes — see fitValueSpansToRow() for why a single
                     // left-to-right pass over sibling cells in the same row isn't
                     // guaranteed to converge.
                     for (let pass = 0; pass < 10; pass++) {
-                        shrunkSpans.forEach(({ id, span, cell, label }) => fitCellText(span, cell, label, VALUE_SPAN_DEFAULT_SIZE, (id === 'sku-value' || id === 'cells-value') ? 8 : 10));
+                        shrunkSpans.forEach(({ span, cell, label }) => fitCellText(span, cell, label, uniformSize, uniformSize));
                     }
 
                     // גבהים מפורשים על שורות הspecs — מאפשר ל-html2canvas לחשב items-end בצורה תקינה
