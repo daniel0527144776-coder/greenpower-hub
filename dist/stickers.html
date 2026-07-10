@@ -1524,13 +1524,19 @@
 
                     // שורש הבעיה: בטלפון הsticker צר (≈375px) → sticker גובה ≈187px
                     // Green Power title ≈150px → נשאר רק ≈37px ל-5 שורות → overflow
-                    // תיקון: מרחיב את wrapper ל-700px לפני לכידה, מחזיר אחרי
+                    // תיקון: מרחיב את wrapper ל-1000px (המקסימום של .sticker-wrapper)
+                    // לפני לכידה, מחזיר אחרי. 700px היה קודם, אבל השדה הכי צר
+                    // (מק"ט, למשל "GP-72V-40A-50XG-01") נשאר עם ~199px לתא בלבד שם —
+                    // מספיק כדי "להתאים", אבל כופה גודל אחיד קטן (~14px) על *כל*
+                    // 10 השדות (כולל קצרים כמו "72V" שהיו יכולים להיות הרבה יותר
+                    // גדולים). ב-1000px יש הרבה יותר מקום לשדה הכי צר, כך שהגודל
+                    // האחיד המחושב גדול בהרבה ותואם איך שהמדבקה נראתה קודם.
                     const wrapper = sticker.closest('.sticker-wrapper');
                     const origWrapW = wrapper ? wrapper.style.width : '';
                     const origWrapMaxW = wrapper ? wrapper.style.maxWidth : '';
-                    const needsWiden = wrapper && wrapper.offsetWidth < 700;
+                    const needsWiden = wrapper && wrapper.offsetWidth < 1000;
                     if (needsWiden) {
-                        wrapper.style.width = '700px';
+                        wrapper.style.width = '1000px';
                         wrapper.style.maxWidth = 'none';
                         // 350ms — מבטיח שהדפדפן סיים reflow (כולל שינוי שורת כותרת מ-2 שורות ל-1)
                         await new Promise(r => setTimeout(r, 350));
