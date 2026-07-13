@@ -45,10 +45,27 @@
             background-color: #f0f2f5;
         }
 
+        /* The sticker is a real 100mm x 50mm physical label with 10 data
+           fields, a header and a footer -- .sticker-wrapper is ALWAYS
+           rendered at its true 1000x500 layout size, on every device,
+           instead of shrinking to fit a narrow phone screen. This is what
+           guarantees the on-screen preview and the downloaded PDF are
+           pixel-for-pixel the same DOM measurements (the PDF capture no
+           longer needs its own separate "widen the wrapper, capture, then
+           restore" step -- it captures exactly what was already on screen).
+           On viewports narrower than 1000px, .sticker-scroll-frame below
+           makes this scroll horizontally instead. A responsive (100%-width)
+           wrapper was tried first and rejected: once the sticker's real
+           on-screen width dropped much below ~1000px, the spec text's
+           line-height still didn't fit its row even after the auto-fit
+           shrink loop hit its floor size (measured: a 390px phone gave 85px
+           x 13px cells, but text needed 15px even at a near-illegible 6px
+           font) -- producing visibly overlapping label/value text live,
+           even though the final PDF (captured at the widened 1000px size)
+           looked fine. */
         .sticker-wrapper {
-            width: 100%;
-            max-width: 1000px; 
-            aspect-ratio: 2 / 1; 
+            width: 1000px;
+            aspect-ratio: 2 / 1;
             position: relative;
             background-color: white;
             box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15);
@@ -56,6 +73,13 @@
             border: 1px solid #e5e7eb;
             overflow: hidden;
             margin: 0 auto;
+        }
+
+        .sticker-scroll-frame {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 4px 0 10px;
         }
 
         #sticker-to-capture {
@@ -161,6 +185,7 @@
     </div>
 
     <!-- Sticker Area -->
+    <div class="sticker-scroll-frame">
     <div class="sticker-wrapper">
         <div id="sticker-to-capture" class="w-full h-full flex flex-row bg-white">
             
@@ -175,11 +200,8 @@
                  makes it a fixed, predictable "sticker width minus the fixed
                  side column", independent of what's rendered inside. -->
             <div class="w-2/3 min-w-0 flex flex-col p-5 pl-4 justify-between h-full">
-                <!-- Logo and slogan section — kept small on mobile (lg: unchanged
-                     for desktop preview): at real phone width the header was
-                     eating ~82 of the sticker's ~177px total height, leaving
-                     only ~9px per spec row regardless of value font size. -->
-                <div class="flex flex-col items-start gap-1 pb-1 border-b lg:border-b-2 border-black">
+                <!-- Logo and slogan section -->
+                <div class="flex flex-col items-start gap-1 pb-1 border-b-2 border-black">
                     <div class="flex w-full items-center justify-center gap-4">
                         <div class="flex-grow flex flex-col items-center text-center">
 
@@ -308,8 +330,8 @@
             
             <!-- Side content on the left -->
             <div class="w-1/3 max-w-[340px] flex flex-col items-center justify-between p-4 border-r-2 border-black bg-gray-50">
-                <div class="flex flex-col items-center w-full mb-2 mt-2"> 
-                    <div id="qr-title" data-editable="true" contenteditable="false" class="text-3xl font-black mb-3 text-center text-black"> 
+                <div class="flex flex-col items-center w-full mb-1 mt-1">
+                    <div id="qr-title" data-editable="true" contenteditable="false" class="text-3xl font-black mb-2 text-center text-black">
                         סרוק לאחריות
                     </div>
                     <div id="qr-placeholder" class="cursor-pointer relative flex justify-center items-center bg-white rounded-xl shadow-md transform transition hover:scale-105 border-2 border-black">
@@ -317,38 +339,39 @@
                     </div>
                 </div>
                 
-                <div class="flex flex-col items-center w-full mb-2 text-center mt-4 flex-grow justify-center"> 
-                    <div id="manufacturer-info" data-editable="true" contenteditable="false" class="text-lg leading-snug mb-2 font-black text-black"> 
+                <div class="flex flex-col items-center w-full mb-1 text-center mt-2 flex-grow justify-center">
+                    <div id="manufacturer-info" data-editable="true" contenteditable="false" class="text-lg leading-snug mb-1 font-black text-black">
                         <p class="font-black text-2xl mb-1">מעבדת Green Power</p>
                         <p class="text-xl">עובדיה מברטנורא 12, אלעד, ישראל</p>
                         <p class="text-xl">053-3224879 | Made in Israel</p>
                     </div>
                 </div>
 
-                 <div class="w-full mb-4 text-center px-2"> 
-                     <p id="standard-info" data-editable="true" contenteditable="false" class="text-base font-black leading-tight break-words text-black"> 
+                 <div class="w-full mb-1 text-center px-2">
+                     <p id="standard-info" data-editable="true" contenteditable="false" class="text-base font-black leading-tight break-words text-black">
                          מיוצר בהתאם לתקן IEC 62133, תקן הבטיחות המחמיר בעולם לסוללות ליתיום.
                      </p>
                  </div>
 
                 <div class="flex flex-col items-center w-full mt-auto">
-                     <div class="w-full border-t-2 border-black my-3"></div>
+                     <div class="w-full border-t-2 border-black my-2"></div>
                     <div class="flex justify-center items-center gap-4 flex-wrap">
                         <div id="icon-placeholder-1" class="w-14 h-14 cursor-pointer rounded flex items-center justify-center p-0.5 bg-white border-2 border-gray-900 shadow-sm">
-                            <img id="icon-img-1" class="h-full w-full object-contain" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"><path d="M73.5,60a30,30,1,1,0-60,24,24,0,1,0,0,48,6,6,0,1,1,0-12,12,12,0,1,1,0-24,30,30,0,0,1,0,48Z"/><path d="M26.5,60a30,30,0,0,1,0-60h18a30,30,0,0,0,0,60Z"/></svg>' alt="CE">
+                            <img id="icon-img-1" class="h-full w-full object-contain" src='data:image/png;base64,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' alt="CE">
                         </div>
                         <div id="icon-placeholder-2" class="w-14 h-14 cursor-pointer rounded flex items-center justify-center p-0.5 bg-white border-2 border-gray-900 shadow-sm">
-                            <img id="icon-img-2" class="h-full w-full object-contain" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><circle cx="64" cy="64" r="56" fill="none" stroke="%23C00" stroke-width="10"/><path fill="%23C00" d="M37 36h18v70H37z"/><path fill="%23C00" d="M55 36h36a18 18 0 010 36H73v34H55z"/></svg>' alt="UL">
+                            <img id="icon-img-2" class="h-full w-full object-contain" src='data:image/png;base64,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' alt="UL">
                         </div>
                         <div id="icon-placeholder-3" class="w-14 h-14 cursor-pointer rounded flex items-center justify-center p-0.5 bg-white border-2 border-gray-900 shadow-sm">
-                           <img id="icon-img-3" class="h-full w-full object-contain" src='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="%23fff" viewBox="0 0 350 150"><rect width="350" height="150" fill="%23005eb8" rx="10"/><path d="M50 40 H68 V110 H50z M85 40 H103 V95 H91 V85 H85z M85 75 H91 V65 H85z M85 55 H91 V45 H85z M115 40 H148 V55 H130 V65 H148 V80 H130 V90 H148 V105 H115z M165 40 H200 C220 40 220 110 200 110 H165z M165 50 H195 C205 50 205 100 195 100 H165z"/><g transform="translate(230 50)"><rect width="80" height="8"/><rect y="20" width="80" height="8"/><circle cx="90" cy="24" r="10"/></g></svg>' alt="IEC">
+                           <img id="icon-img-3" class="h-full w-full object-contain" src='data:image/png;base64,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' alt="IEC">
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
+    </div>
+
     <!-- Controls Area -->
     <div class="controls w-full max-w-5xl mt-8 p-6 bg-white rounded-xl shadow-lg flex flex-col gap-8 mb-10">
         
@@ -1518,39 +1541,17 @@
                     filename += "_" + dateStr;
 
                     const format = this.dataset.format;
-                    const scale = get300DpiScale(); 
 
                     await new Promise(resolve => setTimeout(resolve, 100));
-
-                    // שורש הבעיה: בטלפון הsticker צר (≈375px) → sticker גובה ≈187px
-                    // Green Power title ≈150px → נשאר רק ≈37px ל-5 שורות → overflow
-                    // תיקון: מרחיב את wrapper ל-1000px (המקסימום של .sticker-wrapper)
-                    // לפני לכידה, מחזיר אחרי. 700px היה קודם, אבל השדה הכי צר
-                    // (מק"ט, למשל "GP-72V-40A-50XG-01") נשאר עם ~199px לתא בלבד שם —
-                    // מספיק כדי "להתאים", אבל כופה גודל אחיד קטן (~14px) על *כל*
-                    // 10 השדות (כולל קצרים כמו "72V" שהיו יכולים להיות הרבה יותר
-                    // גדולים). ב-1000px יש הרבה יותר מקום לשדה הכי צר, כך שהגודל
-                    // האחיד המחושב גדול בהרבה ותואם איך שהמדבקה נראתה קודם.
-                    const wrapper = sticker.closest('.sticker-wrapper');
-                    const origWrapW = wrapper ? wrapper.style.width : '';
-                    const origWrapMaxW = wrapper ? wrapper.style.maxWidth : '';
-                    const needsWiden = wrapper && wrapper.offsetWidth < 1000;
-                    if (needsWiden) {
-                        wrapper.style.width = '1000px';
-                        wrapper.style.maxWidth = 'none';
-                        // 350ms — מבטיח שהדפדפן סיים reflow (כולל שינוי שורת כותרת מ-2 שורות ל-1)
-                        await new Promise(r => setTimeout(r, 350));
-                    }
 
                     const specsEl = document.getElementById('new-battery-specs');
                     const specRows = specsEl ? [...specsEl.children] : [];
 
-                    // Long dual-number specs can still be wider than the row even
-                    // at the widened 700px capture width — same fitCellText() logic
-                    // runs live, but here both spans are reset to their ideal
-                    // default size first (the live view may have already shrunk them
-                    // for a *narrower* viewport than this capture uses, so starting
-                    // fresh gives the best possible size for the actual PDF).
+                    // .sticker-wrapper is now a fixed 1000x500 artboard at all times
+                    // (see its CSS comment) so this re-fit is redundant with the
+                    // live view's own auto-fit -- kept anyway as a cheap, harmless
+                    // safety net that guarantees the captured sizes reflect the
+                    // very latest measurements right before the canvas is drawn.
                     const shrunkSpans = [];
                     VALUE_SPAN_IDS.forEach(id => {
                         const span = document.getElementById(id);
@@ -1594,7 +1595,6 @@
                         specRows.forEach(r => { r.style.height = rowH + 'px'; r.style.flex = 'none'; });
                     }
 
-                    // חישוב scale לפי הsticker הנוכחי (אחרי הרחבה אפשרית)
                     const captureScale = get300DpiScale();
 
                     function _restoreAll() {
@@ -1602,10 +1602,6 @@
                         if (specsEl) { specsEl.style.height = origSpecH; specsEl.style.flex = origSpecFlex; }
                         specRows.forEach((r, i) => { r.style.height = origRowH[i].h; r.style.flex = origRowH[i].f; });
                         shrunkSpans.forEach(({ span, label, origValueSize, origLabelSize }) => { span.style.fontSize = origValueSize + 'px'; label.style.fontSize = origLabelSize + 'px'; });
-                        if (needsWiden && wrapper) {
-                            wrapper.style.width = origWrapW;
-                            wrapper.style.maxWidth = origWrapMaxW;
-                        }
                     }
 
                     try {
