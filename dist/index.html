@@ -2805,8 +2805,8 @@ function estimateBatteryCost(it) {
   const m = it.name.match(/(\d+)V\s*(\d+)Ah/);
   if (!m) return null;
   const V = +m[1], Ah = +m[2];
-  const isPro = /PRO/.test(it.cat);
-  const cellPrice = isPro ? 11.5 : 6.5;   // Tenpower 50XG vs EVE 50E
+  // 3-tier landed cell cost (2026-07): PRO=EVE 50PL, ADVANCED=Tenpower 50SG, CLASSIC=EVE 50E
+  const cellPrice = /PRO/.test(it.cat) ? 12.15 : /ADVANCED/.test(it.cat) ? 8.86 : 7.34;
   const cellMah = 5000;                   // 21700 ~5.0Ah
   const S = Math.round(V / 3.7), P = Math.ceil(Ah * 1000 / cellMah);
   const cells = S * P;
