@@ -469,7 +469,7 @@
                     <label for="cells-select" class="block text-sm font-medium text-gray-700 mb-1">סוג תאים</label>
                     <select id="cells-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
                         <option value="EVE 21700 50E" selected>EVE 21700 50E — CLASSIC (2C/3C)</option>
-                        <option value="Tenpower 21700 50SG">Tenpower 21700 50SG — ADVANCED (4C)</option>
+                        <option value="Tenpower 21700 50SG">Tenpower 21700 50SG — ADVANCED (4C/10C)</option>
                         <option value="EVE 21700 50PL">EVE 21700 50PL — PRO (25C/36C)</option>
                     </select>
                 </div>
@@ -1188,9 +1188,9 @@
                 if (cellsText.includes("50PL")) {
                     return { cont: 25, peak: 36, cellCode: "50PL" };
                 }
-                // Tenpower 50SG — ADVANCED (4C cont / 20A per datasheet; peak est. 1.5x = 6C).
+                // Tenpower 50SG — ADVANCED (4C cont / 20A per datasheet; 10C peak / 50A per owner).
                 if (cellsText.includes("50SG")) {
-                    return { cont: 4, peak: 6, cellCode: "50SG" };
+                    return { cont: 4, peak: 10, cellCode: "50SG" };
                 }
                 // EVE 50E — CLASSIC energy cell.
                 return { cont: 2, peak: 3, cellCode: "50E" };
