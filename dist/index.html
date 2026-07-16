@@ -449,14 +449,24 @@ body { padding-bottom: 90px; min-height: 100vh; }
   <!-- Cells we import -->
   <div class="card">
     <h3 class="card-title">🔋 התאים שאנחנו מייבאים</h3>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+    <!-- 3 tiers since the 2026-07 restructure. 50PL/50SG have no dedicated shot yet,
+         so they reuse a same-brand 21700 photo (same as the retail AboutPage cards). -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(100px, 1fr)); gap:10px;">
       <div style="background:var(--primary-light); border-radius:10px; padding:10px; text-align:center;">
         <div style="background:#fff; border-radius:8px; padding:6px; margin-bottom:8px;">
-          <img src="cell-tenpower-50xg.webp" alt="Tenpower 21700 50XG" loading="lazy" style="height:90px; width:auto; object-fit:contain;">
+          <img src="cell-eve-50e.webp" alt="EVE 21700 50PL" loading="lazy" style="height:90px; width:auto; object-fit:contain;">
         </div>
-        <div style="font-weight:700; font-size:12.5px;">Tenpower 21700 50XG</div>
-        <div style="font-size:11px; color:var(--text-muted); margin:3px 0;">PRO · Tabless · 18C רציף / 28C פיק</div>
-        <a href="https://energylabgreen.com/datasheets/tenpower-21700-50xg.pdf" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px; font-weight:700;">📄 מפרט טכני (PDF)</a>
+        <div style="font-weight:700; font-size:12.5px;">EVE 21700 50PL</div>
+        <div style="font-size:11px; color:var(--text-muted); margin:3px 0;">PRO · Tabless · 25C רציף / 36C פיק</div>
+        <a href="https://energylabgreen.com/datasheets/eve-21700-50pl.pdf" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px; font-weight:700;">📄 מפרט טכני (PDF)</a>
+      </div>
+      <div style="background:var(--primary-light); border-radius:10px; padding:10px; text-align:center;">
+        <div style="background:#fff; border-radius:8px; padding:6px; margin-bottom:8px;">
+          <img src="cell-tenpower-50xg.webp" alt="Tenpower 21700 50SG" loading="lazy" style="height:90px; width:auto; object-fit:contain;">
+        </div>
+        <div style="font-weight:700; font-size:12.5px;">Tenpower 21700 50SG</div>
+        <div style="font-size:11px; color:var(--text-muted); margin:3px 0;">ADVANCED · 4C רציף / 10C פיק</div>
+        <a href="https://energylabgreen.com/datasheets/tenpower-21700-50sg.pdf" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px; font-weight:700;">📄 מפרט טכני (PDF)</a>
       </div>
       <div style="background:var(--primary-light); border-radius:10px; padding:10px; text-align:center;">
         <div style="background:#fff; border-radius:8px; padding:6px; margin-bottom:8px;">
@@ -566,9 +576,9 @@ body { padding-bottom: 90px; min-height: 100vh; }
       <label>סוג תא</label>
       <select class="form-select" id="cellType" onchange="recalc()">
         <option value="18650-6">18650 רגיל — ₪6</option>
-        <option value="18650-7">18650 EVE 50E פרמיום — ₪7</option>
-        <option value="21700-12" selected>21700 50XG Tabless — ₪12</option>
-        <option value="21700-13">21700 איכותי — ₪13</option>
+        <option value="21700-50e">21700 EVE 50E (CLASSIC) — ₪7.34</option>
+        <option value="21700-50sg">21700 Tenpower 50SG (ADVANCED) — ₪8.86</option>
+        <option value="21700-50pl" selected>21700 EVE 50PL (PRO · Tabless) — ₪12.15</option>
       </select>
     </div>
     <div class="form-row">
@@ -1080,7 +1090,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
       <li><b>סיכום החודש</b> — הכנסות, רווח נטו ומספר תיקונים. מתעדכן מכל תיקון שנשמר.</li>
       <li><b>פעולות מהירות</b> — קיצורים לכל המסכים.</li>
       <li><b>מחירוני PDF</b> — הורדת מחירון עסקי וקמעונאי.</li>
-      <li><b>התאים שאנחנו מייבאים</b> — Tenpower 50XG (PRO) ו-EVE 50E (CLASSIC) + מפרטים.</li>
+      <li><b>התאים שאנחנו מייבאים</b> — EVE 50PL (PRO), Tenpower 50SG (ADVANCED) ו-EVE 50E (CLASSIC) + מפרטים.</li>
       <li><b>קישורים חיצוניים</b> — ניתנים לעריכה בכפתור "עריכת קישורים".</li>
     </ul>
   </div>
@@ -1389,8 +1399,19 @@ body { padding-bottom: 90px; min-height: 100vh; }
 // ============================================================
 
 // ---- Constants ----
-const CELL_PRICES = { '18650-6': 6, '18650-7': 7, '21700-12': 12, '21700-13': 13 };
-const CELL_WEIGHTS = { '18650-6': 45, '18650-7': 45, '21700-12': 70, '21700-13': 70 };
+// Landed cost per cell. The 21700-* tier keys mirror the 2026-07 3-tier cost model
+// (see estimateBatteryCost / generate-battery-products.mjs) — keep the three in sync.
+// '18650-7'/'21700-12'/'21700-13' are retired from the picker but kept here: jobs
+// saved before the restructure still carry those strings, so a lookup on an old
+// record resolves a price rather than undefined.
+const CELL_PRICES = {
+  '18650-6': 6, '18650-7': 7, '21700-12': 12, '21700-13': 13,
+  '21700-50e': 7.34, '21700-50sg': 8.86, '21700-50pl': 12.15,
+};
+const CELL_WEIGHTS = {
+  '18650-6': 45, '18650-7': 45, '21700-12': 70, '21700-13': 70,
+  '21700-50e': 70, '21700-50sg': 70, '21700-50pl': 70,
+};
 
 const BMS_PRICES = {
   daly: { 20: 25, 30: 35, 40: 55, 60: 65, 80: 95, 100: 120, 120: 150, 150: 180, 200: 230, 220: 250, 300: 330 },
@@ -2561,8 +2582,8 @@ const DEFAULT_REPLIES = [
   },
   {
     id: 'r4',
-    title: 'הסבר תאי 50XG (Tabless)',
-    body: `🔋 הסבר על תא 50XG: מה השתנה ולמה הוא שובר את השוק?\n\nהתא הזה מבוסס על טכנולוגיה חדשה שנקראת "טאבלס" (Tabless), שמשחררת את המנוע ונותנת מקסימום ביצועים בלי להתחמם.\n\nמה ההבדל בין מה שהיה למה שיש עכשיו?\n\n🐢 *מה היה עד היום (תאי 8C הסטנדרטיים):*\nהתאים הישנים עבדו עם "לשונית" פנימית קטנה שדרכה עבר כל החשמל. זה יצר צוואר בקבוק. כשדרשת מכת כוח (עליה קשה או פתיחה מהירה), הסוללה התאמצה, התחממה, ו"חנקה" את המנוע.\n\n🚀 *טכנולוגיית "טאבלס" החדשה (18C רציף / 28C בפיק):*\nבתאי ה-50XG של Tenpower ביטלו את הלשונית הצרה הזו (Tab-less). החשמל זורם החוצה בעוצמה דרך כל הקוטב של התא בבת אחת. זה מאפשר לתא לשחרר פי 2 ופי 3 יותר כוח!\n\n❄️ *התחממות אפסית (התנגדות פנימית נמוכה):*\nבגלל שמבנה הטאבלס מאפשר לחשמל לצאת החוצה כל כך בקלות, הסוללה נשארת קרירה גם כשאתה קורע את הכלי במאמץ.\nסוללה שלא מתחממת שומרת על אורך חיים גדול משמעותית ונשארת אמינה לשנים ארוכות.\n\n🎯 *בקיצור:* טכנולוגיית קצה שמבטיחה שתקבל 100% מהיכולת של הכלי שלך, נקודה.`
+    title: 'הסבר תאי 50PL (Tabless)',
+    body: `🔋 הסבר על תא 50PL: מה השתנה ולמה הוא שובר את השוק?\n\nהתא הזה מבוסס על טכנולוגיה חדשה שנקראת "טאבלס" (Tabless), שמשחררת את המנוע ונותנת מקסימום ביצועים בלי להתחמם.\n\nמה ההבדל בין מה שהיה למה שיש עכשיו?\n\n🐢 *מה היה עד היום (תאי 8C הסטנדרטיים):*\nהתאים הישנים עבדו עם "לשונית" פנימית קטנה שדרכה עבר כל החשמל. זה יצר צוואר בקבוק. כשדרשת מכת כוח (עליה קשה או פתיחה מהירה), הסוללה התאמצה, התחממה, ו"חנקה" את המנוע.\n\n🚀 *טכנולוגיית "טאבלס" החדשה (25C רציף / 36C בפיק):*\nבתאי ה-50PL של EVE ביטלו את הלשונית הצרה הזו (Tab-less). החשמל זורם החוצה בעוצמה דרך כל הקוטב של התא בבת אחת. זה מאפשר לתא לשחרר פי 2 ופי 3 יותר כוח!\n\n❄️ *התחממות אפסית (התנגדות פנימית נמוכה):*\nבגלל שמבנה הטאבלס מאפשר לחשמל לצאת החוצה כל כך בקלות, הסוללה נשארת קרירה גם כשאתה קורע את הכלי במאמץ.\nסוללה שלא מתחממת שומרת על אורך חיים גדול משמעותית ונשארת אמינה לשנים ארוכות.\n\n🎯 *בקיצור:* טכנולוגיית קצה שמבטיחה שתקבל 100% מהיכולת של הכלי שלך, נקודה.`
   },
   {
     id: 'r5',
@@ -3308,7 +3329,7 @@ function openInventoryEditor(id) {
   const inv = getInventory();
   const it = id ? inv.find(x => x.id === id) : { name: '', qty: 0, low: '', note: '' };
   openModal(id ? 'עריכת פריט' : 'פריט מלאי חדש', `
-    <div class="form-row"><label>שם הפריט</label><input class="form-input-wide" id="invName" value="${it.name || ''}" placeholder="תא Tenpower 50XG / BMS DALY 60A" style="width:170px;"></div>
+    <div class="form-row"><label>שם הפריט</label><input class="form-input-wide" id="invName" value="${it.name || ''}" placeholder="תא EVE 50PL / BMS DALY 60A" style="width:170px;"></div>
     <div class="form-row"><label>כמות במלאי</label><input type="number" class="form-input" id="invQty" value="${it.qty || 0}" min="0"></div>
     <div class="form-row"><label>סף התראה</label><input type="number" class="form-input" id="invLow" value="${it.low != null ? it.low : ''}" placeholder="לדוגמה 20"></div>
     <div class="form-row"><label>הערה</label><input class="form-input-wide" id="invNote" value="${it.note || ''}" placeholder="ספק / מק\"ט" style="width:170px;"></div>`,
