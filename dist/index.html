@@ -3324,17 +3324,47 @@ function renderInventory() {
       <span><b>${x.n}</b> <span style="color:var(--text-muted);font-size:11px;">${x.t}</span></span>
       <span style="font-weight:700;color:var(--primary);">₪${x.c}</span></div>`).join('') +
     '</div><div style="font-size:10px;color:var(--text-muted);margin-top:6px;">עלות מלאה עד המעבדה — כולל מע״מ, שילוח ואגרות (עוסק פטור אינו מקזז מע״מ)</div>';
-  const inv = getInventory().slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const inv = getInventory();
   const low = inv.filter(i => i.low != null && Number(i.qty) <= Number(i.low));
   document.getElementById('inventoryLowAlert').innerHTML = low.length
     ? `<div class="alert alert-danger">⚠️ <b>מלאי נמוך:</b> ${low.map(i => `${i.name} (${i.qty})`).join(' · ')}</div>` : '';
   const list = document.getElementById('inventoryList');
   if (inv.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים. הוסף תאים, BMS, מטענים, ניקל וכו\'.</div></div>'; return; }
-  list.innerHTML = inv.map(i => {
-    const isLow = i.low != null && Number(i.qty) <= Number(i.low);
-    return `<div class="list-item" style="${isLow ? 'border-color:var(--danger);' : ''}">
+  const CAT_ORDER = ['BMS', 'מטען', 'תא', 'ניקל', 'אחר'];
+  const CAT_ICON = { 'BMS': '🛡️', 'מטען': '🔌', 'תא': '🔋', 'ניקל': '⚡', 'אחר': '📦' };
+  const groups = {};
+  inv.forEach(i => { const c = invCatOf(i); (groups[c] = groups[c] || []).push(i); });
+  const cats = Object.keys(groups).sort((a, b) => {
+    const ia = CAT_ORDER.indexOf(a), ib = CAT_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
+  list.innerHTML = cats.map(c => {
+    const items = groups[c].slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he', { numeric: true }));
+    const totalQty = items.reduce((s, x) => s + (Number(x.qty) || 0), 0);
+    return `<div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px;margin-bottom:6px;border-bottom:2px solid var(--primary);">
+        <span style="font-weight:700;font-size:15px;">${CAT_ICON[c] || '📦'} ${c}</span>
+        <span style="font-size:11px;color:var(--text-muted);">${items.length} סוגים · ${totalQty} יח'</span>
+      </div>
+      ${items.map(i => renderInvItem(i, c)).join('')}
+    </div>`;
+  }).join('');
+}
+// Category of an inventory item: an explicit .cat wins; otherwise derived from the
+// name prefix so items seeded/imported before .cat existed still group correctly.
+function invCatOf(it) {
+  if (it.cat) return it.cat;
+  const n = (it.name || '').trim();
+  for (const k of ['BMS', 'מטען', 'תא', 'ניקל']) { if (n === k || n.startsWith(k + ' ')) return k; }
+  return 'אחר';
+}
+function renderInvItem(i, cat) {
+  const isLow = i.low != null && Number(i.qty) <= Number(i.low);
+  let title = i.name || '';
+  if (cat && cat !== 'אחר' && title.startsWith(cat + ' ')) title = title.slice(cat.length + 1);
+  return `<div class="list-item" style="${isLow ? 'border-color:var(--danger);' : ''}">
       <div class="list-item-header">
-        <div><div class="list-item-title">${i.name} ${isLow ? '<span style="font-size:10px;color:var(--danger);">⚠️ נמוך</span>' : ''}</div>
+        <div><div class="list-item-title">${title} ${isLow ? '<span style="font-size:10px;color:var(--danger);">⚠️ נמוך</span>' : ''}</div>
           <div class="list-item-subtitle">${i.note || ''}${i.low != null ? ` · סף: ${i.low}` : ''}</div></div>
         <div class="num-input">
           <button class="num-btn" onclick="adjustInventory('${i.id}',-1)">−</button>
@@ -3347,7 +3377,6 @@ function renderInventory() {
         <button class="btn btn-sm btn-danger" onclick="deleteInventory('${i.id}')">🗑️</button>
       </div>
     </div>`;
-  }).join('');
 }
 function adjustInventory(id, d) {
   const inv = getInventory(); const it = inv.find(x => x.id === id); if (!it) return;
@@ -3357,8 +3386,11 @@ function adjustInventory(id, d) {
 function openInventoryEditor(id) {
   const inv = getInventory();
   const it = id ? inv.find(x => x.id === id) : { name: '', qty: 0, low: '', note: '' };
+  const curCat = it.cat || (it.name ? invCatOf(it) : 'BMS');
+  const catOpts = ['BMS', 'מטען', 'תא', 'ניקל', 'אחר'].map(c => `<option value="${c}"${c === curCat ? ' selected' : ''}>${c}</option>`).join('');
   openModal(id ? 'עריכת פריט' : 'פריט מלאי חדש', `
-    <div class="form-row"><label>שם הפריט</label><input class="form-input-wide" id="invName" value="${it.name || ''}" placeholder="תא EVE 50PL / BMS DALY 60A" style="width:170px;"></div>
+    <div class="form-row"><label>קטגוריה</label><select class="form-select" id="invCat">${catOpts}</select></div>
+    <div class="form-row"><label>שם הפריט</label><input class="form-input-wide" id="invName" value="${it.name || ''}" placeholder="20S 100A / DALY 60A / 72V 5A" style="width:170px;"></div>
     <div class="form-row"><label>כמות במלאי</label><input type="number" class="form-input" id="invQty" value="${it.qty || 0}" min="0"></div>
     <div class="form-row"><label>סף התראה</label><input type="number" class="form-input" id="invLow" value="${it.low != null ? it.low : ''}" placeholder="לדוגמה 20"></div>
     <div class="form-row"><label>הערה</label><input class="form-input-wide" id="invNote" value="${it.note || ''}" placeholder="ספק / מק\"ט" style="width:170px;"></div>`,
@@ -3368,7 +3400,7 @@ function saveInventory(id) {
   const name = document.getElementById('invName').value.trim();
   if (!name) { alert('הזן שם פריט'); return; }
   const lowVal = document.getElementById('invLow').value;
-  const rec = { name, qty: Math.max(0, parseInt(document.getElementById('invQty').value) || 0), low: lowVal === '' ? null : (parseInt(lowVal) || 0), note: document.getElementById('invNote').value };
+  const rec = { name, cat: document.getElementById('invCat').value, qty: Math.max(0, parseInt(document.getElementById('invQty').value) || 0), low: lowVal === '' ? null : (parseInt(lowVal) || 0), note: document.getElementById('invNote').value };
   const inv = getInventory();
   if (id) { const i = inv.findIndex(x => x.id === id); if (i >= 0) inv[i] = { ...inv[i], ...rec }; }
   else { inv.push({ id: 'inv' + Date.now(), ...rec }); }
@@ -3414,8 +3446,8 @@ function doInventoryBulkImport() {
     const full = cat ? `${cat} ${name}` : name;
     const upsert = (nm2, q, nt) => {
       const ex = merge ? inv.find(x => (x.name || '').toLowerCase() === nm2.toLowerCase()) : null;
-      if (ex) { ex.qty = q; if (nt) ex.note = nt; updated++; }
-      else { inv.push({ id: 'inv' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: nm2, qty: q, low: null, note: nt }); added++; }
+      if (ex) { ex.qty = q; if (nt) ex.note = nt; if (cat) ex.cat = cat; updated++; }
+      else { inv.push({ id: 'inv' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: nm2, cat: cat || undefined, qty: q, low: null, note: nt }); added++; }
     };
     upsert(full, qty, note);
     if (usedQty != null) upsert(`${full} (יד 2)`, usedQty, 'יד שנייה');
@@ -3453,8 +3485,8 @@ function seedInventoryOnce() {
     INV_SEED_2026.forEach(([cat, name, qty, used]) => {
       const full = `${cat} ${name}`;
       const base = 'invseed_' + cat + '_' + name.replace(/\s+/g, '');
-      if (!has(full)) { inv.push({ id: base, name: full, qty, low: null, note: '' }); added++; }
-      if (used > 0) { const un = `${full} (יד 2)`; if (!has(un)) { inv.push({ id: base + '_u', name: un, qty: used, low: null, note: 'יד שנייה' }); added++; } }
+      if (!has(full)) { inv.push({ id: base, name: full, cat, qty, low: null, note: '' }); added++; }
+      if (used > 0) { const un = `${full} (יד 2)`; if (!has(un)) { inv.push({ id: base + '_u', name: un, cat, qty: used, low: null, note: 'יד שנייה' }); added++; } }
     });
     if (added) Store.set('inventory', inv);
     settings.invSeedBMS2026 = true;
