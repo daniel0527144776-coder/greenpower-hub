@@ -576,6 +576,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
       <label>סוג תא</label>
       <select class="form-select" id="cellType" onchange="recalc()">
         <option value="18650-6">18650 רגיל — ₪6</option>
+        <option value="18650-25p">18650 EVE 25P (כלי עבודה) — ₪5.14</option>
         <option value="21700-50e">21700 EVE 50E (CLASSIC) — ₪7.34</option>
         <option value="21700-50sg">21700 Tenpower 50SG (ADVANCED) — ₪8.86</option>
         <option value="21700-50pl" selected>21700 EVE 50PL (PRO · Tabless) — ₪12.15</option>
@@ -1347,9 +1348,13 @@ body { padding-bottom: 90px; min-height: 100vh; }
 <section id="page-inventory" class="page">
   <div class="page-header">
     <h2 class="page-title">📦 ניהול מלאי</h2>
-    <button class="btn btn-primary btn-sm" onclick="openInventoryEditor(null)">➕ פריט</button>
+    <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" onclick="openInventoryBulkImport()">📥 ייבוא מהיר</button>
+      <button class="btn btn-primary btn-sm" onclick="openInventoryEditor(null)">➕ פריט</button>
+    </div>
   </div>
   <div id="inventoryLowAlert"></div>
+  <div id="cellCostRef" class="card" style="margin-bottom:10px;"></div>
   <div class="card">
     <div id="inventoryList"></div>
   </div>
@@ -1405,13 +1410,21 @@ body { padding-bottom: 90px; min-height: 100vh; }
 // saved before the restructure still carry those strings, so a lookup on an old
 // record resolves a price rather than undefined.
 const CELL_PRICES = {
-  '18650-6': 6, '18650-7': 7, '21700-12': 12, '21700-13': 13,
+  '18650-6': 6, '18650-7': 7, '18650-25p': 5.14, '21700-12': 12, '21700-13': 13,
   '21700-50e': 7.34, '21700-50sg': 8.86, '21700-50pl': 12.15,
 };
 const CELL_WEIGHTS = {
-  '18650-6': 45, '18650-7': 45, '21700-12': 70, '21700-13': 70,
+  '18650-6': 45, '18650-7': 45, '18650-25p': 45, '21700-12': 70, '21700-13': 70,
   '21700-50e': 70, '21700-50sg': 70, '21700-50pl': 70,
 };
+// Landed (unit) cost per cell type — supplier USD x rate x 1.371 (VAT on CIF + sea freight
+// + fees, an עוסק פטור cannot reclaim the VAT). Shown as a reference on the inventory page.
+const CELL_COST_REF = [
+  { n: 'EVE 50E',       t: 'CLASSIC · 21700',        c: 7.34 },
+  { n: 'Tenpower 50SG', t: 'ADVANCED · 21700',       c: 8.86 },
+  { n: 'EVE 50PL',      t: 'PRO · 21700 Tabless',    c: 12.15 },
+  { n: 'EVE 25P',       t: 'כלי עבודה · 18650',      c: 5.14 },
+];
 
 const BMS_PRICES = {
   daly: { 20: 25, 30: 35, 40: 55, 60: 65, 80: 95, 100: 120, 120: 150, 150: 180, 200: 230, 220: 250, 300: 330 },
@@ -3304,6 +3317,13 @@ function renderStickerLog() {
 // ============================================================
 function getInventory() { return Store.get('inventory') || []; }
 function renderInventory() {
+  const cc = document.getElementById('cellCostRef');
+  if (cc) cc.innerHTML = '<h3 class="card-title">🔋 עלות תא (עלות נחיתה ליחידה)</h3>' +
+    '<div style="display:flex;flex-direction:column;">' +
+    CELL_COST_REF.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);">
+      <span><b>${x.n}</b> <span style="color:var(--text-muted);font-size:11px;">${x.t}</span></span>
+      <span style="font-weight:700;color:var(--primary);">₪${x.c}</span></div>`).join('') +
+    '</div><div style="font-size:10px;color:var(--text-muted);margin-top:6px;">עלות מלאה עד המעבדה — כולל מע״מ, שילוח ואגרות (עוסק פטור אינו מקזז מע״מ)</div>';
   const inv = getInventory().slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   const low = inv.filter(i => i.low != null && Number(i.qty) <= Number(i.low));
   document.getElementById('inventoryLowAlert').innerHTML = low.length
@@ -3355,6 +3375,48 @@ function saveInventory(id) {
   Store.set('inventory', inv); closeModal(); renderInventory();
 }
 function deleteInventory(id) { if (!confirm('למחוק פריט?')) return; let inv = getInventory(); inv = inv.filter(x => x.id !== id); Store.set('inventory', inv); renderInventory(); }
+// Bulk paste-import: one item per line, the quantity read from "9PC". A header line
+// (BMS / מטען / תא / ניקל) tags every item under it with that category. Text in ( ) is
+// kept verbatim as the item note — nothing is guessed away.
+function openInventoryBulkImport() {
+  openModal('ייבוא מלאי מהיר', `
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">
+      שורה לכל פריט. כותרת בשורה נפרדת (<b>BMS</b> / <b>מטען</b> / <b>תא</b> / <b>ניקל</b>) מסמנת את הקטגוריה
+      לשורות שאחריה. הכמות נקראת מ־"9PC". טקסט בסוגריים נשמר כהערה.</p>
+    <textarea id="bulkInvText" class="form-input-wide" style="width:100%;height:220px;font-family:monospace;font-size:12px;box-sizing:border-box;" placeholder="BMS&#10;20S 100A 9PC&#10;16S 60A 10PC (3pc)&#10;&#10;מטען&#10;72V 5A 9PC"></textarea>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;">
+      <input type="checkbox" id="bulkInvMerge" checked> עדכן כמות לפריט קיים בעל אותו שם (במקום כפילות)
+    </label>`,
+    `<button class="btn btn-primary" onclick="doInventoryBulkImport()">📥 ייבא</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function doInventoryBulkImport() {
+  const raw = document.getElementById('bulkInvText').value || '';
+  const merge = document.getElementById('bulkInvMerge').checked;
+  const inv = getInventory();
+  const HEADERS = { 'bms': 'BMS', 'מטען': 'מטען', 'מטענים': 'מטען', 'charger': 'מטען', 'chargers': 'מטען',
+                    'תא': 'תא', 'תאים': 'תא', 'cell': 'תא', 'cells': 'תא', 'ניקל': 'ניקל', 'nickel': 'ניקל' };
+  let cat = '', added = 0, updated = 0;
+  raw.split('\n').forEach(line => {
+    const s = line.trim();
+    if (!s) return;
+    const hk = s.toLowerCase().replace(/[:：]/g, '').trim();
+    if (HEADERS[hk]) { cat = HEADERS[hk]; return; }
+    const qm = s.match(/(\d+)\s*pc\b/i);
+    const qty = qm ? parseInt(qm[1], 10) : 0;
+    const nm = s.match(/\(([^)]*)\)/);
+    const note = nm ? nm[1].trim() : '';
+    const name = s.replace(/\([^)]*\)/g, '').replace(/(\d+)\s*pc\b/i, '').replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim();
+    if (!name) return;
+    const full = cat ? `${cat} ${name}` : name;
+    const existing = merge ? inv.find(x => (x.name || '').toLowerCase() === full.toLowerCase()) : null;
+    if (existing) { existing.qty = qty; if (note) existing.note = note; updated++; }
+    else { inv.push({ id: 'inv' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: full, qty, low: null, note }); added++; }
+  });
+  if (!added && !updated) { alert('לא זוהו פריטים. בדוק שכל שורה מכילה כמות (למשל "9PC").'); return; }
+  Store.set('inventory', inv);
+  closeModal(); renderInventory();
+  alert(`יובאו ${added} פריטים חדשים${updated ? `, ${updated} עודכנו` : ''}.`);
+}
 
 // ============================================================
 // SETTINGS
