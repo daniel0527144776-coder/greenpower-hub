@@ -3382,7 +3382,8 @@ function openInventoryBulkImport() {
   openModal('ייבוא מלאי מהיר', `
     <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">
       שורה לכל פריט. כותרת בשורה נפרדת (<b>BMS</b> / <b>מטען</b> / <b>תא</b> / <b>ניקל</b>) מסמנת את הקטגוריה
-      לשורות שאחריה. הכמות נקראת מ־"9PC". טקסט בסוגריים נשמר כהערה.</p>
+      לשורות שאחריה. הכמות נקראת מ־"9PC". מספר בסוגריים כמו <b>(5pc)</b> = יחידות יד&nbsp;2
+      → נוצר פריט נפרד "(יד 2)". טקסט אחר בסוגריים נשמר כהערה.</p>
     <textarea id="bulkInvText" class="form-input-wide" style="width:100%;height:220px;font-family:monospace;font-size:12px;box-sizing:border-box;" placeholder="BMS&#10;20S 100A 9PC&#10;16S 60A 10PC (3pc)&#10;&#10;מטען&#10;72V 5A 9PC"></textarea>
     <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;">
       <input type="checkbox" id="bulkInvMerge" checked> עדכן כמות לפריט קיים בעל אותו שם (במקום כפילות)
@@ -3403,14 +3404,21 @@ function doInventoryBulkImport() {
     if (HEADERS[hk]) { cat = HEADERS[hk]; return; }
     const qm = s.match(/(\d+)\s*pc\b/i);
     const qty = qm ? parseInt(qm[1], 10) : 0;
-    const nm = s.match(/\(([^)]*)\)/);
-    const note = nm ? nm[1].trim() : '';
+    const paren = s.match(/\(([^)]*)\)/);
+    const parenTxt = paren ? paren[1].trim() : '';
+    const usedM = parenTxt.match(/(\d+)\s*pc\b/i);   // "(5pc)" => 5 second-hand (יד 2) units
+    const usedQty = usedM ? parseInt(usedM[1], 10) : null;
+    const note = (usedQty == null && parenTxt) ? parenTxt : '';
     const name = s.replace(/\([^)]*\)/g, '').replace(/(\d+)\s*pc\b/i, '').replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim();
     if (!name) return;
     const full = cat ? `${cat} ${name}` : name;
-    const existing = merge ? inv.find(x => (x.name || '').toLowerCase() === full.toLowerCase()) : null;
-    if (existing) { existing.qty = qty; if (note) existing.note = note; updated++; }
-    else { inv.push({ id: 'inv' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: full, qty, low: null, note }); added++; }
+    const upsert = (nm2, q, nt) => {
+      const ex = merge ? inv.find(x => (x.name || '').toLowerCase() === nm2.toLowerCase()) : null;
+      if (ex) { ex.qty = q; if (nt) ex.note = nt; updated++; }
+      else { inv.push({ id: 'inv' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), name: nm2, qty: q, low: null, note: nt }); added++; }
+    };
+    upsert(full, qty, note);
+    if (usedQty != null) upsert(`${full} (יד 2)`, usedQty, 'יד שנייה');
   });
   if (!added && !updated) { alert('לא זוהו פריטים. בדוק שכל שורה מכילה כמות (למשל "9PC").'); return; }
   Store.set('inventory', inv);
