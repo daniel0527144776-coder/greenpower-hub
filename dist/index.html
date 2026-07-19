@@ -441,7 +441,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
   <!-- Price-list PDFs -->
   <div class="card">
     <h3 class="card-title">📄 מחירוני PDF להורדה</h3>
-    <a class="btn btn-primary btn-block" style="margin-bottom:8px;text-decoration:none;text-align:center;" href="https://greenpower-il.netlify.app/greenpower-b2b-pricelist.pdf" target="_blank" rel="noopener">⬇️ מחירון עסקי (B2B)</a>
+    <a class="btn btn-primary btn-block" style="margin-bottom:8px;text-decoration:none;text-align:center;" href="https://b2b.energylabgreen.com/greenpower-b2b-pricelist.pdf" target="_blank" rel="noopener">⬇️ מחירון עסקי (B2B)</a>
     <a class="btn btn-secondary btn-block" style="margin-bottom:8px;text-decoration:none;text-align:center;" href="https://energylabgreen.com/greenpower-retail-pricelist.pdf" target="_blank" rel="noopener">⬇️ מחירון קמעונאי (פרטי)</a>
     <a class="btn btn-secondary btn-block" style="text-decoration:none;text-align:center;" href="supplier-pricelist.pdf" target="_blank" rel="noopener">🔒 מחירון ספק IC GOGOGO (פנימי)</a>
   </div>
@@ -462,7 +462,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
       </div>
       <div style="background:var(--primary-light); border-radius:10px; padding:10px; text-align:center;">
         <div style="background:#fff; border-radius:8px; padding:6px; margin-bottom:8px;">
-          <img src="cell-tenpower-50xg.webp" alt="Tenpower 21700 50SG" loading="lazy" style="height:90px; width:auto; object-fit:contain;">
+          <img src="cell-tenpower-50sg.webp" alt="Tenpower 21700 50SG" loading="lazy" style="height:90px; width:auto; object-fit:contain;">
         </div>
         <div style="font-weight:700; font-size:12.5px;">Tenpower 21700 50SG</div>
         <div style="font-size:11px; color:var(--text-muted); margin:3px 0;">ADVANCED · 4C רציף / 10C פיק</div>
@@ -2482,7 +2482,7 @@ function refreshHome() {
 
 const DEFAULT_LINKS = [
   { icon: '🌐', title: 'האתר העסקי', desc: 'אתר אינטרנט - Green Power', url: 'https://energylabgreen.com' },
-  { icon: '📋', title: 'הקטלוג העסקי', desc: 'קטלוג מוצרים אונליין', url: 'https://greenpower-il.netlify.app' },
+  { icon: '📋', title: 'הקטלוג העסקי', desc: 'קטלוג מוצרים אונליין', url: 'https://b2b.energylabgreen.com' },
   { icon: '🏷️', title: 'עורך מדבקות', desc: 'הדפסת מדבקות לסוללות', url: 'stickers.html' },
   { icon: '💼', title: 'הנהלת חשבונות SmartBuy', desc: 'מערכת חשבוניות והנהלת חשבונות', url: '' },
   { icon: '🛒', title: 'AliExpress IC GOGOGO', desc: 'הזמנה מהספק הראשי', url: '' }
@@ -3442,7 +3442,7 @@ function openInstallGuide() {
 
   const fileWarn = isFile
     ? `<div style="background: var(--warning-light); padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
-        <strong>⚠️ קובץ מקומי:</strong> כדי להתקין כאפליקציה אמיתית, צריך להריץ דרך שרת מקומי או להעלות לאינטרנט (לדוגמה Netlify Drop - גרירה חינמית). פתיחה ישירה מ-file:// לא תאפשר התקנה מלאה.
+        <strong>⚠️ קובץ מקומי:</strong> כדי להתקין כאפליקציה אמיתית, יש לגשת דרך הכתובת באינטרנט (hub.energylabgreen.com). פתיחה ישירה מ-file:// לא תאפשר התקנה מלאה.
       </div>`
     : '';
 
