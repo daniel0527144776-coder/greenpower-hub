@@ -3426,6 +3426,42 @@ function doInventoryBulkImport() {
   alert(`יובאו ${added} פריטים חדשים${updated ? `, ${updated} עודכנו` : ''}.`);
 }
 
+// One-time seed of the BMS + charger stock Daniel dictated (2026-07-19). Runs once from
+// startApp AFTER the cloud pull, guarded by a synced settings flag so it never re-adds --
+// including on his other devices -- and is idempotent by item name so a re-run can't
+// duplicate. A parenthetical count meant יד 2 (second-hand), split into its own item.
+// [category, name, qty(new), qty(יד 2) or 0]
+const INV_SEED_2026 = [
+  ['BMS', 'JK-BD6A20S20P', 9, 0], ['BMS', 'JK-BD6A20S15P', 1, 0],
+  ['BMS', '20S 200A', 0, 0], ['BMS', '20S 150A', 4, 0], ['BMS', '20S 100A', 9, 0], ['BMS', '20S 60A', 3, 1],
+  ['BMS', '16S 100A', 5, 0], ['BMS', '16S 60A', 10, 3],
+  ['BMS', '15S 50A', 4, 1], ['BMS', '15S 25A', 2, 1],
+  ['BMS', '13S 60A', 10, 0], ['BMS', '13S 40A', 1, 5], ['BMS', '13S 30A', 7, 0], ['BMS', '13S 20A', 1, 0],
+  ['BMS', '10S 15A', 3, 2], ['BMS', '8S 20A', 1, 0],
+  ['BMS', '7S 60A', 4, 0], ['BMS', '7S 20A', 2, 0], ['BMS', '4S 20A', 2, 0],
+  ['מטען', '72V 0-15A', 3, 0], ['מטען', '72V 8A', 4, 0], ['מטען', '72V 5A', 9, 0],
+  ['מטען', '60V 8A', 2, 0], ['מטען', '60V 5A', 6, 0], ['מטען', '60V 3A', 5, 0],
+  ['מטען', '48V 3A', 3, 0], ['מטען', '36V 2A', 1, 0],
+];
+function seedInventoryOnce() {
+  try {
+    const settings = Store.get('settings') || {};
+    if (settings.invSeedBMS2026) return;
+    const inv = getInventory();
+    const has = n => inv.some(x => (x.name || '').toLowerCase() === n.toLowerCase());
+    let added = 0;
+    INV_SEED_2026.forEach(([cat, name, qty, used]) => {
+      const full = `${cat} ${name}`;
+      const base = 'invseed_' + cat + '_' + name.replace(/\s+/g, '');
+      if (!has(full)) { inv.push({ id: base, name: full, qty, low: null, note: '' }); added++; }
+      if (used > 0) { const un = `${full} (יד 2)`; if (!has(un)) { inv.push({ id: base + '_u', name: un, qty: used, low: null, note: 'יד שנייה' }); added++; } }
+    });
+    if (added) Store.set('inventory', inv);
+    settings.invSeedBMS2026 = true;
+    Store.set('settings', settings);
+  } catch (e) { /* never block boot on the seed */ }
+}
+
 // ============================================================
 // SETTINGS
 // ============================================================
@@ -3636,6 +3672,7 @@ async function startApp() {
   if (!Sync.isAuthed()) { showLogin('פג תוקף ההתחברות — התחבר שוב'); return; }
   const statusEl = document.getElementById('syncStatus');
   if (statusEl) statusEl.textContent = '☁️ סנכרון ענן פעיל · ' + (Sync.email || '');
+  seedInventoryOnce();
   init();
   Sync.flush().catch(() => {});
 }
