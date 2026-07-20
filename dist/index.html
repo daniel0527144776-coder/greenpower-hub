@@ -392,8 +392,8 @@ body { padding-bottom: 90px; min-height: 100vh; }
       </div>
       <div class="quick-card" onclick="navigateTo('orders')">
         <span class="quick-card-icon">🛒</span>
-        <div class="quick-card-title">הזמנות</div>
-        <div class="quick-card-desc">הצעות מחיר ומכירות</div>
+        <div class="quick-card-title">מכירות ותיקונים</div>
+        <div class="quick-card-desc">הכל במקום אחד</div>
       </div>
       <div class="quick-card" onclick="navigateTo('finances')">
         <span class="quick-card-icon">💰</span>
@@ -1199,9 +1199,13 @@ body { padding-bottom: 90px; min-height: 100vh; }
 <!-- ============ ORDERS PAGE ============ -->
 <section id="page-orders" class="page">
   <div class="page-header">
-    <h2 class="page-title">🛒 הזמנות</h2>
-    <button class="btn btn-primary btn-sm" onclick="openOrderEditor()">➕ הזמנה חדשה</button>
+    <h2 class="page-title">🛒 מכירות ותיקונים</h2>
+    <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" onclick="navigateTo('calc')">🔧 תיקון</button>
+      <button class="btn btn-primary btn-sm" onclick="openOrderEditor()">🛒 מכירה</button>
+    </div>
   </div>
+  <div class="btn-group" id="salesFilterBar" style="margin-bottom:10px;flex-wrap:wrap;"></div>
   <div id="ordersList"></div>
 </section>
 
@@ -2987,14 +2991,19 @@ function saveOrder() {
   }
   Store.set('orders', orders); closeModal(); renderOrders();
 }
-function renderOrders() {
-  const orders = Store.get('orders') || [];
-  const list = document.getElementById('ordersList');
-  if (orders.length === 0) { list.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">אין הזמנות. לחץ "הזמנה חדשה".</div></div></div>'; return; }
-  list.innerHTML = orders.map(o => `
+let salesFilter = 'all';
+function setSalesFilter(f) { salesFilter = f; renderOrders(); }
+// Type-tagged pill for the unified sales+repairs list.
+function salesBadge(kind) {
+  return kind === 'sale'
+    ? '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;background:rgba(34,211,238,0.15);color:var(--primary);margin-left:4px;">🛒 מכירה</span>'
+    : '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;background:rgba(52,211,153,0.15);color:#34d399;margin-left:4px;">🔧 תיקון</span>';
+}
+function saleRow(o) {
+  return `
     <div class="list-item">
       <div class="list-item-header">
-        <div><div class="list-item-title">${o.customer || 'ללא שם'} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
+        <div><div class="list-item-title">${salesBadge('sale')} ${o.customer || 'ללא שם'} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
           <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')} · ${o.items.length} פריטים</div></div>
         <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div><div class="list-item-subtitle">${o.status || 'הצעה'}</div></div>
       </div>
@@ -3004,7 +3013,43 @@ function renderOrders() {
         <button class="btn btn-sm btn-secondary" onclick="openOrderEditor('${o.id}')">✏️</button>
         <button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')">🗑️</button>
       </div>
-    </div>`).join('');
+    </div>`;
+}
+function repairRow(j) {
+  let warr = '';
+  if (j.warrantyEnd) {
+    const days = Math.ceil((new Date(j.warrantyEnd).getTime() - Date.now()) / 86400000);
+    warr = days > 0 ? `אחריות: ${days} ימים` : 'אחריות: פג';
+  }
+  const spec = (j.voltage && j.capacity) ? `🔋 ${j.voltage}V ${j.capacity}Ah` : '';
+  return `
+    <div class="list-item">
+      <div class="list-item-header">
+        <div><div class="list-item-title">${salesBadge('repair')} ${j.customerName || 'ללא שם'} ${j.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
+          <div class="list-item-subtitle">${new Date(j.date).toLocaleDateString('he-IL')}${spec ? ' · ' + spec : ''}</div></div>
+        <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div><div class="list-item-subtitle">${warr}</div></div>
+      </div>
+      <div class="btn-group" style="margin-top:8px;">
+        ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="callCustomer('${j.customerPhone}')">💬 הודעה</button>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="navigateTo('warranties')">🛡️ אחריות</button>
+      </div>
+    </div>`;
+}
+function renderOrders() {
+  const orders = (Store.get('orders') || []).map(o => ({ kind: 'sale', date: o.date, raw: o }));
+  const jobs = (Store.get('jobs') || []).map(j => ({ kind: 'repair', date: j.date, raw: j }));
+  const bar = document.getElementById('salesFilterBar');
+  if (bar) {
+    const chip = (f, label) => `<button class="btn btn-sm ${salesFilter === f ? 'btn-primary' : 'btn-secondary'}" onclick="setSalesFilter('${f}')">${label}</button>`;
+    bar.innerHTML = chip('all', `הכל (${orders.length + jobs.length})`) + chip('sale', `🛒 מכירות (${orders.length})`) + chip('repair', `🔧 תיקונים (${jobs.length})`);
+  }
+  let all = [...orders, ...jobs];
+  if (salesFilter === 'sale') all = all.filter(x => x.kind === 'sale');
+  else if (salesFilter === 'repair') all = all.filter(x => x.kind === 'repair');
+  all.sort((a, b) => new Date(b.date) - new Date(a.date));
+  const list = document.getElementById('ordersList');
+  if (all.length === 0) { list.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">אין מכירות או תיקונים. לחץ 🛒 מכירה או 🔧 תיקון.</div></div></div>'; return; }
+  list.innerHTML = all.map(x => x.kind === 'sale' ? saleRow(x.raw) : repairRow(x.raw)).join('');
 }
 function cycleOrderStatus(id) { const orders = Store.get('orders') || [], o = orders.find(x => x.id === id); if (!o) return; const seq = ['הצעה', 'שולם', 'נמסר']; o.status = seq[(seq.indexOf(o.status) + 1) % seq.length]; Store.set('orders', orders); renderOrders(); }
 function deleteOrder(id) { if (!confirm('למחוק הזמנה?')) return; let orders = Store.get('orders') || []; orders = orders.filter(o => o.id !== id); Store.set('orders', orders); renderOrders(); }
