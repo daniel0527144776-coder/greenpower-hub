@@ -2944,30 +2944,51 @@ function openOrderEditor(id) {
   const o = id ? orders.find(x => x.id === id) : null;
   if (o) {
     orderDraft = { id: o.id, customer: o.customer, phone: o.phone, isBusiness: o.isBusiness, status: o.status,
-      items: o.items.map(it => ({ ci: CATALOG.findIndex(c => c.cat === it.cat && c.name === it.name), qty: it.qty })).filter(it => it.ci >= 0) };
+      items: o.items.map(it => {
+        if (it.custom) return { custom: true, name: it.name, unit: it.unit, qty: it.qty };
+        const ci = CATALOG.findIndex(c => c.cat === it.cat && c.name === it.name);
+        return ci >= 0 ? { ci, qty: it.qty } : null;
+      }).filter(Boolean) };
   } else {
     orderDraft = { id: null, customer: '', phone: '', isBusiness: false, status: 'הצעה', items: [] };
   }
   renderOrderModal();
 }
 function syncOrderFields() { const n = document.getElementById('ordName'); if (n) orderDraft.customer = n.value; const p = document.getElementById('ordPhone'); if (p) orderDraft.phone = p.value; }
+// {name, unit} for a draft item — a catalog item resolves against the current
+// retail/B2B mode; a custom (non-catalog) item carries its own price.
+function orderItemInfo(it, mode) {
+  if (it.custom) return { name: it.name, unit: Number(it.unit) || 0 };
+  const p = CATALOG[it.ci];
+  return { name: p.name, unit: p[mode] };
+}
 function renderOrderModal() {
-  const prods = CATALOG.filter(c => typeof c.retail === 'number');
-  const opts = prods.map(p => `<option value="${CATALOG.indexOf(p)}">${p.name} — ${p.cat}</option>`).join('');
   const mode = orderDraft.isBusiness ? 'b2b' : 'retail';
+  // Product picker grouped by category (optgroup) so the long list is easy to scan.
+  const byCat = {};
+  CATALOG.forEach((c, i) => { if (typeof c.retail === 'number') (byCat[c.cat] = byCat[c.cat] || []).push({ c, i }); });
+  const opts = Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'he')).map(cat =>
+    `<optgroup label="${cat}">` + byCat[cat].map(x => `<option value="${x.i}">${x.c.name} — ${shek(x.c[mode])}</option>`).join('') + `</optgroup>`
+  ).join('');
   const lines = orderDraft.items.map((it, i) => {
-    const p = CATALOG[it.ci], unit = p[mode];
-    return `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);padding:6px 8px;border-radius:6px;margin-bottom:4px;font-size:12px;"><span>${p.name} ×${it.qty}</span><span>${shek(unit * it.qty)} <span onclick="removeOrderItem(${i})" style="color:var(--danger);cursor:pointer;margin-right:6px;">✕</span></span></div>`;
+    const info = orderItemInfo(it, mode);
+    const tag = it.custom ? ' <span style="font-size:9px;color:var(--accent);">(מותאם)</span>' : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);padding:6px 8px;border-radius:6px;margin-bottom:4px;font-size:12px;"><span>${info.name}${tag} ×${it.qty}</span><span>${shek(info.unit * it.qty)} <span onclick="removeOrderItem(${i})" style="color:var(--danger);cursor:pointer;margin-right:6px;">✕</span></span></div>`;
   }).join('');
-  const total = orderDraft.items.reduce((s, it) => s + CATALOG[it.ci][mode] * it.qty, 0);
+  const total = orderDraft.items.reduce((s, it) => s + orderItemInfo(it, mode).unit * it.qty, 0);
   const body = `
     <div class="form-row"><label>שם לקוח</label><input class="form-input-wide" id="ordName" value="${orderDraft.customer || ''}" style="width:170px;"></div>
     <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="ordPhone" value="${orderDraft.phone || ''}" style="width:170px;"></div>
     <label class="check ${orderDraft.isBusiness ? 'checked' : ''}" onclick="toggleOrderBiz()"><div class="check-box"></div>לקוח עסקי (מחיר B2B)</label>
     <div class="divider"></div>
-    <div class="form-row"><label>מוצר</label><select class="form-select" id="ordProd" style="width:200px;">${opts}</select></div>
+    <div class="form-row"><label>מוצר מהקטלוג</label><select class="form-select" id="ordProd" style="width:200px;">${opts}</select></div>
     <div class="form-row"><label>כמות</label><input type="number" class="form-input" id="ordQty" value="1" min="1"></div>
-    <button class="btn btn-secondary btn-block btn-sm" onclick="addOrderItem()">➕ הוסף לפריטים</button>
+    <button class="btn btn-secondary btn-block btn-sm" onclick="addOrderItem()">➕ הוסף מהקטלוג</button>
+    <div class="divider"></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">🔧 סוללה בהתאמה אישית (לא מהקטלוג):</div>
+    <div class="form-row"><label>תיאור</label><input class="form-input-wide" id="ordCustName" placeholder="72V 40Ah PRO טאבלס" style="width:170px;"></div>
+    <div class="form-row"><label>מחיר ₪</label><input type="number" class="form-input" id="ordCustPrice" min="0" placeholder="0"></div>
+    <button class="btn btn-secondary btn-block btn-sm" onclick="addCustomOrderItem()">➕ הוסף פריט מותאם</button>
     <div style="margin-top:10px;">${lines || '<div style="font-size:12px;color:var(--text-muted);text-align:center;">לא נוספו פריטים</div>'}</div>
     <div style="text-align:left;font-weight:700;color:var(--primary);margin-top:8px;">סה"כ: ${shek(total)}</div>`;
   openModal(orderDraft.id ? 'עריכת הזמנה' : 'הזמנה חדשה', body,
@@ -2975,12 +2996,25 @@ function renderOrderModal() {
 }
 function toggleOrderBiz() { syncOrderFields(); orderDraft.isBusiness = !orderDraft.isBusiness; renderOrderModal(); }
 function addOrderItem() { syncOrderFields(); const ci = parseInt(document.getElementById('ordProd').value); const qty = Math.max(1, parseInt(document.getElementById('ordQty').value) || 1); orderDraft.items.push({ ci, qty }); renderOrderModal(); }
+function addCustomOrderItem() {
+  syncOrderFields();
+  const name = document.getElementById('ordCustName').value.trim();
+  const unit = Math.max(0, parseFloat(document.getElementById('ordCustPrice').value) || 0);
+  if (!name) { alert('הזן תיאור לסוללה המותאמת'); return; }
+  if (!unit) { alert('הזן מחיר לפריט המותאם'); return; }
+  orderDraft.items.push({ custom: true, name, unit, qty: 1 });
+  renderOrderModal();
+}
 function removeOrderItem(i) { syncOrderFields(); orderDraft.items.splice(i, 1); renderOrderModal(); }
 function saveOrder() {
   syncOrderFields();
   if (orderDraft.items.length === 0) { alert('הוסף לפחות פריט אחד'); return; }
   const mode = orderDraft.isBusiness ? 'b2b' : 'retail';
-  const items = orderDraft.items.map(it => { const p = CATALOG[it.ci]; return { name: p.name, cat: p.cat, qty: it.qty, unit: p[mode] }; });
+  const items = orderDraft.items.map(it => {
+    if (it.custom) return { name: it.name, cat: 'מותאם אישית', qty: it.qty, unit: Number(it.unit) || 0, custom: true };
+    const p = CATALOG[it.ci];
+    return { name: p.name, cat: p.cat, qty: it.qty, unit: p[mode] };
+  });
   const total = items.reduce((s, it) => s + it.unit * it.qty, 0);
   const orders = Store.get('orders') || [];
   if (orderDraft.id) {
