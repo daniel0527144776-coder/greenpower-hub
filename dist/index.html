@@ -1423,11 +1423,13 @@ const CELL_WEIGHTS = {
 };
 // Landed (unit) cost per cell type — supplier USD x rate x 1.371 (VAT on CIF + sea freight
 // + fees, an עוסק פטור cannot reclaim the VAT). Shown as a reference on the inventory page.
+// sea = documented landed cost (the real import method for building packs).
+// air = Daniel's air-freight landed cost per cell (faster, dearer). null = not given yet.
 const CELL_COST_REF = [
-  { n: 'EVE 50E',       t: 'CLASSIC · 21700',        c: 7.34 },
-  { n: 'Tenpower 50SG', t: 'ADVANCED · 21700',       c: 8.86 },
-  { n: 'EVE 50PL',      t: 'PRO · 21700 Tabless',    c: 12.15 },
-  { n: 'EVE 25P',       t: 'כלי עבודה · 18650',      c: 5.14 },
+  { n: 'EVE 50E',       t: 'CLASSIC · 21700',        sea: 7.34,  air: 9.65 },
+  { n: 'Tenpower 50SG', t: 'ADVANCED · 21700',       sea: 8.86,  air: 10.25 },
+  { n: 'EVE 50PL',      t: 'PRO · 21700 Tabless',    sea: 12.15, air: 13.03 },
+  { n: 'EVE 25P',       t: 'כלי עבודה · 18650',      sea: 5.14,  air: null },
 ];
 
 const BMS_PRICES = {
@@ -3398,11 +3400,12 @@ function getInventory() { return Store.get('inventory') || []; }
 function renderInventory() {
   const cc = document.getElementById('cellCostRef');
   if (cc) cc.innerHTML = '<h3 class="card-title">🔋 עלות תא (עלות נחיתה ליחידה)</h3>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--text-muted);font-weight:700;padding:2px 0 5px;border-bottom:1px solid var(--border);"><span>תא</span><span style="display:flex;gap:14px;"><span style="width:52px;text-align:left;">🚢 ימי</span><span style="width:52px;text-align:left;">✈️ אוויר</span></span></div>' +
     '<div style="display:flex;flex-direction:column;">' +
     CELL_COST_REF.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);">
       <span><b>${x.n}</b> <span style="color:var(--text-muted);font-size:11px;">${x.t}</span></span>
-      <span style="font-weight:700;color:var(--primary);">₪${x.c}</span></div>`).join('') +
-    '</div><div style="font-size:10px;color:var(--text-muted);margin-top:6px;">עלות מלאה עד המעבדה — כולל מע״מ, שילוח ואגרות (עוסק פטור אינו מקזז מע״מ)</div>';
+      <span style="display:flex;gap:14px;font-weight:700;"><span style="width:52px;text-align:left;color:var(--primary);">₪${x.sea}</span><span style="width:52px;text-align:left;color:${x.air != null ? '#fbbf24' : 'var(--text-muted)'};">${x.air != null ? '₪' + x.air : '—'}</span></span></div>`).join('') +
+    '</div><div style="font-size:10px;color:var(--text-muted);margin-top:6px;">עלות מלאה עד המעבדה — כולל מע״מ, שילוח ואגרות. 🚢 ימי = שיטת הבנייה הרגילה · ✈️ אוויר = מהיר ויקר יותר.</div>';
   const inv = getInventory();
   const low = inv.filter(i => i.low != null && Number(i.qty) <= Number(i.low));
   document.getElementById('inventoryLowAlert').innerHTML = low.length
