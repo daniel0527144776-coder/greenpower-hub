@@ -494,7 +494,10 @@ body { padding-bottom: 90px; min-height: 100vh; }
       <div style="font-size:11px;color:var(--text-muted);">מחיר מומלץ ללקוח</div>
       <div id="qpPrice" style="font-size:28px;font-weight:800;color:var(--primary);"></div>
       <div id="qpNote" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
-      <button class="btn btn-sm" style="margin-top:8px;background:#25D366;color:#fff;border:none;" onclick="qpCopy()">📋 העתק ללקוח</button>
+      <div class="btn-group" style="margin-top:8px;justify-content:center;">
+        <button class="btn btn-sm btn-primary" onclick="qpCreateJob()">🔧 צור עבודה</button>
+        <button class="btn btn-sm" style="background:#25D366;color:#fff;border:none;" onclick="qpCopy()">📋 העתק ללקוח</button>
+      </div>
     </div>
   </div>
 
@@ -2369,7 +2372,7 @@ function renderWarranties() {
           <span class="warranty-badge ${badgeCls}">${badgeText}</span>
         </div>
         <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
-          🔋 ${j.voltage}V ${j.capacity}Ah · ${VEHICLE_LABELS[j.vehicle]} · ₪${j.price.toLocaleString('he-IL')}
+          ${(j.voltage && j.capacity) ? `🔋 ${j.voltage}V ${j.capacity}Ah${VEHICLE_LABELS[j.vehicle] ? ' · ' + VEHICLE_LABELS[j.vehicle] : ''}` : ('🔧 ' + (j.quickRepair || 'תיקון'))} · ₪${(Number(j.price) || 0).toLocaleString('he-IL')}
         </div>
         <div style="font-size: 11px; color: var(--text-light); margin-top: 2px;">
           תיקון: ${new Date(j.date).toLocaleDateString('he-IL')} · אחריות עד: ${end.toLocaleDateString('he-IL')}
@@ -2823,6 +2826,58 @@ function qpCopy() {
   const item = PRICE_CATEGORIES[ci].items[ii];
   const msg = `שלום 👋\n\nלגבי ${item.name}:\nמחיר: ${item.final}\n\n✅ אחריות מלאה · זמן תיקון 3-5 ימי עבודה\n${(bizDetails && bizDetails.name) || 'Green Power'}\n${(bizDetails && bizDetails.phone) || ''}`;
   navigator.clipboard.writeText(msg).then(() => alert('✅ ההצעה הועתקה! הדבק בוואטסאפ ללקוח.'));
+}
+// Create a full job straight from the quick recommendation — no long form. It writes the
+// same job shape saveJob() does (so it feeds אחריות + פיננסים + לקוחות), just without the
+// battery-build fields a repair quote doesn't have.
+function qpCreateJob() {
+  const ci = document.getElementById('qpCat').value, ii = document.getElementById('qpItem').value;
+  if (ci === '' || ii === '') { alert('בחר תיקון קודם'); return; }
+  const item = PRICE_CATEGORIES[ci].items[ii];
+  const m = (item.final.match(/\d[\d,]*/) || [''])[0].replace(/,/g, '');
+  openModal('🔧 צור עבודה — ' + item.name, `
+    <div class="form-row"><label>שם לקוח</label><input class="form-input-wide" id="qjName" style="width:170px;" placeholder="ישראל ישראלי"></div>
+    <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="qjPhone" style="width:170px;" placeholder="050-1234567"></div>
+    <div class="form-row"><label>מחיר סופי ₪</label><input type="number" class="form-input" id="qjPrice" value="${m || ''}" min="0"></div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">התיקון: <b>${item.name}</b> · מומלץ: ${item.final}.<br>תיווצר עבודה עם ${WARRANTY_MONTHS} חודשי אחריות שתיכנס לפיננסים ולאחריות.</p>`,
+    `<button class="btn btn-primary" onclick="qpSaveJob('${ci}','${ii}')">✅ צור עבודה</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function qpSaveJob(ci, ii) {
+  const item = PRICE_CATEGORIES[ci].items[ii];
+  const name = document.getElementById('qjName').value.trim();
+  const phone = document.getElementById('qjPhone').value.trim();
+  const price = parseInt(document.getElementById('qjPrice').value, 10) || 0;
+  if (!price) { alert('הזן מחיר סופי'); return; }
+  const now = new Date();
+  const entry = {
+    id: 'j' + Date.now(), date: now.toISOString(), dateDisplay: now.toLocaleString('he-IL'),
+    customerName: name, customerPhone: phone, customerNotes: item.name,
+    isBusiness: false, businessName: '',
+    vehicle: '', voltage: '', capacity: '', cellType: '',
+    jobs: [], quickRepair: item.name,
+    price: price, cost: 0, profit: price, hours: 0,
+    bmsBrand: '', bmsAmps: '', photoBefore: null, photoAfter: null,
+    warrantyMonths: WARRANTY_MONTHS,
+    warrantyEnd: new Date(Date.now() + WARRANTY_MONTHS * 30 * 24 * 60 * 60 * 1000).toISOString()
+  };
+  const jobs = Store.get('jobs') || [];
+  jobs.unshift(entry);
+  if (jobs.length > 500) jobs.pop();
+  Store.set('jobs', jobs);
+  if (name && phone) {
+    const customers = Store.get('customers') || [];
+    const ex = customers.find(c => c.phone === phone);
+    if (ex) {
+      ex.lastVisit = entry.date; ex.totalSpent = (ex.totalSpent || 0) + price; ex.visitCount = (ex.visitCount || 0) + 1;
+      if (item.name && !ex.notes) ex.notes = item.name;
+    } else {
+      customers.push({ id: 'c' + Date.now(), name, phone, notes: item.name, isBusiness: false, businessName: '', firstVisit: entry.date, lastVisit: entry.date, totalSpent: price, visitCount: 1 });
+    }
+    Store.set('customers', customers);
+    if (typeof refreshCustomerSelect === 'function') refreshCustomerSelect();
+  }
+  closeModal();
+  alert('✅ העבודה נוצרה! נכנסה לאחריות ולפיננסים.');
 }
 function renderPriceList() {
   const container = document.getElementById('priceList');
