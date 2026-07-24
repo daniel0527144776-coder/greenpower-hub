@@ -988,10 +988,10 @@ body { padding-bottom: 90px; min-height: 100vh; }
     <h2 class="page-title">🔒 מחירון ספק IC GOGOGO</h2>
     <button class="btn btn-primary btn-sm" onclick="openExternal('supplier-pricelist.pdf')">⬇️ פתח PDF</button>
   </div>
+  <div class="info-banner"><span>💡</span><div>מחיר סופי ליחידה כולל שילוח, בשער <b>$1 = ₪3</b> · <b>לא כולל מכס</b>. פנימי — לא לשיתוף עם לקוחות.</div></div>
   <div class="card">
-    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">מחירון הספק הפנימי (IC GOGOGO) — למידע שלך בלבד, לא לשיתוף עם לקוחות.</p>
-    <iframe src="supplier-pricelist.pdf#toolbar=0" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:10px;background:#fff;" title="מחירון ספק IC GOGOGO"></iframe>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center;">לא נטען כאן? לחץ "⬇️ פתח PDF" למעלה.</p>
+    <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש רכיב (BMS / מטען / ניקל / שרינק...)" style="width:100%;margin-bottom:10px;" oninput="renderSupplier()">
+    <div id="supplierList"></div>
   </div>
 </section>
 
@@ -1693,6 +1693,7 @@ function navigateTo(page) {
   if (page === 'bizdocs') renderBizDocs();
   if (page === 'stickerlog') renderStickerLog();
   if (page === 'inventory') renderInventory();
+  if (page === 'supplier') renderSupplier();
 }
 
 // ---- Modal ----
@@ -2878,6 +2879,82 @@ function qpSaveJob(ci, ii) {
   }
   closeModal();
   alert('✅ העבודה נוצרה! נכנסה לאחריות ולפיננסים.');
+}
+// IC GOGOGO supplier price list — extracted from the supplier PDF (מאי 2026). NetFree
+// placeholders the PDF on Daniel's phone, so it's a searchable text table instead.
+// [category, name, final USD per unit incl. shipping]; ₪ = USD x SUPPLIER_USD (Daniel's
+// rate, the PDF used 2.92). Prices exclude customs.
+const SUPPLIER_USD = 3;
+const SUPPLIER_PRICES = [
+  ['BMS חכם JK', 'JK B1A 24S 150A', 111], ['BMS חכם JK', 'JK BD6A24S10P 100A', 55],
+  ['BMS חכם JK', 'JK BD6A24S15P 150A', 61.5], ['BMS חכם JK', 'JK BD6A24S20P 200A', 65.5],
+  ['BMS חכם JK', 'JK B2A24S20P 200A (דגם B)', 127], ['BMS חכם JK', 'JK BD6A20S15P 150A 20S', 43.5],
+  ['BMS חכם JK', 'JK BD6A20S20P 200A 20S', 50],
+  ['BMS DALY', 'DALY 7S 24V 20A', 10.7], ['BMS DALY', 'DALY 7S 24V 60A', 20], ['BMS DALY', 'DALY 10S 36V 15A', 9.3],
+  ['BMS DALY', 'DALY 13S 48V 40A', 22], ['BMS DALY', 'DALY 13S 48V 60A', 25], ['BMS DALY', 'DALY 15S 30A', 14],
+  ['BMS DALY', 'DALY 16S 60V 40A', 24.6], ['BMS DALY', 'DALY 16S 60V 60A', 26.5], ['BMS DALY', 'DALY 16S 60V 100A', 47],
+  ['BMS DALY', 'DALY 20S 72V 60A', 26.5], ['BMS DALY', 'DALY 20S 72V 100A', 55], ['BMS DALY', 'DALY 20S 72V 150A', 70],
+  ['BMS DALY', 'DALY 20S 72V 200A', 87],
+  ['BMS JBD', 'JBD 13S 30A', 17], ['BMS JBD', 'JBD 16S 60A', 31], ['BMS ANT', 'ANT BMS 220A 17S-24S', 77.3],
+  ['מאזני סוללות', 'Cell Balancer 13S-17S', 51.5], ['מאזני סוללות', 'Cell Balancer 17S-21S', 60.5],
+  ['מאזני סוללות', 'Cell Balancer 1.2A (פשוט)', 17], ['מאזני סוללות', 'JK Active Balancer 2S-24S 4A', 46],
+  ['מטענים אלומיניום MLC', '48V 3A XLR', 25], ['מטענים אלומיניום MLC', '60V 5A XLR', 35], ['מטענים אלומיניום MLC', '60V 8A XLR', 47],
+  ['מטענים אלומיניום MLC', '60V 10A XLR', 64], ['מטענים אלומיניום MLC', '72V 5A XLR', 35], ['מטענים אלומיניום MLC', '72V 8A XLR', 44.5],
+  ['מטענים אלומיניום MLC', '72V 10A XLR', 65],
+  ['מטענים פלסטיק AIYONG', '48V 3A', 14], ['מטענים פלסטיק AIYONG', '60V 3A', 14], ['מטענים פלסטיק AIYONG', '60V 5A', 22],
+  ['מטענים פלסטיק AIYONG', '72V 3A', 20.5], ['מטענים פלסטיק AIYONG', '72V 5A', 22],
+  ['מטענים מתכווננים', 'YLL 72V 0-15A (מתכוונן)', 83], ['מטענים מתכווננים', '15-92.5V 0-15A WiFi (חכם)', 78],
+  ['מטענים מתכווננים', '8S LFP 0-25A Anderson', 68], ['מטענים מתכווננים', '24S 8A Li-ion XLR', 42],
+  ['ניקל ונחושת', 'ניקל טהור 21700 2P 0.2mm 1KG', 78], ['ניקל ונחושת', 'ניקל טהור 21700 3P 0.2mm 1KG', 78],
+  ['ניקל ונחושת', 'ניקל טהור אלכסוני 21700 2P 1KG', 78], ['ניקל ונחושת', 'ניקל טהור רחב 10mm 1KG', 80],
+  ['ניקל ונחושת', 'ניקל מצופה 21700 1KG', 22], ['ניקל ונחושת', 'ניקל מצופה 18650 19mm 2P 1KG', 22],
+  ['ניקל ונחושת', 'ניקל מצופה 18650 אלכסוני 1KG', 23], ['ניקל ונחושת', 'פס נחושת רחב 20mm 0.4mm (מטר)', 2.5],
+  ['ניקל ונחושת', 'פלטת נחושת 21700 23mm×800mm', 6.5], ['ניקל ונחושת', 'פלטת נחושת 21700 7×8', 0.85],
+  ['ניקל ונחושת', 'פלטת נחושת 21700 5×6', 0.47], ['ניקל ונחושת', 'פלטת נחושת 21700 3×4', 0.17],
+  ['ניקל ונחושת', 'רצועת נחושת 21700 1×3', 0.05], ['ניקל ונחושת', 'רצועת נחושת 21700 1×2', 0.02],
+  ['מחזיקי תאים', 'מחזיק 21700 10×17', 0.54], ['מחזיקי תאים', 'מחזיק 21700 6×17', 0.38],
+  ['מחזיקי תאים', 'מחזיק 21700 14×10', 0.59], ['מחזיקי תאים', 'מחזיק אלכסוני 1S 3P+4P', 0.21],
+  ['שרוולי כיווץ PVC (1KG)', '120mm', 8.5], ['שרוולי כיווץ PVC (1KG)', '180mm', 10], ['שרוולי כיווץ PVC (1KG)', '210mm', 10],
+  ['שרוולי כיווץ PVC (1KG)', '250mm', 10], ['שרוולי כיווץ PVC (1KG)', '300mm', 11.5], ['שרוולי כיווץ PVC (1KG)', '350mm', 10],
+  ['שרוולי כיווץ PVC (1KG)', '380mm', 10], ['שרוולי כיווץ PVC (1KG)', '410mm', 14], ['שרוולי כיווץ PVC (1KG)', '480mm', 15.5],
+  ['שרוולי כיווץ PVC (1KG)', '500mm', 18],
+  ['בידוד וסרטים', 'נייר ירוק PET 70mm 30M', 10.5], ['בידוד וסרטים', 'נייר ירוק PET 90mm 30M', 10.5],
+  ['בידוד וסרטים', 'נייר ירוק PET 150mm 40M', 22], ['בידוד וסרטים', 'נייר ירוק PET 200mm 30M', 32],
+  ['בידוד וסרטים', 'נייר ירוק PET 300mm 30M', 42], ['בידוד וסרטים', 'נייר ירוק PET 400mm 30M', 47],
+  ['בידוד וסרטים', 'נייר ירוק PET 500mm 30M', 56], ['בידוד וסרטים', 'Kapton 20mm 33M', 3.5],
+  ['בידוד וסרטים', 'Kapton 25mm 33M', 3.5], ['בידוד וסרטים', 'Kapton 40mm 33M', 6.5], ['בידוד וסרטים', 'Kapton 55mm 33M', 5.75],
+  ['בידוד וסרטים', 'פיברגלס 20mm 25M', 2.13], ['בידוד וסרטים', 'פיברגלס 50mm 25M', 2.67],
+  ['בידוד וסרטים', 'פיברגלס 60mm 50M', 6.67], ['בידוד וסרטים', 'פיברגלס 100mm 50M', 8.17],
+  ['בידוד וסרטים', 'EVA ספוגי 10mm×25cm 10M', 7.5], ['בידוד וסרטים', 'סרט דו-צדדי צהוב 50mm 20M', 10],
+  ['בידוד וסרטים', 'Isolirband כחול 70mm 20M', 4.5], ['בידוד וסרטים', 'Isolirband כחול 150mm 20M', 10],
+  ['כבלים סיליקון', '6 AWG אדום/שחור 5M', 5.3], ['כבלים סיליקון', '7 AWG אדום/שחור 5M', 17],
+  ['כבלים סיליקון', '8 AWG אדום/שחור 5M', 11], ['כבלים סיליקון', '10 AWG אדום/שחור 5M', 7.5],
+  ['כבלים סיליקון', '14 AWG אדום/שחור 3M', 3], ['כבלים סיליקון', 'כבל מנוע 3mm² 1.2M', 8],
+  ['מחברים וטרמינלים', 'XT60 Male/Female', 0.8], ['מחברים וטרמינלים', 'XT90S Anti-Spark (זוג)', 2.8],
+  ['מחברים וטרמינלים', 'QS8/QS8-S/L (זוג)', 6.5], ['מחברים וטרמינלים', 'QS10-S Male+Female (סט)', 12.1],
+  ['מחברים וטרמינלים', 'Anderson 50A', 0.8], ['מחברים וטרמינלים', 'שקע טעינה XLR/GX-16', 2.3],
+  ['מחברים וטרמינלים', 'נעל כבל OT 50A-200A', 0.42], ['מחברים וטרמינלים', 'נתיך Fuse 50A-300A', 4.7],
+  ['מחברים וטרמינלים', 'מתג Silver Fish', 2.3],
+  ['כלי עבודה', 'מלחם נייד 80W 12V DC', 21.5], ['כלי עבודה', 'בדיל הלחמה 1mm 500g', 13.5],
+  ['כלי עבודה', 'בדיל הלחמה 1mm 1KG (איכות)', 55], ['כלי עבודה', 'רב מודד UNI-T UT33A+', 19],
+  ['רכיבי הנעה', 'מנוע אחורי 1000W (Dualtron DT2)', 205], ['רכיבי הנעה', 'בקר KT 35A Sine Wave', 59],
+  ['רכיבי הנעה', 'צג LCD3 KT', 47], ['רכיבי הנעה', 'רגלית תמיכה Dualtron S2', 6],
+  ['רכיבי הנעה', 'קופסת בקר Extra Large', 9.5], ['רכיבי הנעה', 'וולטמטר לכידון 48V', 9.7],
+];
+function renderSupplier() {
+  const el = document.getElementById('supplierList');
+  if (!el) return;
+  const q = (document.getElementById('supQ') ? document.getElementById('supQ').value : '').trim().toLowerCase();
+  const rows = SUPPLIER_PRICES.filter(r => !q || (r[0] + ' ' + r[1]).toLowerCase().includes(q));
+  if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא רכיב</div></div>'; return; }
+  let html = '', lastCat = '';
+  rows.forEach(r => {
+    if (r[0] !== lastCat) { lastCat = r[0]; html += `<div style="font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">${r[0]}</div>`; }
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;">
+      <span>${r[1]}</span>
+      <span style="display:flex;gap:12px;white-space:nowrap;"><span style="color:var(--text-muted);">$${r[2]}</span><span style="font-weight:700;color:var(--primary);min-width:44px;text-align:left;">₪${Math.round(r[2] * SUPPLIER_USD)}</span></span></div>`;
+  });
+  el.innerHTML = html;
 }
 function renderPriceList() {
   const container = document.getElementById('priceList');
