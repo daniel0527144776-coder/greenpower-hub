@@ -479,6 +479,20 @@ body { padding-bottom: 90px; min-height: 100vh; }
     <button class="btn btn-secondary btn-sm" onclick="resetCalc()">איפוס</button>
   </div>
 
+  <!-- Quick price recommendation -->
+  <div class="card" style="border:1px solid var(--primary);">
+    <h3 class="card-title">💰 המלצת מחיר מהירה</h3>
+    <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">בחר סוג תיקון וקבל מחיר מומלץ ללקוח — בלי למלא טופס.</p>
+    <div class="form-row"><label>קטגוריה</label><select class="form-select" id="qpCat" onchange="qpFillItems()" style="width:200px;"></select></div>
+    <div class="form-row"><label>מה צריך</label><select class="form-select" id="qpItem" onchange="qpShow()" style="width:200px;"></select></div>
+    <div id="qpResult" style="display:none;margin-top:10px;padding:12px;background:var(--bg);border-radius:10px;text-align:center;">
+      <div style="font-size:11px;color:var(--text-muted);">מחיר מומלץ ללקוח</div>
+      <div id="qpPrice" style="font-size:28px;font-weight:800;color:var(--primary);"></div>
+      <div id="qpNote" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
+      <button class="btn btn-sm" style="margin-top:8px;background:#25D366;color:#fff;border:none;" onclick="qpCopy()">📋 העתק ללקוח</button>
+    </div>
+  </div>
+
   <!-- Customer info -->
   <div class="card">
     <h3 class="card-title">👤 פרטי לקוח</h3>
@@ -2764,6 +2778,34 @@ const PRICE_CATEGORIES = [
   }
 ];
 
+// Quick price recommendation — a few taps on the calc page instead of the full form.
+// Reads the same PRICE_CATEGORIES the repair pricelist uses, so it stays one source.
+function qpInit() {
+  const sel = document.getElementById('qpCat');
+  if (!sel || sel.options.length) return;
+  sel.innerHTML = '<option value="">— בחר —</option>' + PRICE_CATEGORIES.map((c, i) => `<option value="${i}">${c.name}</option>`).join('');
+}
+function qpFillItems() {
+  const ci = document.getElementById('qpCat').value, it = document.getElementById('qpItem');
+  document.getElementById('qpResult').style.display = 'none';
+  if (ci === '') { it.innerHTML = ''; return; }
+  it.innerHTML = '<option value="">— בחר —</option>' + PRICE_CATEGORIES[ci].items.map((x, j) => `<option value="${j}">${x.name}</option>`).join('');
+}
+function qpShow() {
+  const ci = document.getElementById('qpCat').value, ii = document.getElementById('qpItem').value, res = document.getElementById('qpResult');
+  if (ci === '' || ii === '') { res.style.display = 'none'; return; }
+  const item = PRICE_CATEGORIES[ci].items[ii];
+  document.getElementById('qpPrice').textContent = item.final;
+  document.getElementById('qpNote').textContent = item.cost ? ('רמת מחיר: ' + item.cost) : '';
+  res.style.display = 'block';
+}
+function qpCopy() {
+  const ci = document.getElementById('qpCat').value, ii = document.getElementById('qpItem').value;
+  if (ci === '' || ii === '') return;
+  const item = PRICE_CATEGORIES[ci].items[ii];
+  const msg = `שלום 👋\n\nלגבי ${item.name}:\nמחיר: ${item.final}\n\n✅ אחריות מלאה · זמן תיקון 3-5 ימי עבודה\n${(bizDetails && bizDetails.name) || 'Green Power'}\n${(bizDetails && bizDetails.phone) || ''}`;
+  navigator.clipboard.writeText(msg).then(() => alert('✅ ההצעה הועתקה! הדבק בוואטסאפ ללקוח.'));
+}
 function renderPriceList() {
   const container = document.getElementById('priceList');
   container.innerHTML = PRICE_CATEGORIES.map(cat => `
@@ -3682,6 +3724,7 @@ function openInstallGuide() {
 // ============================================================
 
 function init() {
+  qpInit();
   // Load settings
   const s = Store.get('settings');
   if (s) {
