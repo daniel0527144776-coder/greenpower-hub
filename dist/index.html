@@ -420,6 +420,11 @@ body { padding-bottom: 90px; min-height: 100vh; }
         <div class="quick-card-title">עורך מדבקות</div>
         <div class="quick-card-desc">יצירה והדפסת מדבקות</div>
       </div>
+      <div class="quick-card" onclick="navigateTo('supplier')">
+        <span class="quick-card-icon">🔒</span>
+        <div class="quick-card-title">מחירון ספק</div>
+        <div class="quick-card-desc">IC GOGOGO (פנימי)</div>
+      </div>
       <div class="quick-card" onclick="navigateTo('help')">
         <span class="quick-card-icon">❓</span>
         <div class="quick-card-title">עזרה ומדריך</div>
@@ -974,6 +979,19 @@ body { padding-bottom: 90px; min-height: 100vh; }
   </div>
 </section>
 
+<!-- ============ SUPPLIER PRICE LIST PAGE ============ -->
+<section id="page-supplier" class="page">
+  <div class="page-header">
+    <h2 class="page-title">🔒 מחירון ספק IC GOGOGO</h2>
+    <button class="btn btn-primary btn-sm" onclick="openExternal('supplier-pricelist.pdf')">⬇️ פתח PDF</button>
+  </div>
+  <div class="card">
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">מחירון הספק הפנימי (IC GOGOGO) — למידע שלך בלבד, לא לשיתוף עם לקוחות.</p>
+    <iframe src="supplier-pricelist.pdf#toolbar=0" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:10px;background:#fff;" title="מחירון ספק IC GOGOGO"></iframe>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center;">לא נטען כאן? לחץ "⬇️ פתח PDF" למעלה.</p>
+  </div>
+</section>
+
 <!-- ============ SETTINGS PAGE ============ -->
 <section id="page-settings" class="page">
   <div class="page-header">
@@ -1147,7 +1165,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
       <li><b>🖨️ עורך מדבקות</b> — כעת מסנכרן את העיצוב לענן (אותו חשבון), כך שהתבנית זהה בכל מכשיר.</li>
       <li><b>🏢 תיעוד עסקי</b> — סמן תיקון כ"לקוח עסקי" במחשבון, וקבל בעמוד "תיעוד עסקי" דו"ח תיקונים מרוכז לכל בית עסק — להדפסה/PDF ושליחה בוואטסאפ.</li>
       <li><b>🗂️ מדבקות שמורות</b> — כל מדבקה שנוצרת בעורך נשמרת אוטומטית לכאן (מסונכרן), מסווגת לתיקון או בנייה/מכירה. הלוגו מופיע אוטומטית בעורך.</li>
-      <li><b>🔒 מחירון ספק</b> — מחירון IC GOGOGO זמין להורדה בכרטיס "מחירוני PDF" בדף הבית (פנימי).</li>
+      <li><b>🔒 מחירון ספק</b> — מחירון IC GOGOGO זמין בכרטיס "מחירון ספק" בדף הבית (פנימי).</li>
       <li><b>📦 מלאי</b> — מעקב כמות לתאים/BMS/חלקים עם התראת מלאי נמוך.</li>
       <li><b>💰 רווחיות מדויקת</b> — שכר העובדים (משעון העובדים) נכנס אוטומטית להוצאות; אומדן עלות ספק לכל מוצר (% מהמחיר, ניתן לשינוי בהגדרות); מדבקות הלקוח מופיעות בכרטיס הלקוח.</li>
       <li><b>💾 תזכורת גיבוי</b> — באנר בדף הבית כשלא גובה מעל שבוע. <b>QR</b> במדבקות נוצר מקומית (ללא תלות באינטרנט).</li>
