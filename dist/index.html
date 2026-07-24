@@ -501,6 +501,8 @@ body { padding-bottom: 90px; min-height: 100vh; }
     </div>
   </div>
 
+  <button class="btn btn-secondary btn-block btn-sm" style="margin-bottom:10px;" onclick="var f=document.getElementById('fullCalc');f.style.display=f.style.display==='none'?'block':'none';">🔧 מחשבון מפורט (תמונות · אפיון סוללה · חשבונית) ▾</button>
+  <div id="fullCalc" style="display:none;">
   <!-- Customer info -->
   <div class="card">
     <h3 class="card-title">👤 פרטי לקוח</h3>
@@ -823,6 +825,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
   <div id="checklistBox" class="alert alert-warning" style="display: none;">
     <strong>✅ צ'קליסט בטיחות:</strong>
     <div id="checklistContent" style="margin-top: 4px;"></div>
+  </div>
   </div>
 </section>
 
