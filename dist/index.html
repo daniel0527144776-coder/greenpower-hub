@@ -991,9 +991,13 @@ body { padding-bottom: 90px; min-height: 100vh; }
     <h2 class="page-title">🔒 מחירון ספק IC GOGOGO</h2>
     <button class="btn btn-primary btn-sm" onclick="openExternal('supplier-pricelist.pdf')">⬇️ פתח PDF</button>
   </div>
-  <div class="info-banner"><span>💡</span><div>מחיר סופי ליחידה כולל שילוח, בשער <b>$1 = ₪3</b> · <b>לא כולל מכס</b>. פנימי — לא לשיתוף עם לקוחות.</div></div>
+  <div class="info-banner"><span>💡</span><div>מחיר סופי ליחידה כולל שילוח, בשער <b>$1 = ₪3</b> · <b>לא כולל מכס</b>. כעוסק פטור מע"מ הוא עלות אמיתית שלא מתקזזת. פנימי — לא לשיתוף עם לקוחות.</div></div>
   <div class="card">
     <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש רכיב (BMS / מטען / ניקל / שרינק...)" style="width:100%;margin-bottom:10px;" oninput="renderSupplier()">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
+      <input type="checkbox" id="supVat" checked onchange="renderSupplier()" style="width:16px;height:16px;">
+      <span>הצג <b>כולל מע"מ 18%</b> (העלות האמיתית שלך)</span>
+    </label>
     <div id="supplierList"></div>
   </div>
 </section>
@@ -2887,7 +2891,12 @@ function qpSaveJob(ci, ii) {
 // placeholders the PDF on Daniel's phone, so it's a searchable text table instead.
 // [category, name, final USD per unit incl. shipping]; ₪ = USD x SUPPLIER_USD (Daniel's
 // rate, the PDF used 2.92). Prices exclude customs.
+// VAT 18% is applied on top by default: Daniel is an עוסק פטור, so import VAT is a real
+// unreclaimable cost, not a pass-through. Toggle #supVat turns it off.
 const SUPPLIER_USD = 3;
+const SUPPLIER_VAT = 0.18;
+// Sub-shekel items (copper strips at ₪0.06) rounded to "₪0" before this.
+function fmtIls(n) { return n >= 10 ? '₪' + Math.round(n) : '₪' + n.toFixed(2).replace(/\.?0+$/, ''); }
 const SUPPLIER_PRICES = [
   ['BMS חכם JK', 'JK B1A 24S 150A', 111], ['BMS חכם JK', 'JK BD6A24S10P 100A', 55],
   ['BMS חכם JK', 'JK BD6A24S15P 150A', 61.5], ['BMS חכם JK', 'JK BD6A24S20P 200A', 65.5],
@@ -2950,12 +2959,15 @@ function renderSupplier() {
   const q = (document.getElementById('supQ') ? document.getElementById('supQ').value : '').trim().toLowerCase();
   const rows = SUPPLIER_PRICES.filter(r => !q || (r[0] + ' ' + r[1]).toLowerCase().includes(q));
   if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא רכיב</div></div>'; return; }
+  const vatEl = document.getElementById('supVat');
+  const vat = vatEl ? vatEl.checked : true;
   let html = '', lastCat = '';
   rows.forEach(r => {
-    if (r[0] !== lastCat) { lastCat = r[0]; html += `<div style="font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">${r[0]}</div>`; }
+    if (r[0] !== lastCat) { lastCat = r[0]; html += `<div style="font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">${r[0]}<span style="float:left;font-weight:400;font-size:11px;color:var(--text-muted);">${vat ? 'כולל מע"מ' : 'ללא מע"מ'}</span></div>`; }
+    const base = r[2] * SUPPLIER_USD;
     html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;">
       <span>${r[1]}</span>
-      <span style="display:flex;gap:12px;white-space:nowrap;"><span style="color:var(--text-muted);">$${r[2]}</span><span style="font-weight:700;color:var(--primary);min-width:44px;text-align:left;">₪${Math.round(r[2] * SUPPLIER_USD)}</span></span></div>`;
+      <span style="display:flex;gap:12px;white-space:nowrap;"><span style="color:var(--text-muted);">$${r[2]}</span><span style="font-weight:700;color:var(--primary);min-width:52px;text-align:left;">${fmtIls(vat ? base * (1 + SUPPLIER_VAT) : base)}</span></span></div>`;
   });
   el.innerHTML = html;
 }
