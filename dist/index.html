@@ -805,7 +805,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
     <div class="result-label">מחיר סופי ללקוח</div>
     <div class="result-value" id="finalPrice">₪0</div>
     <div class="result-sub" id="priceBreakdown"></div>
-    <div class="result-warranty">🛡️ אחריות מלאה 6 חודשים</div>
+    <div class="result-warranty">🛡️ אחריות מלאה <span id="calcWarrantyMonths">6</span> חודשים</div>
   </div>
 
   <!-- Action buttons -->
@@ -2617,6 +2617,11 @@ function saveLinks() {
 // QUICK REPLIES
 // ============================================================
 
+// NOTE: evaluated at parse time, before init() restores the saved settings — so a
+// `${WARRANTY_MONTHS}` in here would freeze at the literal 6 while LOOKING dynamic.
+// The "אחריות מלאה 6 חודשים" below is deliberately a literal. It contradicts the retail
+// site, which promises 12 months in 20 places; that is a policy call for Daniel, and
+// changing it also needs an in-app edit of any copy already saved to `replies`.
 const DEFAULT_REPLIES = [
   {
     id: 'r1',
@@ -3777,6 +3782,15 @@ function saveSettings() {
   WARRANTY_MONTHS = parseInt(document.getElementById('setWarranty').value) || 6;
   const cp = parseFloat(document.getElementById('setCostPct').value); COST_PCT = isNaN(cp) ? 60 : cp;
   Store.set('settings', { hourly: HOURLY, margin: MARGIN * 100, usd: USD, warranty: WARRANTY_MONTHS, costPct: COST_PCT });
+  syncWarrantyLabel();
+}
+
+// The calculator's warranty line was hardcoded "6 חודשים" while the WhatsApp message,
+// the printed quote and the saved warranty record all used WARRANTY_MONTHS. Change the
+// setting to 12 and the screen kept promising 6 — three documents, two different numbers.
+function syncWarrantyLabel() {
+  const el = document.getElementById('calcWarrantyMonths');
+  if (el) el.textContent = WARRANTY_MONTHS;
 }
 
 function saveBizDetails() {
@@ -3906,6 +3920,7 @@ function init() {
   // Derived, not typed: the help text said "283 המוצרים" against a catalog of 784.
   const hc = document.getElementById('helpCatCount');
   if (hc) hc.textContent = CATALOG.length;
+  syncWarrantyLabel();
   // Load settings
   const s = Store.get('settings');
   if (s) {
