@@ -1167,7 +1167,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
   <div class="card" style="border:1px solid rgba(52,211,153,0.3);background:rgba(52,211,153,0.06);">
     <h3 class="card-title">🆕 חדש בגרסה 3.5</h3>
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
-      <li><b>🏷️ מחירון מוצרים</b> — כל 283 המוצרים עם מחיר <b>פרטי ועסקי</b>. החלף בטאב למעלה. הפעל "הצג עלות ורווח" כדי לראות כמה כל מוצר עולה לך וכמה אתה מרוויח. לחיצה על מוצר → הזנת עלות ספק מדויקת.</li>
+      <li><b>🏷️ מחירון מוצרים</b> — כל <span id="helpCatCount">—</span> המוצרים עם מחיר <b>פרטי ועסקי</b> (כולל <b>תאים בודדים</b> עם מדרגות כמות). החלף בטאב למעלה. הפעל "הצג עלות ורווח" כדי לראות כמה כל מוצר עולה לך וכמה אתה מרוויח. לחיצה על מוצר → הזנת עלות ספק מדויקת.</li>
       <li><b>🛒 הזמנות</b> — בנה הצעת מחיר מהקטלוג (פרטי או עסקי בלחיצה), שלח בוואטסאפ, ועקוב אחר סטטוס (הצעה→שולם→נמסר). מכירות ששולמו נכנסות אוטומטית להכנסות.</li>
       <li><b>💰 הכנסות והוצאות</b> — דו"ח רווח-הפסד חודשי: הכנסות (תיקונים + מכירות) פחות הוצאות. רשום הוצאות לפי קטגוריה.</li>
       <li><b>⏱️ שעון עובדים</b> — רשום שעות לכל עובד, וקבל סיכום שעות ושכר חודשי. הגדר עובדים ותעריפים ב"ניהול עובדים".</li>
@@ -3903,6 +3903,9 @@ function openInstallGuide() {
 
 function init() {
   qpInit();
+  // Derived, not typed: the help text said "283 המוצרים" against a catalog of 784.
+  const hc = document.getElementById('helpCatCount');
+  if (hc) hc.textContent = CATALOG.length;
   // Load settings
   const s = Store.get('settings');
   if (s) {
