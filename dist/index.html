@@ -1022,6 +1022,38 @@ body { padding-bottom: 90px; min-height: 100vh; }
       <label>אימייל</label>
       <input type="email" class="form-input-wide" id="bizEmail" placeholder="greenpower.service.israel@gmail.com" style="width: 180px;">
     </div>
+
+    <div class="divider"></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">💳 פרטי תשלום להצעת מחיר</div>
+    <div class="info-banner" style="margin-bottom:8px;"><span>🔒</span><div style="font-size:11px;">נשמר בחשבון שלך בלבד, מאחורי ההתחברות — <b>לא</b> בתוך קובץ האתר. אל תכניס פרטי בנק לקוד: קובץ ה-HTML של הלוח נגיש לכל אחד שיודע את הכתובת.</div></div>
+    <div class="form-row">
+      <label>ביט / פייבוקס</label>
+      <input type="tel" class="form-input-wide" id="bizBit" placeholder="מספר לביט" style="width: 180px;">
+    </div>
+    <div class="form-row">
+      <label>בעל החשבון</label>
+      <input type="text" class="form-input-wide" id="bizBankHolder" placeholder="שם בעל החשבון" style="width: 180px;">
+    </div>
+    <div class="form-row">
+      <label>בנק</label>
+      <input type="text" class="form-input-wide" id="bizBankName" placeholder="שם הבנק ומספרו" style="width: 180px;">
+    </div>
+    <div class="form-row">
+      <label>סניף</label>
+      <input type="text" class="form-input-wide" id="bizBankBranch" placeholder="מספר סניף" style="width: 180px;">
+    </div>
+    <div class="form-row">
+      <label>מספר חשבון</label>
+      <input type="text" class="form-input-wide" id="bizBankAccount" placeholder="מספר חשבון" style="width: 180px;">
+    </div>
+    <div class="form-row">
+      <label>מקדמה % מהמחיר</label>
+      <input type="number" class="form-input" id="bizDepositPct" value="50" min="0" max="100" step="5">
+    </div>
+    <div class="form-row">
+      <label>צפי אספקה (ימי עסקים)</label>
+      <input type="number" class="form-input" id="bizLeadDays" value="7" min="1" max="60" step="1">
+    </div>
     <button class="btn btn-primary btn-block" style="margin-top: 8px;" onclick="saveBizDetails()">💾 שמור פרטי עסק</button>
   </div>
 
@@ -3134,18 +3166,18 @@ function openOrderEditor(id) {
   const orders = Store.get('orders') || [];
   const o = id ? orders.find(x => x.id === id) : null;
   if (o) {
-    orderDraft = { id: o.id, customer: o.customer, phone: o.phone, isBusiness: o.isBusiness, status: o.status,
+    orderDraft = { id: o.id, customer: o.customer, phone: o.phone, bms: o.bms || '', isBusiness: o.isBusiness, status: o.status,
       items: o.items.map(it => {
         if (it.custom) return { custom: true, name: it.name, unit: it.unit, qty: it.qty };
         const ci = PRICING.findIndex(c => c.cat === it.cat && c.name === it.name);
         return ci >= 0 ? { ci, qty: it.qty } : null;
       }).filter(Boolean) };
   } else {
-    orderDraft = { id: null, customer: '', phone: '', isBusiness: false, status: 'הצעה', items: [] };
+    orderDraft = { id: null, customer: '', phone: '', bms: '', isBusiness: false, status: 'הצעה', items: [] };
   }
   renderOrderModal();
 }
-function syncOrderFields() { const n = document.getElementById('ordName'); if (n) orderDraft.customer = n.value; const p = document.getElementById('ordPhone'); if (p) orderDraft.phone = p.value; }
+function syncOrderFields() { const n = document.getElementById('ordName'); if (n) orderDraft.customer = n.value; const p = document.getElementById('ordPhone'); if (p) orderDraft.phone = p.value; const b = document.getElementById('ordBms'); if (b) orderDraft.bms = b.value; }
 // {name, unit} for a draft item — a catalog item resolves against the current
 // retail/B2B mode; a custom (non-catalog) item carries its own price.
 function orderItemInfo(it, mode) {
@@ -3170,6 +3202,7 @@ function renderOrderModal() {
   const body = `
     <div class="form-row"><label>שם לקוח</label><input class="form-input-wide" id="ordName" value="${orderDraft.customer || ''}" style="width:170px;"></div>
     <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="ordPhone" value="${orderDraft.phone || ''}" style="width:170px;"></div>
+    <div class="form-row"><label>BMS (להצעה)</label><input class="form-input-wide" id="ordBms" value="${orderDraft.bms || ''}" placeholder="ANT 80A / DALY 60A" style="width:170px;"></div>
     <label class="check ${orderDraft.isBusiness ? 'checked' : ''}" onclick="toggleOrderBiz()"><div class="check-box"></div>לקוח עסקי (מחיר B2B)</label>
     <div class="divider"></div>
     <div class="form-row"><label>מוצר מהקטלוג</label><select class="form-select" id="ordProd" style="width:200px;">${opts}</select></div>
@@ -3210,9 +3243,9 @@ function saveOrder() {
   const orders = Store.get('orders') || [];
   if (orderDraft.id) {
     const idx = orders.findIndex(o => o.id === orderDraft.id);
-    if (idx >= 0) orders[idx] = { ...orders[idx], customer: orderDraft.customer, phone: orderDraft.phone, isBusiness: orderDraft.isBusiness, items, total };
+    if (idx >= 0) orders[idx] = { ...orders[idx], customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', isBusiness: orderDraft.isBusiness, items, total };
   } else {
-    orders.unshift({ id: 'o' + Date.now(), date: new Date().toISOString(), customer: orderDraft.customer, phone: orderDraft.phone, isBusiness: orderDraft.isBusiness, items, total, status: 'הצעה' });
+    orders.unshift({ id: 'o' + Date.now(), date: new Date().toISOString(), customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', isBusiness: orderDraft.isBusiness, items, total, status: 'הצעה' });
   }
   Store.set('orders', orders); closeModal(); renderOrders();
 }
@@ -3278,11 +3311,93 @@ function renderOrders() {
 }
 function cycleOrderStatus(id) { const orders = Store.get('orders') || [], o = orders.find(x => x.id === id); if (!o) return; const seq = ['הצעה', 'שולם', 'נמסר']; o.status = seq[(seq.indexOf(o.status) + 1) % seq.length]; Store.set('orders', orders); renderOrders(); }
 function deleteOrder(id) { if (!confirm('למחוק הזמנה?')) return; let orders = Store.get('orders') || []; orders = orders.filter(o => o.id !== id); Store.set('orders', orders); renderOrders(); }
+// Cell + C-rate per tier. Same three tiers as products.ts TIERS — if those change, change
+// these. Used to fill the spec block of a quote straight from the catalog category.
+const TIER_SPEC = {
+  CLASSIC:  { cell: 'EVE 21700 50E (Classic)',           crate: '2C~3C' },
+  ADVANCED: { cell: 'Tenpower 21700 50SG (Advanced)',    crate: '4C~10C' },
+  PRO:      { cell: 'EVE 21700 50PL Tabless (Pro)',      crate: '25C~36C' },
+};
+// A catalog category carries the family and the tier: 'סוללות אינדורו וטרקטורונים - 60V CLASSIC'.
+// Returns null for anything that is not a battery row, so the quote drops the spec block
+// instead of inventing one for a charger or a repair.
+function orderItemSpec(it) {
+  if (!it || !it.cat) return null;
+  const m = it.cat.match(/^סוללות\s+(.+?)\s+-\s+\d+V(?:\s+(PRO|ADVANCED|CLASSIC))?$/);
+  if (!m) return null;
+  return { fit: m[1], tier: m[2] || '', spec: TIER_SPEC[m[2]] || null };
+}
 function orderWhatsApp(id) {
   const orders = Store.get('orders') || [], o = orders.find(x => x.id === id); if (!o) return;
-  const lines = o.items.map(it => `• ${it.name} ×${it.qty} — ${shek(it.unit * it.qty)}`).join('\n');
-  const msg = `שלום ${o.customer || ''} 👋\n\nהצעת מחיר מ-Green Power:\n\n${lines}\n\n💰 *סה"כ: ${shek(o.total)}*${o.isBusiness ? '\n(מחיר עסקי B2B)' : ''}\n\n✅ אחריות מלאה · תאי Grade A\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
-  navigator.clipboard.writeText(msg).then(() => alert('✅ ההצעה הועתקה ללוח! הדבק אותה בוואטסאפ ללקוח.'));
+  navigator.clipboard.writeText(buildQuoteText(o))
+    .then(() => alert('✅ ההצעה הועתקה ללוח! הדבק אותה בוואטסאפ ללקוח.'));
+}
+// The quote used to be four lines: a name, the items, a total, "אחריות מלאה · תאי Grade A".
+// It said nothing about which cells, what BMS, what the warranty actually is, how long it
+// takes or how to pay — so every real quote was retyped by hand. This builds the full
+// version. Every part is omitted when its data is missing rather than printed empty:
+// no payment block until the details are filled in on the settings page.
+function buildQuoteText(o) {
+  const B = bizDetails || {};
+  const money = (n) => shek(n);
+  const P = [];
+
+  P.push(`שלום ${o.customer || ''} 👋`.trim());
+  P.push('כדי שנתחיל רשמית את התהליך, הנה סיכום ההזמנה ותוכנית הפעולה שלנו:');
+
+  // --- order summary: spec per line, derived from the catalog category ---
+  const sum = ['*סיכום ההזמנה:*'];
+  let anyBattery = false;
+  o.items.forEach((it) => {
+    const qty = it.qty > 1 ? ` ×${it.qty}` : '';
+    const s = orderItemSpec(it);
+    if (s) anyBattery = true;
+    // A charger or a repair is not a "דגם סוללה" — the first draft labelled every line
+    // that way and produced "✅ דגם סוללה: איזון תאים עמוק".
+    sum.push(`✅ *${s ? 'דגם סוללה' : 'פריט'}:* ${it.name}${s && s.spec ? ' ' + s.spec.crate : ''}${qty}`);
+    if (s && s.spec) sum.push(`✅ *סדרת תאים:* ${s.spec.cell}`);
+    if (s) sum.push(`✅ *התאמה:* ${s.fit}`);
+  });
+  if (o.bms) sum.push(`✅ *מערכת ניהול (BMS):* ${o.bms}`);
+  sum.push(`✅ *אחריות:* ${WARRANTY_BUILD} חודשים`);
+  P.push(sum.join('\n'));
+
+  // --- money ---
+  const pct = B.depositPct != null ? B.depositPct : 50;
+  const deposit = Math.round((o.total * pct) / 100 / 50) * 50;
+  const balance = o.total - deposit;
+  const acct = ['*חשבון:*', `• *מחיר סופי:* ${money(o.total)}${o.isBusiness ? ' (מחיר עסקי)' : ''}`];
+  if (pct > 0 && pct < 100 && deposit > 0 && balance > 0) {
+    acct.push(`• *מקדמה לתחילת עבודה:* ${money(deposit)}`);
+    acct.push(`• *יתרה לתשלום במסירה:* ${money(balance)}`);
+  }
+  P.push(acct.join('\n'));
+
+  // --- process ---
+  const lead = B.leadDays != null ? B.leadDays : 7;
+  const subj = anyBattery ? 'הסוללה' : 'ההזמנה';   // don't promise "the battery" for a charger
+  P.push(['*תהליך ולוח זמנים:*',
+    `• *סטטוס:* תשלום המקדמה מכניס את ${subj} שלך מיידית לתור העבודה.`,
+    `• *צפי לסיום:* ${subj} תהיה מוכנה תוך *${lead} ימי עסקים* מרגע קבלת המקדמה.`].join('\n'));
+
+  // --- how to pay: only the channels that are actually configured ---
+  const pay = [];
+  if (B.bit) pay.push(`🔹 *ביט:* ${B.bit}`);
+  if (B.bankAccount) {
+    const bank = [B.bankHolder, B.bankName, B.bankBranch && `סניף ${B.bankBranch}`, `חשבון ${B.bankAccount}`]
+      .filter(Boolean).join(' | ');
+    pay.push(`🔹 *העברה בנקאית:* ${bank}`);
+  }
+  if (B.address) pay.push(`🔹 *מזומן:* במעבדת ${B.name || 'Green Power'}, ${B.address}.`);
+  if (pay.length) {
+    P.push(`*איך יוצאים לדרך?*\n${deposit > 0 && balance > 0 ? `לביצוע תשלום המקדמה (${money(deposit)})` : 'לביצוע התשלום'} ניתן להשתמש בדרכים הבאות:\n\n${pay.join('\n')}`);
+    P.push('לאחר התשלום, אשמח לקבל צילום מסך לאישור, ואשלח לך הזמנה רשמית.');
+  }
+
+  P.push('מרגע זה, אתה בידיים טובות. אני זמין לכל שאלה ומתחייב לעדכן בסיום העבודה.');
+  P.push(`בברכה, ${B.owner || 'דניאל'}`);
+  P.push(`*מעבדת ${B.name || 'Green Power'} - הבית שלך לאנרגיה חשמלית* 🔋`);
+  return P.join('\n\n');
 }
 
 // ============================================================
@@ -3810,7 +3925,17 @@ function saveBizDetails() {
     phone2: document.getElementById('bizPhone2').value,
     address: document.getElementById('bizAddress').value,
     id: document.getElementById('bizId').value,
-    email: document.getElementById('bizEmail').value
+    email: document.getElementById('bizEmail').value,
+    // Payment details live here — in the synced `biz` key behind the login — and never
+    // in the HTML. hub.energylabgreen.com serves this file to anyone who asks (the gate
+    // is JS-side only), so a hardcoded account number would be published.
+    bit: document.getElementById('bizBit').value,
+    bankHolder: document.getElementById('bizBankHolder').value,
+    bankName: document.getElementById('bizBankName').value,
+    bankBranch: document.getElementById('bizBankBranch').value,
+    bankAccount: document.getElementById('bizBankAccount').value,
+    depositPct: parseInt(document.getElementById('bizDepositPct').value, 10),
+    leadDays: parseInt(document.getElementById('bizLeadDays').value, 10)
   };
   Store.set('biz', bizDetails);
   alert('✅ פרטי העסק נשמרו!');
@@ -3965,6 +4090,13 @@ function init() {
   document.getElementById('bizAddress').value = bizDetails.address || '';
   document.getElementById('bizId').value = bizDetails.id || '';
   document.getElementById('bizEmail').value = bizDetails.email || '';
+  document.getElementById('bizBit').value = bizDetails.bit || '';
+  document.getElementById('bizBankHolder').value = bizDetails.bankHolder || '';
+  document.getElementById('bizBankName').value = bizDetails.bankName || '';
+  document.getElementById('bizBankBranch').value = bizDetails.bankBranch || '';
+  document.getElementById('bizBankAccount').value = bizDetails.bankAccount || '';
+  document.getElementById('bizDepositPct').value = bizDetails.depositPct != null ? bizDetails.depositPct : 50;
+  document.getElementById('bizLeadDays').value = bizDetails.leadDays != null ? bizDetails.leadDays : 7;
 
   // Initialize default replies if needed
   if (!Store.get('replies')) Store.set('replies', DEFAULT_REPLIES);
