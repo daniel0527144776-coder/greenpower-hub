@@ -3080,12 +3080,48 @@ function openCostEditor(i) {
   const cur = costs[k] != null ? costs[k] : (productCost(it) || '');
   openModal('עלות ספק / בנייה',
     `<div style="font-size:13px;margin-bottom:8px;">${it.cat}<br><b>${it.name}</b></div>
-     <div class="form-row"><label>עלות לי ₪</label><input type="number" class="form-input" id="costInput" value="${cur}" min="0" step="10"></div>
+     <div class="form-row"><label>עלות לי ₪</label><input type="number" class="form-input" id="costInput" value="${cur}" min="0" step="10" oninput="updateCostProfit(${i})"></div>
      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">פרטי: ${typeof it.retail === 'number' ? shek(it.retail) : it.retail} · עסקי: ${typeof it.b2b === 'number' ? shek(it.b2b) : it.b2b}</div>
+     <div id="costProfit" style="margin-top:8px;"></div>
      <div style="font-size:11px;color:var(--text-light);margin-top:4px;">לסוללות מוצג אומדן מהתאים עד שמזינים עלות ספק מדויקת.</div>`,
     `<button class="btn btn-primary" onclick="saveCost(${i})">💾 שמור</button>
      <button class="btn btn-secondary btn-sm" onclick="clearCost(${i})">איפוס</button>
      <button class="btn btn-secondary" onclick="closeModal()">סגור</button>`);
+  updateCostProfit(i);
+}
+// The editor showed the cost and the two prices but never the answer to the actual
+// question — what is left for me. Recomputes live as the cost is typed, so the effect of
+// a supplier quote is visible before saving. Prices that are ranges or text
+// ('₪450-600', 'לפי הצעה', 'תוספת 15%') have no arithmetic, and say so rather than
+// rendering NaN or a confident zero.
+function updateCostProfit(i) {
+  const box = document.getElementById('costProfit');
+  if (!box) return;
+  const it = PRICING[i];
+  const raw = document.getElementById('costInput').value;
+  const cost = parseFloat(raw);
+  if (raw === '' || isNaN(cost)) {
+    box.innerHTML = '<div style="font-size:11px;color:var(--text-light);">הזן עלות כדי לראות את הרווח</div>';
+    return;
+  }
+  const line = (label, price) => {
+    if (typeof price !== 'number') return `<div style="font-size:12px;color:var(--text-muted);">${label}: —</div>`;
+    const profit = price - cost;
+    const marg = price > 0 ? Math.round((profit / price) * 100) : 0;
+    const col = profit < 0 ? '#ef4444' : '#10b981';
+    const warn = profit < 0 ? ' ⚠️ מתחת לעלות' : '';
+    // '₪' + '-60' gives "₪-60", and a leading minus is a NEUTRAL character: in an RTL
+    // line it jumps to the wrong side, the same bug that rendered "Grade A+" as "+Grade A".
+    // Build the sign explicitly and pin the run with <bdi dir="ltr">.
+    const money = (profit < 0 ? '-' : '') + shek(Math.abs(profit));
+    return `<div style="font-size:12px;display:flex;justify-content:space-between;gap:10px;">
+      <span style="color:var(--text-muted);">${label}</span>
+      <span style="color:${col};font-weight:700;"><bdi dir="ltr">${money} · ${marg}%</bdi>${warn}</span></div>`;
+  };
+  box.innerHTML =
+    '<div style="border-top:1px solid var(--border);padding-top:8px;">' +
+    '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">הרווח שלי</div>' +
+    line('פרטי', it.retail) + line('עסקי', it.b2b) + '</div>';
 }
 function saveCost(i) { const it = PRICING[i], v = parseFloat(document.getElementById('costInput').value), costs = getCosts(); if (!isNaN(v)) costs[catKey(it)] = v; Store.set('costs', costs); closeModal(); renderCatalog(); }
 function clearCost(i) { const it = PRICING[i], costs = getCosts(); delete costs[catKey(it)]; Store.set('costs', costs); closeModal(); renderCatalog(); }
