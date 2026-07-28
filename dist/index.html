@@ -355,11 +355,6 @@ body { padding-bottom: 90px; min-height: 100vh; }
   <div class="card">
     <h3 class="card-title">⚡ פעולות מהירות</h3>
     <div class="quick-grid">
-      <div class="quick-card" onclick="navigateTo('calc')">
-        <span class="quick-card-icon">🧮</span>
-        <div class="quick-card-title">תמחור חדש</div>
-        <div class="quick-card-desc">מחשבון תמחור תיקון</div>
-      </div>
       <div class="quick-card" onclick="navigateTo('customers')">
         <span class="quick-card-icon">👥</span>
         <div class="quick-card-title">לקוחות</div>
@@ -382,8 +377,8 @@ body { padding-bottom: 90px; min-height: 100vh; }
       </div>
       <div class="quick-card" onclick="navigateTo('orders')">
         <span class="quick-card-icon">🛒</span>
-        <div class="quick-card-title">מכירות ותיקונים</div>
-        <div class="quick-card-desc">הכל במקום אחד</div>
+        <div class="quick-card-title">תמחור, מכירות ותיקונים</div>
+        <div class="quick-card-desc">מחיר מהיר · הצעה · מחשבון מפורט</div>
       </div>
       <div class="quick-card" onclick="navigateTo('finances')">
         <span class="quick-card-icon">💰</span>
@@ -419,6 +414,20 @@ body { padding-bottom: 90px; min-height: 100vh; }
         <span class="quick-card-icon">🔒</span>
         <div class="quick-card-title">עלויות ספקים</div>
         <div class="quick-card-desc">כל הספקים · תאים · BMS</div>
+      </div>
+      <!-- These two pages existed with NO navigateTo() anywhere in the file — fully built
+           and completely unreachable. תגובות מהירות is where the saved WhatsApp templates
+           are edited, so the 6-month warranty line in one of them could not be corrected
+           in the app at all. -->
+      <div class="quick-card" onclick="navigateTo('replies')">
+        <span class="quick-card-icon">💬</span>
+        <div class="quick-card-title">תגובות מהירות</div>
+        <div class="quick-card-desc">תבניות וואטסאפ ללקוחות</div>
+      </div>
+      <div class="quick-card" onclick="navigateTo('stickerlog')">
+        <span class="quick-card-icon">🗂️</span>
+        <div class="quick-card-title">מדבקות שמורות</div>
+        <div class="quick-card-desc">היסטוריית מדבקות שהונפקו</div>
       </div>
       <div class="quick-card" onclick="navigateTo('help')">
         <span class="quick-card-icon">❓</span>
@@ -479,25 +488,10 @@ body { padding-bottom: 90px; min-height: 100vh; }
     <button class="btn btn-secondary btn-sm" onclick="resetCalc()">איפוס</button>
   </div>
 
-  <!-- Quick price recommendation -->
-  <div class="card" style="border:1px solid var(--primary);">
-    <h3 class="card-title">💰 המלצת מחיר מהירה</h3>
-    <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">בחר סוג תיקון וקבל מחיר מומלץ ללקוח — בלי למלא טופס.</p>
-    <div class="form-row"><label>קטגוריה</label><select class="form-select" id="qpCat" onchange="qpFillItems()" style="width:200px;"></select></div>
-    <div class="form-row"><label>מה צריך</label><select class="form-select" id="qpItem" onchange="qpShow()" style="width:200px;"></select></div>
-    <div id="qpResult" style="display:none;margin-top:10px;padding:12px;background:var(--bg);border-radius:10px;text-align:center;">
-      <div style="font-size:11px;color:var(--text-muted);">מחיר מומלץ ללקוח</div>
-      <div id="qpPrice" style="font-size:28px;font-weight:800;color:var(--primary);"></div>
-      <div id="qpNote" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
-      <div class="btn-group" style="margin-top:8px;justify-content:center;">
-        <button class="btn btn-sm btn-primary" onclick="qpCreateJob()">🔧 צור עבודה</button>
-        <button class="btn btn-sm" style="background:#25D366;color:#fff;border:none;" onclick="qpCopy()">📋 העתק ללקוח</button>
-      </div>
-    </div>
-  </div>
 
-  <button class="btn btn-secondary btn-block btn-sm" style="margin-bottom:10px;" onclick="var f=document.getElementById('fullCalc');f.style.display=f.style.display==='none'?'block':'none';">🔧 מחשבון מפורט (תמונות · אפיון סוללה · חשבונית) ▾</button>
-  <div id="fullCalc" style="display:none;">
+  <!-- The collapse toggle went with the quick-pricer: this page IS the detailed
+       calculator now, so there is nothing to collapse it in favour of. -->
+  <div id="fullCalc">
   <!-- Customer info -->
   <div class="card">
     <h3 class="card-title">👤 פרטי לקוח</h3>
@@ -1249,10 +1243,26 @@ body { padding-bottom: 90px; min-height: 100vh; }
 <!-- ============ ORDERS PAGE ============ -->
 <section id="page-orders" class="page">
   <div class="page-header">
-    <h2 class="page-title">🛒 מכירות ותיקונים</h2>
+    <h2 class="page-title">🛒 תמחור, מכירות ותיקונים</h2>
     <div class="btn-group">
-      <button class="btn btn-secondary btn-sm" onclick="navigateTo('calc')">🔧 תיקון</button>
-      <button class="btn btn-primary btn-sm" onclick="openOrderEditor()">🛒 מכירה</button>
+      <button class="btn btn-secondary btn-sm" onclick="navigateTo('calc')">🧮 מחשבון מפורט</button>
+      <button class="btn btn-primary btn-sm" onclick="openOrderEditor()">🛒 מכירה / הצעה</button>
+    </div>
+  </div>
+  <!-- Quick price recommendation — moved here from the calculator 2026-07-28 -->
+  <div class="card" style="border:1px solid var(--primary);">
+    <h3 class="card-title">💰 המלצת מחיר מהירה</h3>
+    <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">בחר סוג תיקון וקבל מחיר מומלץ ללקוח — בלי למלא טופס.</p>
+    <div class="form-row"><label>קטגוריה</label><select class="form-select" id="qpCat" onchange="qpFillItems()" style="width:200px;"></select></div>
+    <div class="form-row"><label>מה צריך</label><select class="form-select" id="qpItem" onchange="qpShow()" style="width:200px;"></select></div>
+    <div id="qpResult" style="display:none;margin-top:10px;padding:12px;background:var(--bg);border-radius:10px;text-align:center;">
+      <div style="font-size:11px;color:var(--text-muted);">מחיר מומלץ ללקוח</div>
+      <div id="qpPrice" style="font-size:28px;font-weight:800;color:var(--primary);"></div>
+      <div id="qpNote" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
+      <div class="btn-group" style="margin-top:8px;justify-content:center;">
+        <button class="btn btn-sm btn-primary" onclick="qpCreateJob()">🔧 צור עבודה</button>
+        <button class="btn btn-sm" style="background:#25D366;color:#fff;border:none;" onclick="qpCopy()">📋 העתק ללקוח</button>
+      </div>
     </div>
   </div>
   <div class="btn-group" id="salesFilterBar" style="margin-bottom:10px;flex-wrap:wrap;"></div>
@@ -3173,7 +3183,6 @@ function productCost(it) {
   if (typeof it.retail === 'number' && COST_PCT > 0) return Math.round(it.retail * COST_PCT / 100);
   return null;
 }
-function productCostIsEstimate(it) { return getCosts()[catKey(it)] == null; }
 
 let priceMode = 'retail';
 let showCost = false;
@@ -4344,9 +4353,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
-  deferredInstallPrompt = e;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'inline-flex';
+  deferredInstallPrompt = e;   // surfaced by openInstallGuide(), which reads this flag
 });
 window.installPWA = async function() {
   if (!deferredInstallPrompt) {
@@ -4356,8 +4363,6 @@ window.installPWA = async function() {
   deferredInstallPrompt.prompt();
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
-  const btn = document.getElementById('pwaInstallBtn');
-  if (btn) btn.style.display = 'none';
 };
 
 </script>
