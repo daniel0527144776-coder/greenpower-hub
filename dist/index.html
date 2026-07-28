@@ -417,8 +417,8 @@ body { padding-bottom: 90px; min-height: 100vh; }
       </div>
       <div class="quick-card" onclick="navigateTo('supplier')">
         <span class="quick-card-icon">🔒</span>
-        <div class="quick-card-title">מחירון ספק</div>
-        <div class="quick-card-desc">IC GOGOGO (פנימי)</div>
+        <div class="quick-card-title">עלויות ספקים</div>
+        <div class="quick-card-desc">כל הספקים · תאים · BMS</div>
       </div>
       <div class="quick-card" onclick="navigateTo('help')">
         <span class="quick-card-icon">❓</span>
@@ -1408,7 +1408,6 @@ body { padding-bottom: 90px; min-height: 100vh; }
     </div>
   </div>
   <div id="inventoryLowAlert"></div>
-  <div id="cellCostRef" class="card" style="margin-bottom:10px;"></div>
   <div class="card">
     <div id="inventoryList"></div>
   </div>
@@ -3865,14 +3864,9 @@ function renderStickerLog() {
 // ============================================================
 function getInventory() { return Store.get('inventory') || []; }
 function renderInventory() {
-  const cc = document.getElementById('cellCostRef');
-  if (cc) cc.innerHTML = '<h3 class="card-title">🔋 עלות תא (עלות נחיתה ליחידה)</h3>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:var(--text-muted);font-weight:700;padding:2px 0 5px;border-bottom:1px solid var(--border);"><span>תא</span><span style="display:flex;gap:14px;"><span style="width:52px;text-align:left;">🚢 ימי</span><span style="width:52px;text-align:left;">✈️ אוויר</span></span></div>' +
-    '<div style="display:flex;flex-direction:column;">' +
-    CELL_COST_REF.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);">
-      <span><b>${x.n}</b> <span style="color:var(--text-muted);font-size:11px;">${x.t}</span></span>
-      <span style="display:flex;gap:14px;font-weight:700;"><span style="width:52px;text-align:left;color:var(--primary);">₪${x.sea}</span><span style="width:52px;text-align:left;color:${x.air != null ? '#fbbf24' : 'var(--text-muted)'};">${x.air != null ? '₪' + x.air : '—'}</span></span></div>`).join('') +
-    '</div><div style="font-size:10px;color:var(--text-muted);margin-top:6px;">עלות מלאה עד המעבדה — כולל מע״מ, שילוח ואגרות. 🚢 ימי = שיטת הבנייה הרגילה · ✈️ אוויר = מהיר ויקר יותר.</div>';
+  // The cell-cost reference used to render here. It is a SUPPLIER cost, not stock on a
+  // shelf, so it belongs on עלויות ספקים — where it now lives alongside every other
+  // supplier — and not on a page about what is in the drawer.
   const inv = getInventory();
   const low = inv.filter(i => i.low != null && Number(i.qty) <= Number(i.low));
   document.getElementById('inventoryLowAlert').innerHTML = low.length
