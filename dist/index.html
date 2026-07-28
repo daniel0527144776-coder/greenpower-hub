@@ -972,16 +972,19 @@ body { padding-bottom: 90px; min-height: 100vh; }
 <!-- ============ SUPPLIER PRICE LIST PAGE ============ -->
 <section id="page-supplier" class="page">
   <div class="page-header">
-    <h2 class="page-title">🔒 מחירון ספק IC GOGOGO</h2>
+    <h2 class="page-title">🔒 עלויות ספקים</h2>
     <button class="btn btn-primary btn-sm" onclick="openExternal('supplier-pricelist.pdf')">⬇️ פתח PDF</button>
   </div>
-  <div class="info-banner"><span>💡</span><div>מחיר סופי ליחידה כולל שילוח, בשער <b>$1 = ₪3</b> · <b>לא כולל מכס</b>. כעוסק פטור מע"מ הוא עלות אמיתית שלא מתקזזת. פנימי — לא לשיתוף עם לקוחות.</div></div>
+  <div class="info-banner"><span>💡</span><div>מחיר סופי ליחידה כולל שילוח, בשער <b>$1 = ₪3</b> · <b>לא כולל מכס</b>. כעוסק פטור מע"מ הוא עלות אמיתית שלא מתקזזת.</div></div>
+  <div class="info-banner" style="background:rgba(239,68,68,0.12);border-right-color:#ef4444;"><span>⚠️</span><div style="font-size:11px;">קובץ ה-HTML של הלוח מוגש לכל מי שיודע את הכתובת — שער ההתחברות הוא JavaScript בלבד. פריטים שתוסיף כאן נשמרים בחשבון שלך (מסונכרן, לא בקובץ), אבל <b>המחירון המובנה של IC GOGOGO ועלויות התאים כן נמצאים בקובץ וגלויים</b>.</div></div>
   <div class="card">
-    <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש רכיב (BMS / מטען / ניקל / שרינק...)" style="width:100%;margin-bottom:10px;" oninput="renderSupplier()">
+    <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש רכיב (תא / BMS / מטען / ניקל...)" style="width:100%;margin-bottom:10px;" oninput="renderSupplier()">
+    <select class="form-select" id="supWho" style="width:100%;margin-bottom:10px;" onchange="renderSupplier()"></select>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
       <input type="checkbox" id="supVat" checked onchange="renderSupplier()" style="width:16px;height:16px;">
       <span>הצג <b>כולל מע"מ 18%</b> (העלות האמיתית שלך)</span>
     </label>
+    <button class="btn btn-secondary btn-block btn-sm" style="margin-bottom:10px;" onclick="openSupplierAdd()">➕ הוסף פריט / ספק</button>
     <div id="supplierList"></div>
   </div>
 </section>
@@ -1478,13 +1481,22 @@ const CELL_WEIGHTS = {
 // + fees, an עוסק פטור cannot reclaim the VAT). Shown as a reference on the inventory page.
 // sea = documented landed cost (the real import method for building packs).
 // air = Daniel's air-freight landed cost per cell (faster, dearer). null = not given yet.
+// Landed cost of every cell type the lab imports — sea (the normal method) and air
+// where Daniel has quoted it. Sea figures must stay identical to CELL_UNIT_COST here and
+// to audit-pricing.mjs; they are supplier USD × 3.00 × 1.371 (rate × VAT-on-CIF + freight
+// + fees, none of which an עוסק פטור reclaims).
 const CELL_COST_REF = [
   { n: 'EVE 50E',       t: 'CLASSIC · 21700',        sea: 7.34,  air: 9.65 },
   { n: 'Tenpower 50SG', t: 'ADVANCED · 21700',       sea: 8.86,  air: 10.25 },
   { n: 'EVE 50PL',      t: 'PRO · 21700 Tabless',    sea: 12.15, air: 13.03 },
   { n: 'EVE 25P',       t: 'כלי עבודה · 18650',      sea: 5.14,  air: null },
+  { n: 'EVE 40P',       t: '21700 · 12.5C',           sea: 8.43,  air: null },
+  { n: 'EVE 35V',       t: '18650 · 3C',              sea: 6.38,  air: null },
+  { n: 'EVE 26V',       t: '18650 · ~2.9C',           sea: 4.03,  air: null },
+  { n: 'Ampace JP30P1', t: '18650 Tabless · 12C',     sea: 13.16, air: null },
 ];
 
+const BMS_BRAND_LABEL = { daly: 'DALY', jk: 'JK Smart', ant: 'ANT' };
 const BMS_PRICES = {
   daly: { 20: 25, 30: 35, 40: 55, 60: 65, 80: 95, 100: 120, 120: 150, 150: 180, 200: 230, 220: 250, 300: 330 },
   jk:   { 20: 110, 30: 120, 40: 135, 60: 150, 80: 170, 100: 175, 120: 195, 150: 220, 200: 260, 220: 285, 300: 380 },
@@ -1568,7 +1580,7 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'replies', 'links', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory'];
+const SYNC_KEYS = ['customers', 'jobs', 'replies', 'links', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs'];
 
 const Sync = {
   session: null,
@@ -2945,23 +2957,114 @@ const SUPPLIER_PRICES = [
   ['רכיבי הנעה', 'צג LCD3 KT', 47], ['רכיבי הנעה', 'רגלית תמיכה Dualtron S2', 6],
   ['רכיבי הנעה', 'קופסת בקר Extra Large', 9.5], ['רכיבי הנעה', 'וולטמטר לכידון 48V', 9.7],
 ];
+// ---- One list for every supplier, not just IC GOGOGO ----------------------------
+// The page carried a single supplier's PDF. Cell landed costs sat on the inventory page,
+// BMS costs only inside the repair calculator, and the other suppliers were not in the
+// hub at all — so "what does this part cost me?" had three different answers depending on
+// where you looked, and usually none.
+//
+// supplierRows() merges three sources into one shape { who, cat, name, usd, ils }:
+//   * IC GOGOGO — SUPPLIER_PRICES, priced in USD
+//   * cells      — CELL_COST_REF, already landed ₪ (VAT included in the 1.371 factor)
+//   * BMS        — BMS_PRICES, already ₪ cost
+//   * anything Daniel adds himself, from the synced 'supplier_costs' key
+// A row priced in USD gets the rate and VAT applied; a row already in ₪ does not, or the
+// VAT would be charged twice.
+function supplierRows() {
+  const rows = [];
+  SUPPLIER_PRICES.forEach((r) => rows.push({ who: 'IC GOGOGO', cat: r[0], name: r[1], usd: r[2] }));
+  CELL_COST_REF.forEach((c) => {
+    rows.push({ who: 'תאי ליתיום', cat: 'תאים — יבוא ימי 🚢', name: c.n + ' · ' + c.t, ils: c.sea, landed: true });
+    if (c.air != null) rows.push({ who: 'תאי ליתיום', cat: 'תאים — יבוא אווירי ✈️', name: c.n + ' · ' + c.t, ils: c.air, landed: true });
+  });
+  Object.keys(BMS_PRICES).forEach((brand) => {
+    Object.keys(BMS_PRICES[brand]).forEach((amps) => {
+      rows.push({ who: 'BMS', cat: 'BMS ' + (BMS_BRAND_LABEL[brand] || brand.toUpperCase()), name: amps + 'A', ils: BMS_PRICES[brand][amps], landed: true });
+    });
+  });
+  (Store.get('supplier_costs') || []).forEach((r, i) => rows.push({ ...r, custom: true, idx: i }));
+  return rows;
+}
+function supplierIls(r, vat) {
+  if (r.ils != null) return Number(r.ils);              // already landed ₪ — never re-VAT
+  const base = Number(r.usd) * SUPPLIER_USD;
+  return vat ? base * (1 + SUPPLIER_VAT) : base;
+}
 function renderSupplier() {
   const el = document.getElementById('supplierList');
   if (!el) return;
   const q = (document.getElementById('supQ') ? document.getElementById('supQ').value : '').trim().toLowerCase();
-  const rows = SUPPLIER_PRICES.filter(r => !q || (r[0] + ' ' + r[1]).toLowerCase().includes(q));
-  if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא רכיב</div></div>'; return; }
   const vatEl = document.getElementById('supVat');
   const vat = vatEl ? vatEl.checked : true;
+  const all = supplierRows();
+
+  // supplier dropdown, rebuilt from the data so a new supplier appears by itself
+  const whoSel = document.getElementById('supWho');
+  if (whoSel) {
+    const whos = [...new Set(all.map((r) => r.who))];
+    const cur = whoSel.value;
+    const opts = '<option value="">כל הספקים (' + all.length + ')</option>' +
+      whos.map((w) => `<option value="${w}"${w === cur ? ' selected' : ''}>${w} (${all.filter((r) => r.who === w).length})</option>`).join('');
+    if (whoSel.innerHTML !== opts) whoSel.innerHTML = opts;
+    if (cur) whoSel.value = cur;
+  }
+  const who = whoSel ? whoSel.value : '';
+
+  const rows = all.filter((r) => (!who || r.who === who) &&
+    (!q || (r.who + ' ' + r.cat + ' ' + r.name).toLowerCase().includes(q)));
+  if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא רכיב</div></div>'; return; }
+
   let html = '', lastCat = '';
-  rows.forEach(r => {
-    if (r[0] !== lastCat) { lastCat = r[0]; html += `<div style="font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">${r[0]}<span style="float:left;font-weight:400;font-size:11px;color:var(--text-muted);">${vat ? 'כולל מע"מ' : 'ללא מע"מ'}</span></div>`; }
-    const base = r[2] * SUPPLIER_USD;
+  rows.forEach((r) => {
+    if (r.cat !== lastCat) {
+      lastCat = r.cat;
+      const note = r.ils != null ? 'עלות נחיתה ₪' : (vat ? 'כולל מע"מ' : 'ללא מע"מ');
+      html += `<div style="font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">${r.cat}<span style="float:left;font-weight:400;font-size:11px;color:var(--text-muted);">${note}</span></div>`;
+    }
+    const usd = r.usd != null ? `<span style="color:var(--text-muted);">$${r.usd}</span>` : '';
+    const del = r.custom ? `<span onclick="removeSupplierRow(${r.idx})" style="color:#ef4444;cursor:pointer;">🗑️</span>` : '';
     html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;">
-      <span>${r[1]}</span>
-      <span style="display:flex;gap:12px;white-space:nowrap;"><span style="color:var(--text-muted);">$${r[2]}</span><span style="font-weight:700;color:var(--primary);min-width:52px;text-align:left;">${fmtIls(vat ? base * (1 + SUPPLIER_VAT) : base)}</span></span></div>`;
+      <span>${r.name}${r.custom ? ' <span style="font-size:10px;color:var(--text-muted);">(שלי)</span>' : ''}</span>
+      <span style="display:flex;gap:12px;white-space:nowrap;align-items:center;">${usd}<span style="font-weight:700;color:var(--primary);min-width:52px;text-align:left;">${fmtIls(supplierIls(r, vat))}</span>${del}</span></div>`;
   });
   el.innerHTML = html;
+}
+// Rows Daniel adds go to the synced store, NOT into this file — the HTML is served to
+// anyone who asks, so growing the cost list in code would grow what is published.
+function openSupplierAdd() {
+  const whos = [...new Set(supplierRows().map((r) => r.who))];
+  openModal('➕ פריט ספק', `
+    <div class="form-row"><label>ספק</label><input class="form-input-wide" id="scWho" list="scWhoList" placeholder="שם הספק" style="width:170px;">
+      <datalist id="scWhoList">${whos.map((w) => `<option value="${w}">`).join('')}</datalist></div>
+    <div class="form-row"><label>קטגוריה</label><input class="form-input-wide" id="scCat" placeholder="בקרים / מטענים / ניקל" style="width:170px;"></div>
+    <div class="form-row"><label>פריט</label><input class="form-input-wide" id="scName" placeholder="שם הדגם" style="width:170px;"></div>
+    <div class="form-row"><label>מחיר $</label><input type="number" class="form-input" id="scUsd" min="0" step="0.01" placeholder="ריק אם בשקלים"></div>
+    <div class="form-row"><label>או מחיר ₪ (נחת)</label><input type="number" class="form-input" id="scIls" min="0" step="0.01" placeholder="עלות סופית"></div>
+    <div style="font-size:11px;color:var(--text-light);margin-top:6px;">מחיר בדולר יומר לפי $1=₪${SUPPLIER_USD} ותתווסף לו מע"מ. מחיר בשקלים נחשב עלות סופית ולא מקבל מע"מ שוב.</div>`,
+    '<button class="btn btn-primary" onclick="saveSupplierRow()">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>');
+}
+function saveSupplierRow() {
+  const who = document.getElementById('scWho').value.trim();
+  const cat = document.getElementById('scCat').value.trim();
+  const name = document.getElementById('scName').value.trim();
+  const usd = parseFloat(document.getElementById('scUsd').value);
+  const ils = parseFloat(document.getElementById('scIls').value);
+  if (!who || !name) { alert('הזן לפחות ספק ושם פריט'); return; }
+  if (isNaN(usd) && isNaN(ils)) { alert('הזן מחיר — בדולר או בשקלים'); return; }
+  const list = Store.get('supplier_costs') || [];
+  const row = { who, cat: cat || who, name };
+  if (!isNaN(usd)) row.usd = usd; else row.ils = ils;
+  list.push(row);
+  Store.set('supplier_costs', list);
+  closeModal();
+  renderSupplier();
+}
+function removeSupplierRow(i) {
+  const list = Store.get('supplier_costs') || [];
+  if (!list[i] || !confirm('למחוק את ' + list[i].name + '?')) return;
+  list.splice(i, 1);
+  Store.set('supplier_costs', list);
+  renderSupplier();
 }
 // ============================================================
 // RANGE CALCULATOR
@@ -3183,7 +3286,6 @@ function syncOrderFields() { const n = document.getElementById('ordName'); if (n
 // The BMS is picked from BMS_PRICES — the same brands and amp ratings the repair
 // calculator already prices — instead of being typed. Free text meant a quote could
 // promise a rating the lab does not stock, and it never reached the sale record.
-const BMS_BRAND_LABEL = { daly: 'DALY', jk: 'JK Smart', ant: 'ANT' };
 function bmsLabel(brand, amps) { return brand && amps ? `${BMS_BRAND_LABEL[brand] || brand.toUpperCase()} ${amps}A` : ''; }
 function bmsBrandOpts(sel) {
   return '<option value="">— ללא —</option>' + Object.keys(BMS_PRICES).map(k =>
