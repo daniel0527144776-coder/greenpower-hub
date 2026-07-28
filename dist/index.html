@@ -1376,11 +1376,12 @@ body { padding-bottom: 90px; min-height: 100vh; }
     <h2 class="page-title">🏢 תיעוד תיקונים — עסקי</h2>
     <span class="page-subtitle" id="bizdocsCount"></span>
   </div>
-  <div class="info-banner"><span>💡</span><div>סמן תיקון כ<strong>"לקוח עסקי"</strong> במחשבון התמחור — וכל התיקונים יתועדו כאן לכל בית עסק, עם דו"ח מרוכז להדפסה/PDF ושליחה.</div></div>
+  <div class="info-banner"><span>💡</span><div>סמן תיקון כ<strong>"לקוח עסקי"</strong> במחשבון התמחור — וכל התיקונים יתועדו כאן לכל בית עסק. 📋 מעתיק סיכום לקבוצת הוואטסאפ של החנות, עם <b>היתרה מחושבת מהחיובים והתשלומים</b> ולא מהזיכרון.</div></div>
   <div class="card" id="bizdocsListCard">
     <div id="bizdocsList"></div>
   </div>
   <div id="bizReportPreview" style="display:none;">
+    <div id="bizAccountStrip"></div>
     <div class="btn-group no-print" style="margin-bottom:10px;">
       <button class="btn btn-secondary" style="flex:1;" onclick="closeBizReport()">← חזרה</button>
       <button class="btn btn-accent" style="flex:1;background:#25D366;" onclick="bizReportWhatsApp()">📋 העתק</button>
@@ -1587,7 +1588,7 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'replies', 'links', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs', 'supplier_prices'];
+const SYNC_KEYS = ['customers', 'jobs', 'replies', 'links', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs', 'supplier_prices', 'biz_payments'];
 
 const Sync = {
   session: null,
@@ -3752,6 +3753,91 @@ function deleteDim(id) { if (!confirm('למחוק דגם?')) return; let dims = 
 // BUSINESS REPAIR DOCUMENTATION
 // ============================================================
 let bizReportPhone = null;
+// ---- Open account per shop -------------------------------------------------------
+// Six shops, each in its own WhatsApp group, each getting a per-repair summary that ends
+// with "יתרה תשלום: 4650₪" — a running balance retyped by hand every time. Every other
+// number in that message comes from the job; that one was the only one nothing checked,
+// and it is the one that costs money when it drifts.
+//
+// Charges come from the jobs already recorded. Payments are a ledger, so a balance is
+// computed, never typed: balance = Σ job prices − Σ payments.
+function getBizPayments() { return Store.get('biz_payments') || []; }
+function paymentsForPhone(phone) { return getBizPayments().filter(p => p.phone === phone); }
+function bizAccount(phone) {
+  const jobs = jobsForPhone(phone);
+  const charged = jobs.reduce((s, j) => s + (Number(j.price) || 0), 0);
+  const paid = paymentsForPhone(phone).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  return { jobs, charged, paid, balance: charged - paid };
+}
+// '₪' + '-60' puts a neutral minus at the head of an RTL line; build the sign explicitly.
+function ilsSigned(n) { return (n < 0 ? '-' : '') + '₪' + Math.abs(Math.round(n)).toLocaleString('he-IL'); }
+const JOB_STATUS = ['התקבל במעבדה', 'בעבודה', 'מוכן לאיסוף', 'נמסר'];
+
+// The message Daniel already sends, with the balance filled in from the ledger instead of
+// from memory. Format deliberately unchanged — his shops read it every week.
+function jobSummaryText(jobId) {
+  const j = (Store.get('jobs') || []).find(x => x.id === jobId);
+  if (!j) return '';
+  const acc = bizAccount(j.customerPhone);
+  const did = (j.jobs || []).map(k => JOB_LABELS[k] || k).join(' + ') || (j.quickRepair || '');
+  const L = ['*📋 סיכום בדיקת מעבדה 📋*', ''];
+  if (j.voltage || j.capacity) L.push(`🔋 *דגם סוללה:* ${j.voltage || ''}V ${j.capacity || ''}Ah`.replace(/\s+/g, ' ').trim());
+  if (j.reason) L.push(`🔍 *סיבת הכניסה:* ${j.reason}`);
+  if (did) L.push(`✅ *תוצאת הבדיקה:* ${did}`);
+  L.push(`💵 *עלות התיקון:* ${Math.round(j.price || 0).toLocaleString('he-IL')}₪`);
+  L.push(`📦 *סטטוס:* ${j.jobStatus || 'בעבודה'}`);
+  // A credit is not a debt — say so rather than printing a minus a reader has to parse.
+  L.push(acc.balance >= 0
+    ? `💳 *יתרה לתשלום:* ${Math.round(acc.balance).toLocaleString('he-IL')}₪`
+    : `💳 *יתרת זכות:* ${Math.round(-acc.balance).toLocaleString('he-IL')}₪`);
+  return L.join('\n');
+}
+function copyJobSummary(jobId) {
+  const txt = jobSummaryText(jobId);
+  if (!txt) return;
+  navigator.clipboard.writeText(txt).then(() => alert('✅ הסיכום הועתק! הדבק בקבוצה של החנות.'));
+}
+function openJobStatusEditor(jobId) {
+  const j = (Store.get('jobs') || []).find(x => x.id === jobId);
+  if (!j) return;
+  openModal('✏️ פרטי התיקון', `
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${j.voltage || ''}V ${j.capacity || ''}Ah · ${new Date(j.date).toLocaleDateString('he-IL')}</div>
+    <div class="form-row"><label>סיבת הכניסה</label><input class="form-input-wide" id="jsReason" value="${(j.reason || '').replace(/"/g, '&quot;')}" placeholder="לא עובד / לא טוען" style="width:170px;"></div>
+    <div class="form-row"><label>סטטוס</label><select class="form-select" id="jsStatus" style="width:170px;">${JOB_STATUS.map(s => `<option${s === (j.jobStatus || 'בעבודה') ? ' selected' : ''}>${s}</option>`).join('')}</select></div>`,
+    `<button class="btn btn-primary" onclick="saveJobStatus('${jobId}')">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function saveJobStatus(jobId) {
+  const jobs = Store.get('jobs') || [];
+  const i = jobs.findIndex(x => x.id === jobId);
+  if (i < 0) return;
+  jobs[i].reason = document.getElementById('jsReason').value.trim();
+  jobs[i].jobStatus = document.getElementById('jsStatus').value;
+  Store.set('jobs', jobs);
+  closeModal();
+  openBizReport(bizReportPhone);
+}
+function openBizPayment(phone) {
+  const acc = bizAccount(phone);
+  openModal('💳 רישום תשלום', `
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">חויב ${ilsSigned(acc.charged)} · שולם ${ilsSigned(acc.paid)} · <b>יתרה ${ilsSigned(acc.balance)}</b></div>
+    <div class="form-row"><label>סכום ₪</label><input type="number" class="form-input" id="bpAmount" min="0" step="10" value="${acc.balance > 0 ? Math.round(acc.balance) : ''}"></div>
+    <div class="form-row"><label>הערה</label><input class="form-input-wide" id="bpNote" placeholder="מזומן / העברה" style="width:170px;"></div>`,
+    `<button class="btn btn-primary" onclick="saveBizPayment('${phone}')">💾 רשום</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function saveBizPayment(phone) {
+  const amount = parseFloat(document.getElementById('bpAmount').value);
+  if (isNaN(amount) || amount <= 0) { alert('הזן סכום'); return; }
+  const list = getBizPayments();
+  list.unshift({ id: 'p' + Date.now(), phone, date: new Date().toISOString(), amount, note: document.getElementById('bpNote').value.trim() });
+  Store.set('biz_payments', list);
+  closeModal();
+  openBizReport(phone);
+}
+function deleteBizPayment(id) {
+  if (!confirm('למחוק תשלום?')) return;
+  Store.set('biz_payments', getBizPayments().filter(p => p.id !== id));
+  openBizReport(bizReportPhone);
+}
 function bizCustomers() { return (Store.get('customers') || []).filter(c => c.isBusiness); }
 function jobsForPhone(phone) { return (Store.get('jobs') || []).filter(j => j.customerPhone === phone).sort((a, b) => new Date(b.date) - new Date(a.date)); }
 
@@ -3763,13 +3849,13 @@ function renderBizDocs() {
   const list = document.getElementById('bizdocsList');
   if (biz.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏢</div><div class="empty-state-text">אין לקוחות עסקיים עדיין.<br>סמן "לקוח עסקי" בעת שמירת תיקון.</div></div>'; return; }
   list.innerHTML = biz.sort((a, b) => new Date(b.lastVisit) - new Date(a.lastVisit)).map(c => {
-    const n = jobsForPhone(c.phone).length;
+    const acc = bizAccount(c.phone);
     return `<div class="list-item" onclick="openBizReport('${c.phone}')">
       <div class="list-item-header">
         <div><div class="list-item-title">${c.businessName || c.name}</div>
           <div class="list-item-subtitle">${c.businessName ? (c.name + ' · ') : ''}📱 ${c.phone}</div></div>
-        <div style="text-align:left;"><div class="list-item-value">₪${(c.totalSpent || 0).toLocaleString('he-IL')}</div>
-          <div class="list-item-subtitle">${n} תיקונים</div></div>
+        <div style="text-align:left;"><div class="list-item-value" style="color:${acc.balance > 0 ? '#f59e0b' : '#10b981'};">${ilsSigned(acc.balance)}</div>
+          <div class="list-item-subtitle">${acc.jobs.length} תיקונים · חויב ${ilsSigned(acc.charged)}</div></div>
       </div>
     </div>`;
   }).join('');
@@ -3787,6 +3873,10 @@ function openBizReport(phone) {
       <td style="padding:7px 8px;font-size:11px;">${(j.jobs || []).map(t => JOB_LABELS[t] || t).join(', ')}${j.customerNotes ? ` · ${j.customerNotes}` : ''}</td>
       <td style="padding:7px 8px;font-size:11px;white-space:nowrap;">${j.warrantyEnd ? new Date(j.warrantyEnd).toLocaleDateString('he-IL') : '—'}</td>
       <td style="padding:7px 8px;font-size:12px;font-weight:700;text-align:left;white-space:nowrap;">₪${(j.price || 0).toLocaleString('he-IL')}</td>
+      <td class="no-print" style="padding:4px 6px;white-space:nowrap;">
+        <span onclick="copyJobSummary('${j.id}')" title="העתק סיכום לקבוצה" style="cursor:pointer;font-size:15px;">📋</span>
+        <span onclick="openJobStatusEditor('${j.id}')" title="סיבה וסטטוס" style="cursor:pointer;font-size:15px;margin-right:6px;">✏️</span>
+      </td>
     </tr>`).join('');
   document.getElementById('bizReportContent').innerHTML = `
     <div style="display:flex;justify-content:space-between;border-bottom:3px solid #1F4E79;padding-bottom:12px;margin-bottom:14px;">
@@ -3820,6 +3910,25 @@ function openBizReport(phone) {
       <div style="font-weight:700;color:#1F4E79;font-size:18px;">₪${total.toLocaleString('he-IL')}</div>
     </div>
     <div style="font-size:11px;color:#555;margin-top:14px;">עוסק פטור · המחירים סופיים (ללא מע"מ) · אחריות מלאה על העבודה והחלקים.</div>`;
+  const acc = bizAccount(phone);
+  const pays = paymentsForPhone(phone);
+  document.getElementById('bizAccountStrip').innerHTML = `
+    <div class="card no-print" style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;color:var(--text-muted);">חשבון פתוח — ${c.businessName || c.name}</div>
+          <div style="font-size:22px;font-weight:800;color:${acc.balance > 0 ? '#f59e0b' : '#10b981'};"><bdi dir="ltr">${ilsSigned(acc.balance)}</bdi></div>
+          <div style="font-size:11px;color:var(--text-muted);">חויב <bdi dir="ltr">${ilsSigned(acc.charged)}</bdi> · שולם <bdi dir="ltr">${ilsSigned(acc.paid)}</bdi></div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openBizPayment('${phone}')">💳 רשום תשלום</button>
+      </div>
+      ${pays.length ? '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px;">' + pays.map(p =>
+        `<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;color:var(--text-muted);">
+           <span>${new Date(p.date).toLocaleDateString('he-IL')}${p.note ? ' · ' + p.note : ''}</span>
+           <span style="display:flex;gap:8px;align-items:center;"><b style="color:#10b981;"><bdi dir="ltr">${ilsSigned(p.amount)}</bdi></b>
+           <span onclick="deleteBizPayment('${p.id}')" style="cursor:pointer;color:#ef4444;">🗑️</span></span>
+         </div>`).join('') + '</div>' : ''}
+    </div>`;
   document.getElementById('bizdocsListCard').style.display = 'none';
   document.getElementById('bizReportPreview').style.display = 'block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
