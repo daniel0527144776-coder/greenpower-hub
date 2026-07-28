@@ -1483,20 +1483,15 @@ const CELL_WEIGHTS = {
 // + fees, an עוסק פטור cannot reclaim the VAT). Shown as a reference on the inventory page.
 // sea = documented landed cost (the real import method for building packs).
 // air = Daniel's air-freight landed cost per cell (faster, dearer). null = not given yet.
-// Landed cost of every cell type the lab imports — sea (the normal method) and air
-// where Daniel has quoted it. Sea figures must stay identical to CELL_UNIT_COST here and
-// to audit-pricing.mjs; they are supplier USD × 3.00 × 1.371 (rate × VAT-on-CIF + freight
-// + fees, none of which an עוסק פטור reclaims).
-const CELL_COST_REF = [
-  { n: 'EVE 50E',       t: 'CLASSIC · 21700',        sea: 7.34,  air: 9.65 },
-  { n: 'Tenpower 50SG', t: 'ADVANCED · 21700',       sea: 8.86,  air: 10.25 },
-  { n: 'EVE 50PL',      t: 'PRO · 21700 Tabless',    sea: 12.15, air: 13.03 },
-  { n: 'EVE 25P',       t: 'כלי עבודה · 18650',      sea: 5.14,  air: null },
-  { n: 'EVE 40P',       t: '21700 · 12.5C',           sea: 8.43,  air: null },
-  { n: 'EVE 35V',       t: '18650 · 3C',              sea: 6.38,  air: null },
-  { n: 'EVE 26V',       t: '18650 · ~2.9C',           sea: 4.03,  air: null },
-  { n: 'Ampace JP30P1', t: '18650 Tabless · 12C',     sea: 13.16, air: null },
-];
+// CELL_COST_REF lived here: the landed cost of every cell, sea and air. It moved to the
+// synced 'supplier_prices' key on 2026-07-28, together with the supplier's NAME — which
+// is the part that must never ship. CLAUDE.md's standing rule is not to name the cell
+// distributor publicly, and this file is served to anyone with the URL.
+//
+// CELL_PRICES and CELL_UNIT_COST below stay: they are keyed by cell MODEL (EVE, Tenpower,
+// Ampace — manufacturers already named on the retail site), they name no supplier, and
+// the repair calculator and the catalog margin column compute from them.
+
 
 const BMS_BRAND_LABEL = { daly: 'DALY', jk: 'JK Smart', ant: 'ANT' };
 const BMS_PRICES = {
@@ -2906,8 +2901,11 @@ function qpSaveJob(ci, ii) {
 // Removing them would break the cost model and the check that keeps it honest.
 const SUPPLIER_USD = 3;
 const SUPPLIER_VAT = 0.18;
-// Sub-shekel items (copper strips at ₪0.06) rounded to "₪0" before this.
-function fmtIls(n) { return n >= 10 ? '₪' + Math.round(n) : '₪' + n.toFixed(2).replace(/\.?0+$/, ''); }
+// Sub-shekel items (copper strips at ₪0.06) rounded to "₪0" before this. Threshold is
+// ₪20, not ₪10: a cell lands at ₪4-13 and the agora are the whole point there — EVE 50PL
+// at ₪12.15 and Ampace JP30P1 at ₪13.16 both showed as "₪13" at the old cutoff, i.e. two
+// different cells at one price. Above ₪20 the decimals are noise, so they go.
+function fmtIls(n) { return n >= 20 ? '₪' + Math.round(n) : '₪' + n.toFixed(2).replace(/\.?0+$/, ''); }
 
 // ---- One list for every supplier, not just IC GOGOGO ----------------------------
 // The page carried a single supplier's PDF. Cell landed costs sat on the inventory page,
@@ -2917,7 +2915,8 @@ function fmtIls(n) { return n >= 10 ? '₪' + Math.round(n) : '₪' + n.toFixed(
 //
 // supplierRows() merges three sources into one shape { who, cat, name, usd, ils }:
 //   * imported lists — the synced 'supplier_prices' key (IC GOGOGO's 115 rows today)
-//   * cells      — CELL_COST_REF, already landed ₪ (VAT included in the 1.371 factor)
+//   * cells      — come through the same import, already landed ₪ (the 1.371 factor
+//                  already contains the VAT, so they must NOT be VAT-ed again)
 //   * BMS        — BMS_PRICES, already ₪ cost
 //   * anything Daniel adds himself, from the synced 'supplier_costs' key
 // A row priced in USD gets the rate and VAT applied; a row already in ₪ does not, or the
@@ -2925,10 +2924,6 @@ function fmtIls(n) { return n >= 10 ? '₪' + Math.round(n) : '₪' + n.toFixed(
 function supplierRows() {
   const rows = [];
   (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'IC GOGOGO', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils }));
-  CELL_COST_REF.forEach((c) => {
-    rows.push({ who: 'תאי ליתיום', cat: 'תאים — יבוא ימי 🚢', name: c.n + ' · ' + c.t, ils: c.sea, landed: true });
-    if (c.air != null) rows.push({ who: 'תאי ליתיום', cat: 'תאים — יבוא אווירי ✈️', name: c.n + ' · ' + c.t, ils: c.air, landed: true });
-  });
   Object.keys(BMS_PRICES).forEach((brand) => {
     Object.keys(BMS_PRICES[brand]).forEach((amps) => {
       rows.push({ who: 'BMS', cat: 'BMS ' + (BMS_BRAND_LABEL[brand] || brand.toUpperCase()), name: amps + 'A', ils: BMS_PRICES[brand][amps], landed: true });
@@ -2969,7 +2964,7 @@ function renderSupplier() {
     // an empty page with a magnifying glass would look broken after the move to storage.
     const noneImported = !(Store.get('supplier_prices') || []).length && !q && !who;
     el.innerHTML = noneImported
-      ? '<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">מחירון הספקים עדיין לא יובא.<br>לחץ <b>📥 ייבוא מחירון</b> ובחר את הקובץ <b>supplier-costs-import.json</b>.<br><span style="font-size:11px;color:var(--text-muted);">עלויות התאים וה-BMS מוצגות למטה גם בלי ייבוא.</span></div></div>'
+      ? '<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">מחירוני הספקים עדיין לא יובאו.<br>לחץ <b>📥 ייבוא מחירון</b> ובחר את הקובץ <b>supplier-costs-import.json</b>.<br><span style="font-size:11px;color:var(--text-muted);">הוא מכיל את התאים (21700 / 18650 · ימי / אווירי) ואת מחירון IC GOGOGO. עלויות ה-BMS מוצגות גם בלי ייבוא.</span></div></div>'
       : '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא רכיב</div></div>';
     return;
   }
