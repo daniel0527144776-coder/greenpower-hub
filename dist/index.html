@@ -365,11 +365,6 @@ body { padding-bottom: 90px; min-height: 100vh; }
         <div class="quick-card-title">אחריות</div>
         <div class="quick-card-desc">מעקב אחריות פעילה</div>
       </div>
-      <div class="quick-card" onclick="navigateTo('range')">
-        <span class="quick-card-icon">🛣️</span>
-        <div class="quick-card-title">טווח נסיעה</div>
-        <div class="quick-card-desc">מחשבון Range</div>
-      </div>
       <div class="quick-card" onclick="navigateTo('catalog')">
         <span class="quick-card-icon">🏷️</span>
         <div class="quick-card-title">מחירון מלא</div>
@@ -390,10 +385,10 @@ body { padding-bottom: 90px; min-height: 100vh; }
         <div class="quick-card-title">שעון עובדים</div>
         <div class="quick-card-desc">שעות עבודה ושכר</div>
       </div>
-      <div class="quick-card" onclick="navigateTo('dims')">
+      <div class="quick-card" onclick="navigateTo('calcs')">
         <span class="quick-card-icon">📐</span>
-        <div class="quick-card-title">מידות סוללה</div>
-        <div class="quick-card-desc">אומדן + מידות קורקינטים</div>
+        <div class="quick-card-title">מחשבונים</div>
+        <div class="quick-card-desc">טווח נסיעה · מידות סוללה</div>
       </div>
       <div class="quick-card" onclick="navigateTo('bizdocs')">
         <span class="quick-card-icon">🏢</span>
@@ -917,11 +912,17 @@ body { padding-bottom: 90px; min-height: 100vh; }
 <!-- repairs price list merged into page-catalog (2026-07-28) -->
 
 <!-- ============ RANGE PAGE ============ -->
-<section id="page-range" class="page">
+<!-- ============ CALCULATORS (range + pack size, merged 2026-07-30) ============ -->
+<section id="page-calcs" class="page">
   <div class="page-header">
-    <h2 class="page-title">🛣️ מחשבון טווח נסיעה</h2>
+    <h2 class="page-title">🧰 מחשבונים</h2>
   </div>
-  <div class="card">
+  <div class="sub-tabs" style="margin-bottom:12px;">
+    <div class="sub-tab active" data-calctab="range" onclick="setCalcTab('range')">🛣️ טווח נסיעה</div>
+    <div class="sub-tab" data-calctab="dims" onclick="setCalcTab('dims')">📐 מידות סוללה</div>
+  </div>
+  <div id="calctab-range">
+<div class="card">
     <div class="form-row">
       <label>סוג כלי</label>
       <select class="form-select" id="rangeVehicle" onchange="calcRange()">
@@ -960,6 +961,41 @@ body { padding-bottom: 90px; min-height: 100vh; }
   </div>
   <div class="alert alert-info">
     <strong>הערה:</strong> הטווח משוער ותלוי בתנאי שטח, רוח, טמפרטורה ומצב הסוללה. החישוב בוצע לפי 85% מהאנרגיה התיאורטית (פקטור בטיחות BMS).
+  </div>
+  </div>
+  <div id="calctab-dims" style="display:none;">
+<div class="card">
+    <h3 class="card-title">🧮 אומדן מידות חבילה</h3>
+    <div class="form-row">
+      <label>סוג תא</label>
+      <select class="form-select" id="dimCell" onchange="calcPackDims()">
+        <option value="21700-50e" selected>21700 EVE 50E — 5.0Ah</option>
+        <option value="21700-50sg">21700 Tenpower 50SG — 5.0Ah</option>
+        <option value="21700-50pl">21700 EVE 50PL — 5.0Ah</option>
+        <option value="21700-40p">21700 EVE 40P — 4.0Ah</option>
+        <option value="18650-35v">18650 EVE 35V — 3.5Ah</option>
+        <option value="18650-jp30">18650 Ampace JP30P1 — 3.0Ah</option>
+        <option value="18650-26v">18650 EVE 26V — 2.55Ah</option>
+        <option value="18650-25p">18650 EVE 25P — 2.5Ah</option>
+      </select>
+    </div>
+    <div class="form-row"><label>מתח</label>
+      <select class="form-select" id="dimV" onchange="calcPackDims()">
+        <option value="36">36V</option><option value="48">48V</option><option value="52">52V</option>
+        <option value="60" selected>60V</option><option value="72">72V</option><option value="84">84V</option>
+      </select>
+    </div>
+    <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="dimAh" value="20" min="1" step="1" oninput="calcPackDims()"></div>
+    <div class="form-row"><label>תאים לאורך שורה</label><input type="number" class="form-input" id="dimPerRow" value="10" min="1" step="1" oninput="calcPackDims()"></div>
+    <div class="info-banner" style="margin-top:8px;"><span>📦</span><div id="dimResult"></div></div>
+    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">אומדן לבלוק תאים עומדים בשכבה אחת (לפני מארז). חבילות שטוחות/רב-שכבתיות יהיו שונות — המידות בפועל תלויות בסידור ובמארז.</p>
+  </div>
+  <div class="card">
+    <h3 class="card-title">🛴 מידות תא מצבר לפי דגם</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">מאגר מידות תא הסוללה בקורקינטים נפוצים. מדוד פעם אחת — ושמור לכל הפעמים הבאות.</p>
+    <button class="btn btn-primary btn-block btn-sm" style="margin-bottom:10px;" onclick="openDimEditor(null)">➕ הוסף דגם</button>
+    <div id="dimsList"></div>
+  </div>
   </div>
 </section>
 
@@ -1338,37 +1374,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
 </section>
 
 <!-- ============ BATTERY DIMENSIONS PAGE ============ -->
-<section id="page-dims" class="page">
-  <div class="page-header">
-    <h2 class="page-title">📐 מידות סוללה</h2>
-  </div>
-  <div class="card">
-    <h3 class="card-title">🧮 אומדן מידות חבילה</h3>
-    <div class="form-row">
-      <label>סוג תא</label>
-      <select class="form-select" id="dimCell" onchange="calcPackDims()">
-        <option value="21700">21700 (Ø21 × 70 מ"מ)</option>
-        <option value="18650">18650 (Ø18 × 65 מ"מ)</option>
-      </select>
-    </div>
-    <div class="form-row"><label>מתח</label>
-      <select class="form-select" id="dimV" onchange="calcPackDims()">
-        <option value="36">36V</option><option value="48">48V</option><option value="52">52V</option>
-        <option value="60" selected>60V</option><option value="72">72V</option><option value="84">84V</option>
-      </select>
-    </div>
-    <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="dimAh" value="20" min="1" step="1" oninput="calcPackDims()"></div>
-    <div class="form-row"><label>תאים לאורך שורה</label><input type="number" class="form-input" id="dimPerRow" value="10" min="1" step="1" oninput="calcPackDims()"></div>
-    <div class="info-banner" style="margin-top:8px;"><span>📦</span><div id="dimResult"></div></div>
-    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">אומדן לבלוק תאים עומדים בשכבה אחת (לפני מארז). חבילות שטוחות/רב-שכבתיות יהיו שונות — המידות בפועל תלויות בסידור ובמארז.</p>
-  </div>
-  <div class="card">
-    <h3 class="card-title">🛴 מידות תא מצבר לפי דגם</h3>
-    <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">מאגר מידות תא הסוללה בקורקינטים נפוצים. מדוד פעם אחת — ושמור לכל הפעמים הבאות.</p>
-    <button class="btn btn-primary btn-block btn-sm" style="margin-bottom:10px;" onclick="openDimEditor(null)">➕ הוסף דגם</button>
-    <div id="dimsList"></div>
-  </div>
-</section>
+
 
 <!-- ============ BUSINESS DOCS PAGE ============ -->
 <section id="page-bizdocs" class="page">
@@ -1748,7 +1754,10 @@ function navigateTo(page) {
   // 'pricelist' is the old repairs page; it now IS the catalog. Kept as an alias so
   // any saved link, quick-card or habit still lands somewhere sensible.
   if (page === 'pricelist') return navigateTo('catalog');
-  if (page === 'range') calcRange();
+  // 'range' and 'dims' were separate pages until 2026-07-30; both are the same
+  // calculators page now. Kept as aliases so saved links and habits still land.
+  if (page === 'range' || page === 'dims') return navigateTo('calcs');
+  if (page === 'calcs') { calcRange(); calcPackDims(); renderDims(); }
   if (page === 'catalog') renderCatalog();
   if (page === 'finances') renderFinances();
   if (page === 'worktime') renderWorktime();
@@ -3087,22 +3096,39 @@ function removeSupplierRow(i) {
 // RANGE CALCULATOR
 // ============================================================
 
+function setCalcTab(tab) {
+  document.querySelectorAll('[data-calctab]').forEach(el =>
+    el.classList.toggle('active', el.dataset.calctab === tab));
+  document.getElementById('calctab-range').style.display = tab === 'range' ? 'block' : 'none';
+  document.getElementById('calctab-dims').style.display = tab === 'dims' ? 'block' : 'none';
+  if (tab === 'range') calcRange(); else { calcPackDims(); renderDims(); }
+}
 function calcRange() {
+  const el = document.getElementById('rangeResult');
+  if (!el) return;
   const v = parseFloat(document.getElementById('rangeV').value) || 60;
   const ah = parseFloat(document.getElementById('rangeAh').value) || 21;
-  const weight = parseFloat(document.getElementById('rangeWeight').value) || 75;
+  // Clamped: an empty or silly weight used to feed straight into the multiplier — 0 kg
+  // gave ×0.63 and inflated the range by 60%, and a negative number went further still.
+  const weight = Math.min(200, Math.max(40, parseFloat(document.getElementById('rangeWeight').value) || 75));
   const veh = document.getElementById('rangeVehicle').value;
   const style = document.getElementById('rangeStyle').value;
   const energy = v * ah;
 
-  const whPerKm = { bike: 12, ebike_fast: 18, scooter: 15, scooter_fast: 22, motor: 35 }[veh];
-  const styleMult = { eco: 0.8, normal: 1.0, sport: 1.3 }[style];
+  // `?? ` fallbacks: an option added to either <select> without a matching key here used
+  // to make whPerKm undefined, and the result rendered as "NaN ק"מ".
+  const whPerKm = ({ bike: 12, ebike_fast: 18, scooter: 15, scooter_fast: 22, motor: 35 })[veh] ?? 15;
+  const styleMult = ({ eco: 0.8, normal: 1.0, sport: 1.3 })[style] ?? 1.0;
   const weightMult = 1 + ((weight - 75) / 200);
-  const usableEnergy = energy * 0.85;
+  const usableEnergy = energy * 0.85;           // ~85% depth of discharge
   const range = usableEnergy / (whPerKm * styleMult * weightMult);
 
-  document.getElementById('rangeResult').textContent = Math.round(range) + ' ק"מ';
-  document.getElementById('rangeDetails').textContent = `${Math.round(energy)} Wh · ${(whPerKm * styleMult).toFixed(1)} Wh/km · משקל: ${weight} ק"ג`;
+  // A band, not a single number. Terrain, tyre pressure, wind and cold move real range by
+  // well over 10%, and "47 ק"מ" printed to a customer reads as a promise the lab then owns.
+  const lo = Math.round(range * 0.85), hi = Math.round(range * 1.1);
+  el.textContent = `${lo}-${hi} ק"מ`;
+  document.getElementById('rangeDetails').textContent =
+    `${Math.round(energy)} Wh · ${Math.round(usableEnergy)} Wh שמישים · ${(whPerKm * styleMult * weightMult).toFixed(1)} Wh/ק"מ · רוכב ${weight} ק"ג`;
 }
 
 // ============================================================
@@ -3690,23 +3716,45 @@ function saveWorkers() {
 // ============================================================
 // BATTERY DIMENSIONS (pack estimator + per-model reference)
 // ============================================================
+// Per-cell capacity by model, because the P-count depends on it and the old code assumed
+// 5.0Ah for EVERY cell — including 18650s, which are 2.5-3.5Ah. A 60V 20Ah pack on EVE 25P
+// came out 16S4P / 64 cells when it is really 16S8P / 128: half the cells, half the
+// weight, and a block roughly half the size. On a tool whose whole job is "will it fit in
+// the scooter", that is the one number that must not be guessed.
+const DIM_CELLS = {
+  '21700-50e':  { label: '21700 EVE 50E',        ah: 5.0,  dia: 21, len: 70, g: 70 },
+  '21700-50sg': { label: '21700 Tenpower 50SG',  ah: 5.0,  dia: 21, len: 70, g: 70 },
+  '21700-50pl': { label: '21700 EVE 50PL',       ah: 5.0,  dia: 21, len: 70, g: 70 },
+  '21700-40p':  { label: '21700 EVE 40P',        ah: 4.0,  dia: 21, len: 70, g: 70 },
+  '18650-35v':  { label: '18650 EVE 35V',        ah: 3.5,  dia: 18, len: 65, g: 45 },
+  '18650-jp30': { label: '18650 Ampace JP30P1',  ah: 3.0,  dia: 18, len: 65, g: 45 },
+  '18650-26v':  { label: '18650 EVE 26V',        ah: 2.55, dia: 18, len: 65, g: 45 },
+  '18650-25p':  { label: '18650 EVE 25P',        ah: 2.5,  dia: 18, len: 65, g: 45 },
+};
 function calcPackDims() {
-  const cell = document.getElementById('dimCell').value;
+  const out = document.getElementById('dimResult');
+  if (!out) return;
+  const c = DIM_CELLS[document.getElementById('dimCell').value] || DIM_CELLS['21700-50e'];
   const V = parseFloat(document.getElementById('dimV').value);
   const Ah = parseFloat(document.getElementById('dimAh').value) || 1;
   const perRow = Math.max(1, parseInt(document.getElementById('dimPerRow').value) || 1);
-  const dia = cell === '18650' ? 18 : 21;
-  const len = cell === '18650' ? 65 : 70;
-  const cellG = cell === '18650' ? 45 : 70;
   const S = Math.max(1, Math.round(V / 3.7));
-  const P = Math.max(1, Math.ceil(Ah / 5)); // 21700/18650 ~5.0Ah here
+  const P = Math.max(1, Math.ceil(Ah / c.ah));
   const N = S * P;
   const cols = perRow, rows = Math.ceil(N / perRow);
-  const L = cols * dia, W = rows * dia, H = len + 18; // +wrap/BMS/wiring
-  const kg = (N * cellG + 500) / 1000;
-  document.getElementById('dimResult').innerHTML =
-    `תצורה <strong>${S}S ${P}P</strong> · <strong>${N}</strong> תאים<br>` +
-    `אומדן בלוק: <strong>${L} × ${W} × ${H} מ"מ</strong> (א×ר×ג) · משקל ~<strong>${kg.toFixed(1)} ק"ג</strong>`;
+  // Holders add ~1mm of wall per cell pitch; the old version packed cells at exactly one
+  // diameter, which reads narrower than anything actually built.
+  const pitch = c.dia + 1;
+  const L = cols * pitch, W = rows * pitch, H = c.len + 18;   // +18 for wrap / BMS / wiring
+  const kg = (N * c.g + 500) / 1000;
+  const wh = Math.round(S * 3.7 * P * c.ah);
+  out.innerHTML =
+    `תצורה <strong>${S}S ${P}P</strong> · <strong>${N}</strong> תאים · <strong>${wh} Wh</strong><br>` +
+    `אומדן בלוק: <strong>${L} × ${W} × ${H} מ"מ</strong> (א×ר×ג) · משקל ~<strong>${kg.toFixed(1)} ק"ג</strong><br>` +
+    // cols×rows is the PHYSICAL grid, which can exceed N when the last row is partial
+    // (152 cells laid 20-per-row is 8 rows = 160 slots). Labelling it "תאים" next to the
+    // real cell count read as a contradiction, so it is named as a layout.
+    `<span style="font-size:11px;color:var(--text-muted);">${c.label} · ${c.ah}Ah לתא · סידור ${cols} × ${rows} שורות${cols * rows > N ? ` (שורה אחרונה חלקית)` : ''}</span>`;
 }
 function getDims() { return Store.get('dims') || []; }
 function renderDims() {
