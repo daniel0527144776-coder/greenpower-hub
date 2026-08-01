@@ -322,6 +322,9 @@ body { min-height: 100vh; }
   </div>
 
   <!-- Backup reminder -->
+  <!-- A shortage you only find out about on the inventory page is a shortage you find out
+       about when a customer is waiting. This is the page opened every morning. -->
+  <div id="invShortAlert" class="alert alert-danger" style="display:none;align-items:center;gap:10px;"></div>
   <div id="backupReminder" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
     <span style="font-size:18px;">💾</span>
     <div style="flex:1;" id="backupReminderText">מומלץ לגבות את הנתונים.</div>
@@ -915,6 +918,11 @@ body { min-height: 100vh; }
   </div>
   <div class="sub-tabs" style="margin-bottom:12px;">
     <div class="sub-tab active" data-calctab="range" onclick="setCalcTab('range')">🛣️ טווח נסיעה</div>
+    <div class="sub-tab" data-calctab="charge" onclick="setCalcTab('charge')">🔌 זמן טעינה</div>
+    <div class="sub-tab" data-calctab="health" onclick="setCalcTab('health')">❤️ בריאות סוללה</div>
+    <div class="sub-tab" data-calctab="speed" onclick="setCalcTab('speed')">🏁 מהירות</div>
+    <div class="sub-tab" data-calctab="cost" onclick="setCalcTab('cost')">💰 חיסכון</div>
+    <div class="sub-tab" data-calctab="upgrade" onclick="setCalcTab('upgrade')">⬆️ שדרוג מתח</div>
     <div class="sub-tab" data-calctab="dims" onclick="setCalcTab('dims')">📐 מידות סוללה</div>
   </div>
   <div id="calctab-range">
@@ -992,6 +1000,53 @@ body { min-height: 100vh; }
     <button class="btn btn-primary btn-block btn-sm" style="margin-bottom:10px;" onclick="openDimEditor(null)">➕ הוסף דגם</button>
     <div id="dimsList"></div>
   </div>
+  </div>
+
+  <div id="calctab-charge" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="chAh" value="40" min="1" oninput="calcCharge()"></div>
+      <div class="form-row"><label>זרם מטען (A)</label><input type="number" class="form-input" id="chA" value="5" min="0.1" step="0.5" oninput="calcCharge()"></div>
+      <div class="form-row"><label>אחוז נוכחי (%)</label><input type="number" class="form-input" id="chPct" value="10" min="0" max="99" oninput="calcCharge()"></div>
+      <div id="chResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="calctab-health" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>טווח מקורי (ק"מ)</label><input type="number" class="form-input" id="heOrig" value="60" min="1" oninput="calcHealth()"></div>
+      <div class="form-row"><label>טווח נוכחי (ק"מ)</label><input type="number" class="form-input" id="heCurr" value="40" min="0" oninput="calcHealth()"></div>
+      <div class="form-row"><label>גיל הסוללה (שנים)</label><input type="number" class="form-input" id="heAge" value="2" min="0" step="0.5" oninput="calcHealth()"></div>
+      <div id="heResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="calctab-speed" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>מתח (V)</label><input type="number" class="form-input" id="spV" value="48" min="1" oninput="calcSpeed()"></div>
+      <div class="form-row"><label>הספק מנוע (W)</label><input type="number" class="form-input" id="spW" value="1000" min="1" step="100" oninput="calcSpeed()"></div>
+      <div class="form-row"><label>קוטר גלגל (אינץ')</label><input type="number" class="form-input" id="spWheel" value="20" min="1" step="0.5" oninput="calcSpeed()"></div>
+      <div class="form-row"><label>משקל רוכב (ק"ג)</label><input type="number" class="form-input" id="spKg" value="75" min="20" oninput="calcSpeed()"></div>
+      <div id="spResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="calctab-cost" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>מתח (V)</label><input type="number" class="form-input" id="coV" value="72" min="1" oninput="calcCost()"></div>
+      <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="coAh" value="40" min="1" oninput="calcCost()"></div>
+      <div class="form-row"><label>ק"מ ביום</label><input type="number" class="form-input" id="coKm" value="30" min="1" oninput="calcCost()"></div>
+      <div id="coResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="calctab-upgrade" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>מתח נוכחי (V)</label><input type="number" class="form-input" id="upFrom" value="48" min="1" oninput="calcUpgrade()"></div>
+      <div class="form-row"><label>מתח מבוקש (V)</label><input type="number" class="form-input" id="upTo" value="60" min="1" oninput="calcUpgrade()"></div>
+      <div class="form-row"><label>קיבולת נוכחית (Ah)</label><input type="number" class="form-input" id="upAh" value="20" min="1" oninput="calcUpgrade()"></div>
+      <div class="form-row"><label>הספק מנוע (W)</label><input type="number" class="form-input" id="upW" value="1000" min="1" step="100" oninput="calcUpgrade()"></div>
+      <div id="upResult" style="margin-top:10px;"></div>
+    </div>
   </div>
 </section>
 
@@ -1284,6 +1339,10 @@ body { min-height: 100vh; }
     </div>
     <input type="text" class="form-input-wide" id="catalogSearch" placeholder="🔍 חיפוש מוצר (72V, מטען, סברטון...)" style="width:100%; margin-bottom:10px;" oninput="renderCatalog()">
     <select class="form-select" id="catalogCat" style="width:100%; margin-bottom:10px;" onchange="renderCatalog()"></select>
+    <div class="btn-group" style="margin-bottom:10px;">
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(true)">⊕ פתח הכל</button>
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(false)">⊖ סגור הכל</button>
+    </div>
     <label class="check" id="costToggle" onclick="toggleCostView()" style="margin-bottom:4px;"><div class="check-box"></div>💵 הצג עלות לי ורווח</label>
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">עלות סוללות = אומדן אוטומטי מהתאים. לחיצה על מוצר מאפשרת להזין עלות ספק מדויקת.</div>
     <div id="catalogList" class="price-list"></div>
@@ -2662,6 +2721,20 @@ function refreshHome() {
     document.getElementById('homeGreeting').textContent = `ברוך הבא, ${bizDetails.owner.split(' ')[0]}`;
   }
 
+  const shEl = document.getElementById('invShortAlert');
+  if (shEl) {
+    const sh = invShortages();
+    if (sh.total) {
+      shEl.style.display = 'flex';
+      const parts = [];
+      if (sh.out.length) parts.push(`<b>${sh.out.length} אזלו מהמלאי</b>`);
+      if (sh.low.length) parts.push(`${sh.low.length} במלאי נמוך`);
+      const names = [...sh.out, ...sh.low].slice(0, 3).map(i => i.name).join(' · ');
+      shEl.innerHTML = `<span style="font-size:18px;">📦</span><div style="flex:1;">${parts.join(' · ')}<div style="font-size:11px;opacity:.85;margin-top:2px;">${names}${sh.total > 3 ? ' ועוד…' : ''}</div></div>` +
+        `<button class="btn btn-sm btn-secondary" style="white-space:nowrap;" onclick="navigateTo('inventory')">פתח מלאי</button>`;
+    } else shEl.style.display = 'none';
+  }
+
   // Weekly backup reminder
   const banner = document.getElementById('backupReminder');
   if (banner) {
@@ -3171,12 +3244,107 @@ function removeSupplierRow(i) {
 // RANGE CALCULATOR
 // ============================================================
 
+// Driven by the tab list itself, so adding a calculator is one markup block and one entry
+// here — the old version named each panel twice and would silently show nothing for a tab
+// somebody forgot to add to the if-chain.
+const CALC_TABS = { range: () => calcRange(), dims: () => { calcPackDims(); renderDims(); },
+  charge: () => calcCharge(), health: () => calcHealth(), speed: () => calcSpeed(),
+  cost: () => calcCost(), upgrade: () => calcUpgrade() };
 function setCalcTab(tab) {
+  if (!CALC_TABS[tab]) return;
   document.querySelectorAll('[data-calctab]').forEach(el =>
     el.classList.toggle('active', el.dataset.calctab === tab));
-  document.getElementById('calctab-range').style.display = tab === 'range' ? 'block' : 'none';
-  document.getElementById('calctab-dims').style.display = tab === 'dims' ? 'block' : 'none';
-  if (tab === 'range') calcRange(); else { calcPackDims(); renderDims(); }
+  Object.keys(CALC_TABS).forEach(t => {
+    const el = document.getElementById('calctab-' + t);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+  });
+  CALC_TABS[tab]();
+}
+
+// ---- The five calculators the retail site offers. Formulas are copied from
+// src/components/calculators/*.tsx so a customer who ran one on the site and then calls
+// gets the same answer, not a second opinion.
+const numOf = (id, dflt) => { const v = parseFloat((document.getElementById(id) || {}).value); return isNaN(v) ? dflt : v; };
+const calcBox = (main, sub2, tone) =>
+  `<div style="background:var(--bg);border-radius:10px;padding:14px;text-align:center;">
+     <div style="font-size:26px;font-weight:800;color:${tone || 'var(--primary)'};">${main}</div>
+     <div style="font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.7;">${sub2}</div></div>`;
+
+function calcCharge() {
+  const el = document.getElementById('chResult'); if (!el) return;
+  const ah = numOf('chAh', 0), amps = numOf('chA', 0);
+  const start = Math.max(0, Math.min(99, numOf('chPct', 0)));
+  if (ah <= 0 || amps <= 0) { el.innerHTML = calcBox('—', 'הזן קיבולת וזרם'); return; }
+  // Bulk to 80% at full current, then absorption at ~55% — a charger does NOT hold its
+  // rated amps to 100%, and a flat Ah/A would under-estimate the last fifth badly.
+  const toCharge = ah * ((100 - start) / 100);
+  const bulkAh = Math.max(0, Math.min(toCharge, ah * 0.8 - ah * (start / 100)));
+  const topAh = Math.max(0, toCharge - bulkAh);
+  const mins = Math.round((bulkAh / amps + (topAh > 0 ? topAh / (amps * 0.55) : 0)) * 60);
+  el.innerHTML = calcBox(`${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')} שעות`,
+    `מ-${start}% ל-100% · ${toCharge.toFixed(1)}Ah להטענה<br>כולל שלב האיטי מ-80% ומעלה`);
+}
+
+function calcHealth() {
+  const el = document.getElementById('heResult'); if (!el) return;
+  const orig = numOf('heOrig', 0), curr = numOf('heCurr', 0), yrs = numOf('heAge', 0);
+  if (orig <= 0) { el.innerHTML = calcBox('—', 'הזן טווח מקורי'); return; }
+  const pct = Math.max(0, Math.min(100, Math.round((curr / orig) * 100)));
+  let label, text, tone;
+  if (pct >= 80) { label = 'הסוללה במצב טוב'; tone = 'var(--accent)'; text = 'הקיבולת עדיין גבוהה. שווה איזון תאים עמוק לתחזוקה — אין צורך בתיקון משמעותי.'; }
+  else if (pct >= 55) { label = 'מומלץ תיקון נקודתי'; tone = 'var(--primary)'; text = 'הבעיה כנראה ממוקדת (כמה תאים חלשים או BMS). תיקון נקודתי יחזיר חלק ניכר מהטווח בעלות נמוכה.'; }
+  else if (pct >= 35) { label = 'תיקון מקיף או חידוש'; tone = 'var(--warning)'; text = 'אבדה קיבולת משמעותית. כדאי אבחון מעבדה — לרוב משתלם חידוש על פני סוללה חדשה.'; }
+  else { label = 'מומלץ חידוש/החלפה'; tone = '#ef4444'; text = 'הקיבולת נמוכה מאוד. בסוללה בת 3+ שנים חידוש מלא או סוללה חדשה משתלמים יותר מתיקון.'; }
+  el.innerHTML = calcBox(pct + '% בריאות', `<b>${label}</b><br>${text}${yrs >= 3 ? '<br>גיל ' + yrs + ' שנים — בטווח הבלאי הטבעי.' : ''}`, tone);
+}
+
+function calcSpeed() {
+  const el = document.getElementById('spResult'); if (!el) return;
+  const v = numOf('spV', 0), w = numOf('spW', 0), wheel = numOf('spWheel', 0), kg = numOf('spKg', 0);
+  if (v <= 0 || w <= 0 || wheel <= 0 || kg <= 0) { el.innerHTML = calcBox('—', 'מלא את כל השדות'); return; }
+  // ~10 rpm per volt AT THE WHEEL, which is what a hub motor's Kv is quoted as. The retail
+  // site divided that by a gearRatio of 5, and a direct-drive hub has no reduction — so it
+  // told customers a 48V/1000W bike on 20" wheels does 9 km/h. It does 40-45. Fixed in both
+  // places 2026-08-02; the site's SpeedCalculator.tsx carries the same correction.
+  const rpm = v * 10;
+  const circKm = (wheel * 2.54 * Math.PI) / 100000;
+  const speed = Math.round(Math.max(0, rpm * circKm * 60 * Math.max(0.5, 1 - ((kg - 70) * 0.003)) * Math.min(w / 1000, 1.5)));
+  el.innerHTML = calcBox(speed + ' קמ"ש', 'הערכה בלבד — תלוי בבקר, בהילוך ובתנאי הדרך.<br>מעל 25 קמ"ש נדרש רישיון/ביטוח בכביש.');
+}
+
+function calcCost() {
+  const el = document.getElementById('coResult'); if (!el) return;
+  const v = numOf('coV', 0), ah = numOf('coAh', 0), km = numOf('coKm', 0);
+  if (v <= 0 || ah <= 0 || km <= 0) { el.innerHTML = calcBox('—', 'מלא את כל השדות'); return; }
+  const RATE = 0.60, PETROL = 7.5, KM_L = 15, WH_KM = 20;
+  const wh = v * ah;
+  const perCharge = (wh / 1000) * RATE;
+  const rangePer = (wh * 0.9) / WH_KM;
+  const chargesMo = (km * 30) / rangePer;
+  const elecMo = chargesMo * perCharge;
+  const petrolMo = ((km * 30) / KM_L) * PETROL;
+  const save = petrolMo - elecMo;
+  el.innerHTML = calcBox('₪' + Math.round(save) + ' לחודש',
+    `חשמל ₪${elecMo.toFixed(0)} מול דלק ₪${petrolMo.toFixed(0)}<br>${chargesMo.toFixed(1)} טעינות בחודש · ₪${perCharge.toFixed(2)} לטעינה<br><b>₪${Math.round(save * 12)} בשנה</b>`,
+    'var(--accent)');
+}
+
+function calcUpgrade() {
+  const el = document.getElementById('upResult'); if (!el) return;
+  const from = numOf('upFrom', 0), to = numOf('upTo', 0), ah = numOf('upAh', 0), w = numOf('upW', 0);
+  if (from <= 0 || to <= 0 || w <= 0) { el.innerHTML = calcBox('—', 'מלא את כל השדות'); return; }
+  const vInc = Math.round(((to - from) / from) * 100);
+  const sInc = Math.round(vInc * 0.9);
+  const motorSafe = (to <= 72 && w >= 1000) || (to <= 60 && w >= 500);
+  const feasible = vInc <= 50 && motorSafe;
+  const notes = [];
+  if (to > from) notes.push('בקר: נדרש בקר שתומך ב-' + to + 'V');
+  if (to !== from) notes.push('BMS: נדרש BMS מתאים ל-' + Math.round(to / 3.7) + 'S');
+  notes.push(motorSafe ? 'מנוע: מתאים למתח המבוקש' : '⚠️ מנוע ' + w + 'W עלול לא לעמוד ב-' + to + 'V');
+  if (vInc > 50) notes.push('⚠️ קפיצה של ' + vInc + '% — מעל המומלץ');
+  el.innerHTML = calcBox(feasible ? '+' + sInc + '% מהירות' : 'לא מומלץ',
+    `הספק +${vInc}% · אנרגיה ${Math.round(from * ah)}Wh → ${Math.round(to * ah)}Wh<br>${notes.join('<br>')}`,
+    feasible ? 'var(--accent)' : '#ef4444');
 }
 function calcRange() {
   const el = document.getElementById('rangeResult');
@@ -3303,9 +3471,17 @@ function renderCatalog() {
   document.getElementById('catalogCount').textContent = items.length + ' פריטים';
   const groups = {};
   items.forEach(it => { (groups[it.cat] = groups[it.cat] || []).push(it); });
+  // Collapsed by default, same as עלויות ספקים: 805 rows over 68 categories was a single
+  // scroll with no way to see what the categories even were. A search or a chosen category
+  // opens everything, because then the filter is what decides what you are looking at.
+  catCatKeys = Object.keys(groups);
+  const forceOpen = !!q || !!cat;
   let html = '';
-  for (const c of Object.keys(groups)) {
-    html += `<div class="price-cat">${c}</div>`;
+  catCatKeys.forEach((c, ci) => {
+    const open = forceOpen || catOpenCats.has(c);
+    html += `<div class="price-cat" onclick="toggleCatCat(${ci})" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <span>${open ? '▾' : '▸'} ${c}</span><span style="font-weight:400;opacity:.7;">${groups[c].length}</span></div>`;
+    if (!open) return;
     groups[c].forEach(it => {
       const price = it[priceMode];
       const priceStr = typeof price === 'number' ? shek(price) : price;
@@ -3323,8 +3499,21 @@ function renderCatalog() {
         <div class="price-item-final">${priceStr}</div>
       </div>`;
     });
-  }
+  });
   document.getElementById('catalogList').innerHTML = html || '<div class="empty-state"><div class="empty-state-text">לא נמצאו מוצרים</div></div>';
+}
+// Index, not name: the category strings carry quotes, slashes and · — interpolating them
+// into an inline onclick is a broken handler waiting to happen (same as toggleSupCat).
+let catOpenCats = new Set(), catCatKeys = [];
+function toggleCatCat(i) {
+  const c = catCatKeys[i];
+  if (c == null) return;
+  if (catOpenCats.has(c)) catOpenCats.delete(c); else catOpenCats.add(c);
+  renderCatalog();
+}
+function catExpandAll(open) {
+  catOpenCats = open ? new Set(catCatKeys) : new Set();
+  renderCatalog();
 }
 
 function openCostEditor(i) {
@@ -4125,14 +4314,32 @@ function clearStickerLog() {
 // INVENTORY
 // ============================================================
 function getInventory() { return Store.get('inventory') || []; }
+// Shortages had two holes. The alert only fired for items with a hand-set `low`, so
+// anything you never configured — which is most of it — could hit zero in silence. And it
+// lived on the inventory page, so you had to already suspect a shortage to see it.
+// Out of stock is now unconditional; a threshold is an extra warning, not the only one.
+const INV_LOW_DEFAULT = 2;
+function invShortages() {
+  const out = [], low = [];
+  for (const i of getInventory()) {
+    const q = Number(i.qty) || 0;
+    const t = i.low != null ? Number(i.low) : INV_LOW_DEFAULT;
+    if (q <= 0) out.push(i); else if (q <= t) low.push(i);
+  }
+  return { out, low, total: out.length + low.length };
+}
+
 function renderInventory() {
   // The cell-cost reference used to render here. It is a SUPPLIER cost, not stock on a
   // shelf, so it belongs on עלויות ספקים — where it now lives alongside every other
   // supplier — and not on a page about what is in the drawer.
   const inv = getInventory();
-  const low = inv.filter(i => i.low != null && Number(i.qty) <= Number(i.low));
-  document.getElementById('inventoryLowAlert').innerHTML = low.length
-    ? `<div class="alert alert-danger">⚠️ <b>מלאי נמוך:</b> ${low.map(i => `${i.name} (${i.qty})`).join(' · ')}</div>` : '';
+  const sh = invShortages();
+  const nameQty = (i) => `${i.name} (${Number(i.qty) || 0})`;
+  document.getElementById('inventoryLowAlert').innerHTML =
+    (sh.out.length ? `<div class="alert alert-danger">🔴 <b>אזל מהמלאי (${sh.out.length}):</b> ${sh.out.map(i => i.name).join(' · ')}</div>` : '') +
+    (sh.low.length ? `<div class="alert alert-warning">⚠️ <b>מלאי נמוך (${sh.low.length}):</b> ${sh.low.map(nameQty).join(' · ')}</div>` : '') +
+    (sh.total === 0 && inv.length ? `<div class="alert alert-success">✅ אין מחסור — כל ${inv.length} הפריטים מעל הסף.</div>` : '');
   const list = document.getElementById('inventoryList');
   if (inv.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים. הוסף תאים, BMS, מטענים, ניקל וכו\'.</div></div>'; return; }
   const CAT_ORDER = ['BMS', 'מטען', 'תא', 'ניקל', 'אחר'];
