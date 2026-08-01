@@ -205,11 +205,6 @@ body { min-height: 100vh; }
 .modal-body { padding: 16px; }
 .modal-footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
 
-/* Quick reply chips */
-.reply-chip { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s; }
-.reply-chip:hover { border-color: var(--primary); background: var(--primary-light); }
-.reply-chip-title { font-weight: 600; font-size: 13px; color: var(--primary); margin-bottom: 4px; }
-.reply-chip-preview { font-size: 11px; color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.5; }
 
 /* WhatsApp preview */
 .whatsapp-preview { background: #DCF8C6; color: #111; padding: 14px 16px; border-radius: var(--radius); font-size: 13px; line-height: 1.6; white-space: pre-wrap; margin-bottom: 10px; border: 1px solid #B8DEA0; }
@@ -418,15 +413,6 @@ body { min-height: 100vh; }
         <span class="quick-card-icon">🔒</span>
         <div class="quick-card-title">עלויות ספקים</div>
         <div class="quick-card-desc">כל הספקים · תאים · BMS</div>
-      </div>
-      <!-- These two pages existed with NO navigateTo() anywhere in the file — fully built
-           and completely unreachable. תגובות מהירות is where the saved WhatsApp templates
-           are edited, so the 6-month warranty line in one of them could not be corrected
-           in the app at all. -->
-      <div class="quick-card" onclick="navigateTo('replies')">
-        <span class="quick-card-icon">💬</span>
-        <div class="quick-card-title">תגובות מהירות</div>
-        <div class="quick-card-desc">תבניות וואטסאפ ללקוחות</div>
       </div>
       <div class="quick-card" onclick="navigateTo('stickerlog')">
         <span class="quick-card-icon">🗂️</span>
@@ -895,18 +881,6 @@ body { min-height: 100vh; }
   </div>
 </section>
 
-<!-- ============ QUICK REPLIES PAGE ============ -->
-<section id="page-replies" class="page">
-  <div class="page-header">
-    <h2 class="page-title">💬 תגובות מהירות</h2>
-    <button class="btn btn-primary btn-sm" onclick="openReplyEditor(null)">➕ חדש</button>
-  </div>
-  <div class="card">
-    <input type="text" class="form-input-wide" id="replySearch" placeholder="🔍 חיפוש בתגובות..." style="width: 100%; margin-bottom: 12px;" oninput="renderReplies()">
-    <div id="repliesList"></div>
-  </div>
-</section>
-
 <!-- ============ PRICE LIST PAGE ============ -->
 <!-- repairs price list merged into page-catalog (2026-07-28) -->
 
@@ -1282,7 +1256,6 @@ body { min-height: 100vh; }
   <div class="card">
     <h3 class="card-title">💬 תגובות · 📋 מחירון · 🛣️ טווח · 🏷️ מדבקות</h3>
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
-      <li><b>תגובות מהירות</b> — תבניות מוכנות ללקוחות (ניתנות לעריכה); לחיצה מעתיקה לוואטסאפ.</li>
       <li><b>מחירון תיקונים</b> — טבלת מחירים לעיון מול לקוח.</li>
       <li><b>מחשבון טווח נסיעה</b> — מחשב Range צפוי לפי נתוני הסוללה.</li>
       <li><b>עורך מדבקות</b> — יצירה והדפסת מדבקות לסוללות.</li>
@@ -1635,7 +1608,6 @@ let state = {
   photoBefore: null,
   photoAfter: null,
   warrantyTab: 'active',
-  editingReplyId: null
 };
 
 let bizDetails = {};
@@ -1678,7 +1650,7 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'replies', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs', 'supplier_prices', 'biz_payments'];
+const SYNC_KEYS = ['customers', 'jobs', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs', 'supplier_prices', 'biz_payments'];
 
 const Sync = {
   session: null,
@@ -1834,7 +1806,6 @@ function navigateTo(page) {
   if (page === 'customers') renderCustomers();
   if (page === 'warranties') renderWarranties();
   if (page === 'stats') renderStats();
-  if (page === 'replies') renderReplies();
   // 'pricelist' is the old repairs page; it now IS the catalog. Kept as an alias so
   // any saved link, quick-card or habit still lands somewhere sensible.
   if (page === 'pricelist') return navigateTo('catalog');
@@ -2750,139 +2721,6 @@ function refreshHome() {
 
 }
 
-
-// ============================================================
-// QUICK REPLIES
-// ============================================================
-
-// NOTE: evaluated at parse time, before init() restores the saved settings — so a
-// `${WARRANTY_MONTHS}` in here would freeze at the literal 6 while LOOKING dynamic.
-// The "אחריות מלאה 6 חודשים" below is deliberately a literal. It contradicts the retail
-// site, which promises 12 months in 20 places; that is a policy call for Daniel, and
-// changing it also needs an in-app edit of any copy already saved to `replies`.
-const DEFAULT_REPLIES = [
-  {
-    id: 'r1',
-    title: 'ברכת לקוח חדש + טיפים',
-    body: `שלום [שם],\n\nמזל טוב על הסוללה החדשה שלך מבית Green Power! 🔋🚀\n\nכדי שהסוללה תשרת אותך בנאמנות לאורך שנים ותספק ביצועים מקסימליים, הכנו לך מדריך קצר וחשוב לתחזוקה נכונה.\n\n💡 *טיפים לשימוש יומיומי (שמירה על אורך חיים)*\n\n1. *טעינה ראשונה (כיול חד-פעמי):*\nבפעם הראשונה בלבד, חשוב להטעין את הסוללה עד 100% מלאים (עד שהמטען מראה אור ירוק) ולהשאיר אותה מחוברת עוד כחצי שעה.\n\n2. *"אזור הנוחות" של הסוללה (הכי חשוב!):*\nהשתדל לשמור את הסוללה בין *20% ל-90%* בשימוש יומיומי.\n\n3. *טעינות חלקיות זה מעולה:*\nטעינה מ-40% ל-70% יוצרת פחות עומס ומאריכה את חיי התאים.\n\n⚠️ *כללי בטיחות זהב*\n🔥 לעולם לא להטעין ללא השגחה!\n🔌 השתמש רק במטען המקורי!\n💧 הרחק ממים!\n☀️ אל תטען בשמש או אחרי נסיעה מאומצת.\n\n*אחסון נכון:* אם לא משתמשים מעל שבוע - טען ל-50-60%.\n\nסע בזהירות ובהנאה!\nדניאל - Green Power`
-  },
-  {
-    id: 'r2',
-    title: 'הסבר תהליך אבחון',
-    body: `בשמחה, תוכל להביא את הסוללה לבדיקה ואבחון אצלנו במעבדה.\n\n*תהליך האבחון והתיקון שלנו פשוט וברור:*\n\n1. *מסירת הסוללה*: מביאים את הסוללה למעבדה ומשלמים מראש את דמי האבחון בסך: *100 ש"ח*.\n\n2. *אבחון מקצועי*: אנו מבצעים אבחון מקיף כדי לאתר את מקור התקלה (עד 2 ימי עסקים).\n\n3. *הצעת מחיר*: לאחר האבחון, ניצור איתך קשר עם הצעת מחיר מפורטת.\n\n4. *קיזוז עלות*: במידה ותבחר לתקן אצלנו, סכום הבדיקה (100 ש"ח) יתקזז במלואו ממחיר התיקון הסופי.\n\n*פרטי המעבדה:*\n📍 כתובת: עובדיה מברטנורא 12/21, אלעד\n🕒 שעות פעילות: א'-ה' 10:30-19:30, ו' 10:30-14:00\n\nכדי שנוכל להיות ערוכים, נשמח אם תעדכן אותנו מתי בערך נוח לך להגיע.\n\nמחכים לראותך! 🛠️`
-  },
-  {
-    id: 'r3',
-    title: 'בקשת ביקורת בגוגל',
-    body: `שלום [שם],\n\nשמחנו לתת לך שירות.\n\nאם היית מרוצה מהמקצועיות ומהתוצאה, נשמח מאוד אם תוכל להשאיר לנו ביקורת קצרה בגוגל.\n\nזה עוזר לנו המון! 🙏\n\nhttps://g.page/r/CTt5BDqkhS4JEBE/review\n\nתודה רבה על האמון! 🙌\n\nדניאל - Green Power`
-  },
-  {
-    id: 'r4',
-    title: 'הסבר תאי 50PL (Tabless)',
-    body: `🔋 הסבר על תא 50PL: מה השתנה ולמה הוא שובר את השוק?\n\nהתא הזה מבוסס על טכנולוגיה חדשה שנקראת "טאבלס" (Tabless), שמשחררת את המנוע ונותנת מקסימום ביצועים בלי להתחמם.\n\nמה ההבדל בין מה שהיה למה שיש עכשיו?\n\n🐢 *מה היה עד היום (תאי 8C הסטנדרטיים):*\nהתאים הישנים עבדו עם "לשונית" פנימית קטנה שדרכה עבר כל החשמל. זה יצר צוואר בקבוק. כשדרשת מכת כוח (עליה קשה או פתיחה מהירה), הסוללה התאמצה, התחממה, ו"חנקה" את המנוע.\n\n🚀 *טכנולוגיית "טאבלס" החדשה (25C רציף / 36C בפיק):*\nבתאי ה-50PL של EVE ביטלו את הלשונית הצרה הזו (Tab-less). החשמל זורם החוצה בעוצמה דרך כל הקוטב של התא בבת אחת. זה מאפשר לתא לשחרר פי 2 ופי 3 יותר כוח!\n\n❄️ *התחממות אפסית (התנגדות פנימית נמוכה):*\nבגלל שמבנה הטאבלס מאפשר לחשמל לצאת החוצה כל כך בקלות, הסוללה נשארת קרירה גם כשאתה קורע את הכלי במאמץ.\nסוללה שלא מתחממת שומרת על אורך חיים גדול משמעותית ונשארת אמינה לשנים ארוכות.\n\n🎯 *בקיצור:* טכנולוגיית קצה שמבטיחה שתקבל 100% מהיכולת של הכלי שלך, נקודה.`
-  },
-  {
-    id: 'r5',
-    title: 'הצעת מחיר ראשונית (תבנית)',
-    body: `שלום [שם] 👋\n\nעברתי על הסוללה שלך [V] [Ah].\n\n📋 *מה צריך לעשות:*\n[פירוט העבודות]\n\n⏱️ *זמן עבודה משוער:* [שעות]\n📦 *זמן אספקה:* [ימים]\n\n💰 *מחיר סופי: ₪[מחיר]*\n\n✅ אחריות מלאה 6 חודשים\n🔧 תאים מסוג Grade A\n\nאשמח לקבוע מועד! 🔋\n\nדניאל - Green Power`
-  }
-];
-
-function renderReplies() {
-  const replies = Store.get('replies') || DEFAULT_REPLIES;
-  const search = (document.getElementById('replySearch')?.value || '').toLowerCase();
-  const filtered = replies.filter(r =>
-    !search || r.title.toLowerCase().includes(search) || r.body.toLowerCase().includes(search)
-  );
-
-  const list = document.getElementById('repliesList');
-  if (filtered.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">אין תגובות. לחץ "חדש" להוספה.</div></div>';
-    return;
-  }
-  list.innerHTML = filtered.map(r => `
-    <div class="reply-chip" onclick="openReplyDetails('${r.id}')">
-      <div class="reply-chip-title">${r.title}</div>
-      <div class="reply-chip-preview">${r.body.replace(/\*/g, '').substring(0, 100)}...</div>
-    </div>
-  `).join('');
-}
-
-function openReplyDetails(id) {
-  const replies = Store.get('replies') || DEFAULT_REPLIES;
-  const r = replies.find(x => x.id === id);
-  if (!r) return;
-  const body = `
-    <div style="margin-bottom: 12px;">
-      <strong style="font-size: 14px;">${r.title}</strong>
-    </div>
-    <div style="background: var(--bg); padding: 12px; border-radius: 6px; font-size: 12px; line-height: 1.6; white-space: pre-wrap; max-height: 300px; overflow-y: auto;">${r.body}</div>
-  `;
-  openModal('תצוגה מקדימה', body, `
-    <button class="btn btn-primary" onclick="copyReply('${id}')">📋 העתק</button>
-    <button class="btn btn-secondary" onclick="openReplyEditor('${id}')">✏️ ערוך</button>
-    <button class="btn btn-danger btn-sm" onclick="deleteReply('${id}')">🗑️</button>
-    <button class="btn btn-secondary" onclick="closeModal()">סגור</button>
-  `);
-}
-
-function copyReply(id) {
-  const replies = Store.get('replies') || DEFAULT_REPLIES;
-  const r = replies.find(x => x.id === id);
-  if (!r) return;
-  navigator.clipboard.writeText(r.body).then(() => {
-    alert('✅ הועתק ללוח!');
-  });
-}
-
-function openReplyEditor(id) {
-  const replies = Store.get('replies') || DEFAULT_REPLIES;
-  const r = id ? replies.find(x => x.id === id) : { title: '', body: '' };
-  state.editingReplyId = id;
-  const body = `
-    <div class="form-row" style="margin-bottom: 10px;">
-      <label style="display: block; width: 100%;">כותרת</label>
-    </div>
-    <input type="text" class="form-input-wide" id="editReplyTitle" value="${r.title}" placeholder="שם התבנית" style="width: 100%; margin-bottom: 12px;">
-    <label style="display: block; font-size: 13px; margin-bottom: 6px;">תוכן ההודעה:</label>
-    <textarea id="editReplyBody" style="width: 100%; min-height: 250px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 13px; line-height: 1.6; direction: rtl;" placeholder="טקסט ההודעה...">${r.body}</textarea>
-    <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
-      טיפ: השתמש ב-[שם], [V], [Ah], [מחיר] כמקומות שמורים שאפשר להחליף לפני שליחה.
-    </div>
-  `;
-  openModal(id ? 'עריכת תגובה' : 'תגובה חדשה', body, `
-    <button class="btn btn-primary" onclick="saveReply()">💾 שמור</button>
-    <button class="btn btn-secondary" onclick="closeModal()">ביטול</button>
-  `);
-}
-
-function saveReply() {
-  const title = document.getElementById('editReplyTitle').value.trim();
-  const body = document.getElementById('editReplyBody').value.trim();
-  if (!title || !body) {
-    alert('יש למלא כותרת ותוכן');
-    return;
-  }
-  let replies = Store.get('replies') || DEFAULT_REPLIES;
-  if (state.editingReplyId) {
-    const idx = replies.findIndex(r => r.id === state.editingReplyId);
-    if (idx >= 0) replies[idx] = { ...replies[idx], title, body };
-  } else {
-    replies.unshift({ id: 'r' + Date.now(), title, body });
-  }
-  Store.set('replies', replies);
-  closeModal();
-  renderReplies();
-}
-
-function deleteReply(id) {
-  if (!confirm('למחוק את התגובה?')) return;
-  let replies = Store.get('replies') || DEFAULT_REPLIES;
-  replies = replies.filter(r => r.id !== id);
-  Store.set('replies', replies);
-  closeModal();
-  renderReplies();
-}
 
 // ============================================================
 // PRICE LIST (competitive market prices)
@@ -4731,8 +4569,6 @@ function init() {
   document.getElementById('bizDepositPct').value = bizDetails.depositPct != null ? bizDetails.depositPct : 50;
   document.getElementById('bizLeadDays').value = bizDetails.leadDays != null ? bizDetails.leadDays : 7;
 
-  // Initialize default replies if needed
-  if (!Store.get('replies')) Store.set('replies', DEFAULT_REPLIES);
   // Initialize default links if needed
 
   refreshCustomerSelect();
