@@ -43,7 +43,7 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; }
-body { padding-bottom: 90px; min-height: 100vh; }
+body { min-height: 100vh; }
 
 /* Header */
 .app-header {
@@ -142,12 +142,6 @@ body { padding-bottom: 90px; min-height: 100vh; }
 .stat-value { font-size: 17px; font-weight: 600; }
 
 /* Bottom Nav */
-.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); display: flex; justify-content: space-around; padding: 6px 4px 8px; z-index: 90; box-shadow: 0 -2px 8px rgba(0,0,0,0.04); }
-.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px; cursor: pointer; color: var(--text-muted); font-size: 10px; border-radius: var(--radius-sm); transition: all 0.15s; }
-.nav-item:hover { background: var(--bg); }
-.nav-item.active { color: var(--primary); }
-.nav-icon { font-size: 20px; }
-.nav-label { font-weight: 500; }
 
 /* Photo box */
 .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -237,7 +231,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
   #invoiceContent { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
   body.printing-biz #bizReportContent, body.printing-biz #bizReportContent * { visibility: visible; }
   body.printing-biz #bizReportContent { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
-  .app-header, .bottom-nav, .no-print { display: none !important; }
+  .app-header, .no-print { display: none !important; }
 }
 
 /* Warranty badge */
@@ -301,7 +295,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
 
 <header class="app-header">
   <div class="app-header-inner">
-    <div class="app-logo">
+    <div class="app-logo" onclick="navigateTo('home')" style="cursor:pointer;" title="חזרה לדף הבית">
       <div class="app-logo-icon">🔋</div>
       <div class="app-logo-text">
         <h1>Green Power</h1>
@@ -360,6 +354,13 @@ body { padding-bottom: 90px; min-height: 100vh; }
   <div class="card">
     <h3 class="card-title">⚡ פעולות מהירות</h3>
     <div class="quick-grid">
+      <!-- calc and stats were reachable ONLY from the tab bar. Removing it without these
+           two would have orphaned the calculator — the most-used page in the hub. -->
+      <div class="quick-card" onclick="navigateTo('calc')">
+        <span class="quick-card-icon">🧮</span>
+        <div class="quick-card-title">מחשבון תמחור</div>
+        <div class="quick-card-desc">הצעת מחיר לתיקון</div>
+      </div>
       <div class="quick-card" onclick="navigateTo('customers')">
         <span class="quick-card-icon">👥</span>
         <div class="quick-card-title">לקוחות</div>
@@ -429,6 +430,11 @@ body { padding-bottom: 90px; min-height: 100vh; }
         <div class="quick-card-title">מדבקות שמורות</div>
         <div class="quick-card-desc">היסטוריית מדבקות שהונפקו</div>
       </div>
+      <div class="quick-card" onclick="navigateTo('stats')">
+        <span class="quick-card-icon">📊</span>
+        <div class="quick-card-title">סטטיסטיקה</div>
+        <div class="quick-card-desc">נתוני העסק לאורך זמן</div>
+      </div>
       <div class="quick-card" onclick="navigateTo('help')">
         <span class="quick-card-icon">❓</span>
         <div class="quick-card-title">עזרה ומדריך</div>
@@ -437,48 +443,7 @@ body { padding-bottom: 90px; min-height: 100vh; }
     </div>
   </div>
 
-  <!-- Cells we import -->
-  <div class="card">
-    <h3 class="card-title">🔋 התאים שאנחנו מייבאים</h3>
-    <!-- 3 tiers since the 2026-07 restructure. 50PL/50SG have no dedicated shot yet,
-         so they reuse a same-brand 21700 photo (same as the retail AboutPage cards). -->
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(100px, 1fr)); gap:10px;">
-      <div style="background:var(--primary-light); border-radius:10px; padding:10px; text-align:center;">
-        <div style="background:#fff; border-radius:8px; padding:6px; margin-bottom:8px;">
-          <img src="cell-eve-50e.webp" alt="EVE 21700 50PL" loading="lazy" style="height:90px; width:auto; object-fit:contain;">
-        </div>
-        <div style="font-weight:700; font-size:12.5px;">EVE 21700 50PL</div>
-        <div style="font-size:11px; color:var(--text-muted); margin:3px 0;">PRO · Tabless · 25C רציף / 36C פיק</div>
-        <a href="https://energylabgreen.com/datasheets/eve-21700-50pl.pdf" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px; font-weight:700;">📄 מפרט טכני (PDF)</a>
-      </div>
-      <div style="background:var(--primary-light); border-radius:10px; padding:10px; text-align:center;">
-        <div style="background:#fff; border-radius:8px; padding:6px; margin-bottom:8px;">
-          <img src="cell-tenpower-50sg.webp" alt="Tenpower 21700 50SG" loading="lazy" style="height:90px; width:auto; object-fit:contain;">
-        </div>
-        <div style="font-weight:700; font-size:12.5px;">Tenpower 21700 50SG</div>
-        <div style="font-size:11px; color:var(--text-muted); margin:3px 0;">ADVANCED · 4C רציף / 10C פיק</div>
-        <a href="https://energylabgreen.com/datasheets/tenpower-21700-50sg.pdf" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px; font-weight:700;">📄 מפרט טכני (PDF)</a>
-      </div>
-      <div style="background:var(--primary-light); border-radius:10px; padding:10px; text-align:center;">
-        <div style="background:#fff; border-radius:8px; padding:6px; margin-bottom:8px;">
-          <img src="cell-eve-50e.webp" alt="EVE 21700 50E" loading="lazy" style="height:90px; width:auto; object-fit:contain;">
-        </div>
-        <div style="font-weight:700; font-size:12.5px;">EVE 21700 50E</div>
-        <div style="font-size:11px; color:var(--text-muted); margin:3px 0;">CLASSIC · 2C רציף / 3C פיק</div>
-        <a href="https://energylabgreen.com/datasheets/eve-21700-50e.pdf" target="_blank" rel="noopener" style="color:var(--primary); font-size:11px; font-weight:700;">📄 מפרט טכני (PDF)</a>
-      </div>
-    </div>
-    <p style="font-size:11px; color:var(--text-muted); margin:10px 0 0; text-align:center;">תאי Grade A מקוריים בלבד · ממוינים ומאוזנים במפעל</p>
-  </div>
 
-  <!-- External links -->
-  <div class="card">
-    <h3 class="card-title">🔗 קישורים חיצוניים</h3>
-    <div id="externalLinks"></div>
-    <button class="btn btn-secondary btn-sm btn-block" style="margin-top: 10px;" onclick="openLinkEditor()">
-      ✏️ עריכת קישורים
-    </button>
-  </div>
 </section>
 
 <!-- ============ CALCULATOR PAGE ============ -->
@@ -1219,10 +1184,9 @@ body { padding-bottom: 90px; min-height: 100vh; }
     <h3 class="card-title">🏠 דף הבית</h3>
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
       <li><b>סיכום החודש</b> — הכנסות, רווח נטו ומספר תיקונים. מתעדכן מכל תיקון שנשמר.</li>
-      <li><b>פעולות מהירות</b> — קיצורים לכל המסכים.</li>
+      <li><b>פעולות מהירות</b> — קיצורים לכל המסכים. <b>זו הדרך היחידה לנווט</b>: אין יותר תפריט תחתון, וכל 16 המסכים נמצאים כאן.</li>
+      <li><b>חזרה לדף הבית</b> — לחיצה על הלוגו 🔋 בראש המסך, מכל מקום.</li>
       <li><b>מחירוני PDF</b> — הורדת מחירון עסקי וקמעונאי.</li>
-      <li><b>התאים שאנחנו מייבאים</b> — EVE 50PL (PRO), Tenpower 50SG (ADVANCED) ו-EVE 50E (CLASSIC) + מפרטים.</li>
-      <li><b>קישורים חיצוניים</b> — ניתנים לעריכה בכפתור "עריכת קישורים".</li>
     </ul>
   </div>
 
@@ -1280,8 +1244,8 @@ body { padding-bottom: 90px; min-height: 100vh; }
       <li><b>📐 מידות סוללה</b> — אומדן מידות חבילה לפי מתח/קיבולת/סוג תא, ומאגר מידות תא-מצבר לפי דגם קורקינט (מדוד פעם אחת ושמור).</li>
       <li><b>🖨️ עורך מדבקות</b> — כעת מסנכרן את העיצוב לענן (אותו חשבון), כך שהתבנית זהה בכל מכשיר.</li>
       <li><b>🏢 תיעוד עסקי</b> — סמן תיקון כ"לקוח עסקי" במחשבון, וקבל בעמוד "תיעוד עסקי" דו"ח תיקונים מרוכז לכל בית עסק — להדפסה/PDF ושליחה בוואטסאפ.</li>
-      <li><b>🗂️ מדבקות שמורות</b> — כל מדבקה שנוצרת בעורך נשמרת אוטומטית לכאן (מסונכרן), מסווגת לתיקון או בנייה/מכירה. הלוגו מופיע אוטומטית בעורך.</li>
-      <li><b>🔒 מחירון ספק</b> — מחירון IC GOGOGO זמין בכרטיס "מחירון ספק" בדף הבית (פנימי).</li>
+      <li><b>🗂️ מדבקות שמורות</b> — כל מדבקה שנוצרת בעורך נשמרת אוטומטית לכאן (מסונכרן), מסווגת לתיקון או בנייה/מכירה. הלוגו מופיע אוטומטית בעורך. אפשר למחוק מדבקה בודדת (🗑️ ליד התאריך) או את כולן ("נקה הכל") — זה מוחק רק את הרישום, לא את העבודה או הלקוח.</li>
+      <li><b>🔒 עלויות ספקים</b> — כל מחירוני הספקים במקום אחד, מקוטלג לפי קטגוריה. המחיר ב-$ הוא מחיר הספק ליחידה; הסכום ב-₪ מוסיף שער, שילוח 39% ומע"מ. שני מתגים מאפשרים לראות את המחיר בלי כל אחד מהם. הרשימה נשמרת בחשבון שלך ולא בקובץ האתר.</li>
       <li><b>📦 מלאי</b> — מעקב כמות לתאים/BMS/חלקים עם התראת מלאי נמוך.</li>
       <li><b>💰 רווחיות מדויקת</b> — שכר העובדים (משעון העובדים) נכנס אוטומטית להוצאות; אומדן עלות ספק לכל מוצר (% מהמחיר, ניתן לשינוי בהגדרות); מדבקות הלקוח מופיעות בכרטיס הלקוח.</li>
       <li><b>💾 תזכורת גיבוי</b> — באנר בדף הבית כשלא גובה מעל שבוע. <b>QR</b> במדבקות נוצר מקומית (ללא תלות באינטרנט).</li>
@@ -1451,8 +1415,9 @@ body { padding-bottom: 90px; min-height: 100vh; }
 <section id="page-stickerlog" class="page">
   <div class="page-header">
     <h2 class="page-title">🗂️ מדבקות שמורות</h2>
-    <span class="page-subtitle" id="stickerlogCount"></span>
+    <button class="btn btn-secondary btn-sm" onclick="clearStickerLog()">🗑️ נקה הכל</button>
   </div>
+  <div style="text-align:left;font-size:12px;color:var(--text-muted);margin:-6px 0 8px;"><span id="stickerlogCount"></span></div>
   <div class="info-banner"><span>💡</span><div>כל מדבקה שנוצרת ב<strong>עורך המדבקות</strong> נשמרת לכאן אוטומטית ומסונכרנת — מסווגת לפי <strong>תיקון</strong> או <strong>בנייה/מכירה</strong>.</div></div>
   <div class="card">
     <div class="sub-tabs" style="margin-bottom:10px;">
@@ -1483,28 +1448,6 @@ body { padding-bottom: 90px; min-height: 100vh; }
 </main>
 
 <!-- ============ BOTTOM NAV ============ -->
-<nav class="bottom-nav">
-  <div class="nav-item active" data-nav="home" onclick="navigateTo('home')">
-    <span class="nav-icon">🏠</span>
-    <span class="nav-label">בית</span>
-  </div>
-  <div class="nav-item" data-nav="calc" onclick="navigateTo('calc')">
-    <span class="nav-icon">🧮</span>
-    <span class="nav-label">מחשבון</span>
-  </div>
-  <div class="nav-item" data-nav="customers" onclick="navigateTo('customers')">
-    <span class="nav-icon">👥</span>
-    <span class="nav-label">לקוחות</span>
-  </div>
-  <div class="nav-item" data-nav="warranties" onclick="navigateTo('warranties')">
-    <span class="nav-icon">🛡️</span>
-    <span class="nav-label">אחריות</span>
-  </div>
-  <div class="nav-item" data-nav="stats" onclick="navigateTo('stats')">
-    <span class="nav-icon">📊</span>
-    <span class="nav-label">סטטיסטיקה</span>
-  </div>
-</nav>
 
 <!-- ============ MODALS ============ -->
 <div class="modal-backdrop" id="modalBackdrop" onclick="if(event.target===this) closeModal()">
@@ -1575,7 +1518,7 @@ const CELL_WEIGHTS = {
 const BMS_BRAND_LABEL = { daly: 'DALY', jk: 'JK Smart', ant: 'ANT' };
 // LANDED cost in ₪ (supplier $ × 3 × 1.39 freight × 1.18 VAT), not the price to the
 // customer — the repair calculator adds MARGIN on top of this. Rebased 2026-07-31 against
-// the supplier's own quotes in the IC GOGOGO chat; DALY had been 28-42% BELOW real cost at
+// the supplier's own quotes; DALY had been 28-42% BELOW real cost at
 // every rating, so every BMS replacement was quoted off an understated part.
 //
 //   DALY quoted $: 20A→8 · 30A→11.5 · 40A→16.6-21.5 · 60A→17-28 · 100A→34-40 · 150A→52 · 200A→65
@@ -1676,7 +1619,7 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'replies', 'links', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs', 'supplier_prices', 'biz_payments'];
+const SYNC_KEYS = ['customers', 'jobs', 'replies', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs', 'supplier_prices', 'biz_payments'];
 
 const Sync = {
   session: null,
@@ -1822,9 +1765,9 @@ function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById('page-' + page);
   if (target) target.classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const navEl = document.querySelector(`[data-nav="${page}"]`);
-  if (navEl) navEl.classList.add('active');
+  // The five-tab bar is gone (2026-08-02): everything is reached from the home page, and
+  // the header logo is the way back. Two navigations competing for the same 17 pages meant
+  // five of them were one tap away and twelve were not, for no reason anyone chose.
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   // Refresh data on page enter
@@ -2732,92 +2675,8 @@ function refreshHome() {
     } else { banner.style.display = 'none'; }
   }
 
-  renderExternalLinks();
 }
 
-// ============================================================
-// EXTERNAL LINKS
-// ============================================================
-
-const DEFAULT_LINKS = [
-  { icon: '🌐', title: 'האתר העסקי', desc: 'אתר אינטרנט - Green Power', url: 'https://energylabgreen.com' },
-  { icon: '📋', title: 'הקטלוג העסקי', desc: 'קטלוג מוצרים אונליין', url: 'https://b2b.energylabgreen.com' },
-  { icon: '🏷️', title: 'עורך מדבקות', desc: 'הדפסת מדבקות לסוללות', url: 'stickers.html' },
-  { icon: '💼', title: 'הנהלת חשבונות SmartBuy', desc: 'מערכת חשבוניות והנהלת חשבונות', url: '' },
-  { icon: '🛒', title: 'AliExpress IC GOGOGO', desc: 'הזמנה מהספק הראשי', url: '' }
-];
-
-function renderExternalLinks() {
-  const links = Store.get('links') || DEFAULT_LINKS;
-  const container = document.getElementById('externalLinks');
-  container.innerHTML = links.filter(l => l.url).map(l => `
-    <div class="link-row" onclick="openExternal('${l.url}', '_blank')">
-      <div class="link-info">
-        <div class="link-icon">${l.icon}</div>
-        <div>
-          <p class="link-title">${l.title}</p>
-          <p class="link-desc">${l.desc}</p>
-        </div>
-      </div>
-      <span style="color: var(--text-light);">←</span>
-    </div>
-  `).join('') || '<div class="empty-state"><div class="empty-state-text">לא הוגדרו קישורים. לחץ על "עריכת קישורים" להוספה.</div></div>';
-}
-
-function openLinkEditor() {
-  const links = Store.get('links') || DEFAULT_LINKS;
-  const body = `
-    <div id="linksEditor">
-      ${links.map((l, i) => `
-        <div style="background: var(--bg); padding: 10px; border-radius: 6px; margin-bottom: 8px;">
-          <div style="display: flex; gap: 6px; margin-bottom: 6px;">
-            <input type="text" class="form-input" style="width: 50px;" value="${l.icon}" id="linkIcon_${i}" placeholder="🌐">
-            <input type="text" class="form-input-wide" style="flex: 1; width: auto;" value="${l.title}" id="linkTitle_${i}" placeholder="כותרת">
-          </div>
-          <input type="text" class="form-input-wide" style="width: 100%; margin-bottom: 6px;" value="${l.desc}" id="linkDesc_${i}" placeholder="תיאור">
-          <input type="url" class="form-input-wide" style="width: 100%;" value="${l.url}" id="linkUrl_${i}" placeholder="https://...">
-        </div>
-      `).join('')}
-    </div>
-    <button class="btn btn-secondary btn-block" style="margin-top: 10px;" onclick="addLinkRow()">➕ הוסף קישור</button>
-  `;
-  openModal('עריכת קישורים', body, `
-    <button class="btn btn-primary" onclick="saveLinks()">💾 שמור</button>
-    <button class="btn btn-secondary" onclick="closeModal()">ביטול</button>
-  `);
-}
-
-function addLinkRow() {
-  const editor = document.getElementById('linksEditor');
-  const i = editor.children.length;
-  const div = document.createElement('div');
-  div.innerHTML = `
-    <div style="background: var(--bg); padding: 10px; border-radius: 6px; margin-bottom: 8px;">
-      <div style="display: flex; gap: 6px; margin-bottom: 6px;">
-        <input type="text" class="form-input" style="width: 50px;" value="🔗" id="linkIcon_${i}" placeholder="🌐">
-        <input type="text" class="form-input-wide" style="flex: 1; width: auto;" id="linkTitle_${i}" placeholder="כותרת">
-      </div>
-      <input type="text" class="form-input-wide" style="width: 100%; margin-bottom: 6px;" id="linkDesc_${i}" placeholder="תיאור">
-      <input type="url" class="form-input-wide" style="width: 100%;" id="linkUrl_${i}" placeholder="https://...">
-    </div>
-  `;
-  editor.appendChild(div.firstElementChild);
-}
-
-function saveLinks() {
-  const editor = document.getElementById('linksEditor');
-  const links = [];
-  for (let i = 0; i < editor.children.length; i++) {
-    const icon = document.getElementById('linkIcon_' + i)?.value || '🔗';
-    const title = document.getElementById('linkTitle_' + i)?.value || '';
-    const desc = document.getElementById('linkDesc_' + i)?.value || '';
-    const url = document.getElementById('linkUrl_' + i)?.value || '';
-    if (title) links.push({ icon, title, desc, url });
-  }
-  Store.set('links', links);
-  closeModal();
-  renderExternalLinks();
-}
 
 // ============================================================
 // QUICK REPLIES
@@ -3057,7 +2916,7 @@ function qpSaveJob(ci, ii) {
   alert('✅ העבודה נוצרה! נכנסה לאחריות ולפיננסים.');
 }
 // ---- Supplier prices are DATA, not code (moved out of this file 2026-07-28) ----
-// The 115-row IC GOGOGO price list used to be baked in right here. hub.energylabgreen.com
+// The 115-row main-supplier price list used to be baked in right here. hub.energylabgreen.com
 // serves this HTML to anyone who asks — the login gate is JavaScript — so every price
 // Daniel pays his supplier was readable by anyone with the URL, on a page that told him
 // it was "פנימי — לא לשיתוף". They now live in the synced 'supplier_prices' key, behind
@@ -3075,7 +2934,7 @@ const SUPPLIER_VAT = 0.18;
 // nothing said which. Every stored price is now the supplier's ex-works quote, and the
 // freight is added here, once, to all of them.
 //
-// 0.39 is measured, not assumed: five documented IC GOGOGO shipments, goods vs freight —
+// 0.39 is measured, not assumed: five documented shipments from the main supplier, goods vs freight —
 //   2024-07-18  $649.5 / $300    2025-07-17  $1,190.5 / $433   2026-02-10  $793 / $407
 //   2026-04-07  $1,033 / $582    2026-06-03  $2,451 / $660
 //   = $6,117 goods, $2,382 freight.
@@ -3091,14 +2950,14 @@ const SUPPLIER_FREIGHT = 0.39;
 // different cells at one price. Above ₪20 the decimals are noise, so they go.
 function fmtIls(n) { return n >= 20 ? '₪' + Math.round(n) : '₪' + n.toFixed(2).replace(/\.?0+$/, ''); }
 
-// ---- One list for every supplier, not just IC GOGOGO ----------------------------
+// ---- One list for every supplier, not just the main one ----------------------------
 // The page carried a single supplier's PDF. Cell landed costs sat on the inventory page,
 // BMS costs only inside the repair calculator, and the other suppliers were not in the
 // hub at all — so "what does this part cost me?" had three different answers depending on
 // where you looked, and usually none.
 //
 // supplierRows() merges three sources into one shape { who, cat, name, usd, ils }:
-//   * imported lists — the synced 'supplier_prices' key (IC GOGOGO's 115 rows today)
+//   * imported lists — the synced 'supplier_prices' key (the main supplier's 115 rows today)
 //   * cells      — come through the same import, already landed ₪ (the 1.371 factor
 //                  already contains the VAT, so they must NOT be VAT-ed again)
 //   * BMS        — BMS_PRICES, already ₪ cost
@@ -3107,7 +2966,7 @@ function fmtIls(n) { return n >= 20 ? '₪' + Math.round(n) : '₪' + n.toFixed(
 // VAT would be charged twice.
 function supplierRows() {
   const rows = [];
-  (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'IC GOGOGO', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils }));
+  (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'ספק', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils }));
   // Labelled "מחשבון תיקונים", not "BMS": these sat next to the supplier's own BMS rows
   // under near-identical category names, so the screen showed what looked like the same
   // board twice at two prices. They are a different thing — the ₪ figures the repair
@@ -3171,7 +3030,7 @@ function renderSupplier() {
     // an empty page with a magnifying glass would look broken after the move to storage.
     const noneImported = !(Store.get('supplier_prices') || []).length && !q && !who;
     el.innerHTML = noneImported
-      ? '<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">מחירוני הספקים עדיין לא יובאו.<br>לחץ <b>📥 ייבוא מחירון</b> ובחר את הקובץ <b>supplier-costs-import.json</b>.<br><span style="font-size:11px;color:var(--text-muted);">הוא מכיל את התאים (21700 / 18650 · ימי / אווירי) ואת מחירון IC GOGOGO. עלויות ה-BMS מוצגות גם בלי ייבוא.</span></div></div>'
+      ? '<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">מחירוני הספקים עדיין לא יובאו.<br>לחץ <b>📥 ייבוא מחירון</b> ובחר את הקובץ <b>supplier-costs-import.json</b>.<br><span style="font-size:11px;color:var(--text-muted);">הוא מכיל את התאים (21700 / 18650 · ימי / אווירי) ואת מחירון הספק הראשי. עלויות ה-BMS מוצגות גם בלי ייבוא.</span></div></div>'
       : '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא רכיב</div></div>';
     return;
   }
@@ -3234,7 +3093,7 @@ function openSupplierImport() {
       בחר את הקובץ <b>supplier-costs-import.json</b> (או הדבק את תוכנו) — הרשימה תישמר בחשבון שלך ותסתנכרן לכל מכשיר.
     </div>
     <input type="file" id="supFile" accept=".json,application/json" class="form-input-wide" style="width:100%;margin-bottom:8px;" onchange="supFilePicked()">
-    <textarea id="supJson" class="form-input-wide" style="width:100%;height:110px;font-size:11px;" placeholder='[{"who":"IC GOGOGO","cat":"BMS","name":"JK 150A","usd":111}]'></textarea>
+    <textarea id="supJson" class="form-input-wide" style="width:100%;height:110px;font-size:11px;" placeholder='[{"who":"שם הספק","cat":"BMS","name":"JK 150A","usd":111}]'></textarea>
     <div style="font-size:11px;color:var(--text-light);margin-top:6px;">שדות: who, cat, name, ואז usd (יומר לשקל + מע"מ) או ils (עלות סופית).</div>`,
     `<button class="btn btn-primary" onclick="importSupplierPrices(false)">📥 החלף רשימה</button>
      <button class="btn btn-secondary btn-sm" onclick="importSupplierPrices(true)">➕ הוסף לקיים</button>
@@ -4225,15 +4084,41 @@ function renderStickerLog() {
   list.innerHTML = items.map(s => {
     const isRep = s.type === 'repair';
     const spec = isRep ? (s.model || '') : `${s.voltage || ''} ${s.capacity || ''} ${s.cells || ''}`.trim();
+    // The delete button carries the index in the UNFILTERED array. Using the position in
+    // `items` would delete the wrong sticker whenever a tab or a search is active — the
+    // list you see is not the list that is stored.
+    const realIdx = arr.indexOf(s);
     return `<div class="list-item">
       <div class="list-item-header">
         <div><div class="list-item-title">${s.client || 'ללא שם'} <span style="font-size:10px;color:${isRep ? 'var(--warning)' : 'var(--accent)'};">(${isRep ? 'תיקון' : 'בנייה/מכירה'})</span></div>
           <div class="list-item-subtitle">${s.ref ? s.ref + ' · ' : ''}${s.sku || ''}</div></div>
-        <div class="list-item-subtitle" style="text-align:left;">${s.date ? new Date(s.date).toLocaleDateString('he-IL') : ''}</div>
+        <div style="display:flex;align-items:center;gap:10px;white-space:nowrap;">
+          <span class="list-item-subtitle">${s.date ? new Date(s.date).toLocaleDateString('he-IL') : ''}</span>
+          <span onclick="deleteSticker(${realIdx})" title="מחק מדבקה" style="color:#ef4444;cursor:pointer;font-size:15px;">🗑️</span>
+        </div>
       </div>
       ${spec ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">🔋 ${spec}</div>` : ''}
     </div>`;
   }).join('');
+}
+// Deleting a sticker record does NOT delete the job, the customer or the warranty — this
+// log is a record of what was printed. Says so in the prompt, because "מחק" on a screen
+// full of customer names invites the opposite assumption.
+function deleteSticker(i) {
+  const arr = Store.get('sticker_history') || [];
+  const s = arr[i];
+  if (!s) return;
+  if (!confirm(`למחוק את המדבקה של "${s.client || 'ללא שם'}"?\n\nזה מוחק רק את הרישום כאן — העבודה, הלקוח והאחריות לא מושפעים.`)) return;
+  arr.splice(i, 1);
+  Store.set('sticker_history', arr);
+  renderStickerLog();
+}
+function clearStickerLog() {
+  const arr = Store.get('sticker_history') || [];
+  if (!arr.length) { alert('אין מדבקות למחיקה.'); return; }
+  if (!confirm(`למחוק את כל ${arr.length} המדבקות השמורות?\n\nפעולה זו לא הפיכה. העבודות והלקוחות לא מושפעים.`)) return;
+  Store.set('sticker_history', []);
+  renderStickerLog();
 }
 
 // ============================================================
@@ -4642,7 +4527,6 @@ function init() {
   // Initialize default replies if needed
   if (!Store.get('replies')) Store.set('replies', DEFAULT_REPLIES);
   // Initialize default links if needed
-  if (!Store.get('links')) Store.set('links', DEFAULT_LINKS);
 
   refreshCustomerSelect();
   refreshHome();
