@@ -1005,14 +1005,23 @@ body { padding-bottom: 90px; min-height: 100vh; }
     <h2 class="page-title">🔒 עלויות ספקים</h2>
     <button class="btn btn-primary btn-sm" onclick="openExternal('supplier-pricelist.pdf')">⬇️ פתח PDF</button>
   </div>
-  <div class="info-banner"><span>💡</span><div>מחיר סופי ליחידה כולל שילוח, בשער <b>$1 = ₪3</b> · <b>לא כולל מכס</b>. כעוסק פטור מע"מ הוא עלות אמיתית שלא מתקזזת.</div></div>
+  <div class="info-banner"><span>💡</span><div>הסכום ב-$ הוא <b>מחיר הספק ליחידה</b> כפי שנקב בהצעה האחרונה. הסכום ב-₪ מוסיף שער <b>$1 = ₪3</b>, שילוח <b>39%</b> (ממוצע 5 משלוחים אמיתיים) ומע"מ 18% · <b>לא כולל מכס</b>. כעוסק פטור מע"מ הוא עלות אמיתית שלא מתקזזת.</div></div>
   <div class="info-banner"><span>🔒</span><div style="font-size:11px;">מחירוני הספקים נשמרים <b>בחשבון שלך</b> ולא בקובץ האתר — קובץ ה-HTML מוגש לכל מי שיודע את הכתובת. <b>עלויות התאים ו-BMS כן נשארו בקובץ</b> כי מחשבון התיקונים מחשב מהן.</div></div>
   <div class="card">
     <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש רכיב (תא / BMS / מטען / ניקל...)" style="width:100%;margin-bottom:10px;" oninput="renderSupplier()">
-    <select class="form-select" id="supWho" style="width:100%;margin-bottom:10px;" onchange="renderSupplier()"></select>
+    <select class="form-select" id="supWho" style="width:100%;margin-bottom:8px;" onchange="renderSupplier()"></select>
+    <select class="form-select" id="supCat" style="width:100%;margin-bottom:8px;" onchange="renderSupplier()"></select>
+    <div class="btn-group" style="margin-bottom:10px;">
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="supExpandAll(true)">⊕ פתח הכל</button>
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="supExpandAll(false)">⊖ סגור הכל</button>
+    </div>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
       <input type="checkbox" id="supVat" checked onchange="renderSupplier()" style="width:16px;height:16px;">
       <span>הצג <b>כולל מע"מ 18%</b> (העלות האמיתית שלך)</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
+      <input type="checkbox" id="supFreight" checked onchange="renderSupplier()" style="width:16px;height:16px;">
+      <span>הצג <b>כולל שילוח 39%</b> — כבה כדי לראות מחיר ספק נטו</span>
     </label>
     <div class="btn-group" style="margin-bottom:10px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openSupplierAdd()">➕ הוסף פריט</button>
@@ -1511,10 +1520,24 @@ const CELL_WEIGHTS = {
 
 
 const BMS_BRAND_LABEL = { daly: 'DALY', jk: 'JK Smart', ant: 'ANT' };
+// LANDED cost in ₪ (supplier $ × 3 × 1.39 freight × 1.18 VAT), not the price to the
+// customer — the repair calculator adds MARGIN on top of this. Rebased 2026-07-31 against
+// the supplier's own quotes in the IC GOGOGO chat; DALY had been 28-42% BELOW real cost at
+// every rating, so every BMS replacement was quoted off an understated part.
+//
+//   DALY quoted $: 20A→8 · 30A→11.5 · 40A→16.6-21.5 · 60A→17-28 · 100A→34-40 · 150A→52 · 200A→65
+//   ANT  quoted $: 220A→60 (the only ANT quote; the rest of the ANT curve is scaled to it)
+//   80/120/220/300A DALY are interpolated on the quoted points — marked here so nobody
+//   mistakes them for something the supplier actually said.
+//
+// DALY's real price depends on S count as well as amps (20S 60A is $28, 13S 60A is $17)
+// and this table is keyed by amps alone, so each entry is the average across the S values
+// Daniel actually buys. JK is left as it was: the quotes bracket it (20S 200A = ₪185,
+// 24S 200A = ₪250, table says 260), so there is no single number to correct it to.
 const BMS_PRICES = {
-  daly: { 20: 25, 30: 35, 40: 55, 60: 65, 80: 95, 100: 120, 120: 150, 150: 180, 200: 230, 220: 250, 300: 330 },
+  daly: { 20: 40, 30: 55, 40: 95, 60: 105, 80: 145, 100: 180, 120: 210, 150: 255, 200: 320, 220: 345, 300: 450 },
   jk:   { 20: 110, 30: 120, 40: 135, 60: 150, 80: 170, 100: 175, 120: 195, 150: 220, 200: 260, 220: 285, 300: 380 },
-  ant:  { 20: 130, 30: 145, 40: 165, 60: 185, 80: 210, 100: 240, 120: 270, 150: 295, 200: 340, 220: 360, 300: 420 }
+  ant:  { 20: 105, 30: 120, 40: 135, 60: 150, 80: 170, 100: 195, 120: 220, 150: 240, 200: 280, 220: 295, 300: 345 }
 };
 
 const JOB_LABELS = {
@@ -2921,6 +2944,22 @@ function qpSaveJob(ci, ii) {
 // Removing them would break the cost model and the check that keeps it honest.
 const SUPPLIER_USD = 3;
 const SUPPLIER_VAT = 0.18;
+// Freight, made explicit 2026-07-31. The banner has always promised "כולל שילוח" but
+// supplierIls only ever applied VAT — the freight was hand-baked into SOME of the stored
+// USD figures and not others, so two rows on this screen meant different things and
+// nothing said which. Every stored price is now the supplier's ex-works quote, and the
+// freight is added here, once, to all of them.
+//
+// 0.39 is measured, not assumed: five documented IC GOGOGO shipments, goods vs freight —
+//   2024-07-18  $649.5 / $300    2025-07-17  $1,190.5 / $433   2026-02-10  $793 / $407
+//   2026-04-07  $1,033 / $582    2026-06-03  $2,451 / $660
+//   = $6,117 goods, $2,382 freight.
+// It is high because this supplier's cargo is heavy and cheap per kilo (nickel, copper,
+// shrink, paper) and it all flies — DHL/FedEx/AliExpress at $11-16/kg, never sea. A
+// value-based share therefore over-charges a 200g BMS and under-charges a 1kg nickel
+// roll; correcting that needs per-item weights, which we do not have. Treat it as the
+// order-level average it is.
+const SUPPLIER_FREIGHT = 0.39;
 // Sub-shekel items (copper strips at ₪0.06) rounded to "₪0" before this. Threshold is
 // ₪20, not ₪10: a cell lands at ₪4-13 and the agora are the whole point there — EVE 50PL
 // at ₪12.15 and Ampace JP30P1 at ₪13.16 both showed as "₪13" at the old cutoff, i.e. two
@@ -2944,18 +2983,24 @@ function fmtIls(n) { return n >= 20 ? '₪' + Math.round(n) : '₪' + n.toFixed(
 function supplierRows() {
   const rows = [];
   (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'IC GOGOGO', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils }));
+  // Labelled "מחשבון תיקונים", not "BMS": these sat next to the supplier's own BMS rows
+  // under near-identical category names, so the screen showed what looked like the same
+  // board twice at two prices. They are a different thing — the ₪ figures the repair
+  // calculator computes from — and the label now says so.
   Object.keys(BMS_PRICES).forEach((brand) => {
     Object.keys(BMS_PRICES[brand]).forEach((amps) => {
-      rows.push({ who: 'BMS', cat: 'BMS ' + (BMS_BRAND_LABEL[brand] || brand.toUpperCase()), name: amps + 'A', ils: BMS_PRICES[brand][amps], landed: true });
+      rows.push({ who: 'מחשבון תיקונים', cat: 'עלות BMS ' + (BMS_BRAND_LABEL[brand] || brand.toUpperCase()) + ' (במחשבון)', name: amps + 'A', ils: BMS_PRICES[brand][amps], landed: true });
     });
   });
   (Store.get('supplier_costs') || []).forEach((r, i) => rows.push({ ...r, custom: true, idx: i }));
   return rows;
 }
-function supplierIls(r, vat) {
+// VAT is charged on CIF, so it applies after freight — not to the goods alone.
+function supplierIls(r, vat, freight) {
   if (r.ils != null) return Number(r.ils);              // already landed ₪ — never re-VAT
-  const base = Number(r.usd) * SUPPLIER_USD;
-  return vat ? base * (1 + SUPPLIER_VAT) : base;
+  let v = Number(r.usd) * SUPPLIER_USD;
+  if (freight) v *= 1 + SUPPLIER_FREIGHT;
+  return vat ? v * (1 + SUPPLIER_VAT) : v;
 }
 function renderSupplier() {
   const el = document.getElementById('supplierList');
@@ -2963,6 +3008,8 @@ function renderSupplier() {
   const q = (document.getElementById('supQ') ? document.getElementById('supQ').value : '').trim().toLowerCase();
   const vatEl = document.getElementById('supVat');
   const vat = vatEl ? vatEl.checked : true;
+  const frEl = document.getElementById('supFreight');
+  const freight = frEl ? frEl.checked : true;
   const all = supplierRows();
 
   // supplier dropdown, rebuilt from the data so a new supplier appears by itself
@@ -2977,7 +3024,22 @@ function renderSupplier() {
   }
   const who = whoSel ? whoSel.value : '';
 
-  const rows = all.filter((r) => (!who || r.who === who) &&
+  // Category dropdown, rebuilt from whatever the supplier filter left — picking a supplier
+  // and then being offered another supplier's categories is how you end up with an empty
+  // list and no idea why.
+  const catSel = document.getElementById('supCat');
+  const inScope = all.filter((r) => !who || r.who === who);
+  if (catSel) {
+    const cats = [...new Set(inScope.map((r) => r.cat))];
+    const cur = catSel.value;
+    const opts = '<option value="">כל הקטגוריות (' + cats.length + ')</option>' +
+      cats.map((c) => `<option value="${c}"${c === cur ? ' selected' : ''}>${c} (${inScope.filter((r) => r.cat === c).length})</option>`).join('');
+    if (catSel.innerHTML !== opts) catSel.innerHTML = opts;
+    catSel.value = cats.includes(cur) ? cur : '';
+  }
+  const cat = catSel ? catSel.value : '';
+
+  const rows = inScope.filter((r) => (!cat || r.cat === cat) &&
     (!q || (r.who + ' ' + r.cat + ' ' + r.name).toLowerCase().includes(q)));
   if (!rows.length) {
     // Distinguish "your filter matched nothing" from "no list has been imported yet" —
@@ -2989,20 +3051,49 @@ function renderSupplier() {
     return;
   }
 
-  let html = '', lastCat = '';
-  rows.forEach((r) => {
-    if (r.cat !== lastCat) {
-      lastCat = r.cat;
-      const note = r.ils != null ? 'עלות נחיתה ₪' : (vat ? 'כולל מע"מ' : 'ללא מע"מ');
-      html += `<div style="font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">${r.cat}<span style="float:left;font-weight:400;font-size:11px;color:var(--text-muted);">${note}</span></div>`;
-    }
-    const usd = r.usd != null ? `<span style="color:var(--text-muted);">$${r.usd}</span>` : '';
-    const del = r.custom ? `<span onclick="removeSupplierRow(${r.idx})" style="color:#ef4444;cursor:pointer;">🗑️</span>` : '';
-    html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;">
-      <span>${r.name}${r.custom ? ' <span style="font-size:10px;color:var(--text-muted);">(שלי)</span>' : ''}</span>
-      <span style="display:flex;gap:12px;white-space:nowrap;align-items:center;">${usd}<span style="font-weight:700;color:var(--primary);min-width:52px;text-align:left;">${fmtIls(supplierIls(r, vat))}</span>${del}</span></div>`;
+  // Collapsed by default: 183 rows across 25 categories was a single scroll with no way
+  // to see what the categories even were. Closed, the whole list fits on one phone screen
+  // as a menu. A search or a chosen category opens everything, because then the filter —
+  // not the fold — is what decides what you are looking at.
+  const groups = new Map();
+  rows.forEach((r) => { if (!groups.has(r.cat)) groups.set(r.cat, []); groups.get(r.cat).push(r); });
+  supCatKeys = [...groups.keys()];
+  const forceOpen = !!q || !!cat;
+
+  let html = '';
+  supCatKeys.forEach((c, i) => {
+    const list = groups.get(c);
+    const open = forceOpen || supOpenCats.has(c);
+    // Say exactly which of the two add-ons are in the number — "כולל מע"מ" alone was
+    // ambiguous once freight became a separate, switchable term.
+    const parts = [freight ? 'שילוח' : null, vat ? 'מע"מ' : null].filter(Boolean);
+    const note = list[0].ils != null ? 'עלות נחיתה ₪' : (parts.length ? '+ ' + parts.join(' + ') : 'מחיר ספק בלבד');
+    html += `<div onclick="toggleSupCat(${i})" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">
+      <span>${open ? '▾' : '▸'} ${c} <span style="font-weight:400;color:var(--text-muted);">(${list.length})</span></span>
+      <span style="font-weight:400;font-size:11px;color:var(--text-muted);white-space:nowrap;">${note}</span></div>`;
+    if (!open) return;
+    list.forEach((r) => {
+      const usd = r.usd != null ? `<span style="color:var(--text-muted);">$${r.usd}</span>` : '';
+      const del = r.custom ? `<span onclick="event.stopPropagation();removeSupplierRow(${r.idx})" style="color:#ef4444;cursor:pointer;">🗑️</span>` : '';
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;">
+        <span>${r.name}${r.custom ? ' <span style="font-size:10px;color:var(--text-muted);">(שלי)</span>' : ''}</span>
+        <span style="display:flex;gap:12px;white-space:nowrap;align-items:center;">${usd}<span style="font-weight:700;color:var(--primary);min-width:52px;text-align:left;">${fmtIls(supplierIls(r, vat, freight))}</span>${del}</span></div>`;
+    });
   });
   el.innerHTML = html;
+}
+// Toggling by index, not by name: the category strings carry quotes, parentheses and ·,
+// and interpolating them into an inline onclick is a broken-handler waiting to happen.
+let supOpenCats = new Set(), supCatKeys = [];
+function toggleSupCat(i) {
+  const c = supCatKeys[i];
+  if (c == null) return;
+  if (supOpenCats.has(c)) supOpenCats.delete(c); else supOpenCats.add(c);
+  renderSupplier();
+}
+function supExpandAll(open) {
+  supOpenCats = open ? new Set(supCatKeys) : new Set();
+  renderSupplier();
 }
 // Rows Daniel adds go to the synced store, NOT into this file — the HTML is served to
 // anyone who asks, so growing the cost list in code would grow what is published.
