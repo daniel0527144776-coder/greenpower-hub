@@ -317,9 +317,6 @@ body { min-height: 100vh; }
   </div>
 
   <!-- Backup reminder -->
-  <!-- A shortage you only find out about on the inventory page is a shortage you find out
-       about when a customer is waiting. This is the page opened every morning. -->
-  <div id="invShortAlert" class="alert alert-danger" style="display:none;align-items:center;gap:10px;"></div>
   <div id="backupReminder" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
     <span style="font-size:18px;">💾</span>
     <div style="flex:1;" id="backupReminderText">מומלץ לגבות את הנתונים.</div>
@@ -1267,7 +1264,7 @@ body { min-height: 100vh; }
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
       <li><b>🏷️ מחירון מוצרים</b> — כל <span id="helpCatCount">—</span> המוצרים עם מחיר <b>פרטי ועסקי</b> (כולל <b>תאים בודדים</b> עם מדרגות כמות). החלף בטאב למעלה. הפעל "הצג עלות ורווח" כדי לראות כמה כל מוצר עולה לך וכמה אתה מרוויח. לחיצה על מוצר → הזנת עלות ספק מדויקת.</li>
       <li><b>🛒 הזמנות</b> — בנה הצעת מחיר מהקטלוג (פרטי או עסקי בלחיצה), שלח בוואטסאפ, ועקוב אחר סטטוס (הצעה→שולם→נמסר). מכירות ששולמו נכנסות אוטומטית להכנסות.</li>
-      <li><b>💰 הכנסות והוצאות</b> — דו"ח רווח-הפסד חודשי. הכנסות = תיקונים שנשמרו + הזמנות ששולמו + <b>רישום הכנסה ידני</b>, פחות הוצאות ושכר עובדים. הרישום הידני הוא לתקבול שלא נשמר כתיקון או כמכירה — אל תזין שם עבודה שכבר שמורה, היא תיספר פעמיים. כפתור <b>📥 ייבוא</b> טוען היסטוריה מקובץ ו<b>מחליף</b> את הרשימות, כדי שייבוא כפול לא יכפיל סכומים.</li>
+      <li><b>💰 הכנסות והוצאות</b> — דו"ח רווח-הפסד חודשי. הכנסות = תיקונים שנשמרו + הזמנות ששולמו + <b>רישום הכנסה ידני</b>, פחות הוצאות ושכר עובדים. הרישום הידני הוא לתקבול שלא נשמר כתיקון או כמכירה — אל תזין שם עבודה שכבר שמורה, היא תיספר פעמיים. כפתור <b>📥 ייבוא</b> טוען היסטוריה מקובץ ו<b>מחליף</b> את הרשימות, כדי שייבוא כפול לא יכפיל סכומים. <b>מבט על</b> מציג רווח לכל חודש ואת הרווח המצטבר מההתחלה — לחיצה על חודש פותחת אותו.</li>
       <li><b>⏱️ שעון עובדים</b> — רשום שעות לכל עובד, וקבל סיכום שעות ושכר חודשי. הגדר עובדים ותעריפים ב"ניהול עובדים".</li>
       <li><b>📐 מידות סוללה</b> — אומדן מידות חבילה לפי מתח/קיבולת/סוג תא, ומאגר מידות תא-מצבר לפי דגם קורקינט (מדוד פעם אחת ושמור).</li>
       <li><b>🖨️ עורך מדבקות</b> — כעת מסנכרן את העיצוב לענן (אותו חשבון), כך שהתבנית זהה בכל מכשיר.</li>
@@ -1367,6 +1364,11 @@ body { min-height: 100vh; }
       <div class="stat-box"><div class="stat-label">רווח נטו</div><div class="stat-value" style="color:var(--accent);" id="finNet">₪0</div></div>
     </div>
     <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:8px;" id="finBreak"></div>
+  </div>
+  <div class="card">
+    <h3 class="card-title">📈 מבט על — כל החודשים</h3>
+    <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">לחיצה על חודש פותחת אותו למעלה.</p>
+    <div id="finOverview"></div>
   </div>
   <div class="card">
     <h3 class="card-title">➕ הכנסה ידנית</h3>
@@ -2715,20 +2717,6 @@ function refreshHome() {
     document.getElementById('homeGreeting').textContent = `ברוך הבא, ${bizDetails.owner.split(' ')[0]}`;
   }
 
-  const shEl = document.getElementById('invShortAlert');
-  if (shEl) {
-    const sh = invShortages();
-    if (sh.total) {
-      shEl.style.display = 'flex';
-      const parts = [];
-      if (sh.out.length) parts.push(`<b>${sh.out.length} אזלו מהמלאי</b>`);
-      if (sh.low.length) parts.push(`${sh.low.length} במלאי נמוך`);
-      const names = [...sh.out, ...sh.low].slice(0, 3).map(i => i.name).join(' · ');
-      shEl.innerHTML = `<span style="font-size:18px;">📦</span><div style="flex:1;">${parts.join(' · ')}<div style="font-size:11px;opacity:.85;margin-top:2px;">${names}${sh.total > 3 ? ' ועוד…' : ''}</div></div>` +
-        `<button class="btn btn-sm btn-secondary" style="white-space:nowrap;" onclick="navigateTo('inventory')">פתח מלאי</button>`;
-    } else shEl.style.display = 'none';
-  }
-
   // Weekly backup reminder
   const banner = document.getElementById('backupReminder');
   if (banner) {
@@ -3730,6 +3718,63 @@ function ensureMonthInput(id) { const el = document.getElementById(id); if (el &
 // the wrong month bucket in the worktime/finances views).
 function todayLocalISO() { const n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0'); }
 function ensureDateInput(id) { const el = document.getElementById(id); if (el && !el.value) el.value = todayLocalISO(); }
+// Every month that has any activity, computed from the same five sources renderFinances
+// uses for the selected month. Deriving the overview from a second, parallel calculation
+// is how a summary ends up disagreeing with the page it summarises.
+function finMonthly() {
+  const jobs = Store.get('jobs') || [], orders = Store.get('orders') || [];
+  const incomes = Store.get('incomes') || [], expenses = Store.get('expenses') || [];
+  const wt = Store.get('worktime') || [];
+  const m = {};
+  const at = (d) => { const k = monthKeyOf(d); if (!k) return null; return (m[k] ||= { inc: 0, exp: 0 }); };
+  jobs.forEach(j => { const b = at(j.date); if (b) b.inc += j.price || 0; });
+  orders.filter(o => o.status === 'שולם' || o.status === 'נמסר').forEach(o => { const b = at(o.date); if (b) b.inc += o.total || 0; });
+  incomes.forEach(e => { const b = at(e.date); if (b) b.inc += e.amount || 0; });
+  expenses.forEach(e => { const b = at(e.date); if (b) b.exp += e.amount || 0; });
+  wt.forEach(e => { const b = at(e.date); if (b) b.exp += (e.hours || 0) * (e.rate || 0); });
+  return m;
+}
+function renderFinanceOverview() {
+  const el = document.getElementById('finOverview');
+  if (!el) return;
+  const m = finMonthly();
+  const keys = Object.keys(m).sort().reverse();
+  if (!keys.length) { el.innerHTML = '<div class="empty-state"><div class="empty-state-text">אין עדיין נתונים.</div></div>'; return; }
+  let ti = 0, te = 0;
+  keys.forEach(k => { ti += m[k].inc; te += m[k].exp; });
+  const best = keys.slice().sort((a, b) => (m[b].inc - m[b].exp) - (m[a].inc - m[a].exp))[0];
+  const months = keys.length;
+  const HE = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+  const label = (k) => HE[+k.slice(5, 7) - 1] + ' ' + k.slice(0, 4);
+  const net = ti - te;
+  el.innerHTML =
+    `<div class="stats-grid" style="margin-bottom:10px;">
+       <div class="stat-box"><div class="stat-label">סה"כ הכנסות</div><div class="stat-value" style="color:var(--primary);font-size:19px;">${shek(ti)}</div></div>
+       <div class="stat-box"><div class="stat-label">סה"כ הוצאות</div><div class="stat-value" style="color:var(--danger);font-size:19px;">${shek(te)}</div></div>
+       <div class="stat-box"><div class="stat-label">רווח מצטבר</div><div class="stat-value" style="color:${net < 0 ? 'var(--danger)' : 'var(--accent)'};font-size:19px;">${shek(net)}</div></div>
+     </div>
+     <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-bottom:10px;">
+       ${months} חודשי פעילות · ממוצע ${shek(Math.round(net / months))} רווח לחודש · החודש הטוב ביותר: ${label(best)} (${shek(m[best].inc - m[best].exp)})
+     </div>` +
+    keys.map(k => {
+      const b = m[k], p = b.inc - b.exp;
+      const pct = b.inc > 0 ? Math.round(p / b.inc * 100) : 0;
+      // Bar width is relative to the best month, so the column is comparable at a glance
+      // instead of every month looking equally good.
+      const w = Math.max(2, Math.round(Math.abs(p) / Math.max(1, Math.abs(m[best].inc - m[best].exp)) * 100));
+      return `<div onclick="document.getElementById('finMonth').value='${k}';renderFinances();" style="cursor:pointer;padding:7px 2px;border-bottom:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;gap:8px;">
+          <span style="font-weight:600;">${label(k)}</span>
+          <span style="white-space:nowrap;"><span style="color:var(--text-muted);font-size:11px;">${shek(b.inc)} − ${shek(b.exp)}</span>
+            <b style="color:${p < 0 ? 'var(--danger)' : 'var(--accent)'};margin-inline-start:8px;">${shek(p)}</b>
+            <span style="color:var(--text-light);font-size:10.5px;">${b.inc > 0 ? pct + '%' : ''}</span></span>
+        </div>
+        <div style="height:4px;background:var(--bg);border-radius:2px;margin-top:4px;overflow:hidden;">
+          <div style="height:100%;width:${w}%;background:${p < 0 ? 'var(--danger)' : 'var(--accent)'};"></div></div>
+      </div>`;
+    }).join('');
+}
+
 function renderFinances() {
   const mk = ensureMonthInput('finMonth'); ensureDateInput('expDate'); ensureDateInput('incDate');
   const jobs = Store.get('jobs') || [], orders = Store.get('orders') || [], expenses = Store.get('expenses') || [];
@@ -3755,6 +3800,7 @@ function renderFinances() {
   document.getElementById('incomeList').innerHTML = incArr.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין רישומי הכנסה ידניים החודש</div></div>' :
     incArr.map(e => `<div class="price-item"><div class="price-item-name">${e.cat || 'הכנסה'}${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final" style="color:var(--accent);">${shek(e.amount)} <span onclick="deleteIncome('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
   const listArr = expenses.filter(e => monthKeyOf(e.date) === mk).sort((a, b) => new Date(b.date) - new Date(a.date));
+  renderFinanceOverview();
   document.getElementById('expenseList').innerHTML = listArr.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין הוצאות החודש</div></div>' :
     listArr.map(e => `<div class="price-item"><div class="price-item-name">${e.cat}${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final" style="color:var(--danger);">${shek(e.amount)} <span onclick="deleteExpense('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
 }
