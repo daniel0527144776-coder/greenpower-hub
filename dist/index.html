@@ -323,27 +323,10 @@ body { min-height: 100vh; }
     <button class="btn btn-sm btn-warning" style="white-space:nowrap;" onclick="exportData()">גבה עכשיו</button>
   </div>
 
-  <!-- Quick stats -->
-  <div class="card">
-    <h3 class="card-title">📊 סיכום החודש</h3>
-    <div class="stats-grid">
-      <div class="stat-box">
-        <div class="stat-label">הכנסות</div>
-        <div class="stat-value" style="color:#22d3ee;" id="homeRev">₪0</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">רווח נטו</div>
-        <div class="stat-value" style="color: var(--accent);" id="homeProfit">₪0</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">תיקונים</div>
-        <div class="stat-value" style="color:#fbbf24;" id="homeJobs">0</div>
-      </div>
-    </div>
-    <div id="homeEmptyHint" style="display:none;margin-top:12px;font-size:12px;color:var(--text-muted);background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.22);border-radius:8px;padding:10px 12px;text-align:center;line-height:1.6;">
-      💡 טרם נרשמו תיקונים החודש. שמרו תיקון מ<b>מחשבון התמחור</b> — וההכנסות, הרווח והסטטיסטיקות יתעדכנו אוטומטית.
-    </div>
-  </div>
+  <!-- The month summary lived here as well as on כספים, and the two did not agree: this
+       one counted repairs only and summed each job's own profit, ignoring sales, the manual
+       income ledger, the expense ledger and wages. Two "רווח נטו" for the same month, one
+       of them wrong. It belongs where the full picture is (Daniel, 2026-08-02). -->
 
   <!-- Quick actions -->
   <div class="card">
@@ -1184,7 +1167,7 @@ body { min-height: 100vh; }
   <div class="card">
     <h3 class="card-title">🏠 דף הבית</h3>
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
-      <li><b>סיכום החודש</b> — הכנסות, רווח נטו ומספר תיקונים. מתעדכן מכל תיקון שנשמר.</li>
+      <li><b>סיכום החודש</b> — נמצא ב<b>כספים</b> בלבד. שם הוא סופר גם מכירות, רישומי הכנסה ידניים, הוצאות ושכר עובדים — לא רק תיקונים.</li>
       <li><b>פעולות מהירות</b> — קיצורים לכל המסכים. <b>זו הדרך היחידה לנווט</b>: אין תפריט תחתון. 9 כרטיסים, ומסכים קרובים מקובצים לטאבים בראש העמוד — <b>תמחור ומכירות</b> (מחיר מהיר ומכירות · מחשבון מפורט), <b>לקוחות ואחריות</b> (לקוחות · אחריות · תיעוד עסקי) ו<b>כספים</b> (כספים · שעון עובדים · סטטיסטיקה). עורך המדבקות נפתח מתוך "מדבקות".</li>
       <li><b>חזרה לדף הבית</b> — לחיצה על הלוגו 🔋 בראש המסך, מכל מקום.</li>
       <li><b>מחירוני PDF</b> — הורדת מחירון עסקי וקמעונאי.</li>
@@ -2711,18 +2694,6 @@ function renderStats() {
 // ============================================================
 
 function refreshHome() {
-  const jobs = Store.get('jobs') || [];
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthJobs = jobs.filter(j => new Date(j.date) >= monthStart);
-  const rev = monthJobs.reduce((s, j) => s + (j.price || 0), 0);
-  const profit = monthJobs.reduce((s, j) => s + (j.profit || 0), 0);
-  document.getElementById('homeRev').textContent = '₪' + rev.toLocaleString('he-IL');
-  document.getElementById('homeProfit').textContent = '₪' + profit.toLocaleString('he-IL');
-  document.getElementById('homeJobs').textContent = monthJobs.length;
-  const emptyHint = document.getElementById('homeEmptyHint');
-  if (emptyHint) emptyHint.style.display = monthJobs.length ? 'none' : 'block';
-
   if (bizDetails.owner) {
     document.getElementById('homeGreeting').textContent = `ברוך הבא, ${bizDetails.owner.split(' ')[0]}`;
   }
