@@ -1365,6 +1365,7 @@ body { min-height: 100vh; }
     </div>
     <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:8px;" id="finBreak"></div>
   </div>
+  <div id="finPending" class="alert alert-warning" style="display:none;align-items:center;gap:10px;"></div>
   <div class="card">
     <h3 class="card-title">📈 מבט על — כל החודשים</h3>
     <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">לחיצה על חודש פותחת אותו למעלה.</p>
@@ -2237,6 +2238,12 @@ function saveJob() {
   if (jobs.length > 500) jobs.pop();
   Store.set('jobs', jobs);
 
+  // Say which month it landed in. The finances page remembers the month you last looked
+  // at, so a repair saved today can be invisible simply because the picker is on August.
+  const HEM = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+  const d0 = new Date(entry.date);
+  entry._savedMsg = `נשמר · ${shek(priceNum)} נוסף להכנסות של ${HEM[d0.getMonth()]} ${d0.getFullYear()}`;
+
   // Update customer record
   if (entry.customerName && entry.customerPhone) {
     const customers = Store.get('customers') || [];
@@ -2265,7 +2272,7 @@ function saveJob() {
     refreshCustomerSelect();
   }
 
-  alert('✅ התיקון נשמר בהצלחה!');
+  alert('✅ ' + entry._savedMsg);
 }
 
 // ---- WhatsApp message generation ----
@@ -3551,7 +3558,7 @@ function saleRow(o) {
   return `
     <div class="list-item">
       <div class="list-item-header">
-        <div><div class="list-item-title">${salesBadge('sale')} ${o.customer || 'ללא שם'} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
+        <div><div class="list-item-title">${salesBadge('sale')} ${o.customer || 'ללא שם'} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''} ${orderIncomeHint(o)}</div>
           <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')} · ${o.items.length} פריטים${o.bms ? ' · BMS ' + o.bms : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${saleCats(o)}</div></div>
         <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div><div class="list-item-subtitle">${o.status || 'הצעה'}</div></div>
@@ -3599,6 +3606,11 @@ function renderOrders() {
   const list = document.getElementById('ordersList');
   if (all.length === 0) { list.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">אין מכירות או תיקונים. לחץ 🛒 מכירה או 🔧 תיקון.</div></div></div>'; return; }
   list.innerHTML = all.map(x => x.kind === 'sale' ? saleRow(x.raw) : repairRow(x.raw)).join('');
+}
+// A quote is not revenue — correct, but the orders list gave no sign of it, so an unpaid
+// sale looked identical to a paid one and the only symptom was a low income figure.
+function orderIncomeHint(o) {
+  return o.status === 'הצעה' ? '<span style="font-size:10px;color:var(--warning);white-space:nowrap;">· לא בהכנסות</span>' : '';
 }
 function cycleOrderStatus(id) { const orders = Store.get('orders') || [], o = orders.find(x => x.id === id); if (!o) return; const seq = ['הצעה', 'שולם', 'נמסר']; o.status = seq[(seq.indexOf(o.status) + 1) % seq.length]; Store.set('orders', orders); renderOrders(); }
 function deleteOrder(id) { if (!confirm('למחוק הזמנה?')) return; let orders = Store.get('orders') || []; orders = orders.filter(o => o.id !== id); Store.set('orders', orders); renderOrders(); }
@@ -3800,6 +3812,15 @@ function renderFinances() {
   document.getElementById('incomeList').innerHTML = incArr.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין רישומי הכנסה ידניים החודש</div></div>' :
     incArr.map(e => `<div class="price-item"><div class="price-item-name">${e.cat || 'הכנסה'}${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final" style="color:var(--accent);">${shek(e.amount)} <span onclick="deleteIncome('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
   const listArr = expenses.filter(e => monthKeyOf(e.date) === mk).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const pending = orders.filter(o => monthKeyOf(o.date) === mk && o.status === 'הצעה');
+  const pendEl = document.getElementById('finPending');
+  if (pendEl) {
+    const sum = pending.reduce((s2, o) => s2 + (o.total || 0), 0);
+    pendEl.style.display = pending.length ? 'flex' : 'none';
+    pendEl.innerHTML = pending.length
+      ? `<span style="font-size:18px;">🧾</span><div style="flex:1;">${pending.length} הצעות בסך <b>${shek(sum)}</b> עדיין בסטטוס "הצעה" — <b>לא נספרות כהכנסה</b> עד שיסומנו "שולם".<div style="font-size:11px;opacity:.85;margin-top:2px;">${pending.slice(0, 3).map(o => o.customer || 'ללא שם').join(' · ')}${pending.length > 3 ? ' ועוד…' : ''}</div></div><button class="btn btn-sm btn-secondary" style="white-space:nowrap;" onclick="navigateTo('orders')">פתח מכירות</button>`
+      : '';
+  }
   renderFinanceOverview();
   document.getElementById('expenseList').innerHTML = listArr.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין הוצאות החודש</div></div>' :
     listArr.map(e => `<div class="price-item"><div class="price-item-name">${e.cat}${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final" style="color:var(--danger);">${shek(e.amount)} <span onclick="deleteExpense('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
