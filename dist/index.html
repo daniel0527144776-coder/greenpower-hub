@@ -1267,7 +1267,7 @@ body { min-height: 100vh; }
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
       <li><b>🏷️ מחירון מוצרים</b> — כל <span id="helpCatCount">—</span> המוצרים עם מחיר <b>פרטי ועסקי</b> (כולל <b>תאים בודדים</b> עם מדרגות כמות). החלף בטאב למעלה. הפעל "הצג עלות ורווח" כדי לראות כמה כל מוצר עולה לך וכמה אתה מרוויח. לחיצה על מוצר → הזנת עלות ספק מדויקת.</li>
       <li><b>🛒 הזמנות</b> — בנה הצעת מחיר מהקטלוג (פרטי או עסקי בלחיצה), שלח בוואטסאפ, ועקוב אחר סטטוס (הצעה→שולם→נמסר). מכירות ששולמו נכנסות אוטומטית להכנסות.</li>
-      <li><b>💰 הכנסות והוצאות</b> — דו"ח רווח-הפסד חודשי: הכנסות (תיקונים + מכירות) פחות הוצאות. רשום הוצאות לפי קטגוריה.</li>
+      <li><b>💰 הכנסות והוצאות</b> — דו"ח רווח-הפסד חודשי. הכנסות = תיקונים שנשמרו + הזמנות ששולמו + <b>רישום הכנסה ידני</b>, פחות הוצאות ושכר עובדים. הרישום הידני הוא לתקבול שלא נשמר כתיקון או כמכירה — אל תזין שם עבודה שכבר שמורה, היא תיספר פעמיים. כפתור <b>📥 ייבוא</b> טוען היסטוריה מקובץ ו<b>מחליף</b> את הרשימות, כדי שייבוא כפול לא יכפיל סכומים.</li>
       <li><b>⏱️ שעון עובדים</b> — רשום שעות לכל עובד, וקבל סיכום שעות ושכר חודשי. הגדר עובדים ותעריפים ב"ניהול עובדים".</li>
       <li><b>📐 מידות סוללה</b> — אומדן מידות חבילה לפי מתח/קיבולת/סוג תא, ומאגר מידות תא-מצבר לפי דגם קורקינט (מדוד פעם אחת ושמור).</li>
       <li><b>🖨️ עורך מדבקות</b> — כעת מסנכרן את העיצוב לענן (אותו חשבון), כך שהתבנית זהה בכל מכשיר.</li>
@@ -1355,7 +1355,10 @@ body { min-height: 100vh; }
 <section id="page-finances" class="page">
   <div class="page-header">
     <h2 class="page-title">💰 הכנסות והוצאות</h2>
-    <input type="month" id="finMonth" class="form-input" style="width:auto;direction:ltr;" onchange="renderFinances()">
+    <div class="btn-group">
+      <input type="month" id="finMonth" class="form-input" style="width:auto;direction:ltr;" onchange="renderFinances()">
+      <button class="btn btn-secondary btn-sm" onclick="openFinanceImport()">📥 ייבוא</button>
+    </div>
   </div>
   <div class="card">
     <div class="stats-grid">
@@ -1364,6 +1367,22 @@ body { min-height: 100vh; }
       <div class="stat-box"><div class="stat-label">רווח נטו</div><div class="stat-value" style="color:var(--accent);" id="finNet">₪0</div></div>
     </div>
     <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:8px;" id="finBreak"></div>
+  </div>
+  <div class="card">
+    <h3 class="card-title">➕ הכנסה ידנית</h3>
+    <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">לתקבול שלא נשמר כתיקון או כמכירה בלוח. תיקונים והזמנות נספרים אוטומטית ואין להזין אותם כאן שוב.</p>
+    <div class="form-row"><label>סכום ₪</label><input type="number" class="form-input" id="incAmount" placeholder="0" min="0" step="10"></div>
+    <div class="form-row"><label>קטגוריה</label>
+      <select class="form-select" id="incCat">
+        <option value="תיקונים ומכירות">תיקונים ומכירות</option>
+        <option value="מכירת חלקים">מכירת חלקים</option>
+        <option value="שירות באתר הלקוח">שירות באתר הלקוח</option>
+        <option value="אחר">אחר</option>
+      </select>
+    </div>
+    <div class="form-row"><label>הערה</label><input type="text" class="form-input-wide" id="incNote" placeholder="פירוט" style="width:180px;"></div>
+    <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="incDate" style="width:auto;direction:ltr;"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:8px;" onclick="addIncome()">💾 הוסף הכנסה</button>
   </div>
   <div class="card">
     <h3 class="card-title">➖ הוצאה חדשה</h3>
@@ -1384,6 +1403,10 @@ body { min-height: 100vh; }
     <div class="form-row"><label>הערה</label><input type="text" class="form-input-wide" id="expNote" placeholder="ספק / פירוט" style="width:180px;"></div>
     <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="expDate" style="width:auto;direction:ltr;"></div>
     <button class="btn btn-primary btn-block" style="margin-top:8px;" onclick="addExpense()">💾 הוסף הוצאה</button>
+  </div>
+  <div class="card">
+    <h3 class="card-title">📗 הכנסות ידניות החודש</h3>
+    <div id="incomeList"></div>
   </div>
   <div class="card">
     <h3 class="card-title">📒 הוצאות החודש</h3>
@@ -1650,7 +1673,7 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs', 'supplier_prices', 'biz_payments'];
+const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs', 'supplier_prices', 'biz_payments'];
 
 const Sync = {
   session: null,
@@ -3708,11 +3731,18 @@ function ensureMonthInput(id) { const el = document.getElementById(id); if (el &
 function todayLocalISO() { const n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0'); }
 function ensureDateInput(id) { const el = document.getElementById(id); if (el && !el.value) el.value = todayLocalISO(); }
 function renderFinances() {
-  const mk = ensureMonthInput('finMonth'); ensureDateInput('expDate');
+  const mk = ensureMonthInput('finMonth'); ensureDateInput('expDate'); ensureDateInput('incDate');
   const jobs = Store.get('jobs') || [], orders = Store.get('orders') || [], expenses = Store.get('expenses') || [];
+  // Income had no ledger — it could only come from a saved job or a sold order. That is
+  // fine going forward, but it left no home for the years of daily totals recorded in
+  // WhatsApp, which are not per-customer jobs. Inventing jobs for them would have polluted
+  // the customer list, the warranty register and every repair statistic. So: a manual
+  // income ledger, symmetric to the expense one, and the P&L adds all three.
+  const incomes = Store.get('incomes') || [];
   const repairRev = jobs.filter(j => monthKeyOf(j.date) === mk).reduce((s, j) => s + (j.price || 0), 0);
   const salesRev = orders.filter(o => monthKeyOf(o.date) === mk && (o.status === 'שולם' || o.status === 'נמסר')).reduce((s, o) => s + (o.total || 0), 0);
-  const income = repairRev + salesRev;
+  const manualRev = incomes.filter(e => monthKeyOf(e.date) === mk).reduce((s, e) => s + (e.amount || 0), 0);
+  const income = repairRev + salesRev + manualRev;
   const ledgerExp = expenses.filter(e => monthKeyOf(e.date) === mk).reduce((s, e) => s + (e.amount || 0), 0);
   // worker wages from the timeclock count as an expense automatically
   const wages = (Store.get('worktime') || []).filter(e => monthKeyOf(e.date) === mk).reduce((s, e) => s + (e.hours * e.rate), 0);
@@ -3720,11 +3750,69 @@ function renderFinances() {
   document.getElementById('finIncome').textContent = shek(income);
   document.getElementById('finExpense').textContent = shek(exp);
   document.getElementById('finNet').textContent = shek(income - exp);
-  document.getElementById('finBreak').textContent = `הכנסה: תיקונים ${shek(repairRev)} + מכירות ${shek(salesRev)} · הוצאה: רישומים ${shek(ledgerExp)} + שכר עובדים ${shek(wages)}`;
+  document.getElementById('finBreak').textContent = `הכנסה: תיקונים ${shek(repairRev)} + מכירות ${shek(salesRev)} + רישום ידני ${shek(manualRev)} · הוצאה: רישומים ${shek(ledgerExp)} + שכר עובדים ${shek(wages)}`;
+  const incArr = incomes.filter(e => monthKeyOf(e.date) === mk).sort((a, b) => new Date(b.date) - new Date(a.date));
+  document.getElementById('incomeList').innerHTML = incArr.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין רישומי הכנסה ידניים החודש</div></div>' :
+    incArr.map(e => `<div class="price-item"><div class="price-item-name">${e.cat || 'הכנסה'}${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final" style="color:var(--accent);">${shek(e.amount)} <span onclick="deleteIncome('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
   const listArr = expenses.filter(e => monthKeyOf(e.date) === mk).sort((a, b) => new Date(b.date) - new Date(a.date));
   document.getElementById('expenseList').innerHTML = listArr.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין הוצאות החודש</div></div>' :
     listArr.map(e => `<div class="price-item"><div class="price-item-name">${e.cat}${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final" style="color:var(--danger);">${shek(e.amount)} <span onclick="deleteExpense('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
 }
+function addIncome() {
+  const amount = parseFloat(document.getElementById('incAmount').value);
+  if (!amount || amount <= 0) { alert('הזן סכום'); return; }
+  const note = document.getElementById('incNote').value;
+  const date = document.getElementById('incDate').value || todayLocalISO();
+  const incomes = Store.get('incomes') || [];
+  incomes.unshift({ id: 'i' + Date.now(), amount, cat: document.getElementById('incCat').value, note, date: new Date(date).toISOString() });
+  Store.set('incomes', incomes);
+  document.getElementById('incAmount').value = ''; document.getElementById('incNote').value = '';
+  renderFinances();
+}
+function deleteIncome(id) {
+  if (!confirm('למחוק את רישום ההכנסה?')) return;
+  Store.set('incomes', (Store.get('incomes') || []).filter(e => e.id !== id));
+  renderFinances();
+}
+
+// One-time import of the WhatsApp "הוצאות והכנסות" history. Replaces rather than appends,
+// and says how many records it is about to drop — running it twice would otherwise double
+// every figure in the P&L, silently.
+function openFinanceImport() {
+  const ci = (Store.get('incomes') || []).length, ce = (Store.get('expenses') || []).length;
+  openModal('📥 ייבוא היסטוריית כספים', `
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+      כרגע רשומים <b>${ci}</b> רישומי הכנסה ו-<b>${ce}</b> הוצאות.<br>
+      בחר את <b>finance-import.json</b> — הרשימות יוחלפו (לא יתווספו), כדי שייבוא כפול לא יכפיל את הסכומים.
+    </div>
+    <input type="file" id="finFile" accept=".json,application/json" class="form-input-wide" style="width:100%;margin-bottom:8px;" onchange="finFilePicked()">
+    <textarea id="finJson" class="form-input-wide" style="width:100%;height:100px;font-size:11px;" placeholder='{"incomes":[...],"expenses":[...]}'></textarea>`,
+    `<button class="btn btn-primary" onclick="importFinance()">📥 החלף</button>
+     <button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function finFilePicked() {
+  const f = document.getElementById('finFile');
+  if (!f || !f.files || !f.files[0]) return;
+  const rd = new FileReader();
+  rd.onload = () => { document.getElementById('finJson').value = rd.result; };
+  rd.readAsText(f.files[0], 'utf-8');
+}
+function importFinance() {
+  const raw = document.getElementById('finJson').value.trim();
+  if (!raw) { alert('בחר קובץ או הדבק JSON'); return; }
+  let d; try { d = JSON.parse(raw); } catch (e) { alert('JSON לא תקין: ' + e.message); return; }
+  const clean = (arr, pre) => (Array.isArray(arr) ? arr : []).map((r, i) => {
+    const amount = Number(r.amount);
+    if (!amount || isNaN(amount) || !r.date) return null;
+    return { id: r.id || pre + Date.now() + '_' + i, amount, cat: String(r.cat || ''), note: String(r.note || ''), date: new Date(r.date).toISOString() };
+  }).filter(Boolean);
+  const inc = clean(d.incomes, 'i'), exp = clean(d.expenses, 'e');
+  if (!inc.length && !exp.length) { alert('לא נמצאו רשומות תקינות'); return; }
+  Store.set('incomes', inc); Store.set('expenses', exp);
+  closeModal(); renderFinances();
+  alert(`✅ יובאו ${inc.length} הכנסות ו-${exp.length} הוצאות.`);
+}
+
 function addExpense() {
   const amount = parseFloat(document.getElementById('expAmount').value);
   if (!amount || amount <= 0) { alert('הזן סכום'); return; }
