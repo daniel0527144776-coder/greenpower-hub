@@ -358,14 +358,10 @@ body { min-height: 100vh; }
       </div>
       <div class="quick-card" onclick="navigateTo('customers')">
         <span class="quick-card-icon">👥</span>
-        <div class="quick-card-title">לקוחות</div>
+        <div class="quick-card-title">לקוחות ואחריות</div>
         <div class="quick-card-desc">ניהול לקוחות והיסטוריה</div>
       </div>
-      <div class="quick-card" onclick="navigateTo('warranties')">
-        <span class="quick-card-icon">🛡️</span>
-        <div class="quick-card-title">אחריות</div>
-        <div class="quick-card-desc">מעקב אחריות פעילה</div>
-      </div>
+
       <div class="quick-card" onclick="navigateTo('catalog')">
         <span class="quick-card-icon">🏷️</span>
         <div class="quick-card-title">מחירון מלא</div>
@@ -378,34 +374,22 @@ body { min-height: 100vh; }
       </div>
       <div class="quick-card" onclick="navigateTo('finances')">
         <span class="quick-card-icon">💰</span>
-        <div class="quick-card-title">הכנסות והוצאות</div>
+        <div class="quick-card-title">כספים</div>
         <div class="quick-card-desc">רווח-הפסד חודשי</div>
       </div>
-      <div class="quick-card" onclick="navigateTo('worktime')">
-        <span class="quick-card-icon">⏱️</span>
-        <div class="quick-card-title">שעון עובדים</div>
-        <div class="quick-card-desc">שעות עבודה ושכר</div>
-      </div>
+
       <div class="quick-card" onclick="navigateTo('calcs')">
         <span class="quick-card-icon">📐</span>
         <div class="quick-card-title">מחשבונים</div>
         <div class="quick-card-desc">טווח נסיעה · מידות סוללה</div>
       </div>
-      <div class="quick-card" onclick="navigateTo('bizdocs')">
-        <span class="quick-card-icon">🏢</span>
-        <div class="quick-card-title">תיעוד עסקי</div>
-        <div class="quick-card-desc">דוח תיקונים ללקוח עסקי</div>
-      </div>
+
       <div class="quick-card" onclick="navigateTo('inventory')">
         <span class="quick-card-icon">📦</span>
         <div class="quick-card-title">מלאי</div>
         <div class="quick-card-desc">תאים · BMS · חלקים</div>
       </div>
-      <div class="quick-card" onclick="location.href='stickers.html'">
-        <span class="quick-card-icon">🖨️</span>
-        <div class="quick-card-title">עורך מדבקות</div>
-        <div class="quick-card-desc">יצירה והדפסת מדבקות</div>
-      </div>
+
       <div class="quick-card" onclick="navigateTo('supplier')">
         <span class="quick-card-icon">🔒</span>
         <div class="quick-card-title">עלויות ספקים</div>
@@ -413,14 +397,10 @@ body { min-height: 100vh; }
       </div>
       <div class="quick-card" onclick="navigateTo('stickerlog')">
         <span class="quick-card-icon">🗂️</span>
-        <div class="quick-card-title">מדבקות שמורות</div>
+        <div class="quick-card-title">מדבקות</div>
         <div class="quick-card-desc">היסטוריית מדבקות שהונפקו</div>
       </div>
-      <div class="quick-card" onclick="navigateTo('stats')">
-        <span class="quick-card-icon">📊</span>
-        <div class="quick-card-title">סטטיסטיקה</div>
-        <div class="quick-card-desc">נתוני העסק לאורך זמן</div>
-      </div>
+
       <div class="quick-card" onclick="navigateTo('help')">
         <span class="quick-card-icon">❓</span>
         <div class="quick-card-title">עזרה ומדריך</div>
@@ -1210,7 +1190,7 @@ body { min-height: 100vh; }
     <h3 class="card-title">🏠 דף הבית</h3>
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
       <li><b>סיכום החודש</b> — הכנסות, רווח נטו ומספר תיקונים. מתעדכן מכל תיקון שנשמר.</li>
-      <li><b>פעולות מהירות</b> — קיצורים לכל המסכים. <b>זו הדרך היחידה לנווט</b>: אין יותר תפריט תחתון, וכל 16 המסכים נמצאים כאן.</li>
+      <li><b>פעולות מהירות</b> — קיצורים לכל המסכים. <b>זו הדרך היחידה לנווט</b>: אין תפריט תחתון. 10 כרטיסים, ומסכים קרובים מקובצים לטאבים בראש העמוד — <b>לקוחות ואחריות</b> (לקוחות · אחריות · תיעוד עסקי) ו<b>כספים</b> (כספים · שעון עובדים · סטטיסטיקה). עורך המדבקות נפתח מתוך "מדבקות".</li>
       <li><b>חזרה לדף הבית</b> — לחיצה על הלוגו 🔋 בראש המסך, מכל מקום.</li>
       <li><b>מחירוני PDF</b> — הורדת מחירון עסקי וקמעונאי.</li>
     </ul>
@@ -1473,7 +1453,10 @@ body { min-height: 100vh; }
 <section id="page-stickerlog" class="page">
   <div class="page-header">
     <h2 class="page-title">🗂️ מדבקות שמורות</h2>
-    <button class="btn btn-secondary btn-sm" onclick="clearStickerLog()">🗑️ נקה הכל</button>
+    <div class="btn-group">
+      <button class="btn btn-primary btn-sm" onclick="openExternal('stickers.html')">🏷️ פתח עורך</button>
+      <button class="btn btn-secondary btn-sm" onclick="clearStickerLog()">🗑️ נקה הכל</button>
+    </div>
   </div>
   <div style="text-align:left;font-size:12px;color:var(--text-muted);margin:-6px 0 8px;"><span id="stickerlogCount"></span></div>
   <div class="info-banner"><span>💡</span><div>כל מדבקה שנוצרת ב<strong>עורך המדבקות</strong> נשמרת לכאן אוטומטית ומסונכרנת — מסווגת לפי <strong>תיקון</strong> או <strong>בנייה/מכירה</strong>.</div></div>
@@ -1818,10 +1801,32 @@ function openExternal(url) {
 }
 
 // ---- Navigation ----
+// Five pages lost their own home card and became tabs of a related page (Daniel,
+// 2026-08-02): 15 cards was more choices than the hub has distinct jobs. Nothing moved —
+// each page is still its own <section>; they just share an entry point and a tab strip.
+const PAGE_GROUPS = [
+  { tabs: [['customers', '👥 לקוחות'], ['warranties', '🛡️ אחריות'], ['bizdocs', '🏢 תיעוד עסקי']] },
+  { tabs: [['finances', '💰 כספים'], ['worktime', '⏱️ שעון עובדים'], ['stats', '📊 סטטיסטיקה']] },
+];
+function renderPageTabs(page) {
+  document.querySelectorAll('.page-group-tabs').forEach((e) => e.remove());
+  const g = PAGE_GROUPS.find((x) => x.tabs.some((t) => t[0] === page));
+  if (!g) return;
+  const sec = document.getElementById('page-' + page);
+  const hdr = sec && sec.querySelector('.page-header');
+  if (!hdr) return;
+  const bar = document.createElement('div');
+  bar.className = 'sub-tabs page-group-tabs';
+  bar.style.marginBottom = '12px';
+  bar.innerHTML = g.tabs.map(([p, l]) => `<div class="sub-tab${p === page ? ' active' : ''}" onclick="navigateTo('${p}')">${l}</div>`).join('');
+  hdr.insertAdjacentElement('afterend', bar);
+}
+
 function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById('page-' + page);
   if (target) target.classList.add('active');
+  renderPageTabs(page);
   // The five-tab bar is gone (2026-08-02): everything is reached from the home page, and
   // the header logo is the way back. Two navigations competing for the same 17 pages meant
   // five of them were one tap away and twelve were not, for no reason anyone chose.
