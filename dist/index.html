@@ -349,12 +349,12 @@ body { min-height: 100vh; }
   <div class="card">
     <h3 class="card-title">⚡ פעולות מהירות</h3>
     <div class="quick-grid">
-      <!-- calc and stats were reachable ONLY from the tab bar. Removing it without these
-           two would have orphaned the calculator — the most-used page in the hub. -->
-      <div class="quick-card" onclick="navigateTo('calc')">
-        <span class="quick-card-icon">🧮</span>
-        <div class="quick-card-title">מחשבון תמחור</div>
-        <div class="quick-card-desc">הצעת מחיר לתיקון</div>
+      <!-- Order matters: this is the whole navigation now, and pricing a visit is what the
+           hub is opened for. Pages that lost their card are tabs — see PAGE_GROUPS. -->
+      <div class="quick-card" onclick="navigateTo('orders')">
+        <span class="quick-card-icon">🛒</span>
+        <div class="quick-card-title">תמחור ומכירות</div>
+        <div class="quick-card-desc">מחיר מהיר · הצעה · מחשבון תיקון</div>
       </div>
       <div class="quick-card" onclick="navigateTo('customers')">
         <span class="quick-card-icon">👥</span>
@@ -366,11 +366,6 @@ body { min-height: 100vh; }
         <span class="quick-card-icon">🏷️</span>
         <div class="quick-card-title">מחירון מלא</div>
         <div class="quick-card-desc">מוצרים · תיקונים · פרטי · עסקי</div>
-      </div>
-      <div class="quick-card" onclick="navigateTo('orders')">
-        <span class="quick-card-icon">🛒</span>
-        <div class="quick-card-title">תמחור, מכירות ותיקונים</div>
-        <div class="quick-card-desc">מחיר מהיר · הצעה · מחשבון מפורט</div>
       </div>
       <div class="quick-card" onclick="navigateTo('finances')">
         <span class="quick-card-icon">💰</span>
@@ -1190,7 +1185,7 @@ body { min-height: 100vh; }
     <h3 class="card-title">🏠 דף הבית</h3>
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
       <li><b>סיכום החודש</b> — הכנסות, רווח נטו ומספר תיקונים. מתעדכן מכל תיקון שנשמר.</li>
-      <li><b>פעולות מהירות</b> — קיצורים לכל המסכים. <b>זו הדרך היחידה לנווט</b>: אין תפריט תחתון. 10 כרטיסים, ומסכים קרובים מקובצים לטאבים בראש העמוד — <b>לקוחות ואחריות</b> (לקוחות · אחריות · תיעוד עסקי) ו<b>כספים</b> (כספים · שעון עובדים · סטטיסטיקה). עורך המדבקות נפתח מתוך "מדבקות".</li>
+      <li><b>פעולות מהירות</b> — קיצורים לכל המסכים. <b>זו הדרך היחידה לנווט</b>: אין תפריט תחתון. 9 כרטיסים, ומסכים קרובים מקובצים לטאבים בראש העמוד — <b>תמחור ומכירות</b> (מחיר מהיר ומכירות · מחשבון מפורט), <b>לקוחות ואחריות</b> (לקוחות · אחריות · תיעוד עסקי) ו<b>כספים</b> (כספים · שעון עובדים · סטטיסטיקה). עורך המדבקות נפתח מתוך "מדבקות".</li>
       <li><b>חזרה לדף הבית</b> — לחיצה על הלוגו 🔋 בראש המסך, מכל מקום.</li>
       <li><b>מחירוני PDF</b> — הורדת מחירון עסקי וקמעונאי.</li>
     </ul>
@@ -1302,9 +1297,8 @@ body { min-height: 100vh; }
 <!-- ============ ORDERS PAGE ============ -->
 <section id="page-orders" class="page">
   <div class="page-header">
-    <h2 class="page-title">🛒 תמחור, מכירות ותיקונים</h2>
+    <h2 class="page-title">🛒 תמחור ומכירות</h2>
     <div class="btn-group">
-      <button class="btn btn-secondary btn-sm" onclick="navigateTo('calc')">🧮 מחשבון מפורט</button>
       <button class="btn btn-primary btn-sm" onclick="openOrderEditor()">🛒 מכירה / הצעה</button>
     </div>
   </div>
@@ -1805,6 +1799,10 @@ function openExternal(url) {
 // 2026-08-02): 15 cards was more choices than the hub has distinct jobs. Nothing moved —
 // each page is still its own <section>; they just share an entry point and a tab strip.
 const PAGE_GROUPS = [
+  // Both pages price the same visit — one a repair, one a product. The orders page already
+  // carried a "🧮 מחשבון מפורט" button to reach the other, which is a tab pair written the
+  // long way; that button is now the strip.
+  { tabs: [['orders', '🛒 מחיר מהיר ומכירות'], ['calc', '🧮 מחשבון מפורט']] },
   { tabs: [['customers', '👥 לקוחות'], ['warranties', '🛡️ אחריות'], ['bizdocs', '🏢 תיעוד עסקי']] },
   { tabs: [['finances', '💰 כספים'], ['worktime', '⏱️ שעון עובדים'], ['stats', '📊 סטטיסטיקה']] },
 ];
