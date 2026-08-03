@@ -1835,10 +1835,34 @@ async function showNavBlocked(url, err) {
       כתובת: <span style="word-break:break-all;">${url}</span><br>
       WebView: <b>${isWv}</b> · תצוגה: ${standalone}<br>
       Service worker: <b>${sw}</b>${err ? '<br>שגיאה: ' + err : ''}<br>
+      <span id="navReach">בודק אם המכשיר בכלל מגיע לכתובת…</span><br>
       <span style="opacity:.8;">${ua}</span>
     </div>
     <button class="btn btn-secondary btn-sm btn-block" style="margin-top:8px;" onclick="copyNavDiag()">📋 העתק את הפרטים</button>
   </div>`;
+  reachTest(url);
+}
+
+// Separates "the WebView refused to navigate" from "the network refused the host". A
+// no-cors fetch cannot read the response, but it still tells us whether the request
+// completed at all — and the hub's own origin is the control, so a probe that fails on
+// BOTH means the test itself is unreliable rather than the target being blocked.
+async function reachTest(url) {
+  const el = document.getElementById('navReach');
+  if (!el) return;
+  const probe = async (u) => {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 5000);
+    try {
+      await fetch(u, { mode: 'no-cors', cache: 'no-store', signal: c.signal });
+      return 'הגיע';
+    } catch (e) {
+      return (e && e.name === 'AbortError') ? 'תקיעה (timeout)' : 'נחסם';
+    } finally { clearTimeout(t); }
+  };
+  const target = await probe(url);
+  const control = await probe(location.origin + '/manifest.webmanifest');
+  el.innerHTML = `גישה לרשת: <b>${url.replace(/^https?:\/\//, '').split('/')[0]} — ${target}</b> · הלוח עצמו — ${control}`;
 }
 function copyNavDiag() {
   const el = document.getElementById('navDiag');
