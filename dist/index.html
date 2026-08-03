@@ -2590,6 +2590,13 @@ function renderWarranties() {
         <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
           ${(j.voltage && j.capacity) ? `🔋 ${j.voltage}V ${j.capacity}Ah${VEHICLE_LABELS[j.vehicle] ? ' · ' + VEHICLE_LABELS[j.vehicle] : ''}` : ('🔧 ' + (j.quickRepair || 'תיקון'))} · ₪${(Number(j.price) || 0).toLocaleString('he-IL')}
         </div>
+        <!-- What the warranty actually covers. A job from the calculator showed only the
+             battery spec, so a year later the record said "60V 21Ah" and not whether we
+             had replaced the BMS or three rows of cells — which is the thing being
+             claimed against. -->
+        <div style="font-size: 12px; color: var(--primary); margin-top: 3px; font-weight: 600;">
+          🔧 ${jobTypeLabel(j)}
+        </div>
         <div style="font-size: 11px; color: var(--text-light); margin-top: 2px;">
           תיקון: ${new Date(j.date).toLocaleDateString('he-IL')} · אחריות עד: ${end.toLocaleDateString('he-IL')}
         </div>
@@ -4509,6 +4516,15 @@ function syncWarrantyLabel() {
 // did not touch (Daniel, 2026-08-03). captest is in for the same reason as diag: it is a
 // measurement, not a repair. Add a job to this list and it stops carrying a warranty.
 const INSPECTION_ONLY = ['diag', 'captest'];
+// The human name of what was done. Jobs from the calculator carry `jobs` (keys into
+// JOB_LABELS); jobs from the quick pricer carry `quickRepair` (already a name).
+function jobTypeLabel(j) {
+  if (!j) return 'תיקון';
+  const arr = Array.isArray(j.jobs) ? j.jobs : [];
+  const named = arr.map((k) => JOB_LABELS[k] || k).filter(Boolean);
+  if (named.length) return named.join(' · ');
+  return j.quickRepair || 'תיקון';
+}
 // A job that includes "בנייה מלאה" is a new battery, not a repair.
 function warrantyFor(jobs) {
   const set = jobs || (typeof state !== 'undefined' && state.jobs) || new Set();
