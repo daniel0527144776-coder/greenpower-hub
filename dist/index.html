@@ -387,6 +387,27 @@ body { min-height: 100vh; }
     </div>
   </div>
 
+  <!-- Google from inside the app, for a phone with no browser.
+       This has to NAVIGATE, not embed: google.com answers X-Frame-Options: SAMEORIGIN, so
+       an iframe renders nothing — same for Gmail. And it cannot use openExternal(), whose
+       <a target="_blank"> does nothing in a WebView without multi-window support (that is
+       the very reason openExternal replaced window.open).
+       location.href works because MainActivity's shouldOverrideUrlLoading returns false for
+       http/https — the page loads inside the app — and onBackPressed calls webView.goBack(),
+       so the hardware back button returns here. -->
+  <div class="card">
+    <h3 class="card-title">🌐 גוגל</h3>
+    <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">נפתח <b>בתוך האפליקציה</b>, בלי דפדפן. לחזרה — כפתור "אחורה" של הטלפון.</p>
+    <div class="form-row" style="margin-bottom:8px;">
+      <input type="text" class="form-input-wide" id="gQuery" placeholder="חפש בגוגל…" style="width:100%;" onkeydown="if(event.key==='Enter')googleSearch()">
+    </div>
+    <button class="btn btn-primary btn-block btn-sm" style="margin-bottom:8px;" onclick="googleSearch()">🔍 חפש</button>
+    <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://mail.google.com/')">📧 Gmail</button>
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://business.google.com/')">🏪 העסק שלי</button>
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://drive.google.com/')">📁 Drive</button>
+    </div>
+  </div>
 
 </section>
 
@@ -1172,6 +1193,7 @@ body { min-height: 100vh; }
       <li><b>פעולות מהירות</b> — קיצורים לכל המסכים. <b>זו הדרך היחידה לנווט</b>: אין תפריט תחתון. 9 כרטיסים, ומסכים קרובים מקובצים לטאבים בראש העמוד — <b>תמחור ומכירות</b> (מחיר מהיר ומכירות · מחשבון מפורט), <b>לקוחות ואחריות</b> (לקוחות · אחריות · תיעוד עסקי) ו<b>כספים</b> (כספים · שעון עובדים · סטטיסטיקה). עורך המדבקות נפתח מתוך "מדבקות".</li>
       <li><b>חזרה לדף הבית</b> — לחיצה על הלוגו 🔋 בראש המסך, מכל מקום.</li>
       <li><b>מחירוני PDF</b> — הורדת מחירון עסקי וקמעונאי.</li>
+      <li><b>🌐 גוגל</b> — חיפוש, Gmail, "העסק שלי" ו-Drive, <b>מתוך האפליקציה</b> ובלי דפדפן. הדף נטען באותו חלון; כפתור "אחורה" של הטלפון מחזיר ללוח. הטמעה בתוך הלוח לא אפשרית — גוגל חוסמת אותה.</li>
     </ul>
   </div>
 
@@ -1770,6 +1792,19 @@ const Sync = {
 };
 
 // ---- Open external URL reliably (window.open is often blocked in a standalone PWA / WebView) ----
+// Leaves the hub in the SAME window. openExternal() opens a new one, which a WebView with
+// no multi-window support silently swallows — and this exists precisely for the phone that
+// has no browser to fall back on. The WebView's back button restores the hub.
+function goExternal(url) {
+  if (!url) return;
+  location.href = url;
+}
+function googleSearch() {
+  const el = document.getElementById('gQuery');
+  const q = (el && el.value || '').trim();
+  // An empty query would land on google.com's home page, which is a fine outcome too.
+  goExternal(q ? 'https://www.google.com/search?q=' + encodeURIComponent(q) : 'https://www.google.com/');
+}
 function openExternal(url) {
   if (!url) return;
   try {
