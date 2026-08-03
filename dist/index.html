@@ -737,6 +737,7 @@ body { min-height: 100vh; }
     <button class="btn btn-primary" style="flex: 1;" onclick="saveJob()">💾 שמור תיקון</button>
     <button class="btn btn-accent" style="flex: 1;" onclick="generateInvoice()">🧾 חשבונית</button>
     <button class="btn btn-accent" style="flex: 1; background: #25D366;" onclick="generateWhatsApp()">💬 וואטסאפ</button>
+    <button class="btn btn-accent" style="flex: 1; background: #229ED9;" onclick="generateTelegram()">✈️ טלגרם</button>
   </div>
 
   <div id="whatsappPreview" class="whatsapp-preview" style="display: none;"></div>
@@ -1186,6 +1187,7 @@ body { min-height: 100vh; }
       <li><b>מרכיבי תיקון</b> — סמן כמה במקביל: שורות, תאים בודדים, תאים נפוחים, תוספות.</li>
       <li><b>פירוט חלפים (BOM)</b> מחושב אוטומטית.</li>
       <li><b>שמור תיקון</b> — מוסיף לקוח, מעדכן הכנסות/סטטיסטיקות, ופותח אחריות.</li>
+      <li><b>שליחה ללקוח</b> — <b>וואטסאפ</b> מעתיק את ההצעה ללוח (מדביקים ידנית); <b>טלגרם</b> פותח את טלגרם עם ההצעה כבר בפנים ורק בוחרים איש קשר. אותו נוסח בשניהם.</li>
     </ol>
     <p style="font-size:12px;color:var(--text-light);margin:8px 0 0;">💡 כפתור "איפוס" מנקה את המחשבון להתחלה חדשה.</p>
   </div>
@@ -2264,11 +2266,10 @@ function saveJob() {
 }
 
 // ---- WhatsApp message generation ----
-function generateWhatsApp() {
-  if (state.jobs.size === 0) {
-    alert('בחר סוג תיקון תחילה');
-    return;
-  }
+// The quote text, built once. WhatsApp and Telegram send the SAME message — two copies of
+// this template would drift the first time a line changes, which is how the warranty
+// wording ended up different in three documents.
+function buildQuoteMsg() {
   const v = document.getElementById('voltage').value;
   const cap = document.getElementById('capacity').value;
   const config = calcConfig();
@@ -2277,16 +2278,34 @@ function generateWhatsApp() {
   const selected = Array.from(state.jobs).map(j => '✓ ' + JOB_LABELS[j]).join('\n');
   const custName = document.getElementById('custName').value;
   const delivery = document.getElementById('deliveryTime').textContent;
+  return `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך:\n🔋 ${v}V ${cap}Ah · תצורת ${config.s}S${config.p}P\n\n📋 העבודה כוללת:\n${selected}\n\n⏱️ ${hours} שעות עבודה\n📦 ${delivery}\n\n💰 *מחיר סופי: ${price}*\n\n${warrantyFor() ? '✅ אחריות מלאה ' + warrantyFor() + ' חודשים על העבודה והחלקים' : 'ℹ️ אבחון בלבד — ללא אחריות'}\n🔧 תאים מסוג Grade A · מעבדה מקצועית\n\nאשמח לקבוע מועד! 🔋⚡\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
+}
 
-  const msg = `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך:\n🔋 ${v}V ${cap}Ah · תצורת ${config.s}S${config.p}P\n\n📋 העבודה כוללת:\n${selected}\n\n⏱️ ${hours} שעות עבודה\n📦 ${delivery}\n\n💰 *מחיר סופי: ${price}*\n\n${warrantyFor() ? '✅ אחריות מלאה ' + warrantyFor() + ' חודשים על העבודה והחלקים' : 'ℹ️ אבחון בלבד — ללא אחריות'}\n🔧 תאים מסוג Grade A · מעבדה מקצועית\n\nאשמח לקבוע מועד! 🔋⚡\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
-
+function showQuotePreview(msg) {
   const ta = document.getElementById('whatsappPreview');
   ta.textContent = msg;
   ta.style.display = 'block';
   document.getElementById('invoicePreview').style.display = 'none';
   ta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
 
+function generateWhatsApp() {
+  if (state.jobs.size === 0) { alert('בחר סוג תיקון תחילה'); return; }
+  const msg = buildQuoteMsg();
+  showQuotePreview(msg);
   navigator.clipboard.writeText(msg).then(() => alert('✅ ההודעה הועתקה ללוח! הדבק אותה בוואטסאפ או בכל אפליקציה אחרת.'));
+}
+
+// Telegram takes the text in the URL and opens its own contact picker, so unlike the
+// WhatsApp button — which can only copy to the clipboard — this actually hands the quote
+// to the app. The clipboard copy still runs as a fallback: the share link is long, and if
+// Telegram is not installed nothing opens and the text would otherwise be lost.
+function generateTelegram() {
+  if (state.jobs.size === 0) { alert('בחר סוג תיקון תחילה'); return; }
+  const msg = buildQuoteMsg();
+  showQuotePreview(msg);
+  if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(() => {});
+  openExternal('https://t.me/share/url?url=' + encodeURIComponent(bizDetails.site || 'https://energylabgreen.com') + '&text=' + encodeURIComponent(msg));
 }
 
 // ---- Invoice generation ----
