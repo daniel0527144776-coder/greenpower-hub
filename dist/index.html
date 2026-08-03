@@ -729,7 +729,7 @@ body { min-height: 100vh; }
       <button class="btn btn-secondary btn-sm" onclick="clearOverride()">↺</button>
     </div>
     <div class="result-warranty" id="overrideNote" style="display:none;"></div>
-    <div class="result-warranty">🛡️ אחריות מלאה <span id="calcWarrantyMonths">6</span> חודשים</div>
+    <div class="result-warranty" id="calcWarrantyBox">🛡️ אחריות מלאה <b>6</b> חודשים</div>
   </div>
 
   <!-- Action buttons -->
@@ -2216,7 +2216,9 @@ function saveJob() {
     photoBefore: state.photoBefore,
     photoAfter: state.photoAfter,
     warrantyMonths: warrantyFor(),
-    warrantyEnd: new Date(Date.now() + warrantyFor() * 30 * 24 * 60 * 60 * 1000).toISOString()
+    // null, not a date. The warranties page lists every job that HAS a warrantyEnd, so a
+    // zero-month job would appear there and expire the same day it was created.
+    warrantyEnd: warrantyFor() ? new Date(Date.now() + warrantyFor() * 30 * 24 * 60 * 60 * 1000).toISOString() : null
   };
 
   const jobs = Store.get('jobs') || [];
@@ -2276,7 +2278,7 @@ function generateWhatsApp() {
   const custName = document.getElementById('custName').value;
   const delivery = document.getElementById('deliveryTime').textContent;
 
-  const msg = `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך:\n🔋 ${v}V ${cap}Ah · תצורת ${config.s}S${config.p}P\n\n📋 העבודה כוללת:\n${selected}\n\n⏱️ ${hours} שעות עבודה\n📦 ${delivery}\n\n💰 *מחיר סופי: ${price}*\n\n✅ אחריות מלאה ${warrantyFor()} חודשים על העבודה והחלקים\n🔧 תאים מסוג Grade A · מעבדה מקצועית\n\nאשמח לקבוע מועד! 🔋⚡\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
+  const msg = `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך:\n🔋 ${v}V ${cap}Ah · תצורת ${config.s}S${config.p}P\n\n📋 העבודה כוללת:\n${selected}\n\n⏱️ ${hours} שעות עבודה\n📦 ${delivery}\n\n💰 *מחיר סופי: ${price}*\n\n${warrantyFor() ? '✅ אחריות מלאה ' + warrantyFor() + ' חודשים על העבודה והחלקים' : 'ℹ️ אבחון בלבד — ללא אחריות'}\n🔧 תאים מסוג Grade A · מעבדה מקצועית\n\nאשמח לקבוע מועד! 🔋⚡\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
 
   const ta = document.getElementById('whatsappPreview');
   ta.textContent = msg;
@@ -2363,7 +2365,7 @@ function generateInvoice() {
     </div>
 
     <div style="font-size: 11px; color: #555; line-height: 1.7; border-top: 2px solid #E5E7EB; padding-top: 14px;">
-      <div><strong style="color: #1F4E79;">🛡️ אחריות:</strong> ${warrantyFor()} חודשים על העבודה והחלקים, מתאריך הוצאת ההצעה.</div>
+      <div><strong style="color: #1F4E79;">🛡️ אחריות:</strong> ${warrantyFor() ? warrantyFor() + ' חודשים על העבודה והחלקים' : 'אבחון בלבד — ללא אחריות'}, מתאריך הוצאת ההצעה.</div>
       <div style="margin-top: 6px;"><strong>⏱️ זמן עבודה:</strong> 3-5 ימי עבודה מרגע קבלת הסוללה למעבדה.</div>
       <div style="margin-top: 6px;"><strong>איכות:</strong> תאי Grade A בלבד · עבודה במעבדה מקצועית · ציוד מתקדם</div>
       <div style="margin-top: 6px;"><strong>שעות פעילות:</strong> א'-ה' 10:30-19:30 · ו' 10:30-14:00</div>
@@ -4495,14 +4497,24 @@ function saveSettings() {
 // the printed quote and the saved warranty record all used WARRANTY_MONTHS. Change the
 // setting to 12 and the screen kept promising 6 — three documents, two different numbers.
 function syncWarrantyLabel() {
-  const el = document.getElementById('calcWarrantyMonths');
-  if (el) el.textContent = warrantyFor();
+  const box = document.getElementById('calcWarrantyBox');
+  if (!box) return;
+  const m = warrantyFor();
+  box.innerHTML = m
+    ? `🛡️ אחריות מלאה <b>${m}</b> חודשים`
+    : 'ℹ️ אבחון בלבד — <b>ללא אחריות</b> (לא בוצעה עבודה על הסוללה)';
 }
+// Jobs that only MEASURE the battery. Nothing is replaced and nothing is soldered, so
+// there is no work to stand behind — a warranty here would be a promise about a pack we
+// did not touch (Daniel, 2026-08-03). captest is in for the same reason as diag: it is a
+// measurement, not a repair. Add a job to this list and it stops carrying a warranty.
+const INSPECTION_ONLY = ['diag', 'captest'];
 // A job that includes "בנייה מלאה" is a new battery, not a repair.
 function warrantyFor(jobs) {
   const set = jobs || (typeof state !== 'undefined' && state.jobs) || new Set();
-  const has = set.has ? (j) => set.has(j) : (j) => Array.prototype.includes.call(set, j);
-  return has('full') ? WARRANTY_BUILD : WARRANTY_MONTHS;
+  const arr = set.has ? [...set] : Array.from(set);
+  if (arr.length && arr.every((j) => INSPECTION_ONLY.includes(j))) return 0;
+  return arr.includes('full') ? WARRANTY_BUILD : WARRANTY_MONTHS;
 }
 // Quick-pricer rows: lab-service categories are repairs, everything else is a product.
 function warrantyForItem(item) {
