@@ -1,4 +1,4 @@
-const CACHE = 'gp-hub-v117';
+const CACHE = 'gp-hub-v118';
 const ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,14 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // Same-origin only. This handler used to answer EVERY GET, including a top-level
+  // navigation to another site — and a cross-origin request pulled through fetch() here
+  // comes back opaque, which a browser will not render as a document. The navigation then
+  // dies with no error and no page: pressing the Google buttons appeared to do nothing.
+  // Returning early hands those requests straight to the network, untouched.
+  let sameOrigin = false;
+  try { sameOrigin = new URL(e.request.url).origin === self.location.origin; } catch (err) { sameOrigin = false; }
+  if (!sameOrigin) return;
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fetchPromise = fetch(e.request).then(networkResp => {
