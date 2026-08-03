@@ -407,6 +407,7 @@ body { min-height: 100vh; }
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://business.google.com/')">🏪 העסק שלי</button>
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://drive.google.com/')">📁 Drive</button>
     </div>
+    <div id="navDiag" style="display:none;margin-top:10px;"></div>
   </div>
 
 </section>
@@ -1795,9 +1796,54 @@ const Sync = {
 // Leaves the hub in the SAME window. openExternal() opens a new one, which a WebView with
 // no multi-window support silently swallows — and this exists precisely for the phone that
 // has no browser to fall back on. The WebView's back button restores the hub.
+//
+// A blocked navigation produces NOTHING — no error, no page, no event. That is untestable
+// from here and unreportable by the user ("the button does nothing" fits four different
+// causes). So: start a timer, and if we are still on this page a second later, say so and
+// print what the device actually is. A silent failure becomes a readable one.
 function goExternal(url) {
   if (!url) return;
-  location.href = url;
+  const box = document.getElementById('navDiag');
+  if (box) box.style.display = 'none';
+  const t = setTimeout(() => showNavBlocked(url), 1100);
+  const cancel = () => clearTimeout(t);
+  window.addEventListener('pagehide', cancel, { once: true });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); }, { once: true });
+  try { location.href = url; } catch (e) { cancel(); showNavBlocked(url, e && e.message); }
+}
+async function showNavBlocked(url, err) {
+  const box = document.getElementById('navDiag');
+  if (!box) return;
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ? 'standalone (PWA)' : 'רגיל';
+  const ua = navigator.userAgent || '';
+  // "wv" in the UA is Android's marker for a WebView. Its absence on a phone with no
+  // browser means the hub is running as an installed PWA, which cannot leave its scope.
+  const isWv = /\bwv\b/.test(ua) ? 'כן — WebView' : 'לא';
+  let sw = 'אין';
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      // typeof, not window.caches — a WebView exposes CacheStorage as a bare global in
+      // some builds, and reading it off window there gives undefined.
+      const keys = (typeof caches !== 'undefined' ? await caches.keys() : []) || [];
+      sw = keys.find((k) => k.indexOf('gp-hub') === 0) || 'פעיל (גרסה לא ידועה)';
+    }
+  } catch (e) { sw = 'שגיאה'; }
+  box.style.display = 'block';
+  box.innerHTML = `<div class="alert alert-warning" style="display:block;">
+    <b>הניווט נחסם — הדף לא נפתח.</b>
+    <div style="font-size:11px;margin-top:8px;line-height:1.9;">
+      כתובת: <span style="word-break:break-all;">${url}</span><br>
+      WebView: <b>${isWv}</b> · תצוגה: ${standalone}<br>
+      Service worker: <b>${sw}</b>${err ? '<br>שגיאה: ' + err : ''}<br>
+      <span style="opacity:.8;">${ua}</span>
+    </div>
+    <button class="btn btn-secondary btn-sm btn-block" style="margin-top:8px;" onclick="copyNavDiag()">📋 העתק את הפרטים</button>
+  </div>`;
+}
+function copyNavDiag() {
+  const el = document.getElementById('navDiag');
+  if (el && navigator.clipboard) navigator.clipboard.writeText(el.textContent.replace(/\s+/g, ' ').trim())
+    .then(() => alert('✅ הועתק — שלח לי את זה'));
 }
 function googleSearch() {
   const el = document.getElementById('gQuery');
