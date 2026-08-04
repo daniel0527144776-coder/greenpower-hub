@@ -597,7 +597,6 @@ body { min-height: 100vh; }
       <div class="pill" onclick="applyCombo(['diag'])">🔍 אבחון בלבד</div>
       <div class="pill" onclick="applyCombo(['bms','shrink','wires'])">🔌 BMS + שרינק + צמה</div>
       <div class="pill" onclick="applyCombo(['nicfix','shrink','balance'])">⚡ נתקים + בידוד</div>
-      <div class="pill" onclick="applyCombo(['full'])">🔋 בנייה מלאה</div>
       <div class="pill" onclick="applyCombo(['water','shrink','wires'])">💧 נזק מים</div>
       <div class="pill" onclick="applyCombo(['bms_upgrade','shrink'])">⬆️ שדרוג BMS</div>
     </div>
@@ -4661,6 +4660,13 @@ function syncWarrantyLabel() {
 // did not touch (Daniel, 2026-08-03). captest is in for the same reason as diag: it is a
 // measurement, not a repair. Add a job to this list and it stops carrying a warranty.
 const INSPECTION_ONLY = ['diag', 'captest'];
+// Job types that must have NO way to select them. 'full' was removed from the job grid on
+// 2026-08-02 because a new pack is priced from the catalog, not from parts x 1.5 + labour
+// — but the "חבילות מהירות" card still offered it, so it stayed one tap away and quoted a
+// 60V 21Ah at ₪2,380 against a list price of ₪3,370. Removing the obvious entry point is
+// not the same as removing the feature. audit-hub.mjs asserts nothing here appears in any
+// handler, so the next one cannot survive in a corner of the markup.
+const RETIRED_JOBS = ['full'];
 // The human name of what was done. Jobs from the calculator carry `jobs` (keys into
 // JOB_LABELS); jobs from the quick pricer carry `quickRepair` (already a name).
 function jobTypeLabel(j) {
