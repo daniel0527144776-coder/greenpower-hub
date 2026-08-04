@@ -1155,6 +1155,23 @@ body { min-height: 100vh; }
     </div>
   </div>
 
+  <!-- External help. The phone has no browser, and the WebView loads https:// in place (its
+       shouldOverrideUrlLoading returns false for http/https), so the hub is the only way to
+       reach a web page there. onBackPressed calls webView.goBack(), so the back button
+       returns here. -->
+  <div class="card">
+    <h3 class="card-title">💬 עזרה של וואטסאפ</h3>
+    <p style="font-size:13px;line-height:1.8;color:var(--text-muted);margin:0 0 10px;">
+      מרכז העזרה הרשמי של וואטסאפ — גיבוי צ'אטים, העברת מספר למכשיר חדש, וואטסאפ עסקי, בעיות בשליחה.
+      נפתח בתוך האפליקציה; חזרה עם כפתור ה־<b>חזור</b> של הטלפון.
+    </p>
+    <div class="btn-group">
+      <button class="btn btn-sm" style="background:#25D366;color:#fff;border:none;" onclick="openExternal('https://faq.whatsapp.com/')">📖 מרכז העזרה</button>
+      <button class="btn btn-sm btn-secondary" onclick="openExternal('https://business.whatsapp.com/')">🏢 וואטסאפ עסקי</button>
+      <button class="btn btn-sm btn-secondary" onclick="openExternal('https://web.whatsapp.com/')">💻 וואטסאפ ווב</button>
+    </div>
+  </div>
+
   <div class="card">
     <h3 class="card-title">👋 מה זו המערכת</h3>
     <p style="font-size:13px;line-height:1.8;color:var(--text-muted);margin:0;">
@@ -1824,13 +1841,25 @@ function sendWhatsApp(phone, msg, whoFor) {
   return true;
 }
 
+// Opens a page. The two things that must both work are a browser tab (desktop) and the
+// WebView APK on Daniel's phone, and they need opposite things.
+//
+// The old version created <a target="_blank"> and clicked it, with a catch() fallback to
+// same-window. The catch never fires in the WebView, because nothing throws — MainActivity
+// sets no setSupportMultipleWindows(true) and overrides no onCreateWindow, so a _blank click
+// is silently DISCARDED. That is why buttons appeared dead on the phone: the sticker editor
+// and the supplier PDF have been unreachable there, not just the links added this session.
+//
+// window.open returns null when it is refused (standalone PWA) instead of throwing, so it is
+// the one form that can actually be tested. If it gives back a window we are done; otherwise
+// navigate in place, which every environment honours and which the app recovers from — its
+// onBackPressed calls webView.goBack().
 function openExternal(url) {
   if (!url) return;
-  try {
-    const a = document.createElement('a');
-    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-    document.body.appendChild(a); a.click(); a.remove();
-  } catch (e) { try { location.href = url; } catch (e2) {} }
+  let w = null;
+  try { w = window.open(url, '_blank', 'noopener'); } catch (e) { w = null; }
+  if (w) return;
+  try { location.href = url; } catch (e) {}
 }
 
 // ---- Navigation ----
