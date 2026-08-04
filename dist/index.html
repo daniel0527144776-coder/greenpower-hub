@@ -758,7 +758,7 @@ body { min-height: 100vh; }
     <button class="btn btn-primary" style="flex: 1;" onclick="saveJob()">💾 שמור תיקון</button>
     <button class="btn btn-accent" style="flex: 1;" onclick="generateInvoice()">🧾 חשבונית</button>
     <button class="btn btn-accent" style="flex: 1; background: #25D366;" onclick="generateWhatsApp()">💬 וואטסאפ</button>
-    <button class="btn btn-accent" style="flex: 1; background: #229ED9;" onclick="generateTelegram()">✈️ טלגרם</button>
+    <button class="btn btn-accent" style="flex: 1; background: #229ED9;" onclick="generateTelegram()">📤 שלח</button>
   </div>
 
   <div id="whatsappPreview" class="whatsapp-preview" style="display: none;"></div>
@@ -1209,7 +1209,7 @@ body { min-height: 100vh; }
       <li><b>מרכיבי תיקון</b> — סמן כמה במקביל: שורות, תאים בודדים, תאים נפוחים, תוספות.</li>
       <li><b>פירוט חלפים (BOM)</b> מחושב אוטומטית.</li>
       <li><b>שמור תיקון</b> — מוסיף לקוח, מעדכן הכנסות/סטטיסטיקות, ופותח אחריות.</li>
-      <li><b>שליחה ללקוח</b> — <b>וואטסאפ</b> מעתיק את ההצעה ללוח (מדביקים ידנית); <b>טלגרם</b> פותח את טלגרם עם ההצעה כבר בפנים ורק בוחרים איש קשר. אותו נוסח בשניהם.</li>
+      <li><b>שליחה ללקוח</b> — <b>וואטסאפ</b> מעתיק את ההצעה ללוח (מדביקים ידנית); <b>שלח</b> פותח את תפריט השיתוף של אנדרואיד ובוחרים כל אפליקציה מותקנת. אותו נוסח בשניהם, וההצעה מועתקת ללוח בכל מקרה.</li>
     </ol>
     <p style="font-size:12px;color:var(--text-light);margin:8px 0 0;">💡 כפתור "איפוס" מנקה את המחשבון להתחלה חדשה.</p>
   </div>
@@ -2418,19 +2418,41 @@ function generateTelegram() {
   if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(() => {});
   shareToTelegram(msg);
 }
-function shareToTelegram(msg) {
+// Three routes, best first.
+//
+// 1. The native share sheet. Android shows every app that can receive text — Telegram,
+//    WhatsApp, SMS, mail — so it does not matter which one is installed, and no scheme
+//    has to be guessed. Needs a user gesture, which a button click is.
+// 2. tg: — straight into Telegram, for the case where the share sheet is unavailable.
+// 3. Say it plainly. The old fallback sent him to t.me, which on a phone WITHOUT Telegram
+//    is a "Download Telegram" page — an answer to a question nobody asked, and it looked
+//    like the feature half-worked. The text is already on the clipboard by then, so the
+//    honest move is to say so.
+async function shareToTelegram(msg) {
   const box = document.getElementById('navDiag');
   if (box) box.style.display = 'none';
-  // If the app scheme does nothing, we are still here a moment later — fall back to the
-  // web share page, and only if THAT also fails do we report it.
-  const t = setTimeout(() => {
-    const url = 'https://t.me/share/url?url=' + encodeURIComponent('https://energylabgreen.com') + '&text=' + encodeURIComponent(msg);
-    goExternal(url);
-  }, 900);
+  if (navigator.share) {
+    try { await navigator.share({ text: msg }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }   // user closed the sheet — not a failure
+  }
+  const t = setTimeout(() => shareFailed(), 900);
   const cancel = () => clearTimeout(t);
   window.addEventListener('pagehide', cancel, { once: true });
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); }, { once: true });
-  try { location.href = 'tg://msg?text=' + encodeURIComponent(msg); } catch (e) { /* fall through to the timer */ }
+  try { location.href = 'tg://msg?text=' + encodeURIComponent(msg); } catch (e) { /* timer reports it */ }
+}
+function shareFailed() {
+  const box = document.getElementById('navDiag');
+  if (!box) return;
+  box.style.display = 'block';
+  box.innerHTML = `<div class="alert alert-warning" style="display:block;">
+    <b>לא נמצאה אפליקציה לשליחה.</b>
+    <div style="font-size:12px;margin-top:6px;line-height:1.8;">
+      ההצעה <b>כבר הועתקה ללוח</b> — פתח וואטסאפ או כל אפליקציה אחרת והדבק.<br>
+      <span style="opacity:.85;">טלגרם לא נפתח, כנראה לא מותקן במכשיר.</span>
+    </div>
+  </div>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ---- Invoice generation ----
