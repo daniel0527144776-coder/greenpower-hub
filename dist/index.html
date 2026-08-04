@@ -387,29 +387,6 @@ body { min-height: 100vh; }
     </div>
   </div>
 
-  <!-- Google from inside the app, for a phone with no browser.
-       This has to NAVIGATE, not embed: google.com answers X-Frame-Options: SAMEORIGIN, so
-       an iframe renders nothing — same for Gmail. And it cannot use openExternal(), whose
-       <a target="_blank"> does nothing in a WebView without multi-window support (that is
-       the very reason openExternal replaced window.open).
-       location.href works because MainActivity's shouldOverrideUrlLoading returns false for
-       http/https — the page loads inside the app — and onBackPressed calls webView.goBack(),
-       so the hardware back button returns here. -->
-  <div class="card">
-    <h3 class="card-title">🌐 גישה מהירה</h3>
-    <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">נפתח <b>בתוך האפליקציה</b>, בלי דפדפן. לחזרה — כפתור "אחורה" של הטלפון.</p>
-    <div class="form-row" style="margin-bottom:8px;">
-      <input type="text" class="form-input-wide" id="gQuery" placeholder="חפש בגוגל…" style="width:100%;" onkeydown="if(event.key==='Enter')googleSearch()">
-    </div>
-    <button class="btn btn-primary btn-block btn-sm" style="margin-bottom:8px;" onclick="googleSearch()">🔍 חפש</button>
-    <div class="btn-group">
-      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://mail.google.com/')">📧 Gmail</button>
-      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://business.google.com/')">🏪 העסק שלי</button>
-      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://drive.google.com/')">📁 Drive</button>
-    </div>
-    <button class="btn btn-secondary btn-sm btn-block" style="margin-top:8px;" onclick="openTiktok()">🎵 טיקטוק — הערוץ שלנו</button>
-    <div id="navDiag" style="display:none;margin-top:10px;"></div>
-  </div>
 
 </section>
 
@@ -759,7 +736,6 @@ body { min-height: 100vh; }
     <button class="btn btn-primary" style="flex: 1;" onclick="saveJob()">💾 שמור תיקון</button>
     <button class="btn btn-accent" style="flex: 1;" onclick="generateInvoice()">🧾 חשבונית</button>
     <button class="btn btn-accent" style="flex: 1; background: #25D366;" onclick="generateWhatsApp()">💬 וואטסאפ</button>
-    <button class="btn btn-accent" style="flex: 1; background: #229ED9;" onclick="generateTelegram()">📤 שלח</button>
   </div>
 
   <div id="whatsappPreview" class="whatsapp-preview" style="display: none;"></div>
@@ -1070,10 +1046,6 @@ body { min-height: 100vh; }
       <label>אימייל</label>
       <input type="email" class="form-input-wide" id="bizEmail" placeholder="greenpower.service.israel@gmail.com" style="width: 180px;">
     </div>
-    <div class="form-row">
-      <label>שם משתמש בטיקטוק</label>
-      <input type="text" class="form-input-wide" id="bizTiktok" placeholder="greenpower.il (בלי @)" style="width: 180px;">
-    </div>
 
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">💳 פרטי תשלום להצעת מחיר</div>
@@ -1198,7 +1170,6 @@ body { min-height: 100vh; }
       <li><b>פעולות מהירות</b> — קיצורים לכל המסכים. <b>זו הדרך היחידה לנווט</b>: אין תפריט תחתון. 9 כרטיסים, ומסכים קרובים מקובצים לטאבים בראש העמוד — <b>תמחור ומכירות</b> (מחיר מהיר ומכירות · מחשבון מפורט), <b>לקוחות ואחריות</b> (לקוחות · אחריות · תיעוד עסקי) ו<b>כספים</b> (כספים · שעון עובדים · סטטיסטיקה). עורך המדבקות נפתח מתוך "מדבקות".</li>
       <li><b>חזרה לדף הבית</b> — לחיצה על הלוגו 🔋 בראש המסך, מכל מקום.</li>
       <li><b>מחירוני PDF</b> — הורדת מחירון עסקי וקמעונאי.</li>
-      <li><b>🌐 גישה מהירה</b> — חיפוש, Gmail, "העסק שלי", Drive וטיקטוק, <b>מתוך האפליקציה</b> ובלי דפדפן. את שם המשתמש בטיקטוק מגדירים ב<b>הגדרות → פרטי העסק</b> (לא מוטמע בקובץ — הוא ציבורי). הדף נטען באותו חלון; כפתור "אחורה" של הטלפון מחזיר ללוח. הטמעה בתוך הלוח לא אפשרית — גוגל חוסמת אותה.</li>
     </ul>
   </div>
 
@@ -1214,7 +1185,6 @@ body { min-height: 100vh; }
       <li><b>מרכיבי תיקון</b> — סמן כמה במקביל: שורות, תאים בודדים, תאים נפוחים, תוספות.</li>
       <li><b>פירוט חלפים (BOM)</b> מחושב אוטומטית.</li>
       <li><b>שמור תיקון</b> — מוסיף לקוח, מעדכן הכנסות/סטטיסטיקות, ופותח אחריות.</li>
-      <li><b>שליחה ללקוח</b> — <b>וואטסאפ</b> מעתיק את ההצעה ללוח (מדביקים ידנית); <b>שלח</b> פותח את תפריט השיתוף של אנדרואיד ובוחרים כל אפליקציה מותקנת. אותו נוסח בשניהם, וההצעה מועתקת ללוח בכל מקרה.</li>
     </ol>
     <p style="font-size:12px;color:var(--text-light);margin:8px 0 0;">💡 כפתור "איפוס" מנקה את המחשבון להתחלה חדשה.</p>
   </div>
@@ -1797,102 +1767,6 @@ const Sync = {
 };
 
 // ---- Open external URL reliably (window.open is often blocked in a standalone PWA / WebView) ----
-// Leaves the hub in the SAME window. openExternal() opens a new one, which a WebView with
-// no multi-window support silently swallows — and this exists precisely for the phone that
-// has no browser to fall back on. The WebView's back button restores the hub.
-//
-// A blocked navigation produces NOTHING — no error, no page, no event. That is untestable
-// from here and unreportable by the user ("the button does nothing" fits four different
-// causes). So: start a timer, and if we are still on this page a second later, say so and
-// print what the device actually is. A silent failure becomes a readable one.
-function goExternal(url) {
-  if (!url) return;
-  const box = document.getElementById('navDiag');
-  if (box) box.style.display = 'none';
-  const t = setTimeout(() => showNavBlocked(url), 1100);
-  const cancel = () => clearTimeout(t);
-  window.addEventListener('pagehide', cancel, { once: true });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); }, { once: true });
-  try { location.href = url; } catch (e) { cancel(); showNavBlocked(url, e && e.message); }
-}
-async function showNavBlocked(url, err) {
-  const box = document.getElementById('navDiag');
-  if (!box) return;
-  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ? 'standalone (PWA)' : 'רגיל';
-  const ua = navigator.userAgent || '';
-  // "wv" in the UA is Android's marker for a WebView. Its absence on a phone with no
-  // browser means the hub is running as an installed PWA, which cannot leave its scope.
-  const isWv = /\bwv\b/.test(ua) ? 'כן — WebView' : 'לא';
-  let sw = 'אין';
-  try {
-    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-      // typeof, not window.caches — a WebView exposes CacheStorage as a bare global in
-      // some builds, and reading it off window there gives undefined.
-      const keys = (typeof caches !== 'undefined' ? await caches.keys() : []) || [];
-      sw = keys.find((k) => k.indexOf('gp-hub') === 0) || 'פעיל (גרסה לא ידועה)';
-    }
-  } catch (e) { sw = 'שגיאה'; }
-  box.style.display = 'block';
-  box.innerHTML = `<div class="alert alert-warning" style="display:block;">
-    <b>הניווט נחסם — הדף לא נפתח.</b>
-    <div style="font-size:11px;margin-top:8px;line-height:1.9;">
-      כתובת: <span style="word-break:break-all;">${url}</span><br>
-      WebView: <b>${isWv}</b> · תצוגה: ${standalone}<br>
-      Service worker: <b>${sw}</b>${err ? '<br>שגיאה: ' + err : ''}<br>
-      <span id="navReach">בודק אם המכשיר בכלל מגיע לכתובת…</span><br>
-      <span style="opacity:.8;">${ua}</span>
-    </div>
-    <button class="btn btn-secondary btn-sm btn-block" style="margin-top:8px;" onclick="copyNavDiag()">📋 העתק את הפרטים</button>
-  </div>`;
-  reachTest(url);
-}
-
-// Separates "the WebView refused to navigate" from "the network refused the host". A
-// no-cors fetch cannot read the response, but it still tells us whether the request
-// completed at all — and the hub's own origin is the control, so a probe that fails on
-// BOTH means the test itself is unreliable rather than the target being blocked.
-async function reachTest(url) {
-  const el = document.getElementById('navReach');
-  if (!el) return;
-  const probe = async (u) => {
-    const c = new AbortController();
-    const t = setTimeout(() => c.abort(), 5000);
-    try {
-      await fetch(u, { mode: 'no-cors', cache: 'no-store', signal: c.signal });
-      return 'הגיע';
-    } catch (e) {
-      return (e && e.name === 'AbortError') ? 'תקיעה (timeout)' : 'נחסם';
-    } finally { clearTimeout(t); }
-  };
-  const target = await probe(url);
-  const control = await probe(location.origin + '/manifest.webmanifest');
-  el.innerHTML = `גישה לרשת: <b>${url.replace(/^https?:\/\//, '').split('/')[0]} — ${target}</b> · הלוח עצמו — ${control}`;
-}
-function copyNavDiag() {
-  const el = document.getElementById('navDiag');
-  if (el && navigator.clipboard) navigator.clipboard.writeText(el.textContent.replace(/\s+/g, ' ').trim())
-    .then(() => alert('✅ הועתק — שלח לי את זה'));
-}
-// The handle lives in the synced biz settings, not here — this file is public, and it also
-// means changing it needs no deploy. Accepts "@name", "name" or a pasted profile URL,
-// because all three are what someone actually has to hand. goExternal carries the
-// diagnostic, so if the device refuses tiktok.com the way it refuses google.com, that gets
-// reported instead of looking like another dead button.
-function openTiktok() {
-  const raw = (bizDetails.tiktok || '').trim();
-  const u = raw.replace(/^https?:\/\/(www\.)?tiktok\.com\//i, '').replace(/^@+/, '').split(/[/?]/)[0];
-  if (!u) {
-    alert('לא הוגדר שם משתמש בטיקטוק.\n\nהגדרות → פרטי העסק → "שם משתמש בטיקטוק".');
-    return navigateTo('settings');
-  }
-  goExternal('https://www.tiktok.com/@' + encodeURIComponent(u));
-}
-function googleSearch() {
-  const el = document.getElementById('gQuery');
-  const q = (el && el.value || '').trim();
-  // An empty query would land on google.com's home page, which is a fine outcome too.
-  goExternal(q ? 'https://www.google.com/search?q=' + encodeURIComponent(q) : 'https://www.google.com/');
-}
 function openExternal(url) {
   if (!url) return;
   try {
@@ -2389,10 +2263,11 @@ function saveJob() {
 }
 
 // ---- WhatsApp message generation ----
-// The quote text, built once. WhatsApp and Telegram send the SAME message — two copies of
-// this template would drift the first time a line changes, which is how the warranty
-// wording ended up different in three documents.
-function buildQuoteMsg() {
+function generateWhatsApp() {
+  if (state.jobs.size === 0) {
+    alert('בחר סוג תיקון תחילה');
+    return;
+  }
   const v = document.getElementById('voltage').value;
   const cap = document.getElementById('capacity').value;
   const config = calcConfig();
@@ -2401,77 +2276,16 @@ function buildQuoteMsg() {
   const selected = Array.from(state.jobs).map(j => '✓ ' + JOB_LABELS[j]).join('\n');
   const custName = document.getElementById('custName').value;
   const delivery = document.getElementById('deliveryTime').textContent;
-  return `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך:\n🔋 ${v}V ${cap}Ah · תצורת ${config.s}S${config.p}P\n\n📋 העבודה כוללת:\n${selected}\n\n⏱️ ${hours} שעות עבודה\n📦 ${delivery}\n\n💰 *מחיר סופי: ${price}*\n\n${warrantyFor() ? '✅ אחריות מלאה ' + warrantyFor() + ' חודשים על העבודה והחלקים' : 'ℹ️ אבחון בלבד — ללא אחריות'}\n🔧 תאים מסוג Grade A · מעבדה מקצועית\n\nאשמח לקבוע מועד! 🔋⚡\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
-}
 
-function showQuotePreview(msg) {
+  const msg = `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך:\n🔋 ${v}V ${cap}Ah · תצורת ${config.s}S${config.p}P\n\n📋 העבודה כוללת:\n${selected}\n\n⏱️ ${hours} שעות עבודה\n📦 ${delivery}\n\n💰 *מחיר סופי: ${price}*\n\n${warrantyFor() ? '✅ אחריות מלאה ' + warrantyFor() + ' חודשים על העבודה והחלקים' : 'ℹ️ אבחון בלבד — ללא אחריות'}\n🔧 תאים מסוג Grade A · מעבדה מקצועית\n\nאשמח לקבוע מועד! 🔋⚡\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
+
   const ta = document.getElementById('whatsappPreview');
   ta.textContent = msg;
   ta.style.display = 'block';
   document.getElementById('invoicePreview').style.display = 'none';
   ta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
 
-function generateWhatsApp() {
-  if (state.jobs.size === 0) { alert('בחר סוג תיקון תחילה'); return; }
-  const msg = buildQuoteMsg();
-  showQuotePreview(msg);
   navigator.clipboard.writeText(msg).then(() => alert('✅ ההודעה הועתקה ללוח! הדבק אותה בוואטסאפ או בכל אפליקציה אחרת.'));
-}
-
-// Hands the quote to the Telegram APP, not to a web page.
-//
-// The first version used openExternal() and t.me — two mistakes on this phone.
-// openExternal opens a new window, which a WebView without multi-window support swallows;
-// and t.me is a website, so it needs the network to reach Telegram's servers, which is the
-// thing that turned out to be blocked for google.com.
-//
-// tg: is a scheme, not a site. MainActivity's shouldOverrideUrlLoading passes any non-http
-// URL to startActivity(ACTION_VIEW), so Android opens the installed Telegram app directly
-// — no browser, no network, nothing to filter. The clipboard copy stays as the fallback
-// for the case where Telegram is not installed and startActivity quietly throws.
-function generateTelegram() {
-  if (state.jobs.size === 0) { alert('בחר סוג תיקון תחילה'); return; }
-  const msg = buildQuoteMsg();
-  showQuotePreview(msg);
-  if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(() => {});
-  shareToTelegram(msg);
-}
-// Three routes, best first.
-//
-// 1. The native share sheet. Android shows every app that can receive text — Telegram,
-//    WhatsApp, SMS, mail — so it does not matter which one is installed, and no scheme
-//    has to be guessed. Needs a user gesture, which a button click is.
-// 2. tg: — straight into Telegram, for the case where the share sheet is unavailable.
-// 3. Say it plainly. The old fallback sent him to t.me, which on a phone WITHOUT Telegram
-//    is a "Download Telegram" page — an answer to a question nobody asked, and it looked
-//    like the feature half-worked. The text is already on the clipboard by then, so the
-//    honest move is to say so.
-async function shareToTelegram(msg) {
-  const box = document.getElementById('navDiag');
-  if (box) box.style.display = 'none';
-  if (navigator.share) {
-    try { await navigator.share({ text: msg }); return; }
-    catch (e) { if (e && e.name === 'AbortError') return; }   // user closed the sheet — not a failure
-  }
-  const t = setTimeout(() => shareFailed(), 900);
-  const cancel = () => clearTimeout(t);
-  window.addEventListener('pagehide', cancel, { once: true });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); }, { once: true });
-  try { location.href = 'tg://msg?text=' + encodeURIComponent(msg); } catch (e) { /* timer reports it */ }
-}
-function shareFailed() {
-  const box = document.getElementById('navDiag');
-  if (!box) return;
-  box.style.display = 'block';
-  box.innerHTML = `<div class="alert alert-warning" style="display:block;">
-    <b>לא נמצאה אפליקציה לשליחה.</b>
-    <div style="font-size:12px;margin-top:6px;line-height:1.8;">
-      ההצעה <b>כבר הועתקה ללוח</b> — פתח וואטסאפ או כל אפליקציה אחרת והדבק.<br>
-      <span style="opacity:.85;">טלגרם לא נפתח, כנראה לא מותקן במכשיר.</span>
-    </div>
-  </div>`;
-  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ---- Invoice generation ----
@@ -4701,12 +4515,12 @@ function syncWarrantyLabel() {
 // did not touch (Daniel, 2026-08-03). captest is in for the same reason as diag: it is a
 // measurement, not a repair. Add a job to this list and it stops carrying a warranty.
 const INSPECTION_ONLY = ['diag', 'captest'];
-// Job types that must have NO way to select them. 'full' was removed from the job grid on
-// 2026-08-02 because a new pack is priced from the catalog, not from parts x 1.5 + labour
-// — but the "חבילות מהירות" card still offered it, so it stayed one tap away and quoted a
-// 60V 21Ah at ₪2,380 against a list price of ₪3,370. Removing the obvious entry point is
-// not the same as removing the feature. audit-hub.mjs asserts nothing here appears in any
-// handler, so the next one cannot survive in a corner of the markup.
+// Job types that must have NO way to select them. 'full' was taken out of the job grid
+// because a new pack is priced from the catalog, not from parts x 1.5 + labour — but the
+// "חבילות מהירות" card still offered it, so it stayed one tap away and quoted a 60V 21Ah
+// at ₪2,380 against a list price of ₪3,370. Removing the obvious entry point is not the
+// same as removing the feature. audit-hub.mjs asserts none of these appears in any
+// handler, so the next survivor cannot hide in a corner of the markup.
 const RETIRED_JOBS = ['full'];
 // The human name of what was done. Jobs from the calculator carry `jobs` (keys into
 // JOB_LABELS); jobs from the quick pricer carry `quickRepair` (already a name).
@@ -4742,10 +4556,6 @@ function saveBizDetails() {
     address: document.getElementById('bizAddress').value,
     id: document.getElementById('bizId').value,
     email: document.getElementById('bizEmail').value,
-    // Kept here rather than hardcoded for the same reason as everything below: this file
-    // is public, and a handle in the markup is a handle published. It also means Daniel
-    // can change it without a deploy.
-    tiktok: document.getElementById('bizTiktok').value,
     // Payment details live here — in the synced `biz` key behind the login — and never
     // in the HTML. hub.energylabgreen.com serves this file to anyone who asks (the gate
     // is JS-side only), so a hardcoded account number would be published.
@@ -4914,7 +4724,6 @@ function init() {
   document.getElementById('bizAddress').value = bizDetails.address || '';
   document.getElementById('bizId').value = bizDetails.id || '';
   document.getElementById('bizEmail').value = bizDetails.email || '';
-  document.getElementById('bizTiktok').value = bizDetails.tiktok || '';
   document.getElementById('bizBit').value = bizDetails.bit || '';
   document.getElementById('bizBankHolder').value = bizDetails.bankHolder || '';
   document.getElementById('bizBankName').value = bizDetails.bankName || '';
