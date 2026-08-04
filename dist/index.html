@@ -2401,16 +2401,37 @@ function generateWhatsApp() {
   navigator.clipboard.writeText(msg).then(() => alert('✅ ההודעה הועתקה ללוח! הדבק אותה בוואטסאפ או בכל אפליקציה אחרת.'));
 }
 
-// Telegram takes the text in the URL and opens its own contact picker, so unlike the
-// WhatsApp button — which can only copy to the clipboard — this actually hands the quote
-// to the app. The clipboard copy still runs as a fallback: the share link is long, and if
-// Telegram is not installed nothing opens and the text would otherwise be lost.
+// Hands the quote to the Telegram APP, not to a web page.
+//
+// The first version used openExternal() and t.me — two mistakes on this phone.
+// openExternal opens a new window, which a WebView without multi-window support swallows;
+// and t.me is a website, so it needs the network to reach Telegram's servers, which is the
+// thing that turned out to be blocked for google.com.
+//
+// tg: is a scheme, not a site. MainActivity's shouldOverrideUrlLoading passes any non-http
+// URL to startActivity(ACTION_VIEW), so Android opens the installed Telegram app directly
+// — no browser, no network, nothing to filter. The clipboard copy stays as the fallback
+// for the case where Telegram is not installed and startActivity quietly throws.
 function generateTelegram() {
   if (state.jobs.size === 0) { alert('בחר סוג תיקון תחילה'); return; }
   const msg = buildQuoteMsg();
   showQuotePreview(msg);
   if (navigator.clipboard) navigator.clipboard.writeText(msg).catch(() => {});
-  openExternal('https://t.me/share/url?url=' + encodeURIComponent(bizDetails.site || 'https://energylabgreen.com') + '&text=' + encodeURIComponent(msg));
+  shareToTelegram(msg);
+}
+function shareToTelegram(msg) {
+  const box = document.getElementById('navDiag');
+  if (box) box.style.display = 'none';
+  // If the app scheme does nothing, we are still here a moment later — fall back to the
+  // web share page, and only if THAT also fails do we report it.
+  const t = setTimeout(() => {
+    const url = 'https://t.me/share/url?url=' + encodeURIComponent('https://energylabgreen.com') + '&text=' + encodeURIComponent(msg);
+    goExternal(url);
+  }, 900);
+  const cancel = () => clearTimeout(t);
+  window.addEventListener('pagehide', cancel, { once: true });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); }, { once: true });
+  try { location.href = 'tg://msg?text=' + encodeURIComponent(msg); } catch (e) { /* fall through to the timer */ }
 }
 
 // ---- Invoice generation ----
