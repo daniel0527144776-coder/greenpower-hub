@@ -396,7 +396,7 @@ body { min-height: 100vh; }
        http/https — the page loads inside the app — and onBackPressed calls webView.goBack(),
        so the hardware back button returns here. -->
   <div class="card">
-    <h3 class="card-title">🌐 גוגל</h3>
+    <h3 class="card-title">🌐 גישה מהירה</h3>
     <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">נפתח <b>בתוך האפליקציה</b>, בלי דפדפן. לחזרה — כפתור "אחורה" של הטלפון.</p>
     <div class="form-row" style="margin-bottom:8px;">
       <input type="text" class="form-input-wide" id="gQuery" placeholder="חפש בגוגל…" style="width:100%;" onkeydown="if(event.key==='Enter')googleSearch()">
@@ -407,6 +407,7 @@ body { min-height: 100vh; }
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://business.google.com/')">🏪 העסק שלי</button>
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="goExternal('https://drive.google.com/')">📁 Drive</button>
     </div>
+    <button class="btn btn-secondary btn-sm btn-block" style="margin-top:8px;" onclick="openTiktok()">🎵 טיקטוק — הערוץ שלנו</button>
     <div id="navDiag" style="display:none;margin-top:10px;"></div>
   </div>
 
@@ -1069,6 +1070,10 @@ body { min-height: 100vh; }
       <label>אימייל</label>
       <input type="email" class="form-input-wide" id="bizEmail" placeholder="greenpower.service.israel@gmail.com" style="width: 180px;">
     </div>
+    <div class="form-row">
+      <label>שם משתמש בטיקטוק</label>
+      <input type="text" class="form-input-wide" id="bizTiktok" placeholder="greenpower.il (בלי @)" style="width: 180px;">
+    </div>
 
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">💳 פרטי תשלום להצעת מחיר</div>
@@ -1193,7 +1198,7 @@ body { min-height: 100vh; }
       <li><b>פעולות מהירות</b> — קיצורים לכל המסכים. <b>זו הדרך היחידה לנווט</b>: אין תפריט תחתון. 9 כרטיסים, ומסכים קרובים מקובצים לטאבים בראש העמוד — <b>תמחור ומכירות</b> (מחיר מהיר ומכירות · מחשבון מפורט), <b>לקוחות ואחריות</b> (לקוחות · אחריות · תיעוד עסקי) ו<b>כספים</b> (כספים · שעון עובדים · סטטיסטיקה). עורך המדבקות נפתח מתוך "מדבקות".</li>
       <li><b>חזרה לדף הבית</b> — לחיצה על הלוגו 🔋 בראש המסך, מכל מקום.</li>
       <li><b>מחירוני PDF</b> — הורדת מחירון עסקי וקמעונאי.</li>
-      <li><b>🌐 גוגל</b> — חיפוש, Gmail, "העסק שלי" ו-Drive, <b>מתוך האפליקציה</b> ובלי דפדפן. הדף נטען באותו חלון; כפתור "אחורה" של הטלפון מחזיר ללוח. הטמעה בתוך הלוח לא אפשרית — גוגל חוסמת אותה.</li>
+      <li><b>🌐 גישה מהירה</b> — חיפוש, Gmail, "העסק שלי", Drive וטיקטוק, <b>מתוך האפליקציה</b> ובלי דפדפן. את שם המשתמש בטיקטוק מגדירים ב<b>הגדרות → פרטי העסק</b> (לא מוטמע בקובץ — הוא ציבורי). הדף נטען באותו חלון; כפתור "אחורה" של הטלפון מחזיר ללוח. הטמעה בתוך הלוח לא אפשרית — גוגל חוסמת אותה.</li>
     </ul>
   </div>
 
@@ -1867,6 +1872,20 @@ function copyNavDiag() {
   const el = document.getElementById('navDiag');
   if (el && navigator.clipboard) navigator.clipboard.writeText(el.textContent.replace(/\s+/g, ' ').trim())
     .then(() => alert('✅ הועתק — שלח לי את זה'));
+}
+// The handle lives in the synced biz settings, not here — this file is public, and it also
+// means changing it needs no deploy. Accepts "@name", "name" or a pasted profile URL,
+// because all three are what someone actually has to hand. goExternal carries the
+// diagnostic, so if the device refuses tiktok.com the way it refuses google.com, that gets
+// reported instead of looking like another dead button.
+function openTiktok() {
+  const raw = (bizDetails.tiktok || '').trim();
+  const u = raw.replace(/^https?:\/\/(www\.)?tiktok\.com\//i, '').replace(/^@+/, '').split(/[/?]/)[0];
+  if (!u) {
+    alert('לא הוגדר שם משתמש בטיקטוק.\n\nהגדרות → פרטי העסק → "שם משתמש בטיקטוק".');
+    return navigateTo('settings');
+  }
+  goExternal('https://www.tiktok.com/@' + encodeURIComponent(u));
 }
 function googleSearch() {
   const el = document.getElementById('gQuery');
@@ -4723,6 +4742,10 @@ function saveBizDetails() {
     address: document.getElementById('bizAddress').value,
     id: document.getElementById('bizId').value,
     email: document.getElementById('bizEmail').value,
+    // Kept here rather than hardcoded for the same reason as everything below: this file
+    // is public, and a handle in the markup is a handle published. It also means Daniel
+    // can change it without a deploy.
+    tiktok: document.getElementById('bizTiktok').value,
     // Payment details live here — in the synced `biz` key behind the login — and never
     // in the HTML. hub.energylabgreen.com serves this file to anyone who asks (the gate
     // is JS-side only), so a hardcoded account number would be published.
@@ -4891,6 +4914,7 @@ function init() {
   document.getElementById('bizAddress').value = bizDetails.address || '';
   document.getElementById('bizId').value = bizDetails.id || '';
   document.getElementById('bizEmail').value = bizDetails.email || '';
+  document.getElementById('bizTiktok').value = bizDetails.tiktok || '';
   document.getElementById('bizBit').value = bizDetails.bit || '';
   document.getElementById('bizBankHolder').value = bizDetails.bankHolder || '';
   document.getElementById('bizBankName').value = bizDetails.bankName || '';
