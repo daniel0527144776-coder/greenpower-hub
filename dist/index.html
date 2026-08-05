@@ -1265,6 +1265,17 @@ body { min-height: 100vh; }
       <div class="sub-tab active" data-pmode="retail" onclick="setPriceMode('retail')">מחיר פרטי</div>
       <div class="sub-tab" data-pmode="b2b" onclick="setPriceMode('b2b')">מחיר עסקי</div>
     </div>
+    <!-- The 42 battery categories all carry their tier in the name ("סוללות אופניים - 48V
+         PRO"), so the split is already in the data — it just had no way to be used. Chips
+         rather than another nesting level: 66 collapsed categories are one click from an
+         item, and a series heading on top would have made it two. -->
+    <div class="sub-tabs" id="catalogTiers" style="margin-bottom:10px;">
+      <div class="sub-tab active" data-tier="" onclick="setCatalogTier('')">הכל</div>
+      <div class="sub-tab" data-tier="CLASSIC" onclick="setCatalogTier('CLASSIC')">CLASSIC</div>
+      <div class="sub-tab" data-tier="ADVANCED" onclick="setCatalogTier('ADVANCED')">ADVANCED</div>
+      <div class="sub-tab" data-tier="PRO" onclick="setCatalogTier('PRO')">PRO</div>
+      <div class="sub-tab" data-tier="OTHER" onclick="setCatalogTier('OTHER')">ללא סדרה</div>
+    </div>
     <input type="text" class="form-input-wide" id="catalogSearch" placeholder="🔍 חיפוש מוצר (72V, מטען, סברטון...)" style="width:100%; margin-bottom:10px;" oninput="renderCatalog()">
     <select class="form-select" id="catalogCat" style="width:100%; margin-bottom:10px;" onchange="renderCatalog()"></select>
     <div class="btn-group" style="margin-bottom:10px;">
@@ -3372,6 +3383,28 @@ let showCost = false;
 function setPriceMode(m) { priceMode = m; document.querySelectorAll('[data-pmode]').forEach(e => e.classList.toggle('active', e.dataset.pmode === m)); renderCatalog(); }
 function toggleCostView() { showCost = !showCost; document.getElementById('costToggle').classList.toggle('checked', showCost); renderCatalog(); }
 
+// Which series a row belongs to. Word-boundary matching, because a substring test would put
+// every "CLASSIC" charger series ("מטענים - סדרת CLASSIC") into the CLASSIC battery tier —
+// those are chargers, not packs. The tier lives at the END of a battery category name, after
+// the voltage: "סוללות אופניים - 48V PRO".
+const TIER_RX = /\s-\s\d+V\s(PRO|ADVANCED|CLASSIC)$/;
+let catalogTier = '';
+function tierOf(it) { const m = String(it.cat || '').match(TIER_RX); return m ? m[1] : ''; }
+function tierMatches(it) {
+  if (!catalogTier) return true;
+  const t = tierOf(it);
+  return catalogTier === 'OTHER' ? !t : t === catalogTier;
+}
+function setCatalogTier(t) {
+  catalogTier = t;
+  document.querySelectorAll('#catalogTiers .sub-tab').forEach(e => e.classList.toggle('active', (e.dataset.tier || '') === t));
+  // Reset the category dropdown: picking PRO while "סוללות אופניים - 48V CLASSIC" is selected
+  // would show an empty list and look broken. The two filters are AND-ed, so one has to yield.
+  const sel = document.getElementById('catalogCat');
+  if (sel && t) sel.value = '';
+  renderCatalog();
+}
+
 function renderCatalog() {
   const sel = document.getElementById('catalogCat');
   if (sel && sel.options.length === 0) {
@@ -3380,7 +3413,9 @@ function renderCatalog() {
   }
   const q = (document.getElementById('catalogSearch')?.value || '').toLowerCase();
   const cat = document.getElementById('catalogCat')?.value || '';
-  const items = PRICING.filter(it => (!cat || it.cat === cat) && (!q || (it.name + ' ' + it.cat).toLowerCase().includes(q)));
+  const items = PRICING.filter(it => (!cat || it.cat === cat)
+    && tierMatches(it)
+    && (!q || (it.name + ' ' + it.cat).toLowerCase().includes(q)));
   document.getElementById('catalogCount').textContent = items.length + ' פריטים';
   const groups = {};
   items.forEach(it => { (groups[it.cat] = groups[it.cat] || []).push(it); });
