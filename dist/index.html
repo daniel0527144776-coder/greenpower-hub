@@ -1048,7 +1048,7 @@ body { min-height: 100vh; }
     </div>
     <div class="form-row">
       <label>כתובת</label>
-      <input type="text" class="form-input-wide" id="bizAddress" placeholder="עובדיה מברטנורא 12, אלעד" style="width: 180px;">
+      <input type="text" class="form-input-wide" id="bizAddress" placeholder="ניסים גאון 6 (בחנייה), אלעד" style="width: 180px;">
     </div>
     <div class="form-row">
       <label>ח.פ. / עוסק</label>
@@ -1588,6 +1588,11 @@ const JOB_LABELS = {
 };
 
 const VEHICLE_LABELS = { bike: 'אופניים חשמליים', scooter: 'קורקינט', motor: 'אופנוע', drill: 'מברגה', rc: 'רחפן/RC' };
+
+// The lab address, in one place. Printed on every quote and business report through the
+// synced `biz` record — see the migration in init(), which is what actually moves it for
+// a hub that already has data.
+const LAB_ADDRESS = 'ניסים גאון 6 (בחנייה), אלעד';
 
 // ---- Settings (with new competitive defaults) ----
 let HOURLY = 180;       // Increased from 150 (competitive)
@@ -2603,11 +2608,15 @@ function openCustomerDetails(idx) {
       jobs.map(j => `
         <div style="background: var(--bg); padding: 10px; border-radius: 6px; margin-bottom: 6px;">
           <div style="display: flex; justify-content: space-between; font-size: 12px;">
-            <span>${j.voltage}V ${j.capacity}Ah · ${VEHICLE_LABELS[j.vehicle]}</span>
-            <span style="font-weight: 600; color: var(--primary);">₪${j.price.toLocaleString('he-IL')}</span>
+            <span>${(j.voltage && j.capacity) ? `${j.voltage}V ${j.capacity}Ah` : '🔧 תיקון'}${VEHICLE_LABELS[j.vehicle] ? ' · ' + VEHICLE_LABELS[j.vehicle] : ''}</span>
+            <span style="font-weight: 600; color: var(--primary);">₪${(Number(j.price) || 0).toLocaleString('he-IL')}</span>
           </div>
           <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">
-            ${j.dateDisplay} · ${j.jobs.map(t => JOB_LABELS[t]).join(', ')}
+            ${j.dateDisplay || new Date(j.date).toLocaleString('he-IL')} · ${jobTypeLabel(j)}
+          </div>
+          <div class="btn-group" style="margin-top: 6px;">
+            <button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','cust:${idx}')">✏️ ערוך</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteJob('${j.id}','cust:${idx}')">🗑️ מחק</button>
           </div>
         </div>
       `).join('')
@@ -2695,7 +2704,11 @@ function renderWarranties() {
         <div style="font-size: 11px; color: var(--text-light); margin-top: 2px;">
           תיקון: ${new Date(j.date).toLocaleDateString('he-IL')} · אחריות עד: ${end.toLocaleDateString('he-IL')}
         </div>
-        ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="margin-top: 8px; background: #25D366; color: white; border: none;" onclick="callCustomer('${j.customerPhone}')">💬 שלח הודעה</button>` : ''}
+        <div class="btn-group" style="margin-top: 8px;">
+          ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background: #25D366; color: white; border: none;" onclick="callCustomer('${j.customerPhone}')">💬 שלח הודעה</button>` : ''}
+          <button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','warranties')">✏️ ערוך</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteJob('${j.id}','warranties')">🗑️</button>
+        </div>
       </div>
     `;
   }).join('');
@@ -3552,20 +3565,26 @@ function openOrderEditor(id) {
   const orders = Store.get('orders') || [];
   const o = id ? orders.find(x => x.id === id) : null;
   if (o) {
-    orderDraft = { id: o.id, customer: o.customer, phone: o.phone, bms: o.bms || '', bmsBrand: o.bmsBrand || '', bmsAmps: o.bmsAmps || '', isBusiness: o.isBusiness, status: o.status,
+    orderDraft = { id: o.id, date: o.date, customer: o.customer, phone: o.phone, bms: o.bms || '', bmsBrand: o.bmsBrand || '', bmsAmps: o.bmsAmps || '', isBusiness: o.isBusiness, status: o.status,
       items: o.items.map(it => {
         if (it.custom) return { custom: true, name: it.name, unit: it.unit, qty: it.qty };
         const ci = PRICING.findIndex(c => c.cat === it.cat && c.name === it.name);
-        return ci >= 0 ? { ci, qty: it.qty } : null;
-      }).filter(Boolean) };
+        // A catalog row that no longer exists (renamed category, regenerated catalog) was
+        // dropped here — so opening an old sale just to fix a phone number silently
+        // deleted the line and re-saved a smaller total. Keep it, at the price it sold for.
+        return ci >= 0 ? { ci, qty: it.qty } : { custom: true, name: it.name, unit: Number(it.unit) || 0, qty: it.qty };
+      }) };
   } else {
-    orderDraft = { id: null, customer: '', phone: '', bms: '', bmsBrand: '', bmsAmps: '', isBusiness: false, status: 'הצעה', items: [] };
+    orderDraft = { id: null, date: new Date().toISOString(), customer: '', phone: '', bms: '', bmsBrand: '', bmsAmps: '', isBusiness: false, status: 'הצעה', items: [] };
   }
   renderOrderModal();
 }
 function syncOrderFields() { const n = document.getElementById('ordName'); if (n) orderDraft.customer = n.value; const p = document.getElementById('ordPhone'); if (p) orderDraft.phone = p.value; const bb = document.getElementById('ordBmsBrand'); if (bb) orderDraft.bmsBrand = bb.value;
   const ba = document.getElementById('ordBmsAmps'); if (ba) orderDraft.bmsAmps = ba.value;
-  orderDraft.bms = bmsLabel(orderDraft.bmsBrand, orderDraft.bmsAmps); }
+  orderDraft.bms = bmsLabel(orderDraft.bmsBrand, orderDraft.bmsAmps);
+  // The date decides which month a sale counts as income in — editable for the same
+  // reason the price is: a sale entered a week late was landing on the wrong month.
+  const dt = document.getElementById('ordDate'); if (dt && dt.value) orderDraft.date = mergeCalendarDate(dt.value, orderDraft.date); }
 // The BMS is picked from BMS_PRICES — the same brands and amp ratings the repair
 // calculator already prices — instead of being typed. Free text meant a quote could
 // promise a rating the lab does not stock, and it never reached the sale record.
@@ -3608,6 +3627,7 @@ function renderOrderModal() {
   const body = `
     <div class="form-row"><label>שם לקוח</label><input class="form-input-wide" id="ordName" value="${orderDraft.customer || ''}" style="width:170px;"></div>
     <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="ordPhone" value="${orderDraft.phone || ''}" style="width:170px;"></div>
+    <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="ordDate" value="${dateInputValue(orderDraft.date)}" style="width:150px;"></div>
     <div class="form-row"><label>דגם BMS</label>
       <select class="form-select" id="ordBmsBrand" style="width:95px;" onchange="syncOrderFields()">${bmsBrandOpts(orderDraft.bmsBrand)}</select>
       <select class="form-select" id="ordBmsAmps" style="width:75px;" onchange="syncOrderFields()">${bmsAmpsOpts(orderDraft.bmsBrand, orderDraft.bmsAmps)}</select>
@@ -3654,9 +3674,9 @@ function saveOrder() {
   const orders = Store.get('orders') || [];
   if (orderDraft.id) {
     const idx = orders.findIndex(o => o.id === orderDraft.id);
-    if (idx >= 0) orders[idx] = { ...orders[idx], customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total };
+    if (idx >= 0) orders[idx] = { ...orders[idx], date: orderDraft.date || orders[idx].date, customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total };
   } else {
-    orders.unshift({ id: 'o' + Date.now(), date: new Date().toISOString(), customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total, status: 'הצעה' });
+    orders.unshift({ id: 'o' + Date.now(), date: orderDraft.date || new Date().toISOString(), customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total, status: 'הצעה' });
   }
   Store.set('orders', orders); closeModal(); renderOrders();
 }
@@ -3709,6 +3729,8 @@ function repairRow(j) {
       <div class="btn-group" style="margin-top:8px;">
         ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="callCustomer('${j.customerPhone}')">💬 הודעה</button>` : ''}
         <button class="btn btn-sm btn-secondary" onclick="navigateTo('warranties')">🛡️ אחריות</button>
+        <button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','orders')">✏️ ערוך</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteJob('${j.id}','orders')">🗑️</button>
       </div>
     </div>`;
 }
@@ -3734,7 +3756,15 @@ function orderIncomeHint(o) {
   return o.status === 'הצעה' ? '<span style="font-size:10px;color:var(--warning);white-space:nowrap;">· לא בהכנסות</span>' : '';
 }
 function cycleOrderStatus(id) { const orders = Store.get('orders') || [], o = orders.find(x => x.id === id); if (!o) return; const seq = ['הצעה', 'שולם', 'נמסר']; o.status = seq[(seq.indexOf(o.status) + 1) % seq.length]; Store.set('orders', orders); renderOrders(); }
-function deleteOrder(id) { if (!confirm('למחוק הזמנה?')) return; let orders = Store.get('orders') || []; orders = orders.filter(o => o.id !== id); Store.set('orders', orders); renderOrders(); }
+function deleteOrder(id) {
+  const o = (Store.get('orders') || []).find(x => x.id === id);
+  if (!o) return;
+  // Name and amount in the prompt: the list is sorted by date, and a mistap on a phone
+  // used to delete the neighbouring row without ever saying which one it was.
+  if (!confirm(`למחוק את המכירה של ${o.customer || 'ללא שם'} · ${shek(o.total || 0)}?\n${o.status === 'הצעה' ? 'זו הצעה — היא לא נספרת בהכנסות.' : 'ההכנסה תרד מהפיננסים.'} אין ביטול.`)) return;
+  Store.set('orders', (Store.get('orders') || []).filter(x => x.id !== id));
+  renderOrders();
+}
 // Cell + C-rate per tier. Same three tiers as products.ts TIERS — if those change, change
 // these. Used to fill the spec block of a quote straight from the catalog category.
 const TIER_SPEC = {
@@ -4222,25 +4252,151 @@ function copyJobSummary(jobId) {
   if (!txt) return;
   navigator.clipboard.writeText(txt).then(() => alert('✅ הסיכום הועתק! הדבק בקבוצה של החנות.'));
 }
-function openJobStatusEditor(jobId) {
-  const j = (Store.get('jobs') || []).find(x => x.id === jobId);
-  if (!j) return;
-  openModal('✏️ פרטי התיקון', `
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${j.voltage || ''}V ${j.capacity || ''}Ah · ${new Date(j.date).toLocaleDateString('he-IL')}</div>
-    <div class="form-row"><label>סיבת הכניסה</label><input class="form-input-wide" id="jsReason" value="${(j.reason || '').replace(/"/g, '&quot;')}" placeholder="לא עובד / לא טוען" style="width:170px;"></div>
-    <div class="form-row"><label>סטטוס</label><select class="form-select" id="jsStatus" style="width:170px;">${JOB_STATUS.map(s => `<option${s === (j.jobStatus || 'בעבודה') ? ' selected' : ''}>${s}</option>`).join('')}</select></div>`,
-    `<button class="btn btn-primary" onclick="saveJobStatus('${jobId}')">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+// ---- Edit / delete a saved repair -------------------------------------------------
+// A saved job is a business record in four places at once: income in finances, a row in
+// the sales list, a live warranty, and a line in a shop's monthly report. Until now it
+// could only be CREATED — a wrong price, a job saved on the wrong phone, or a duplicate
+// had no fix inside the app.
+//
+// Both operations reconcile the CUSTOMER aggregate. saveJob() adds price and a visit to
+// it, so an edit or a delete that ignored it would leave the customer card claiming money
+// that no job backs — the one number here nothing recomputes on render.
+let jobEditReturn = 'orders';
+function jobById(id) { return (Store.get('jobs') || []).find(j => j.id === id); }
+
+// <input type="date"> wants the LOCAL calendar date; ISO.slice(0,10) is the UTC one,
+// which is the previous day for anything recorded after 21:00 Israel time.
+function dateInputValue(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
-function saveJobStatus(jobId) {
+// Only the calendar date is editable; the time of day already recorded is kept, so
+// re-saving a job cannot reshuffle same-day ordering.
+function mergeCalendarDate(dateStr, prevIso) {
+  const nd = new Date(dateStr + 'T00:00:00');
+  if (isNaN(nd)) return prevIso;
+  const p = new Date(prevIso);
+  nd.setHours(isNaN(p) ? 12 : p.getHours(), isNaN(p) ? 0 : p.getMinutes(), 0, 0);
+  return nd.toISOString();
+}
+
+// spentDelta/visitDelta are signed. Clamped at 0: records predating this bookkeeping can
+// be inconsistent, and a negative total on a customer card is worse than a stale one.
+function adjustCustomerTotals(phone, spentDelta, visitDelta, name) {
+  if (!phone) return;
+  const customers = Store.get('customers') || [];
+  const c = customers.find(x => x.phone === phone);
+  if (c) {
+    c.totalSpent = Math.max(0, (c.totalSpent || 0) + spentDelta);
+    c.visitCount = Math.max(0, (c.visitCount || 0) + visitDelta);
+    if (name && !c.name) c.name = name;
+  } else if (visitDelta > 0) {
+    const now = new Date().toISOString();
+    customers.push({ id: 'c' + Date.now(), name: name || '', phone, notes: '', isBusiness: false, businessName: '',
+      firstVisit: now, lastVisit: now, totalSpent: Math.max(0, spentDelta), visitCount: visitDelta });
+  } else return;
+  Store.set('customers', customers);
+  if (typeof refreshCustomerSelect === 'function') refreshCustomerSelect();
+}
+
+// Re-render the list the editor was opened from, so the change shows where it was made
+// instead of only after navigating away and back.
+function afterJobChange() {
+  const r = jobEditReturn || 'orders';
+  if (r === 'biz') { if (bizReportPhone) openBizReport(bizReportPhone); else renderBizDocs(); return; }
+  if (r.indexOf('cust:') === 0) { openCustomerDetails(parseInt(r.slice(5), 10)); return; }
+  if (r === 'warranties') { renderWarranties(); return; }
+  if (r === 'customers') { renderCustomers(); return; }
+  renderOrders();
+}
+
+function openJobEditor(jobId, ret) {
+  const j = jobById(jobId);
+  if (!j) return;
+  jobEditReturn = ret || 'orders';
+  const esc = s => String(s == null ? '' : s).replace(/"/g, '&quot;');
+  const sel = new Set(Array.isArray(j.jobs) ? j.jobs : []);
+  const types = Object.keys(JOB_LABELS).map(k =>
+    `<div class="check ${sel.has(k) ? 'checked' : ''}" data-jek="${k}" onclick="this.classList.toggle('checked')" style="font-size:11px;padding:6px 7px;"><div class="check-box"></div>${JOB_LABELS[k]}</div>`).join('');
+  openModal('✏️ עריכת תיקון', `
+    <div class="form-row"><label>שם לקוח</label><input class="form-input-wide" id="jeName" value="${esc(j.customerName)}" style="width:170px;"></div>
+    <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="jePhone" value="${esc(j.customerPhone)}" style="width:170px;"></div>
+    <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="jeDate" value="${dateInputValue(j.date)}" style="width:150px;"></div>
+    <div class="form-row"><label>מחיר ₪</label><input type="number" class="form-input" id="jePrice" value="${Number(j.price) || 0}" min="0"></div>
+    <div class="form-row"><label>עלות ₪</label><input type="number" class="form-input" id="jeCost" value="${Number(j.cost) || 0}" min="0"></div>
+    <div class="form-row"><label>מתח V</label><input type="number" class="form-input" id="jeVolt" value="${esc(j.voltage)}" style="width:70px;">
+      <label style="margin-right:10px;">קיבולת Ah</label><input type="number" class="form-input" id="jeCap" value="${esc(j.capacity)}" style="width:70px;"></div>
+    <div class="form-row"><label>סיבת הכניסה</label><input class="form-input-wide" id="jeReason" value="${esc(j.reason)}" placeholder="לא עובד / לא טוען" style="width:170px;"></div>
+    <div class="form-row"><label>סטטוס</label><select class="form-select" id="jeStatus" style="width:170px;">${JOB_STATUS.map(s => `<option${s === (j.jobStatus || 'בעבודה') ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
+    <div class="form-row"><label>אחריות (חודשים)</label><input type="number" class="form-input" id="jeWarranty" value="${j.warrantyMonths != null ? j.warrantyMonths : 0}" min="0" max="60" style="width:70px;"></div>
+    <div class="form-row"><label>הערות</label><input class="form-input-wide" id="jeNotes" value="${esc(j.customerNotes)}" style="width:170px;"></div>
+    ${j.quickRepair ? `<div class="form-row"><label>תיאור העבודה</label><input class="form-input-wide" id="jeQuick" value="${esc(j.quickRepair)}" style="width:170px;"></div>` : ''}
+    <div class="divider"></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">מה בוצע (נכנס לדו"ח החנות ולסיכום בוואטסאפ):</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">${types}</div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">שינוי המחיר מעדכן גם את ההכנסות בפיננסים וגם את סך ההוצאות של הלקוח. שינוי התאריך מעביר את ההכנסה לחודש אחר.</p>`,
+    `<button class="btn btn-primary" onclick="saveJobEdit('${jobId}')">💾 שמור</button>
+     <button class="btn btn-danger" onclick="deleteJob('${jobId}')">🗑️ מחק</button>
+     <button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+// The bizdocs report reached the old reason/status-only editor by this name; it is now
+// two of the fields above. Kept as an alias so nothing has to know that.
+function openJobStatusEditor(jobId) { openJobEditor(jobId, 'biz'); }
+
+function saveJobEdit(jobId) {
   const jobs = Store.get('jobs') || [];
   const i = jobs.findIndex(x => x.id === jobId);
   if (i < 0) return;
-  jobs[i].reason = document.getElementById('jsReason').value.trim();
-  jobs[i].jobStatus = document.getElementById('jsStatus').value;
+  const j = jobs[i];
+  const oldPrice = Number(j.price) || 0, oldPhone = j.customerPhone || '';
+  const price = Math.max(0, parseFloat(document.getElementById('jePrice').value) || 0);
+  const cost = Math.max(0, parseFloat(document.getElementById('jeCost').value) || 0);
+  const name = document.getElementById('jeName').value.trim();
+  const phone = document.getElementById('jePhone').value.trim();
+  const dv = document.getElementById('jeDate').value;
+  if (dv) {
+    j.date = mergeCalendarDate(dv, j.date);
+    j.dateDisplay = new Date(j.date).toLocaleString('he-IL');
+  }
+  j.customerName = name;
+  j.customerPhone = phone;
+  j.customerNotes = document.getElementById('jeNotes').value.trim();
+  j.price = price;
+  j.cost = cost;
+  j.profit = price - cost;
+  j.voltage = document.getElementById('jeVolt').value.trim();
+  j.capacity = document.getElementById('jeCap').value.trim();
+  j.reason = document.getElementById('jeReason').value.trim();
+  j.jobStatus = document.getElementById('jeStatus').value;
+  const q = document.getElementById('jeQuick');
+  if (q) j.quickRepair = q.value.trim();
+  j.jobs = Array.from(document.querySelectorAll('[data-jek].checked')).map(el => el.dataset.jek);
+  // The warranty is left as typed rather than recomputed from the job types: it is a
+  // promise already made to a customer, and an edit made a year later must not silently
+  // shorten or extend it. warrantyEnd is re-derived because the job DATE may have moved.
+  const months = Math.max(0, parseInt(document.getElementById('jeWarranty').value, 10) || 0);
+  j.warrantyMonths = months;
+  j.warrantyEnd = months ? new Date(new Date(j.date).getTime() + months * 30 * 24 * 60 * 60 * 1000).toISOString() : null;
   Store.set('jobs', jobs);
+  // Money follows the phone: a job moved to another customer has to leave the first card.
+  if (phone === oldPhone) adjustCustomerTotals(phone, price - oldPrice, 0, name);
+  else { adjustCustomerTotals(oldPhone, -oldPrice, -1); adjustCustomerTotals(phone, price, 1, name); }
   closeModal();
-  openBizReport(bizReportPhone);
+  afterJobChange();
 }
+
+function deleteJob(jobId, ret) {
+  const j = jobById(jobId);
+  if (!j) return;
+  if (ret) jobEditReturn = ret;
+  if (!confirm(`למחוק את התיקון של ${j.customerName || 'ללא שם'} · ${shek(Number(j.price) || 0)}?\nההכנסה תרד מהפיננסים והאחריות תימחק. אין ביטול.`)) return;
+  Store.set('jobs', (Store.get('jobs') || []).filter(x => x.id !== jobId));
+  adjustCustomerTotals(j.customerPhone, -(Number(j.price) || 0), -1);
+  closeModal();
+  afterJobChange();
+}
+
 function openBizPayment(phone) {
   const acc = bizAccount(phone);
   openModal('💳 רישום תשלום', `
@@ -4300,7 +4456,8 @@ function openBizReport(phone) {
       <td style="padding:7px 8px;font-size:12px;font-weight:700;text-align:left;white-space:nowrap;">₪${(j.price || 0).toLocaleString('he-IL')}</td>
       <td class="no-print" style="padding:4px 6px;white-space:nowrap;">
         <span onclick="copyJobSummary('${j.id}')" title="העתק סיכום לקבוצה" style="cursor:pointer;font-size:15px;">📋</span>
-        <span onclick="openJobStatusEditor('${j.id}')" title="סיבה וסטטוס" style="cursor:pointer;font-size:15px;margin-right:6px;">✏️</span>
+        <span onclick="openJobEditor('${j.id}','biz')" title="ערוך תיקון" style="cursor:pointer;font-size:15px;margin-right:6px;">✏️</span>
+        <span onclick="deleteJob('${j.id}','biz')" title="מחק תיקון" style="cursor:pointer;font-size:15px;margin-right:6px;">🗑️</span>
       </td>
     </tr>`).join('');
   document.getElementById('bizReportContent').innerHTML = `
@@ -4850,10 +5007,19 @@ function init() {
     owner: 'דניאל מחול',
     phone: '055-7292481',
     phone2: '053-3224879',
-    address: 'עובדיה מברטנורא 12, אלעד',
+    address: LAB_ADDRESS,
     email: 'greenpower.service.israel@gmail.com'
   };
   if (!Store.get('biz')) Store.set('biz', bizDetails);
+  // 2026-08-13 — the lab moved to ניסים גאון 6. The default object above only ever applies
+  // to a hub that has never been set up; the address that actually prints on quotes and
+  // business reports lives in the synced `biz` record, so the old one has to be replaced
+  // in place, once. Same trap as DEFAULT_REPLIES: a new default changes nothing on a
+  // device that already has data.
+  if (bizDetails.address && /מברטנורא/.test(bizDetails.address)) {
+    bizDetails.address = LAB_ADDRESS;
+    Store.set('biz', bizDetails);
+  }
 
   document.getElementById('bizName').value = bizDetails.name || '';
   document.getElementById('bizOwner').value = bizDetails.owner || '';
