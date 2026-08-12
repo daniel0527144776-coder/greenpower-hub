@@ -1233,7 +1233,9 @@ body { min-height: 100vh; }
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
       <li><b>💬 וואטסאפ ישירות</b> — כפתורי הוואטסאפ פותחים את השיחה עם הלקוח וההודעה כבר כתובה בפנים, בלי להעתיק ולהדביק. עובד מהמחשבון, מכרטיס לקוח, מהזמנה, מהתמחור המהיר ומדו"ח לקוח עסקי. <b>צריך מספר טלפון</b> — בלעדיו ההודעה עדיין מועתקת ללוח כמו קודם.</li>
       <li><b>🏷️ מחירון מוצרים</b> — כל <span id="helpCatCount">—</span> המוצרים עם מחיר <b>פרטי ועסקי</b> (כולל <b>תאים בודדים</b> עם מדרגות כמות). החלף בטאב למעלה. הפעל "הצג עלות ורווח" כדי לראות כמה כל מוצר עולה לך וכמה אתה מרוויח. לחיצה על מוצר → הזנת עלות ספק מדויקת.</li>
-      <li><b>🛒 הזמנות</b> — בנה הצעת מחיר מהקטלוג (פרטי או עסקי בלחיצה), שלח בוואטסאפ, ועקוב אחר סטטוס (הצעה→שולם→נמסר). מכירות ששולמו נכנסות אוטומטית להכנסות.</li>
+      <li><b>🛒 תמחור ומכירות</b> — בנה הצעת מחיר מהקטלוג (פרטי או עסקי בלחיצה), שלח בוואטסאפ, ועקוב אחר סטטוס (הצעה→שולם→נמסר). מכירות ששולמו נכנסות אוטומטית להכנסות.
+        בראש העמוד <b>סיכום החודש</b> (מכירות · תיקונים · סה"כ) ובאנר של <b>הצעות פתוחות</b> שלחיצה עליו מסננת אליהן. מתחת: <b>חיפוש</b> לפי שם, טלפון, פריט או מפרט, סינון להכל/מכירות/תיקונים/הצעות, והרשימה <b>מקובצת לפי חודש</b> עם סכום לכל חודש.
+        על כל שורה — ✏️ לעריכה ו🗑️ למחיקה, גם לתיקון וגם למכירה שכבר בוצעו.</li>
       <li><b>💰 הכנסות והוצאות</b> — דו"ח רווח-הפסד חודשי. הכנסות = תיקונים שנשמרו + הזמנות ששולמו + <b>רישום הכנסה ידני</b>, פחות הוצאות ושכר עובדים. הרישום הידני הוא לתקבול שלא נשמר כתיקון או כמכירה — אל תזין שם עבודה שכבר שמורה, היא תיספר פעמיים. כפתור <b>📥 ייבוא</b> טוען היסטוריה מקובץ ו<b>מחליף</b> את הרשימות, כדי שייבוא כפול לא יכפיל סכומים. <b>מבט על</b> מציג רווח לכל חודש ואת הרווח המצטבר מההתחלה — לחיצה על חודש פותחת אותו.</li>
       <li><b>⏱️ שעון עובדים</b> — רשום שעות לכל עובד, וקבל סיכום שעות ושכר חודשי. הגדר עובדים ותעריפים ב"ניהול עובדים".</li>
       <li><b>📐 מידות סוללה</b> — אומדן מידות חבילה לפי מתח/קיבולת/סוג תא, ומאגר מידות תא-מצבר לפי דגם קורקינט (מדוד פעם אחת ושמור).</li>
@@ -1305,27 +1307,45 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">🛒 תמחור ומכירות</h2>
     <div class="btn-group">
-      <button class="btn btn-primary btn-sm" onclick="openOrderEditor()">🛒 מכירה / הצעה</button>
+      <button class="btn btn-primary btn-sm" onclick="openOrderEditor()">🛒 מכירה</button>
+      <button class="btn btn-secondary btn-sm" onclick="navigateTo('calc')">🔧 תיקון</button>
     </div>
   </div>
-  <!-- Quick price recommendation — moved here from the calculator 2026-07-28 -->
+
+  <!-- This month, at a glance. The page used to list rows and total nothing, so "how is
+       this month going" meant leaving for כספים and coming back. -->
+  <div class="stats-grid" id="salesStats"></div>
+  <div class="info-banner" id="salesPending" style="display:none;cursor:pointer;" onclick="setSalesFilter('quote')"></div>
+
+  <!-- Quick price recommendation — moved here from the calculator 2026-07-28, made
+       collapsible 2026-08-13. It sat permanently above the list, so arriving to look up a
+       past sale meant scrolling past a form every time. The open/closed choice is stored. -->
   <div class="card" style="border:1px solid var(--primary);">
-    <h3 class="card-title">💰 המלצת מחיר מהירה</h3>
-    <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">בחר סוג תיקון וקבל מחיר מומלץ ללקוח — בלי למלא טופס.</p>
-    <div class="form-row"><label>קטגוריה</label><select class="form-select" id="qpCat" onchange="qpFillItems()" style="width:200px;"></select></div>
-    <div class="form-row"><label>מה צריך</label><select class="form-select" id="qpItem" onchange="qpShow()" style="width:200px;"></select></div>
-    <div id="qpResult" style="display:none;margin-top:10px;padding:12px;background:var(--bg);border-radius:10px;text-align:center;">
-      <div style="font-size:11px;color:var(--text-muted);">מחיר מומלץ ללקוח</div>
-      <div id="qpPrice" style="font-size:28px;font-weight:800;color:var(--primary);"></div>
-      <div id="qpNote" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
-      <div class="btn-group" style="margin-top:8px;justify-content:center;align-items:center;">
-        <button class="btn btn-sm btn-primary" onclick="qpCreateJob()">🔧 צור עבודה</button>
-        <input class="form-input" id="qpPhone" style="width:130px;" placeholder="050-1234567" inputmode="tel">
-        <button class="btn btn-sm" style="background:#25D366;color:#fff;border:none;" onclick="qpCopy()">💬 שלח</button>
+    <h3 class="card-title" onclick="toggleQuickPricer()" style="cursor:pointer;user-select:none;justify-content:space-between;">
+      <span>💰 המלצת מחיר מהירה</span><span id="qpChevron" style="font-weight:400;opacity:.7;">▾</span>
+    </h3>
+    <div id="qpBody">
+      <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">בחר סוג תיקון וקבל מחיר מומלץ ללקוח — בלי למלא טופס.</p>
+      <div class="form-row"><label>קטגוריה</label><select class="form-select" id="qpCat" onchange="qpFillItems()" style="width:200px;"></select></div>
+      <div class="form-row"><label>מה צריך</label><select class="form-select" id="qpItem" onchange="qpShow()" style="width:200px;"></select></div>
+      <div id="qpResult" style="display:none;margin-top:10px;padding:12px;background:var(--bg);border-radius:10px;text-align:center;">
+        <div style="font-size:11px;color:var(--text-muted);">מחיר מומלץ ללקוח</div>
+        <div id="qpPrice" style="font-size:28px;font-weight:800;color:var(--primary);"></div>
+        <div id="qpNote" style="font-size:11px;color:var(--text-muted);margin-top:2px;"></div>
+        <div class="btn-group" style="margin-top:8px;justify-content:center;align-items:center;">
+          <button class="btn btn-sm btn-primary" onclick="qpCreateJob()">🔧 צור עבודה</button>
+          <input class="form-input" id="qpPhone" style="width:130px;" placeholder="050-1234567" inputmode="tel">
+          <button class="btn btn-sm" style="background:#25D366;color:#fff;border:none;" onclick="qpCopy()">💬 שלח</button>
+        </div>
       </div>
     </div>
   </div>
-  <div class="btn-group" id="salesFilterBar" style="margin-bottom:10px;flex-wrap:wrap;"></div>
+
+  <!-- wrap, not scroll: at 390px the fourth chip (הצעות) sat off the left edge of a
+       horizontally-scrolling bar, which is where the least discoverable filter should
+       never be. -->
+  <div class="sub-tabs" id="salesFilterBar" style="flex-wrap:wrap;"></div>
+  <input type="text" class="form-input-wide" id="salesSearch" placeholder="🔍 חיפוש לפי שם, טלפון, פריט או מפרט" style="width:100%;margin-bottom:10px;" oninput="renderOrders()">
   <div id="ordersList"></div>
 </section>
 
@@ -3681,12 +3701,53 @@ function saveOrder() {
   Store.set('orders', orders); closeModal(); renderOrders();
 }
 let salesFilter = 'all';
-function setSalesFilter(f) { salesFilter = f; renderOrders(); }
+// The list is capped and grown on demand. 500 jobs + every sale rendered as one innerHTML
+// is a visible freeze on a phone, and nobody scrolls past the first screen anyway.
+let salesLimit = 60;
+function setSalesFilter(f) { salesFilter = f; salesLimit = 60; renderOrders(); }
+function salesShowMore() { salesLimit += 60; renderOrders(); }
+
+// A quote is not revenue. This is the ONE definition of when a sale becomes income —
+// renderFinances reads it too, because they were two chances to disagree about the same
+// number and the sales page is where the disagreement would be noticed last.
+function saleIsIncome(o) { return o.status === 'שולם' || o.status === 'נמסר'; }
+
+const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+function monthLabelHe(key) { const p = String(key).split('-'); return `${HE_MONTHS[+p[1] - 1] || ''} ${p[0]}`; }
+
+function toggleQuickPricer() {
+  const b = document.getElementById('qpBody');
+  if (!b) return;
+  const open = b.style.display === 'none';
+  b.style.display = open ? '' : 'none';
+  document.getElementById('qpChevron').textContent = open ? '▾' : '▸';
+  Store.set('qp_open', open);   // not in SYNC_KEYS — a UI preference, not business data
+}
+
+// Everything a row can be matched on, built once per render.
+function salesHaystack(x) {
+  const o = x.raw;
+  if (x.kind === 'sale') {
+    return [o.customer, o.phone, o.status, o.bms].concat((o.items || []).flatMap(i => [i.name, i.cat]))
+      .filter(Boolean).join(' ').toLowerCase();
+  }
+  return [o.customerName, o.customerPhone, jobTypeLabel(o), o.reason, o.quickRepair, o.customerNotes,
+    (o.voltage && o.capacity) ? `${o.voltage}v ${o.capacity}ah` : '', VEHICLE_LABELS[o.vehicle]]
+    .filter(Boolean).join(' ').toLowerCase();
+}
+
 // Type-tagged pill for the unified sales+repairs list.
 function salesBadge(kind) {
   return kind === 'sale'
     ? '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;background:rgba(34,211,238,0.15);color:var(--primary);margin-left:4px;">🛒 מכירה</span>'
     : '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;background:rgba(52,211,153,0.15);color:#34d399;margin-left:4px;">🔧 תיקון</span>';
+}
+// Status as a coloured pill rather than grey text: "הצעה" and "נמסר" mean opposite things
+// about whether the money arrived, and they used to render identically.
+function saleStatusPill(status) {
+  const st = status || 'הצעה';
+  const c = st === 'נמסר' ? '#34d399' : st === 'שולם' ? 'var(--primary)' : 'var(--warning)';
+  return `<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;border:1px solid ${c};color:${c};white-space:nowrap;">${st}</span>`;
 }
 // A sale used to read "3 פריטים" and nothing else — you had to open it to see what it
 // was. Categories (deduped, shortened) make the list scannable.
@@ -3702,7 +3763,7 @@ function saleRow(o) {
         <div><div class="list-item-title">${salesBadge('sale')} ${o.customer || 'ללא שם'} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''} ${orderIncomeHint(o)}</div>
           <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')} · ${o.items.length} פריטים${o.bms ? ' · BMS ' + o.bms : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${saleCats(o)}</div></div>
-        <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div><div class="list-item-subtitle">${o.status || 'הצעה'}</div></div>
+        <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div><div style="margin-top:3px;">${saleStatusPill(o.status)}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
         <button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="orderWhatsApp('${o.id}')">💬 שלח</button>
@@ -3723,7 +3784,8 @@ function repairRow(j) {
     <div class="list-item">
       <div class="list-item-header">
         <div><div class="list-item-title">${salesBadge('repair')} ${j.customerName || 'ללא שם'} ${j.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
-          <div class="list-item-subtitle">${new Date(j.date).toLocaleDateString('he-IL')}${spec ? ' · ' + spec : ''}</div></div>
+          <div class="list-item-subtitle">${new Date(j.date).toLocaleDateString('he-IL')}${spec ? ' · ' + spec : ''}</div>
+          <div class="list-item-subtitle" style="font-size:10.5px;">${jobTypeLabel(j)}</div></div>
         <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div><div class="list-item-subtitle">${warr}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
@@ -3737,18 +3799,94 @@ function repairRow(j) {
 function renderOrders() {
   const orders = (Store.get('orders') || []).map(o => ({ kind: 'sale', date: o.date, raw: o }));
   const jobs = (Store.get('jobs') || []).map(j => ({ kind: 'repair', date: j.date, raw: j }));
+
+  // ---- this month, at the top, before any filter is applied ----
+  const mk = monthKeyOf(new Date());
+  const mSales = orders.filter(x => monthKeyOf(x.date) === mk && saleIsIncome(x.raw));
+  const mRepairs = jobs.filter(x => monthKeyOf(x.date) === mk);
+  const sumS = mSales.reduce((s, x) => s + (x.raw.total || 0), 0);
+  const sumR = mRepairs.reduce((s, x) => s + (Number(x.raw.price) || 0), 0);
+  const stats = document.getElementById('salesStats');
+  if (stats) stats.innerHTML =
+    `<div class="stat-box"><div class="stat-label">מכירות</div><div class="stat-value" style="color:var(--primary);">${shek(sumS)}</div><div class="stat-label">${mSales.length} החודש</div></div>` +
+    `<div class="stat-box"><div class="stat-label">תיקונים</div><div class="stat-value" style="color:#34d399;">${shek(sumR)}</div><div class="stat-label">${mRepairs.length} החודש</div></div>` +
+    `<div class="stat-box"><div class="stat-label">סה"כ</div><div class="stat-value">${shek(sumS + sumR)}</div><div class="stat-label">${monthLabelHe(mk)}</div></div>`;
+
+  // Open quotes are the one actionable pile on this page — money already offered that
+  // nobody has chased. The banner is a shortcut into the filter, not just a notice.
+  const quotes = orders.filter(x => !saleIsIncome(x.raw));
+  const pend = document.getElementById('salesPending');
+  if (pend) {
+    pend.style.display = quotes.length ? 'flex' : 'none';
+    const sum = quotes.reduce((s, x) => s + (x.raw.total || 0), 0);
+    pend.innerHTML = quotes.length
+      ? `<span>🧾</span><div style="flex:1;">${quotes.length} הצעות פתוחות בסך <b>${shek(sum)}</b> — לא נספרות כהכנסה עד שיסומנו "שולם".</div><span style="font-weight:700;white-space:nowrap;">הצג ←</span>`
+      : '';
+  }
+
+  // ---- filter + search ----
+  let all = orders.concat(jobs);
   const bar = document.getElementById('salesFilterBar');
   if (bar) {
-    const chip = (f, label) => `<button class="btn btn-sm ${salesFilter === f ? 'btn-primary' : 'btn-secondary'}" onclick="setSalesFilter('${f}')">${label}</button>`;
-    bar.innerHTML = chip('all', `הכל (${orders.length + jobs.length})`) + chip('sale', `🛒 מכירות (${orders.length})`) + chip('repair', `🔧 תיקונים (${jobs.length})`);
+    const chip = (f, label) => `<div class="sub-tab${salesFilter === f ? ' active' : ''}" onclick="setSalesFilter('${f}')">${label}</div>`;
+    bar.innerHTML = chip('all', `הכל (${all.length})`) + chip('sale', `🛒 מכירות (${orders.length})`)
+      + chip('repair', `🔧 תיקונים (${jobs.length})`) + chip('quote', `🧾 הצעות (${quotes.length})`);
   }
-  let all = [...orders, ...jobs];
   if (salesFilter === 'sale') all = all.filter(x => x.kind === 'sale');
   else if (salesFilter === 'repair') all = all.filter(x => x.kind === 'repair');
+  else if (salesFilter === 'quote') all = all.filter(x => x.kind === 'sale' && !saleIsIncome(x.raw));
+  const q = (document.getElementById('salesSearch') ? document.getElementById('salesSearch').value : '').trim().toLowerCase();
+  if (q) all = all.filter(x => salesHaystack(x).includes(q));
   all.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  // Restore the quick pricer's open/closed state on every page entry.
+  const qpBody = document.getElementById('qpBody');
+  if (qpBody) {
+    const open = Store.get('qp_open') !== false;
+    qpBody.style.display = open ? '' : 'none';
+    const chev = document.getElementById('qpChevron');
+    if (chev) chev.textContent = open ? '▾' : '▸';
+  }
+
   const list = document.getElementById('ordersList');
-  if (all.length === 0) { list.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-state-icon">🛒</div><div class="empty-state-text">אין מכירות או תיקונים. לחץ 🛒 מכירה או 🔧 תיקון.</div></div></div>'; return; }
-  list.innerHTML = all.map(x => x.kind === 'sale' ? saleRow(x.raw) : repairRow(x.raw)).join('');
+  if (all.length === 0) {
+    const filtered = q || salesFilter !== 'all';
+    list.innerHTML = `<div class="card"><div class="empty-state"><div class="empty-state-icon">${filtered ? '🔍' : '🛒'}</div><div class="empty-state-text">${filtered ? 'אין תוצאות לסינון הזה.' : 'אין מכירות או תיקונים עדיין.<br>לחץ 🛒 מכירה או 🔧 תיקון.'}</div></div></div>`;
+    return;
+  }
+
+  // ---- grouped by month, each header carrying that month's total ----
+  // A flat list with a date on every row is not scannable once there are a few hundred of
+  // them, and the month total is the number people open this page to find. Totals are over
+  // the WHOLE month within the current filter, not just the rows rendered, so "הצג עוד"
+  // never changes a figure that is already on screen.
+  const totals = new Map();
+  for (const x of all) {
+    const k = monthKeyOf(x.date);
+    const t = totals.get(k) || { n: 0, income: 0, quoted: 0 };
+    t.n++;
+    if (x.kind === 'repair') t.income += Number(x.raw.price) || 0;
+    else if (saleIsIncome(x.raw)) t.income += x.raw.total || 0;
+    else t.quoted += x.raw.total || 0;
+    totals.set(k, t);
+  }
+  const shown = all.slice(0, salesLimit);
+  let html = '', lastKey = null;
+  for (const x of shown) {
+    const k = monthKeyOf(x.date);
+    if (k !== lastKey) {
+      lastKey = k;
+      const t = totals.get(k);
+      html += `<div class="price-cat" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;">
+        <span>${monthLabelHe(k)}</span>
+        <span style="font-weight:600;opacity:.85;">${t.n} · ${shek(t.income)}${t.quoted ? ` <span style="font-weight:400;opacity:.75;">+ ${shek(t.quoted)} בהצעות</span>` : ''}</span></div>`;
+    }
+    html += x.kind === 'sale' ? saleRow(x.raw) : repairRow(x.raw);
+  }
+  if (all.length > shown.length) {
+    html += `<button class="btn btn-secondary btn-block" style="margin-top:10px;" onclick="salesShowMore()">⬇️ הצג עוד (נותרו ${all.length - shown.length})</button>`;
+  }
+  list.innerHTML = html;
 }
 // A quote is not revenue — correct, but the orders list gave no sign of it, so an unpaid
 // sale looked identical to a paid one and the only symptom was a low income figure.
@@ -3947,7 +4085,7 @@ function renderFinances() {
   // income ledger, symmetric to the expense one, and the P&L adds all three.
   const incomes = Store.get('incomes') || [];
   const repairRev = jobs.filter(j => monthKeyOf(j.date) === mk).reduce((s, j) => s + (j.price || 0), 0);
-  const salesRev = orders.filter(o => monthKeyOf(o.date) === mk && (o.status === 'שולם' || o.status === 'נמסר')).reduce((s, o) => s + (o.total || 0), 0);
+  const salesRev = orders.filter(o => monthKeyOf(o.date) === mk && saleIsIncome(o)).reduce((s, o) => s + (o.total || 0), 0);
   const manualRev = incomes.filter(e => monthKeyOf(e.date) === mk).reduce((s, e) => s + (e.amount || 0), 0);
   const income = repairRev + salesRev + manualRev;
   const ledgerExp = expenses.filter(e => monthKeyOf(e.date) === mk).reduce((s, e) => s + (e.amount || 0), 0);
@@ -3962,7 +4100,7 @@ function renderFinances() {
   document.getElementById('incomeList').innerHTML = incArr.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין רישומי הכנסה ידניים החודש</div></div>' :
     incArr.map(e => `<div class="price-item"><div class="price-item-name">${e.cat || 'הכנסה'}${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final" style="color:var(--accent);">${shek(e.amount)} <span onclick="deleteIncome('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
   const listArr = expenses.filter(e => monthKeyOf(e.date) === mk).sort((a, b) => new Date(b.date) - new Date(a.date));
-  const pending = orders.filter(o => monthKeyOf(o.date) === mk && o.status === 'הצעה');
+  const pending = orders.filter(o => monthKeyOf(o.date) === mk && !saleIsIncome(o));
   const pendEl = document.getElementById('finPending');
   if (pendEl) {
     const sum = pending.reduce((s2, o) => s2 + (o.total || 0), 0);
