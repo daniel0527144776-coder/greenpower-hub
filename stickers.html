@@ -849,7 +849,7 @@
                     elementsState.push(state);
                 });
 
-                localStorage.setItem('stickerElementStates', JSON.stringify(elementsState));
+                localStorage.setItem('stickerElementStates', JSON.stringify({ v: STICKER_TEMPLATE_VERSION, elements: elementsState }));
             }
 
             window.restoreStickerElementsState = function(elements) {
@@ -935,17 +935,37 @@
                 location.reload();
             };
 
+            // Bump this on ANY change to the sticker template — text, sizes, layout, marks.
+            // The saved state stores each editable element's innerHTML as well as its
+            // geometry and writes it back over the markup on load, so without a version a
+            // template change is INVISIBLE forever on any device that has ever saved. That
+            // is not a hypothetical: the address, the type scale and the standards line
+            // were each edited, deployed, verified live — and still did not appear on the
+            // owner's phone, because his save kept restoring the old ones on top.
+            const STICKER_TEMPLATE_VERSION = '2026-08-17';
+
             function loadElementStates() {
-                const savedStates = localStorage.getItem('stickerElementStates');
-                if (savedStates) {
-                    const elementsState = JSON.parse(savedStates);
-                    window.restoreStickerElementsState(elementsState);
-                    syncDropdownsFromElements(elementsState);
-                    // Refresh computed fields so a stale local save can't
-                    // reintroduce an old spec format after a code fix — now
-                    // safe since the dropdowns above match what was restored.
-                    updateAllSpecs();
+                const raw = localStorage.getItem('stickerElementStates');
+                if (!raw) return;
+                let saved = null;
+                try { saved = JSON.parse(raw); } catch (e) { saved = null; }
+                // A bare array is the pre-versioning format, so it is by definition stale.
+                const elementsState = (saved && !Array.isArray(saved) && saved.v === STICKER_TEMPLATE_VERSION)
+                    ? saved.elements
+                    : null;
+                if (!elementsState) {
+                    // Drop it rather than restore it: the template is newer, and silently
+                    // showing the old label is the failure this whole mechanism caused.
+                    try { localStorage.removeItem('stickerElementStates'); } catch (e) {}
+                    if (saved) showNotification('המדבקה עודכנה — העיצוב אופס לגרסה החדשה');
+                    return;
                 }
+                window.restoreStickerElementsState(elementsState);
+                syncDropdownsFromElements(elementsState);
+                // Refresh computed fields so a stale local save can't
+                // reintroduce an old spec format after a code fix — now
+                // safe since the dropdowns above match what was restored.
+                updateAllSpecs();
             }
             
             // הסוללה עצמה לא נשמרת יותר בהיסטוריה — נשאר רק המונה היומי למק"ט,
