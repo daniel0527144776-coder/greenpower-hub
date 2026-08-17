@@ -4532,6 +4532,10 @@ let stickerTab = 'all';
 function setStickerTab(t) { stickerTab = t; document.querySelectorAll('[data-sltab]').forEach(e => e.classList.toggle('active', e.dataset.sltab === t)); renderStickerLog(); }
 function renderStickerLog() {
   const arr = Store.get('sticker_history') || [];
+  // The sticker editor writes this key straight to localStorage — it is same-origin, but it
+  // has no Sync layer of its own. Writing it back through Store here is what pushes those
+  // records to the cloud, so opening this page is also what makes them survive a new device.
+  if (arr.length) Store.set('sticker_history', arr);
   const q = (document.getElementById('stickerSearch')?.value || '').toLowerCase();
   let items = arr.filter(s => stickerTab === 'all' || s.type === stickerTab);
   if (q) items = items.filter(s => `${s.client || ''} ${s.sku || ''} ${s.model || ''} ${s.ref || ''}`.toLowerCase().includes(q));
