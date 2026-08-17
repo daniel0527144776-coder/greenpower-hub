@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- טוען משקלים כבדים של Heebo עבור "שחור חזק" -->
-    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
@@ -84,7 +84,7 @@
 
         #sticker-to-capture {
              color: #000000 !important; /* Force Black */
-             font-weight: 900 !important; /* Force Extra Bold/Heavy */
+             font-weight: 400 !important; /* base weight; each element states its own */
              background-color: #ffffff;
         }
         
@@ -93,25 +93,7 @@
         #sticker-to-capture span, 
         #sticker-to-capture div, 
         #sticker-to-capture p {
-             font-weight: 900;
              color: #000000;
-        }
-
-        /* The manufacturer block and the standard line are deliberately LIGHTER than the
-           rest of the sticker (Daniel, 2026-08-17): bigger type, thinner strokes. The two
-           rules above force 900 on every descendant of #sticker-to-capture, so a Tailwind
-           font-normal class on the element loses. TWO IDs here out-specify that blanket
-           '#sticker-to-capture p' rule — and it carries NO !important on purpose, so an
-           inline weight still wins and the editor's font-weight control keeps working on
-           these elements. Heebo is loaded at 400;700;800;900, so 400 and 700 are real
-           faces and not synthesised. */
-        #sticker-to-capture #manufacturer-info,
-        #sticker-to-capture #manufacturer-info p,
-        #sticker-to-capture #standard-info {
-             font-weight: 400;
-        }
-        #sticker-to-capture #manufacturer-info p:first-child {
-             font-weight: 700;
         }
 
         [data-editable="true"], div[id*="placeholder"] {
@@ -180,8 +162,8 @@
         }
         
         div[id*="icon-placeholder"] {
-            width: 3.5rem; 
-            height: 3.5rem; 
+            width: 4.5rem; 
+            height: 4.5rem; 
         }
          #qr-placeholder {
             width: 8rem; 
@@ -224,10 +206,10 @@
 
                             <!-- Header Container: Title -->
                             <div class="flex items-center justify-center w-full">
-                                <h1 id="main-title" data-editable="true" contenteditable="false" class="text-6xl lg:text-7xl font-black leading-tight tracking-tight whitespace-nowrap">Green Power</h1>
+                                <h1 id="main-title" data-editable="true" contenteditable="false" class="text-6xl lg:text-7xl font-extrabold leading-tight tracking-tight whitespace-nowrap">Green Power</h1>
                             </div>
 
-                            <p id="slogan" data-editable="true" contenteditable="false" class="text-2xl lg:text-3xl font-black mt-1 tracking-wide">הבית שלכם לאנרגיה חשמלית.</p>
+                            <p id="slogan" data-editable="true" contenteditable="false" class="text-2xl lg:text-3xl font-normal mt-1 tracking-wide">הבית שלכם לאנרגיה חשמלית.</p>
                         </div>
                     </div>
                 </div>
@@ -237,45 +219,45 @@
                     <!-- Row 1 -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-capacity" class="text-lg font-black shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">קיבולת:</span>
-                            <span id="capacity-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-capacity" class="text-lg font-medium shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">קיבולת:</span>
+                            <span id="capacity-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-voltage" class="text-lg font-black shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">מתח:</span>
-                            <span id="voltage-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-voltage" class="text-lg font-medium shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">מתח:</span>
+                            <span id="voltage-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                     </div>
                     <!-- Row 2 -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-discharge" class="text-lg font-black shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">זרם פריקה:</span>
-                            <span id="discharge-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-discharge" class="text-lg font-medium shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">זרם פריקה:</span>
+                            <span id="discharge-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-power" class="text-lg font-black shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">הספק:</span>
-                            <span id="power-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-power" class="text-lg font-medium shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">הספק:</span>
+                            <span id="power-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                     </div>
                     <!-- Row 3 -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-c-rate" class="text-lg font-black shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">קצב C:</span>
-                            <span id="c-rate-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-c-rate" class="text-lg font-medium shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">קצב C:</span>
+                            <span id="c-rate-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-bms" class="text-lg font-black shrink-0 whitespace-nowrap" dir="ltr" data-editable="true" contenteditable="false">BMS:</span>
-                            <span id="bms-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-bms" class="text-lg font-medium shrink-0 whitespace-nowrap" dir="ltr" data-editable="true" contenteditable="false">BMS:</span>
+                            <span id="bms-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                     </div>
                     <!-- Row 4 -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-cells" class="text-lg font-black shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">תאים:</span>
-                            <span id="cells-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-cells" class="text-lg font-medium shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">תאים:</span>
+                            <span id="cells-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-sku" class="text-lg font-black shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">מק"ט:</span>
-                            <span id="sku-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-sku" class="text-lg font-medium shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">מק"ט:</span>
+                            <span id="sku-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                     </div>
                     <!-- Row 5 — "תוקף אחריות:" was the single longest label in
@@ -286,12 +268,12 @@
                          until:). -->
                     <div class="flex gap-x-8 flex-1 min-h-0">
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-production" class="text-lg font-black shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">ת. ייצור:</span>
-                            <span id="production-date-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-production" class="text-lg font-medium shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">ת. ייצור:</span>
+                            <span id="production-date-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                         <div class="flex justify-between items-end py-0.5 border-b border-gray-700 flex-1 min-w-0 overflow-hidden">
-                            <span id="label-warranty" class="text-lg font-black shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">ת. אחריות:</span>
-                            <span id="warranty-end-value" data-editable="true" contenteditable="false" class="text-[24px] font-black text-left whitespace-nowrap"></span>
+                            <span id="label-warranty" class="text-lg font-medium shrink-0 whitespace-nowrap" data-editable="true" contenteditable="false">ת. אחריות:</span>
+                            <span id="warranty-end-value" data-editable="true" contenteditable="false" class="text-[28px] font-semibold text-left whitespace-nowrap"></span>
                         </div>
                     </div>
                 </div>
@@ -302,41 +284,41 @@
                         
                         <div class="grid grid-cols-2 gap-4 flex-grow min-h-0">
                              <div class="border-2 border-black p-2 rounded-lg bg-red-50 flex flex-col justify-start h-full overflow-hidden">
-                                <span id="label-fault-desc" class="font-black underline text-xl mb-1 block" data-editable="true" contenteditable="false">תיאור תקלה:</span>
-                                <div id="fault-description-display" data-editable="true" contenteditable="false" class="text-lg leading-snug font-black whitespace-pre-wrap break-words"></div>
+                                <span id="label-fault-desc" class="font-semibold underline text-2xl mb-1 block" data-editable="true" contenteditable="false">תיאור תקלה:</span>
+                                <div id="fault-description-display" data-editable="true" contenteditable="false" class="text-xl leading-snug font-normal whitespace-pre-wrap break-words"></div>
                             </div>
                             
                             <div class="border-2 border-black p-2 rounded-lg bg-green-50 flex flex-col justify-start h-full overflow-hidden">
-                                <span id="label-repair-details" class="font-black underline text-xl mb-1 block" data-editable="true" contenteditable="false">פירוט התיקון שבוצע:</span>
-                                <div id="repair-details-display" data-editable="true" contenteditable="false" class="text-lg leading-snug font-black whitespace-pre-wrap break-words"></div>
+                                <span id="label-repair-details" class="font-semibold underline text-2xl mb-1 block" data-editable="true" contenteditable="false">פירוט התיקון שבוצע:</span>
+                                <div id="repair-details-display" data-editable="true" contenteditable="false" class="text-xl leading-snug font-normal whitespace-pre-wrap break-words"></div>
                             </div>
                         </div>
 
                         <div class="flex flex-col gap-1 flex-shrink-0 mt-1 border-t-2 border-dashed border-black pt-2">
                              <div class="flex justify-between items-center border-b border-black pb-1">
                                 <div class="flex items-center gap-2">
-                                    <span id="label-repair-date" class="font-black text-xl" data-editable="true" contenteditable="false">תאריך תיקון:</span>
-                                    <span id="repair-date-display" data-editable="true" contenteditable="false" class="text-2xl font-black"></span>
+                                    <span id="label-repair-date" class="font-medium text-xl" data-editable="true" contenteditable="false">תאריך תיקון:</span>
+                                    <span id="repair-date-display" data-editable="true" contenteditable="false" class="text-2xl font-semibold"></span>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <span id="label-repair-warranty" class="font-black text-xl" data-editable="true" contenteditable="false">תוקף אחריות:</span>
-                                    <span id="repair-warranty-end-display" data-editable="true" contenteditable="false" class="text-2xl font-black"></span>
+                                    <span id="label-repair-warranty" class="font-medium text-xl" data-editable="true" contenteditable="false">תוקף אחריות:</span>
+                                    <span id="repair-warranty-end-display" data-editable="true" contenteditable="false" class="text-2xl font-semibold"></span>
                                 </div>
                              </div>
 
                              <div class="flex items-center justify-center py-1">
-                                <span id="label-battery-model" class="font-black text-xl ml-2" data-editable="true" contenteditable="false">דגם סוללה:</span>
-                                <span id="battery-model-display" data-editable="true" contenteditable="false" class="text-3xl font-black tracking-wide">---</span>
+                                <span id="label-battery-model" class="font-medium text-xl ml-2" data-editable="true" contenteditable="false">דגם סוללה:</span>
+                                <span id="battery-model-display" data-editable="true" contenteditable="false" class="text-3xl font-semibold tracking-wide">---</span>
                              </div>
 
                              <div id="client-info-on-sticker" class="flex justify-between items-end mt-1 hidden w-full border-t-2 border-black pt-1">
                                  <div class="flex flex-col items-start flex-grow">
-                                     <span id="label-client-for" class="font-black text-sm text-black uppercase" data-editable="true" contenteditable="false">שם לקוח:</span>
-                                     <span id="client-name-display" class="text-4xl font-black leading-none tracking-tight text-black" data-editable="true" contenteditable="false"></span>
+                                     <span id="label-client-for" class="font-medium text-base text-black uppercase" data-editable="true" contenteditable="false">שם לקוח:</span>
+                                     <span id="client-name-display" class="text-4xl font-bold leading-none tracking-tight text-black" data-editable="true" contenteditable="false"></span>
                                  </div>
                                  <div class="flex flex-col items-end min-w-fit">
-                                     <span id="label-client-ref" class="font-black text-sm text-black uppercase" data-editable="true" contenteditable="false">מספר הזמנה:</span>
-                                     <span id="client-ref-display" class="text-2xl font-black leading-none" data-editable="true" contenteditable="false"></span>
+                                     <span id="label-client-ref" class="font-medium text-base text-black uppercase" data-editable="true" contenteditable="false">מספר הזמנה:</span>
+                                     <span id="client-ref-display" class="text-2xl font-semibold leading-none" data-editable="true" contenteditable="false"></span>
                                  </div>
                              </div>
                         </div>
@@ -348,7 +330,7 @@
             <!-- Side content on the left -->
             <div class="w-1/3 max-w-[340px] flex flex-col items-center justify-between p-4 border-r-2 border-black bg-gray-50">
                 <div class="flex flex-col items-center w-full mb-1 mt-1">
-                    <div id="qr-title" data-editable="true" contenteditable="false" class="text-3xl font-black mb-2 text-center text-black">
+                    <div id="qr-title" data-editable="true" contenteditable="false" class="text-3xl font-semibold mb-2 text-center text-black">
                         סרוק לאחריות
                     </div>
                     <div id="qr-placeholder" class="cursor-pointer relative flex justify-center items-center bg-white rounded-xl shadow-md transform transition hover:scale-105 border-2 border-black">
@@ -357,30 +339,30 @@
                 </div>
                 
                 <div class="flex flex-col items-center w-full mb-1 text-center mt-2 flex-grow justify-center">
-                    <div id="manufacturer-info" data-editable="true" contenteditable="false" class="text-xl leading-snug mb-1 text-black">
-                        <p class="text-3xl mb-1">מעבדת Green Power</p>
+                    <div id="manufacturer-info" data-editable="true" contenteditable="false" class="text-xl font-normal leading-snug mb-1 text-black">
+                        <p class="text-3xl font-bold mb-1">מעבדת Green Power</p>
                         <p class="text-2xl">ניסים גאון 6, אלעד, ישראל</p>
                         <p class="text-xl whitespace-nowrap">053-3224879 | Made in Israel</p>
                     </div>
                 </div>
 
                  <div class="w-full mb-1 text-center px-2">
-                     <p id="standard-info" data-editable="true" contenteditable="false" class="text-base leading-tight break-words text-black">
-                         מיוצר בהתאם לתקן IEC 62133, תקן הבטיחות המחמיר בעולם לסוללות ליתיום.
+                     <p id="standard-info" data-editable="true" contenteditable="false" class="text-base font-normal leading-tight break-words text-black">
+                         תאי ליתיום בתקן IEC 62133 · דוח בדיקה UN38.3
                      </p>
                  </div>
 
                 <div class="flex flex-col items-center w-full mt-auto">
                      <div class="w-full border-t-2 border-black my-2"></div>
                     <div class="flex justify-center items-center gap-4 flex-wrap">
-                        <div id="icon-placeholder-1" class="w-14 h-14 cursor-pointer rounded flex items-center justify-center p-0.5 bg-white border-2 border-gray-900 shadow-sm">
-                            <img id="icon-img-1" class="h-full w-full object-contain" src='data:image/png;base64,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' alt="CE">
+                        <div id="icon-placeholder-1" title="איסוף נפרד לסוללות ליתיום" class="w-16 h-16 cursor-pointer flex items-center justify-center">
+                            <img id="icon-img-1" class="h-full w-full object-contain" src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIyIDIyaDU2Ii8+PHBhdGggZD0iTTQwIDIydi04aDIwdjgiLz48cGF0aCBkPSJNMjkgMzBoNDJsLTUgNDJIMzR6Ii8+PC9nPjxjaXJjbGUgY3g9IjQwIiBjeT0iNzkiIHI9IjUiLz48Y2lyY2xlIGN4PSI2MCIgY3k9Ijc5IiByPSI1Ii8+PHBhdGggZD0iTTE0IDgwIDg2IDE2IiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIi8+PHRleHQgeD0iNTAiIHk9Ijk4IiBmb250LWZhbWlseT0iQXJpYWwsSGVsdmV0aWNhLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjEiIGZvbnQtd2VpZ2h0PSI3MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkxpLWlvbjwvdGV4dD48L3N2Zz4=' alt="איסוף נפרד — Li-ion">
                         </div>
-                        <div id="icon-placeholder-2" class="w-14 h-14 cursor-pointer rounded flex items-center justify-center p-0.5 bg-white border-2 border-gray-900 shadow-sm">
-                            <img id="icon-img-2" class="h-full w-full object-contain" src='data:image/png;base64,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' alt="UL">
+                        <div id="icon-placeholder-2" title="אין לשרוף ואין לחשוף לאש" class="w-16 h-16 cursor-pointer flex items-center justify-center">
+                            <img id="icon-img-2" class="h-full w-full object-contain" src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iNDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSI5Ii8+PHBhdGggZD0iTTUwIDIyYzEwIDE1IDE3IDIwIDE3IDMxYTE3IDE3IDAgMCAxLTM0IDBjMC05IDctMTMgOS0yMiAzIDggOCA3IDgtOXoiIGZpbGw9IiMwMDAiLz48cGF0aCBkPSJNMjIgNzggNzggMjIiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSI5IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L3N2Zz4=' alt="אין לשרוף">
                         </div>
-                        <div id="icon-placeholder-3" class="w-14 h-14 cursor-pointer rounded flex items-center justify-center p-0.5 bg-white border-2 border-gray-900 shadow-sm">
-                           <img id="icon-img-3" class="h-full w-full object-contain" src='data:image/png;base64,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' alt="IEC">
+                        <div id="icon-placeholder-3" title="אין לפרק · אין להרטיב · עיין בהוראות" class="w-16 h-16 cursor-pointer flex items-center justify-center">
+                            <img id="icon-img-3" class="h-full w-full object-contain" src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PHBhdGggZD0iTTUwIDggOTYgOTBINHoiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSI5IiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHJlY3QgeD0iNDQiIHk9IjM2IiB3aWR0aD0iMTIiIGhlaWdodD0iMjkiIHJ4PSI2IiBmaWxsPSIjMDAwIi8+PGNpcmNsZSBjeD0iNTAiIGN5PSI3NyIgcj0iNyIgZmlsbD0iIzAwMCIvPjwvc3ZnPg==' alt="אזהרה — אין לפרק">
                         </div>
                     </div>
                 </div>
@@ -1086,8 +1068,8 @@
                 ...VALUE_SPAN_IDS,
                 ...VALUE_SPAN_IDS.map((id) => 'label-' + id.replace(/-value$/, '')),
             ]);
-            const VALUE_SPAN_DEFAULT_SIZE = 24;
-            // Matches the label spans' text-lg class (18px). This was 10px between
+            const VALUE_SPAN_DEFAULT_SIZE = 28;
+            // Matches the label spans' text-xl class (20px). This was 10px between
             // 2026-07-10 and 2026-08-17 on the theory that a long label could eat a
             // tight row and force the VALUE smaller than the label naming it. In
             // practice it made every label unreadable next to its value, which is not
