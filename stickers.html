@@ -354,7 +354,7 @@
                 </div>
 
                 <div class="flex flex-col items-center w-full mt-auto">
-                     <div class="w-full border-t-2 border-black my-2"></div>
+                     <div class="w-full border-t-2 border-black my-1"></div>
                     <div class="flex justify-center items-center gap-4 flex-wrap">
                         <div id="icon-placeholder-1" title="איסוף נפרד לסוללות ליתיום" class="w-16 h-16 cursor-pointer flex items-center justify-center">
                             <img id="icon-img-1" class="h-full w-full object-contain" src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTIyIDIyaDU2Ii8+PHBhdGggZD0iTTQwIDIydi04aDIwdjgiLz48cGF0aCBkPSJNMjkgMzBoNDJsLTUgNDJIMzR6Ii8+PC9nPjxjaXJjbGUgY3g9IjQwIiBjeT0iNzkiIHI9IjUiLz48Y2lyY2xlIGN4PSI2MCIgY3k9Ijc5IiByPSI1Ii8+PHBhdGggZD0iTTE0IDgwIDg2IDE2IiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIi8+PHRleHQgeD0iNTAiIHk9Ijk4IiBmb250LWZhbWlseT0iQXJpYWwsSGVsdmV0aWNhLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjEiIGZvbnQtd2VpZ2h0PSI3MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkxpLWlvbjwvdGV4dD48L3N2Zz4=' alt="איסוף נפרד — Li-ion">
@@ -1182,6 +1182,37 @@
                 }
             }
 
+            // The left column is height-bound and its last row is the safety marks. Its text
+            // is fixed, but how tall that text comes out is not: the same three-line tagline
+            // measured 470px of a 478px column here and overflowed by 4px on a Linux renderer,
+            // which is a 12px difference in text metrics and no difference in the markup. The
+            // marks are the part that falls off the label, and they are the part that must not.
+            //
+            // Same treatment as fitValueSpansToRow(): keep the designed size whenever it fits
+            // — which is every case on this machine and on the owner's phone — and give back
+            // a pixel at a time only when it does not. Nothing shrinks unconditionally; that
+            // was tried once and it made the whole label worse.
+            const TAGLINE_DEFAULT_SIZE = 24;
+            const TAGLINE_MIN_SIZE = 20;
+            function fitSideColumn() {
+                const marks = document.getElementById('icon-placeholder-1');
+                const col = marks && marks.closest('#sticker-to-capture > div');
+                const tagline = document.querySelector('#manufacturer-info p');
+                if (!col || !tagline) return;
+                const room = () => {
+                    const cs = getComputedStyle(col);
+                    const used = [...col.children].reduce((a, c) => a + c.getBoundingClientRect().height, 0);
+                    return col.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - used;
+                };
+                let size = TAGLINE_DEFAULT_SIZE;
+                tagline.style.fontSize = size + 'px';
+                while (size > TAGLINE_MIN_SIZE && room() < 0) {
+                    size -= 1;
+                    tagline.style.fontSize = size + 'px';
+                }
+            }
+            window.fitSideColumn = fitSideColumn;
+
             function getCellRates(cellsText) {
                 // EVE 50PL — PRO extreme cell (25C cont / 36C peak, per datasheet 125A/180A).
                 if (cellsText.includes("50PL")) {
@@ -1257,6 +1288,7 @@
                 const bmsSpan = document.getElementById('bms-value');
                 if (bmsSpan) bmsSpan.innerText = formatBmsWithPeak(savedBms);
                 fitValueSpansToRow();
+                fitSideColumn();
             }
             window.refreshComputedSpecDisplay = refreshComputedSpecDisplay;
 
@@ -1305,6 +1337,7 @@
 
                 updateWarrantyExpiration();
                 fitValueSpansToRow();
+                fitSideColumn();
             }
             window.updateAllSpecs = updateAllSpecs;
 
@@ -1613,6 +1646,7 @@
                     // a comment on each telling the next person to keep the two in sync.
                     // There is one now. Sizes are restored from shrunkSpans after capture.
                     fitValueSpansToRow();
+                fitSideColumn();
 
                     // גבהים מפורשים על שורות הspecs — מאפשר ל-html2canvas לחשב items-end בצורה תקינה
                     const origStickerH = sticker.style.height;

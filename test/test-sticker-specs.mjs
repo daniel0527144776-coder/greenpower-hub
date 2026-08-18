@@ -110,5 +110,41 @@ console.log('\n4. the label and the sticker agree after a reload');
   check('a restored record is capped the same way', r === '150A/300A', r);
 }
 
+console.log('\n5. the safety marks cannot be pushed off the label');
+{
+  // The left column had 8px of slack, and the same markup that measured +16px of clearance
+  // here overflowed by 4px on a Linux runner — a difference in text metrics, not in the
+  // page. The marks are what falls off, and they are the part a battery label must keep.
+  // Narrowing the column reproduces wider metrics on demand: same font, one more line.
+  const r = await p.evaluate(() => {
+    const marks = document.getElementById('icon-placeholder-1');
+    const col = marks.closest('#sticker-to-capture > div');
+    const sticker = document.getElementById('sticker-to-capture');
+    const tag = document.querySelector('#manufacturer-info p');
+    const state = () => ({
+      clearance: Math.round(sticker.getBoundingClientRect().bottom - marks.getBoundingClientRect().bottom),
+      size: Math.round(parseFloat(getComputedStyle(tag).fontSize)),
+    });
+    window.fitSideColumn();
+    const normal = state();
+    const orig = col.style.width;
+    const squeezed = [0.94, 0.88, 0.82].map((pct) => {
+      col.style.width = Math.round(col.clientWidth * pct) + 'px';
+      window.fitSideColumn();
+      const s = state();
+      col.style.width = orig;
+      return { pct, ...s };
+    });
+    window.fitSideColumn();
+    return { normal, squeezed, restored: state() };
+  });
+  console.log(`     normal ${JSON.stringify(r.normal)}  squeezed ${JSON.stringify(r.squeezed)}`);
+  check('the designed size is kept when it fits', r.normal.size === 24 && r.normal.clearance >= 0, r.normal);
+  check('the marks stay on the label under wider metrics',
+    r.squeezed.every((s) => s.clearance >= 0), r.squeezed);
+  check('nothing stays shrunk once the pressure is gone',
+    r.restored.size === 24 && r.restored.clearance >= 0, r.restored);
+}
+
 await b.close(); srv.close();
 process.exit(finish());
