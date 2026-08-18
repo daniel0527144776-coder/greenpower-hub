@@ -4652,13 +4652,20 @@ function renderInventory() {
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
   });
   list.innerHTML = cats.map(c => {
-    // Voltage first (an item without one sorts last — ranking it by a number it does not
-    // have would be arbitrary), then stock, then name.
-    const volt = (x) => { const m = String(x.name || '').match(/(\d+)\s*V/i); return m ? +m[1] : Infinity; };
-    const items = groups[c].slice().sort((a, b) =>
-      volt(a) - volt(b) ||
-      (Number(a.qty) || 0) - (Number(b.qty) || 0) ||
-      (a.name || '').localeCompare(b.name || '', 'he', { numeric: true }));
+    // A number followed by a unit, e.g. "13S", "60A", "72V". The lookahead stops "60A" from
+    // being read out of a longer token and keeps 0.15 (nickel) intact.
+    const unit = (x, u) => {
+      const m = String(x.name || '').match(new RegExp('(\\d+(?:\\.\\d+)?)\\s*' + u + '(?![A-Za-z\\u0590-\\u05FF])', 'i'));
+      return m ? parseFloat(m[1]) : Infinity;
+    };
+    const byStock = (a, b) => (Number(a.qty) || 0) - (Number(b.qty) || 0)
+      || (a.name || '').localeCompare(b.name || '', 'he', { numeric: true });
+    // A BMS carries no voltage — its identity is the S count and the current rating, so it
+    // sorts by those. Everywhere else voltage is the axis, as on the price list. An item
+    // missing the relevant number sorts last rather than pretending to have one.
+    const items = groups[c].slice().sort((a, b) => (c === 'BMS'
+      ? unit(a, 'S') - unit(b, 'S') || unit(a, 'A') - unit(b, 'A')
+      : unit(a, 'V') - unit(b, 'V')) || byStock(a, b));
     const totalQty = items.reduce((s, x) => s + (Number(x.qty) || 0), 0);
     return `<div style="margin-bottom:14px;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px;margin-bottom:6px;border-bottom:2px solid var(--primary);">
