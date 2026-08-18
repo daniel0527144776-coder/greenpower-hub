@@ -83,6 +83,9 @@
         }
 
         #sticker-to-capture {
+             /* The printer clips the left edge of the label, so the content sits 10px in.
+                White space here is cheaper than a cut-off column. */
+             padding-left: 10px;
              color: #000000 !important; /* Force Black */
              font-weight: 400 !important; /* base weight; each element states its own */
              background-color: #ffffff;
@@ -203,7 +206,7 @@
                  wide enough to push the QR/side column out of frame). w-2/3
                  makes it a fixed, predictable "sticker width minus the fixed
                  side column", independent of what's rendered inside. -->
-            <div class="w-2/3 min-w-0 flex flex-col p-5 pl-4 justify-between h-full">
+            <div class="w-2/3 min-w-0 flex flex-col p-5 pt-2 pl-4 justify-between h-full">
                 <!-- Logo and slogan section -->
                 <div class="flex flex-col items-start gap-0 pb-4 border-b-2 border-black">
                     <div class="flex w-full items-center justify-center gap-4">
@@ -211,7 +214,7 @@
 
                             <!-- Header Container: Title -->
                             <div class="flex items-center justify-center w-full">
-                                <h1 id="main-title" data-editable="true" contenteditable="false" class="text-[56px] font-semibold leading-tight tracking-tight whitespace-nowrap">Green Power</h1>
+                                <h1 id="main-title" data-editable="true" contenteditable="false" class="text-[60px] font-semibold leading-tight tracking-tight whitespace-nowrap">Green Power</h1>
                             </div>
 
                         </div>
@@ -938,7 +941,7 @@
             // is not a hypothetical: the address, the type scale and the standards line
             // were each edited, deployed, verified live — and still did not appear on the
             // owner's phone, because his save kept restoring the old ones on top.
-            const STICKER_TEMPLATE_VERSION = '2026-08-18l';
+            const STICKER_TEMPLATE_VERSION = '2026-08-18m';
 
             // Record of every sticker produced. The hub's stickerlog page, its home card and
             // the "מדבקות שהונפקו" block on a customer card all read this key; between
