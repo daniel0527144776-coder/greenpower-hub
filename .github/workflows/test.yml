@@ -1,0 +1,79 @@
+# Runs the hub's own checks on every push.
+#
+# Until now nothing did. The three suites below existed in a repo with no remote, so they
+# only ran when someone remembered to type the command — and a hub deploy was push-and-hope.
+# Cloudflare publishes this repo on push regardless of what happens here; treat a red run as
+# "roll it back", not "it never went out".
+#
+# No package.json in this repo on purpose: it holds static assets that Cloudflare serves
+# directly, and adding one risks changing how the deploy is detected. Playwright is
+# installed into a scratch directory instead.
+name: hub tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright + Chromium
+        run: |
+          npm init -y --silent
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+
+      # The inline script is ~5,000 lines in one HTML file, so a syntax error takes the whole
+      # app down at once. Cheapest possible check, run before anything expensive.
+      - name: Inline scripts parse
+        run: |
+          node -e "
+          const fs=require('fs');
+          for (const f of ['dist/index.html','dist/stickers.html']) {
+            const t=fs.readFileSync(f,'utf8');
+            const parts=[...t.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(s=>s.trim());
+            fs.writeFileSync('/tmp/'+f.replace(/[^a-z]/gi,'_')+'.js', parts.join('\n;\n'));
+            console.log(f, parts.length, 'inline block(s)');
+          }"
+          for f in /tmp/*.js; do node --check "$f"; done
+
+      # dist/ is what Cloudflare serves. index.html here at the root is a pre-dist leftover
+      # and nothing reads it, but stickers.html exists in both and they must not drift.
+      - name: stickers.html matches dist
+        run: diff stickers.html dist/stickers.html
+
+      - name: Hub — edit/delete, sales page, warranty register
+        run: node test/test-hub-jobedit.mjs
+
+      - name: Sticker — saved layout is versioned
+        run: node test/test-sticker-state.mjs
+
+      - name: Sticker — every sticker is recorded
+        run: node test/test-sticker-history.mjs
+
+      # Fails on marks overflowing the artboard, text spilling its column, or a font weight
+      # with no loaded face — all three have shipped to a printer before.
+      - name: Sticker — renders, both modes
+        env:
+          STICKER_OUT: ${{ runner.temp }}/stickers
+        run: |
+          node test/render-sticker-pdf.mjs --volt 72 --cap 60 --out ci-new
+          node test/render-sticker-pdf.mjs --repair --out ci-repair
+
+      - name: Upload the rendered stickers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sticker-renders
+          path: ${{ runner.temp }}/stickers/*.png
+          if-no-files-found: ignore

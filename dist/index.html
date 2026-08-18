@@ -329,6 +329,11 @@ body { min-height: 100vh; }
   </div>
 
   <!-- Backup reminder -->
+  <div id="warrantyReminder" class="alert alert-warning" style="display:none;align-items:center;gap:10px;cursor:pointer;" onclick="openExpiringWarranties()">
+    <span style="font-size:18px;">🛡️</span>
+    <div style="flex:1;" id="warrantyReminderText"></div>
+    <span style="white-space:nowrap;font-weight:700;">הצג ←</span>
+  </div>
   <div id="backupReminder" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
     <span style="font-size:18px;">💾</span>
     <div style="flex:1;" id="backupReminderText">מומלץ לגבות את הנתונים.</div>
@@ -2834,7 +2839,31 @@ function renderStats() {
 // HOME PAGE
 // ============================================================
 
+// Straight to the tab that lists them, so the banner is one tap from the phone call it is
+// asking for rather than a notice you have to act on twice.
+function openExpiringWarranties() {
+  navigateTo('warranties');
+  setWarrantyTab('expiring');
+}
+
 function refreshHome() {
+  // Warranties running out in the next 30 days — repairs AND sales, via warrantyEntries().
+  const wb = document.getElementById('warrantyReminder');
+  if (wb) {
+    const now = Date.now();
+    const soon = warrantyEntries().filter((e) => {
+      const d = (new Date(e.end).getTime() - now) / 86400000;
+      return d > 0 && d <= 30;
+    });
+    wb.style.display = soon.length ? 'flex' : 'none';
+    if (soon.length) {
+      const names = [...new Set(soon.map((e) => e.name).filter(Boolean))];
+      document.getElementById('warrantyReminderText').innerHTML =
+        `<b>${soon.length}` + (soon.length === 1 ? ' אחריות נגמרת' : ' אחריויות נגמרות') + ` ב-30 הימים הקרובים.</b>` +
+        (names.length ? `<div style="font-size:11px;opacity:.85;margin-top:2px;">${names.slice(0, 3).join(' · ')}${names.length > 3 ? ' ועוד…' : ''}</div>` : '');
+    }
+  }
+
   if (bizDetails.owner) {
     document.getElementById('homeGreeting').textContent = `ברוך הבא, ${bizDetails.owner.split(' ')[0]}`;
   }
