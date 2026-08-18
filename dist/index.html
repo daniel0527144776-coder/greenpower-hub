@@ -2642,21 +2642,54 @@ function setWarrantyTab(tab) {
   renderWarranties();
 }
 
+// One warranty entry, whichever side of the business it came from. A repair carries what
+// its job recorded; a SOLD order carries the longest warranty among its items, from the
+// order date. Quotes are excluded — nothing has been handed over, so nothing is covered.
+function warrantyEntries() {
+  const out = [];
+  (Store.get('jobs') || []).forEach((j) => {
+    if (!j.warrantyEnd) return;
+    out.push({
+      kind: 'repair', id: j.id, name: j.customerName, phone: j.customerPhone,
+      date: j.date, end: j.warrantyEnd, amount: Number(j.price) || 0,
+      spec: (j.voltage && j.capacity)
+        ? `🔋 ${j.voltage}V ${j.capacity}Ah${VEHICLE_LABELS[j.vehicle] ? ' · ' + VEHICLE_LABELS[j.vehicle] : ''}`
+        : '🔧 ' + (j.quickRepair || 'תיקון'),
+      what: jobTypeLabel(j),
+    });
+  });
+  (Store.get('orders') || []).forEach((o) => {
+    if (!saleIsIncome(o)) return;
+    const months = (o.items || []).reduce((m, it) => Math.max(m, warrantyForItem(it)), 0);
+    if (!months) return;
+    const start = new Date(o.date);
+    if (isNaN(start)) return;
+    out.push({
+      kind: 'sale', id: o.id, name: o.customer, phone: o.phone,
+      date: o.date, end: new Date(start.getTime() + months * 30 * 24 * 60 * 60 * 1000).toISOString(),
+      amount: Number(o.total) || 0,
+      spec: '🛒 ' + (saleCats(o) || 'מכירה'),
+      what: (o.items || []).map((it) => it.name).join(' · ') || 'מכירה',
+    });
+  });
+  return out;
+}
+
 function renderWarranties() {
-  const jobs = Store.get('jobs') || [];
   const now = Date.now();
-  let filtered = jobs.filter(j => j.warrantyEnd);
+  let filtered = warrantyEntries();
 
   if (state.warrantyTab === 'active') {
-    filtered = filtered.filter(j => new Date(j.warrantyEnd).getTime() > now);
+    filtered = filtered.filter(e => new Date(e.end).getTime() > now);
   } else if (state.warrantyTab === 'expiring') {
-    filtered = filtered.filter(j => {
-      const days = (new Date(j.warrantyEnd).getTime() - now) / (24 * 60 * 60 * 1000);
+    filtered = filtered.filter(e => {
+      const days = (new Date(e.end).getTime() - now) / (24 * 60 * 60 * 1000);
       return days > 0 && days <= 30;
     });
   } else if (state.warrantyTab === 'expired') {
-    filtered = filtered.filter(j => new Date(j.warrantyEnd).getTime() <= now);
+    filtered = filtered.filter(e => new Date(e.end).getTime() <= now);
   }
+  filtered.sort((a, b) => new Date(a.end) - new Date(b.end));
 
 
   const list = document.getElementById('warrantiesList');
@@ -2666,7 +2699,7 @@ function renderWarranties() {
   }
 
   list.innerHTML = filtered.map(j => {
-    const end = new Date(j.warrantyEnd);
+    const end = new Date(j.end);
     const days = Math.ceil((end.getTime() - now) / (24 * 60 * 60 * 1000));
     let badgeCls = 'warranty-active', badgeText = `${days} ימים`;
     if (days <= 0) { badgeCls = 'warranty-expired'; badgeText = 'פג'; }
@@ -2675,28 +2708,30 @@ function renderWarranties() {
       <div class="list-item">
         <div class="list-item-header">
           <div>
-            <div class="list-item-title">${j.customerName || 'ללא שם'}</div>
-            <div class="list-item-subtitle">📱 ${j.customerPhone || '—'}</div>
+            <div class="list-item-title">${j.kind === 'sale' ? '🛒 ' : '🔧 '}${j.name || 'ללא שם'}</div>
+            <div class="list-item-subtitle">📱 ${j.phone || '—'}</div>
           </div>
           <span class="warranty-badge ${badgeCls}">${badgeText}</span>
         </div>
         <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
-          ${(j.voltage && j.capacity) ? `🔋 ${j.voltage}V ${j.capacity}Ah${VEHICLE_LABELS[j.vehicle] ? ' · ' + VEHICLE_LABELS[j.vehicle] : ''}` : ('🔧 ' + (j.quickRepair || 'תיקון'))} · ₪${(Number(j.price) || 0).toLocaleString('he-IL')}
+          ${j.spec} · ₪${j.amount.toLocaleString('he-IL')}
         </div>
         <!-- What the warranty actually covers. A job from the calculator showed only the
              battery spec, so a year later the record said "60V 21Ah" and not whether we
              had replaced the BMS or three rows of cells — which is the thing being
              claimed against. -->
         <div style="font-size: 12px; color: var(--primary); margin-top: 3px; font-weight: 600;">
-          🔧 ${jobTypeLabel(j)}
+          ${j.what}
         </div>
         <div style="font-size: 11px; color: var(--text-light); margin-top: 2px;">
-          תיקון: ${new Date(j.date).toLocaleDateString('he-IL')} · אחריות עד: ${end.toLocaleDateString('he-IL')}
+          ${j.kind === 'sale' ? 'נמכר' : 'תיקון'}: ${new Date(j.date).toLocaleDateString('he-IL')} · אחריות עד: ${end.toLocaleDateString('he-IL')}
         </div>
         <div class="btn-group" style="margin-top: 8px;">
-          ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background: #25D366; color: white; border: none;" onclick="callCustomer('${j.customerPhone}')">💬 שלח הודעה</button>` : ''}
-          <button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','warranties')">✏️ ערוך</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteJob('${j.id}','warranties')">🗑️</button>
+          ${j.phone ? `<button class="btn btn-sm btn-secondary" style="background: #25D366; color: white; border: none;" onclick="callCustomer('${j.phone}')">💬 שלח הודעה</button>` : ''}
+          ${j.kind === 'sale'
+            ? `<button class="btn btn-sm btn-secondary" onclick="openOrderEditor('${j.id}')">✏️ ערוך מכירה</button>`
+            : `<button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','warranties')">✏️ ערוך</button>
+               <button class="btn btn-sm btn-danger" onclick="deleteJob('${j.id}','warranties')">🗑️</button>`}
         </div>
       </div>
     `;
@@ -3344,6 +3379,10 @@ function renderCatalog() {
   const SERIES = [['CLASSIC', 'CLASSIC'], ['ADVANCED', 'ADVANCED'], ['PRO', 'PRO'], ['OTHER', 'ללא סדרה']];
   const bySeries = new Map(SERIES.map(([k]) => [k, []]));
   Object.keys(groups).forEach(c => { const m = c.match(TIER_RX); bySeries.get(m ? m[1] : 'OTHER').push(c); });
+  // By voltage, low to high. A category with no voltage keeps alphabetical order and sorts
+  // after the battery ones — ranking it by a number it does not have would be arbitrary.
+  const voltOf = (c) => { const m = String(c).match(/(\d+)\s*V/i); return m ? +m[1] : Infinity; };
+  bySeries.forEach((list) => list.sort((a, b) => voltOf(a) - voltOf(b) || a.localeCompare(b, 'he', { numeric: true })));
   catCatKeys = SERIES.flatMap(([k]) => bySeries.get(k));
   const forceOpen = !!q || !!cat;
   let html = '', ci = -1;
@@ -4971,6 +5010,36 @@ function openInstallGuide() {
 // INITIALIZATION
 // ============================================================
 
+
+// ---- Explanatory banners collapse ------------------------------------------------------
+// They are reference, not instructions you follow every time, and seven of them across the
+// tabs is a wall of text between the user and the thing they came to do. One line each,
+// opened on demand. See the exclusions above the querySelectorAll: a banner with an id is
+// something the app writes into, not a note.
+function collapseNotes() {
+  document.querySelectorAll('.info-banner:not([id])').forEach((el) => {
+    // A button is an action, and an id underneath is something the app renders into
+    // (#dimResult is the pack-size result, not a note about it).
+    if (el.dataset.note || el.querySelector('button') || el.querySelector('[id]')) return;
+    el.dataset.note = '1';
+    const body = document.createElement('div');
+    body.style.cssText = 'display:none;flex-basis:100%;margin-top:6px;';
+    while (el.firstChild) body.appendChild(el.firstChild);
+    const head = document.createElement('div');
+    head.style.cssText = 'flex:1;display:flex;justify-content:space-between;align-items:center;gap:8px;';
+    head.innerHTML = '<span>ℹ️ הסבר</span><span style="opacity:.55;font-size:11px;">▸</span>';
+    el.appendChild(head);
+    el.appendChild(body);
+    el.style.cursor = 'pointer';
+    el.style.flexWrap = 'wrap';
+    el.addEventListener('click', () => {
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : 'block';
+      head.lastElementChild.textContent = open ? '▸' : '▾';
+    });
+  });
+}
+
 function init() {
   // The help text used to name the catalog size. It was typed by hand and went stale —
   // "283 המוצרים" against a catalog of 784 — then derived, and now simply gone: a total
@@ -5075,6 +5144,7 @@ async function startApp() {
 }
 
 function boot() {
+  collapseNotes();
   try {
     Sync.loadSession();
     if (Sync.isAuthed()) startApp();
