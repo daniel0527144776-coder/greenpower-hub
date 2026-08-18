@@ -14,6 +14,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 // CI installs playwright; locally nothing is installed for the hub, so fall back to the
@@ -58,7 +59,7 @@ async function makeSticker(page, { repair, client, ref, volt, cap }) {
   await page.waitForTimeout(600);
   const dl = page.waitForEvent('download', { timeout: 120000 });
   await page.locator('.download-btn[data-format="pdf"]').click();
-  await (await dl).saveAs(path.join(DIST, '..', '..', 'verify-screenshots', 'history-probe.pdf'));
+  await (await dl).saveAs(path.join(os.tmpdir(), 'gp-history-probe.pdf'));
   await page.waitForTimeout(400);
 }
 
@@ -67,7 +68,8 @@ const page = await ctx.newPage();
 page.on('pageerror', e => errors.push(String(e)));
 page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto('http://127.0.0.1:4182/stickers.html', { waitUntil: 'domcontentloaded' });
-await page.waitForTimeout(2200);
+await page.waitForFunction(() => typeof window.resetStickerDesign === 'function', { timeout: 30000 });
+await page.waitForTimeout(800);
 await page.evaluate(() => localStorage.removeItem('gp_sticker_history'));
 
 await makeSticker(page, { client: 'אוראל פיימן', ref: '1042', volt: '72', cap: '60' });
