@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { checker } from './diag.mjs';
 const require_ = createRequire(import.meta.url);
 const { chromium } = (() => {
   try { return require_('playwright'); }
@@ -32,11 +33,7 @@ const srv = http.createServer((q, r) => {
 });
 await new Promise(r => srv.listen(4189, r));
 
-let fails = 0;
-const check = (label, ok, got) => {
-  if (ok) console.log(`  ok   ${label}`);
-  else { console.log(`  FAIL ${label}${got !== undefined ? ` — ${JSON.stringify(got)}` : ''}`); fails++; }
-};
+const { check, finish } = checker();
 
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 390, height: 800 } });
@@ -114,5 +111,4 @@ console.log('\n4. the label and the sticker agree after a reload');
 }
 
 await b.close(); srv.close();
-console.log(fails ? `\n${fails} FAILED` : '\nall green');
-process.exit(fails ? 1 : 0);
+process.exit(finish());

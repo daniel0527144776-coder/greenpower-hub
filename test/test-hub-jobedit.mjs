@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { checker } from './diag.mjs';
 
 // playwright is a dependency of the React site, not of this folder, and there is no
 // reason to install a second copy. `import` cannot take a Windows drive path
@@ -35,8 +36,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise(r => server.listen(4199, r));
 
-let fails = 0;
-const check = (label, ok, got) => { if (ok) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${got !== undefined ? ` — got ${JSON.stringify(got)}` : ''}`); fails++; } };
+const { check, finish } = checker();
 
 const JOB = {
   id: 'j1', date: '2026-08-01T09:00:00.000Z', dateDisplay: '1.8.2026, 12:00',
@@ -291,5 +291,4 @@ check('no JS errors on the page', errors.length === 0, errors);
 
 await browser.close();
 server.close();
-console.log(fails ? `\n${fails} FAILED` : '\nall green');
-process.exit(fails ? 1 : 0);
+process.exit(finish());

@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { checker } from './diag.mjs';
 // CI installs playwright; locally nothing is installed for the hub, so fall back to the
 // copy the retail site already carries rather than duplicating a browser download.
 const require_ = createRequire(import.meta.url);
@@ -49,8 +50,7 @@ const srv = http.createServer((q, r) => {
 });
 await new Promise(r => srv.listen(4188, r));
 
-let fails = 0;
-const check = (label, ok, got) => { if (ok) console.log(`  ok   ${label}`); else { console.log(`  FAIL ${label}${got !== undefined ? ` — ${JSON.stringify(got)}` : ''}`); fails++; } };
+const { check, finish } = checker();
 
 const b = await chromium.launch();
 
@@ -108,5 +108,4 @@ console.log('\n2. a save made by THIS version is still restored');
 }
 
 await b.close(); srv.close();
-console.log(fails ? `\n${fails} FAILED` : '\nall green');
-process.exit(fails ? 1 : 0);
+process.exit(finish());

@@ -20,6 +20,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Reading a run log needs a token and there isn't one, so a red build could only ever
+      # say which STEP failed. The suites write the labels of the checks that failed here,
+      # and the last step turns them into an ARTIFACT NAME — artifact names come back from
+      # the public API, so the name is the diagnosis. See test/diag.mjs.
+      GP_DIAG: ${{ runner.temp }}/failing-checks.txt
     steps:
       - uses: actions/checkout@v4
 
@@ -81,3 +87,24 @@ jobs:
           name: sticker-renders
           path: ${{ runner.temp }}/stickers/*.png
           if-no-files-found: ignore
+
+      # Names the failing assertion in a place that can be read without a token.
+      - name: Name the failing assertion
+        if: failure()
+        id: diag
+        run: |
+          if [ -s "$GP_DIAG" ]; then
+            echo "slug=$(tr -d '\n' < "$GP_DIAG")" >> "$GITHUB_OUTPUT"
+          else
+            # The step that failed did not get as far as an assertion — a crash, an install,
+            # the diff, or the parse check. Say so rather than implying a passing suite.
+            echo "slug=step-failed-before-any-assertion" >> "$GITHUB_OUTPUT"
+            echo "no assertion recorded" > "$GP_DIAG"
+          fi
+
+      - name: Publish the diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FAILED--${{ steps.diag.outputs.slug }}
+          path: ${{ env.GP_DIAG }}
