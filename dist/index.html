@@ -4599,8 +4599,8 @@ function renderInventory() {
   const sh = invShortages();
   const nameQty = (i) => `${i.name} (${Number(i.qty) || 0})`;
   document.getElementById('inventoryLowAlert').innerHTML =
-    (sh.out.length ? `<div class="alert alert-danger">🔴 <b>אזל מהמלאי (${sh.out.length}):</b> ${sh.out.map(i => i.name).join(' · ')}</div>` : '') +
-    (sh.low.length ? `<div class="alert alert-warning">⚠️ <b>מלאי נמוך (${sh.low.length}):</b> ${sh.low.map(nameQty).join(' · ')}</div>` : '') +
+    (sh.out.length ? `<div class="alert alert-danger">🔴 <b>אזל מהמלאי:</b> ${sh.out.map(i => i.name).join(' · ')}</div>` : '') +
+    (sh.low.length ? `<div class="alert alert-warning">⚠️ <b>מלאי נמוך:</b> ${sh.low.map(nameQty).join(' · ')}</div>` : '') +
     (sh.total === 0 && inv.length ? `<div class="alert alert-success">✅ אין מחסור — כל ${inv.length} הפריטים מעל הסף.</div>` : '');
   const list = document.getElementById('inventoryList');
   if (inv.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים. הוסף תאים, BMS, מטענים, ניקל וכו\'.</div></div>'; return; }
