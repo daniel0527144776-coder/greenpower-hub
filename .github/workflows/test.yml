@@ -62,6 +62,11 @@ jobs:
       - name: stickers.html matches dist
         run: diff stickers.html dist/stickers.html
 
+      # The network here rewrites pages in flight; one such page was saved and committed,
+      # and its injected scripts reached production. Cheap, and it runs before the browser.
+      - name: Pages load nothing from outside their origin
+        run: node test/test-self-contained.mjs
+
       - name: Hub — edit/delete, sales page, warranty register
         run: node test/test-hub-jobedit.mjs
 
