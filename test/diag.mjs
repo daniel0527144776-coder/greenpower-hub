@@ -9,6 +9,32 @@
 // The name comes back from the API, and the name is the diagnosis.
 import fs from 'node:fs';
 
+// Slugify for use as an artifact name: those reject / \ : * ? " < > | and are awkward with
+// spaces. Hebrew survives, so a Hebrew label still reads on the other side.
+const slugify = (parts) => parts
+  .map((f) => String(f).replace(/[^a-zA-Z0-9֐-׿]+/g, '-').replace(/^-|-$/g, '').slice(0, 150))
+  .join('__AND__')
+  .slice(0, 190) || 'unnamed';
+
+// For a script that collects free-text failures rather than named checks.
+export function writeDiag(messages) {
+  if (!process.env.GP_DIAG || !messages.length) return;
+  try { fs.writeFileSync(process.env.GP_DIAG, slugify(messages)); } catch { /* never mask the real failure */ }
+}
+
+// A crash is a diagnosis too, and it is the case that otherwise reports as
+// "step-failed-before-any-assertion" — true, and useless. Installed on import: every suite
+// here imports this module, and none of them has a reason to want the default behaviour.
+for (const ev of ['uncaughtException', 'unhandledRejection']) {
+  process.on(ev, (e) => {
+    const msg = `${ev} ${(e && e.message) || e}`;
+    console.log(`\nCRASH ${msg}`);
+    if (e && e.stack) console.log(e.stack);
+    writeDiag([`CRASH ${msg}`]);
+    process.exit(1);
+  });
+}
+
 export function checker() {
   const failed = [];
   const check = (label, ok, got) => {
@@ -21,15 +47,7 @@ export function checker() {
   };
   // Call instead of process.exit(). Returns the exit code so a caller can still decide.
   const finish = () => {
-    if (failed.length && process.env.GP_DIAG) {
-      // Artifact names reject / \ : * ? " < > | and are awkward with spaces; keep it to a
-      // slug that survives the round trip and still reads as the sentence it came from.
-      const slug = failed
-        .map((f) => f.replace(/[^a-zA-Z0-9֐-׿]+/g, '-').replace(/^-|-$/g, '').slice(0, 150))
-        .join('__AND__')
-        .slice(0, 190) || 'unnamed';
-      try { fs.writeFileSync(process.env.GP_DIAG, slug); } catch { /* never mask the real failure */ }
-    }
+    writeDiag(failed);
     console.log(failed.length ? `\n${failed.length} FAILED` : '\nall green');
     return failed.length ? 1 : 0;
   };

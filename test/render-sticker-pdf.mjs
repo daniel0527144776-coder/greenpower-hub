@@ -16,6 +16,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { writeDiag } from './diag.mjs';
 
 // CI installs playwright; locally nothing is installed for the hub, so fall back to the
 // copy the retail site already carries rather than duplicating a browser download.
@@ -197,7 +198,7 @@ const imgs = [...s.matchAll(/<<([^<>]*(?:<<[^>]*>>[^<>]*)*)>>\s*stream\r?\n/g)]
     return { w: n('Width'), h: n('Height'), len: n('Length'), cs: t('ColorSpace'), filter: t('Filter'), start: o.start };
   })
   .filter(o => o.cs === 'DeviceRGB');
-if (!imgs.length) { console.log('no DeviceRGB image in the PDF'); process.exit(1); }
+if (!imgs.length) { console.log('no DeviceRGB image in the PDF'); writeDiag(['no DeviceRGB image in the PDF']); process.exit(1); }
 const im = imgs.sort((a, b2) => b2.w * b2.h - a.w * a.h)[0];
 let data = buf.subarray(im.start, im.start + im.len);
 if (im.filter === 'FlateDecode') data = zlib.inflateSync(data);
@@ -221,5 +222,5 @@ fs.writeFileSync(pngPath, Buffer.concat([
   chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0)),
 ]));
 console.log(`\n${pngPath}  ${w}x${h}`);
-if (errors.length) { console.log('page errors:'); errors.forEach(e => console.log('  ' + e)); }
+if (errors.length) { console.log('page errors:'); errors.forEach(e => console.log('  ' + e)); writeDiag(errors); }
 process.exit(errors.length ? 1 : 0);
