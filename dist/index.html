@@ -768,7 +768,6 @@ body { min-height: 100vh; }
 <section id="page-customers" class="page">
   <div class="page-header">
     <h2 class="page-title">👥 לקוחות</h2>
-    <span class="page-subtitle" id="customerCount">0 לקוחות</span>
   </div>
   <div class="card">
     <input type="text" class="form-input-wide" id="customerSearch" placeholder="🔍 חיפוש לפי שם או טלפון..." style="width: 100%; margin-bottom: 12px;" oninput="renderCustomers()">
@@ -780,7 +779,6 @@ body { min-height: 100vh; }
 <section id="page-warranties" class="page">
   <div class="page-header">
     <h2 class="page-title">🛡️ אחריות פעילה</h2>
-    <span class="page-subtitle" id="warrantyCount">0</span>
   </div>
   <div class="card">
     <div class="sub-tabs">
@@ -1232,7 +1230,7 @@ body { min-height: 100vh; }
     <h3 class="card-title">🆕 חדש בגרסה 3.5</h3>
     <ul style="font-size:13px;line-height:1.9;color:var(--text-muted);padding-inline-start:18px;margin:0;">
       <li><b>💬 וואטסאפ ישירות</b> — כפתורי הוואטסאפ פותחים את השיחה עם הלקוח וההודעה כבר כתובה בפנים, בלי להעתיק ולהדביק. עובד מהמחשבון, מכרטיס לקוח, מהזמנה, מהתמחור המהיר ומדו"ח לקוח עסקי. <b>צריך מספר טלפון</b> — בלעדיו ההודעה עדיין מועתקת ללוח כמו קודם.</li>
-      <li><b>🏷️ מחירון מוצרים</b> — כל <span id="helpCatCount">—</span> המוצרים עם מחיר <b>פרטי ועסקי</b> (כולל <b>תאים בודדים</b> עם מדרגות כמות). החלף בטאב למעלה. הפעל "הצג עלות ורווח" כדי לראות כמה כל מוצר עולה לך וכמה אתה מרוויח. לחיצה על מוצר → הזנת עלות ספק מדויקת.</li>
+      <li><b>🏷️ מחירון מוצרים</b> — כל המוצרים עם מחיר <b>פרטי ועסקי</b> (כולל <b>תאים בודדים</b> עם מדרגות כמות). החלף בטאב למעלה. הפעל "הצג עלות ורווח" כדי לראות כמה כל מוצר עולה לך וכמה אתה מרוויח. לחיצה על מוצר → הזנת עלות ספק מדויקת.</li>
       <li><b>🛒 מכירות ותיקונים</b> — בנה הצעת מחיר מהקטלוג (פרטי או עסקי בלחיצה), שלח בוואטסאפ, ועקוב אחר סטטוס (הצעה→שולם→נמסר). מכירות ששולמו נכנסות אוטומטית להכנסות.
         בראש העמוד <b>סיכום החודש</b> (מכירות · תיקונים · סה"כ) ובאנר של <b>הצעות פתוחות</b> שלחיצה עליו מסננת אליהן. מתחת: <b>חיפוש</b> לפי שם, טלפון, פריט או מפרט, סינון להכל/מכירות/תיקונים/הצעות, והרשימה <b>מקובצת לפי חודש</b> עם סכום לכל חודש.
         על כל שורה — ✏️ לעריכה ו🗑️ למחיקה, גם לתיקון וגם למכירה שכבר בוצעו.</li>
@@ -1272,7 +1270,6 @@ body { min-height: 100vh; }
 <section id="page-catalog" class="page">
   <div class="page-header">
     <h2 class="page-title">🏷️ מחירון מלא — מוצרים ותיקונים</h2>
-    <span class="page-subtitle" id="catalogCount"></span>
   </div>
   <div class="card">
     <div class="sub-tabs" style="margin-bottom:10px;">
@@ -1429,7 +1426,6 @@ body { min-height: 100vh; }
 <section id="page-bizdocs" class="page">
   <div class="page-header">
     <h2 class="page-title">🏢 תיעוד תיקונים — עסקי</h2>
-    <span class="page-subtitle" id="bizdocsCount"></span>
   </div>
   <div class="info-banner"><span>💡</span><div>סמן תיקון כ<strong>"לקוח עסקי"</strong> במחשבון התמחור — וכל התיקונים יתועדו כאן לכל בית עסק. 📋 מעתיק סיכום לקבוצת הוואטסאפ של החנות, עם <b>היתרה מחושבת מהחיובים והתשלומים</b> ולא מהזיכרון.</div></div>
   <div class="card" id="bizdocsListCard">
@@ -1455,7 +1451,6 @@ body { min-height: 100vh; }
       <button class="btn btn-secondary btn-sm" onclick="clearStickerLog()">🗑️ נקה הכל</button>
     </div>
   </div>
-  <div style="text-align:left;font-size:12px;color:var(--text-muted);margin:-6px 0 8px;"><span id="stickerlogCount"></span></div>
   <div class="info-banner"><span>💡</span><div>כל מדבקה שנוצרת ב<strong>עורך המדבקות</strong> נשמרת לכאן אוטומטית ומסונכרנת — מסווגת לפי <strong>תיקון</strong> או <strong>בנייה/מכירה</strong>.</div></div>
   <div class="card">
     <div class="sub-tabs" style="margin-bottom:10px;">
@@ -2548,7 +2543,6 @@ function renderCustomers() {
   );
   filtered.sort((a, b) => new Date(b.lastVisit) - new Date(a.lastVisit));
 
-  document.getElementById('customerCount').textContent = `${customers.length} לקוחות`;
 
   const list = document.getElementById('customersList');
   if (filtered.length === 0) {
@@ -2664,7 +2658,6 @@ function renderWarranties() {
     filtered = filtered.filter(j => new Date(j.warrantyEnd).getTime() <= now);
   }
 
-  document.getElementById('warrantyCount').textContent = `${filtered.length}`;
 
   const list = document.getElementById('warrantiesList');
   if (filtered.length === 0) {
@@ -3339,7 +3332,6 @@ function renderCatalog() {
   const items = PRICING.filter(it => (!cat || it.cat === cat)
     && tierMatches(it)
     && (!q || (it.name + ' ' + it.cat).toLowerCase().includes(q)));
-  document.getElementById('catalogCount').textContent = items.length + ' פריטים';
   const groups = {};
   items.forEach(it => { (groups[it.cat] = groups[it.cat] || []).push(it); });
   // Collapsed by default, same as עלויות ספקים: 805 rows over 68 categories was a single
@@ -4422,7 +4414,6 @@ function jobsForPhone(phone) { return (Store.get('jobs') || []).filter(j => j.cu
 
 function renderBizDocs() {
   const biz = bizCustomers();
-  document.getElementById('bizdocsCount').textContent = biz.length + ' לקוחות';
   document.getElementById('bizReportPreview').style.display = 'none';
   document.getElementById('bizdocsListCard').style.display = 'block';
   const list = document.getElementById('bizdocsList');
@@ -4539,7 +4530,6 @@ function renderStickerLog() {
   const q = (document.getElementById('stickerSearch')?.value || '').toLowerCase();
   let items = arr.filter(s => stickerTab === 'all' || s.type === stickerTab);
   if (q) items = items.filter(s => `${s.client || ''} ${s.sku || ''} ${s.model || ''} ${s.ref || ''}`.toLowerCase().includes(q));
-  document.getElementById('stickerlogCount').textContent = arr.length + ' מדבקות';
   const list = document.getElementById('stickerlogList');
   if (items.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🗂️</div><div class="empty-state-text">אין מדבקות בקטגוריה זו.<br>צור מדבקה בעורך והיא תופיע כאן.</div></div>'; return; }
   list.innerHTML = items.map(s => {
@@ -4980,9 +4970,9 @@ function openInstallGuide() {
 // ============================================================
 
 function init() {
-  // Derived, not typed: the help text said "283 המוצרים" against a catalog of 784.
-  const hc = document.getElementById('helpCatCount');
-  if (hc) hc.textContent = PRICING.length;
+  // The help text used to name the catalog size. It was typed by hand and went stale —
+  // "283 המוצרים" against a catalog of 784 — then derived, and now simply gone: a total
+  // nobody acts on is not worth keeping correct. Same for every other page counter.
   syncWarrantyLabel();
   // Load settings
   const s = Store.get('settings');
