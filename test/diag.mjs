@@ -14,7 +14,9 @@ export function checker() {
   const check = (label, ok, got) => {
     if (ok) { console.log(`  ok   ${label}`); return true; }
     console.log(`  FAIL ${label}${got !== undefined ? ` — ${JSON.stringify(got)}` : ''}`);
-    failed.push(label);
+    // The observed value goes in too. "no page errors" names the assertion but not the
+    // error, and the error is the part that says what to fix.
+    failed.push(label + (got === undefined ? '' : ' GOT ' + JSON.stringify(got)));
     return false;
   };
   // Call instead of process.exit(). Returns the exit code so a caller can still decide.
@@ -23,9 +25,9 @@ export function checker() {
       // Artifact names reject / \ : * ? " < > | and are awkward with spaces; keep it to a
       // slug that survives the round trip and still reads as the sentence it came from.
       const slug = failed
-        .map((f) => f.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60))
+        .map((f) => f.replace(/[^a-zA-Z0-9֐-׿]+/g, '-').replace(/^-|-$/g, '').slice(0, 150))
         .join('__AND__')
-        .slice(0, 180);
+        .slice(0, 190) || 'unnamed';
       try { fs.writeFileSync(process.env.GP_DIAG, slug); } catch { /* never mask the real failure */ }
     }
     console.log(failed.length ? `\n${failed.length} FAILED` : '\nall green');
