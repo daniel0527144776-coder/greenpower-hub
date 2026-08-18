@@ -25,7 +25,11 @@ jobs:
       # say which STEP failed. The suites write the labels of the checks that failed here,
       # and the last step turns them into an ARTIFACT NAME — artifact names come back from
       # the public API, so the name is the diagnosis. See test/diag.mjs.
-      GP_DIAG: ${{ runner.temp }}/failing-checks.txt
+      # A literal path, not ${{ runner.temp }}: the `runner` context does not exist yet when
+      # job-level env is evaluated, and using it there does not fail the step — it fails the
+      # whole workflow before a single job is created, which reads from the API as an
+      # ordinary red build with no steps at all.
+      GP_DIAG: /tmp/failing-checks.txt
     steps:
       - uses: actions/checkout@v4
 
