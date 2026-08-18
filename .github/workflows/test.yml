@@ -61,6 +61,10 @@ jobs:
       - name: Sticker — every sticker is recorded
         run: node test/test-sticker-history.mjs
 
+      # A printed spec that overstates the pack is a warranty problem, not a cosmetic one.
+      - name: Sticker — printed current never exceeds the BMS
+        run: node test/test-sticker-specs.mjs
+
       # Fails on marks overflowing the artboard, text spilling its column, or a font weight
       # with no loaded face — all three have shipped to a printer before.
       - name: Sticker — renders, both modes

@@ -1194,6 +1194,35 @@
                 // EVE 50E — CLASSIC energy cell.
                 return { cont: 2, peak: 3, cellCode: "50E" };
             }
+            // What the BMS lets through, in amps. Read from the dropdown when it is the
+            // source, otherwise parsed back out of the printed label so that a restored
+            // history record is limited by its own BMS too.
+            function getBmsLimits(bmsText) {
+                const sel = document.getElementById('bms-select');
+                const opt = sel && sel.options[sel.selectedIndex];
+                if (opt && opt.dataset.cont) {
+                    return { cont: parseInt(opt.dataset.cont, 10), peak: parseInt(opt.dataset.peak, 10) };
+                }
+                const m = (bmsText || '').match(/(\d+)A(?:\s*\/\s*(\d+)A)?/);
+                return m
+                    ? { cont: parseInt(m[1], 10), peak: m[2] ? parseInt(m[2], 10) : NaN }
+                    : { cont: NaN, peak: NaN };
+            }
+
+            // The figure on the label is what the PACK delivers, and a pack cannot pass more
+            // current than its BMS allows. This used to be computed from the cells alone, so
+            // a 60Ah CLASSIC build wired through a DALY 30A printed "120A/180A" — four times
+            // what it can actually give, on the document that carries the warranty. Take the
+            // lower of the two limits. If the BMS has no documented peak, no peak is printed:
+            // inventing one is the same mistake in a smaller size.
+            function formatDischarge(cellCont, cellPeak, bmsText) {
+                const bms = getBmsLimits(bmsText);
+                if (isNaN(bms.cont)) return `${cellCont}A/${cellPeak}A`;
+                const cont = Math.min(cellCont, bms.cont);
+                const peak = isNaN(bms.peak) ? NaN : Math.min(cellPeak, bms.peak);
+                return (isNaN(peak) || peak <= cont) ? `${cont}A` : `${cont}A/${peak}A`;
+            }
+
             // Re-derive "brand contA/peakA" from a possibly-stale saved BMS label
             // (old saves may only have "DALY 40A") using the live dropdown's
             // data-peak lookup — same rule as updateAllSpecs().
@@ -1215,15 +1244,18 @@
                 const byText = (id) => { const e = elements.find((x) => x.id === id); return e ? strip(e.innerHTML) : ''; };
                 const totalCapacity = parseInt(byText('capacity-value'), 10);
                 const cellsText = byText('cells-value');
+                const savedBms = byText('bms-value');
                 if (!isNaN(totalCapacity) && cellsText) {
                     const { cont, peak } = getCellRates(cellsText);
                     const crateSpan = document.getElementById('c-rate-value');
                     if (crateSpan) crateSpan.innerText = `${cont}C/${peak}C`;
                     const dischargeSpan = document.getElementById('discharge-value');
-                    if (dischargeSpan) dischargeSpan.innerText = `${totalCapacity * cont}A/${totalCapacity * peak}A`;
+                    if (dischargeSpan) {
+                        dischargeSpan.innerText = formatDischarge(totalCapacity * cont, totalCapacity * peak, savedBms);
+                    }
                 }
                 const bmsSpan = document.getElementById('bms-value');
-                if (bmsSpan) bmsSpan.innerText = formatBmsWithPeak(byText('bms-value'));
+                if (bmsSpan) bmsSpan.innerText = formatBmsWithPeak(savedBms);
                 fitValueSpansToRow();
             }
             window.refreshComputedSpecDisplay = refreshComputedSpecDisplay;
@@ -1255,10 +1287,11 @@
                 const { cont: cRateContinuous, peak: cRatePeak, cellCode } = getCellRates(cell);
                 document.getElementById('c-rate-value').innerText = `${cRateContinuous}C/${cRatePeak}C`;
 
-                // Auto Calculate Discharge based on C-Rate — continuous/peak
+                // Discharge = what the cells can give, capped by what the BMS lets through.
                 const dischargeContinuous = totalCapacity * cRateContinuous;
                 const dischargePeak = totalCapacity * cRatePeak;
-                document.getElementById('discharge-value').innerText = `${dischargeContinuous}A/${dischargePeak}A`;
+                document.getElementById('discharge-value').innerText =
+                    formatDischarge(dischargeContinuous, dischargePeak, bmsText);
 
                 // BMS Calculation
                 document.getElementById('bms-value').innerText = bmsText;
