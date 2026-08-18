@@ -4667,12 +4667,23 @@ function renderInventory() {
       ? unit(a, 'S') - unit(b, 'S') || unit(a, 'A') - unit(b, 'A')
       : unit(a, 'V') - unit(b, 'V')) || byStock(a, b));
     const totalQty = items.reduce((s, x) => s + (Number(x.qty) || 0), 0);
+    // Second-hand stock stands on its own. Matched on the name because that is where the
+    // fact lives today — there is no "used" field on an inventory row, and inventing one
+    // would orphan every item already typed in with "יד 2" in its name.
+    const isUsed = (x) => /יד\s*2|יד\s*שני(?:י)?ה|משומש/i.test(x.name || '');
+    const fresh = items.filter((x) => !isUsed(x));
+    const used = items.filter(isUsed);
+    const sub = (title, list) => list.length
+      ? `<div style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin:8px 2px 4px;">${title}</div>`
+        + list.map((i) => renderInvItem(i, c)).join('')
+      : '';
     return `<div style="margin-bottom:14px;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px;margin-bottom:6px;border-bottom:2px solid var(--primary);">
         <span style="font-weight:700;font-size:15px;">${CAT_ICON[c] || '📦'} ${c}</span>
         <span style="font-size:11px;color:var(--text-muted);">${totalQty} יח'</span>
       </div>
-      ${items.map(i => renderInvItem(i, c)).join('')}
+      ${used.length ? sub('חדש', fresh) : fresh.map((i) => renderInvItem(i, c)).join('')}
+      ${sub('♻️ יד 2', used)}
     </div>`;
   }).join('');
 }
