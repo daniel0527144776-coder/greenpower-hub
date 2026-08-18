@@ -4,14 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>עורך מדבקות מקצועי - Green Power</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- טוען משקלים כבדים של Heebo עבור "שחור חזק" -->
-    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Everything below is served from this origin on purpose. This was the only page in
+         the hub that reached outside for anything, and all four of its hosts were on the
+         critical path: without jsPDF or html2canvas the download button does nothing at
+         all. On a filtered or offline network that meant no label could be printed, and it
+         is also what turned CI red. Heebo is the variable font, one file per subset. -->
+    <link href="vendor/heebo.css" rel="stylesheet">
+    <script src="vendor/tailwind-cdn.js"></script>
+    <script src="vendor/html2canvas-1.4.1.min.js"></script>
+    <script src="vendor/interact.min.js"></script>
+    <script src="vendor/jspdf-2.5.1.umd.min.js"></script>
     <script src="qrcode.min.js"></script>
     
 

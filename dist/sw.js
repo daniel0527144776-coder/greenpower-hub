@@ -1,14 +1,30 @@
-const CACHE = 'gp-hub-v173';
+const CACHE = 'gp-hub-v174';
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icon-512.png'
+  './icon-512.png',
+  // The sticker editor and the libraries it cannot work without. Printing a label is the
+  // one thing done standing at the bench, where the phone's signal is worst, so these are
+  // precached rather than left to be picked up on first use.
+  './stickers.html',
+  './qrcode.min.js',
+  './vendor/heebo.css',
+  './vendor/fonts/heebo-hebrew.woff2',
+  './vendor/fonts/heebo-latin.woff2',
+  './vendor/tailwind-cdn.js',
+  './vendor/html2canvas-1.4.1.min.js',
+  './vendor/interact.min.js',
+  './vendor/jspdf-2.5.1.umd.min.js'
 ];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {}))
+    // One at a time, not addAll: addAll is atomic, so a single 404 would throw away the
+    // whole precache — and the .catch() below it would swallow the fact that it had.
+    caches.open(CACHE).then(c => Promise.all(
+      ASSETS.map(u => c.add(u).catch(err => console.warn('sw: precache skipped', u, err)))
+    ))
   );
   self.skipWaiting();
 });
