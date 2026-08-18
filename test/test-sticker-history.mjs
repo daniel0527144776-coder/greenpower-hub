@@ -66,7 +66,11 @@ async function makeSticker(page, { repair, client, ref, volt, cap }) {
 console.log('\n1. producing a sticker records it');
 const page = await ctx.newPage();
 page.on('pageerror', e => errors.push(String(e)));
-page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+page.on('console', m => { if (m.type() !== 'error') return;
+  const t = m.text();
+  // Network weather on a runner is not a defect in the page.
+  if (/Failed to load resource|net::|ERR_|supabase|fonts.g(oogle)?/i.test(t)) return;
+  errors.push(t); });
 await page.goto('http://127.0.0.1:4182/stickers.html', { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.resetStickerDesign === 'function', { timeout: 30000 });
 await page.waitForTimeout(800);

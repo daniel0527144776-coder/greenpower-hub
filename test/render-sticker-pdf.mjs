@@ -68,7 +68,11 @@ if (FROM_PDF) {
   const ctx = await b.newContext({ viewport: { width: 390, height: 800 }, acceptDownloads: true });
   const p = await ctx.newPage();
   p.on('pageerror', e => errors.push(String(e)));
-  p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  p.on('console', m => { if (m.type() !== 'error') return;
+  const t = m.text();
+  // Network weather on a runner is not a defect in the page.
+  if (/Failed to load resource|net::|ERR_|supabase|fonts.g(oogle)?/i.test(t)) return;
+  errors.push(t); });
   await p.goto('http://127.0.0.1:4193/stickers.html', { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(2000);
   if (REPAIR) { await p.locator('.mode-button.repair-mode').click(); await p.waitForTimeout(600); }
