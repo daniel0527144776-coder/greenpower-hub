@@ -1,11 +1,14 @@
-// The printed discharge current must never overstate what the pack can deliver.
+// What the sticker prints for זרם פריקה, and what it must keep printing.
 //
 //   node test/test-sticker-specs.mjs [--selftest]
 //
-// It was computed from the cells alone. A 60Ah CLASSIC pack wired through a DALY 30A
-// therefore printed "120A/180A" — the cells' figure, four times what the BMS lets through —
-// on the label that carries the warranty. The rule is the lower of the two limits, and a
-// BMS with no documented peak gets no peak printed rather than an invented one.
+// The figure is the CELLS' — capacity × C-rate — and it deliberately ignores the BMS. It
+// was capped at min(cells, BMS) on 2026-08-19 and Daniel reverted it the same day: "תחזיר
+// בחזרה את התיקון... אני לא רוצה לתקן אותו". This file exists so the next person to notice
+// that a 60Ah CLASSIC through a DALY 30A prints 120A/180A finds a red test instead of an
+// invitation. It has been found, fixed, and undone on purpose.
+//
+// Section 5 is unrelated and load-bearing: the safety marks must stay on the label.
 //
 // --selftest asserts the opposite outcome so the check can be watched failing.
 import http from 'node:http';
@@ -71,43 +74,46 @@ const classic = opts.cells.find((c) => c.includes('50E'));
 const extreme = opts.cells.find((c) => c.includes('50PL'));
 console.log(`using ${volt}V ${cap}Ah · cells ${classic} / ${extreme}\n`);
 
-console.log('1. the BMS caps the cells');
+console.log('1. the figure is capacity x C-rate');
 {
-  // 60Ah CLASSIC = 2C/3C = 120A/180A from the cells. A DALY 30A passes 30A/90A.
+  // 60Ah CLASSIC = 2C/3C.
   const r = await build(volt, cap, classic, 'DALY 30A');
-  check('the printed current does not exceed the BMS', r.discharge === (SELFTEST ? 'never' : '30A/90A'), r);
-  check('the BMS itself is still shown in full', r.bms === 'DALY 30A/90A', r.bms);
-  check('the C-rate still describes the CELLS, not the pack', r.cRate === '2C/3C', r.cRate);
+  check('it is the cells figure', r.discharge === (SELFTEST ? 'never' : '120A/180A'), r);
+  check('the BMS is shown in full alongside it', r.bms === 'DALY 30A/90A', r.bms);
+  check('the C-rate describes the cells', r.cRate === '2C/3C', r.cRate);
 }
 
-console.log('\n2. a BMS bigger than the cells does not inflate them');
+console.log('\n2. the BMS does not change it — in either direction');
 {
-  // Cells give 120A/180A; a DALY 200A passes 200A/600A. The cells are the limit now.
-  const r = await build(volt, cap, classic, 'DALY 200A');
-  check('the cells remain the limit', r.discharge === '120A/180A', r);
+  // A DALY 30A passes far less than the cells give; a DALY 200A far more. The printed
+  // number is the same in both cases, and that is the intended behaviour.
+  const small = await build(volt, cap, classic, 'DALY 30A');
+  const large = await build(volt, cap, classic, 'DALY 200A');
+  check('a smaller BMS does not lower it', small.discharge === '120A/180A', small);
+  check('a larger BMS does not raise it', large.discharge === '120A/180A', large);
 }
 
-console.log('\n3. each side can bind independently');
+console.log('\n3. a different cell moves it, and only the cell does');
 {
-  // 60Ah of 50PL = 25C/36C = 1500A/2160A of cell. Everything in the list is smaller.
+  // 60Ah of 50PL = 25C/36C.
   const r = await build(volt, cap, extreme, 'ANT 80A');
-  check('continuous and peak both come from the BMS', r.discharge === '80A/200A', r);
+  check('the extreme cell gives its own figure', r.discharge === '1500A/2160A', r);
   const mixed = await build(volt, cap, extreme, 'JK 150A');
-  check('a different BMS moves both numbers', mixed.discharge === '150A/300A', mixed);
+  check('changing only the BMS changes nothing', mixed.discharge === r.discharge, mixed);
 }
 
-console.log('\n4. the label and the sticker agree after a reload');
+console.log('\n4. a restored record recomputes it the same way');
 {
-  // refreshComputedSpecDisplay() runs on restored records and recomputes this field. It has
-  // its own copy of the logic, and a saved record is exactly where the old figure would
-  // otherwise survive — the sticker history is a record of what was PRINTED.
+  // refreshComputedSpecDisplay() runs on restored records and has its own copy of this
+  // arithmetic. The two have disagreed before, and sticker history is a record of what was
+  // actually printed — a restore that quietly changes the number is a falsified record.
   const r = await p.evaluate(() => {
     const el = (id) => document.getElementById(id);
     window.refreshComputedSpecDisplay(
       ['capacity-value', 'cells-value', 'bms-value'].map((id) => ({ id, innerHTML: el(id).innerHTML })));
     return el('discharge-value').innerText.trim();
   });
-  check('a restored record is capped the same way', r === '150A/300A', r);
+  check('the restore path agrees with the build path', r === '1500A/2160A', r);
 }
 
 console.log('\n5. the safety marks cannot be pushed off the label');
