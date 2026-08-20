@@ -41,7 +41,17 @@ function scan(name, html) {
   return found;
 }
 
-const files = fs.readdirSync(DIST).filter((f) => f.endsWith('.html'));
+// Recursive: /clock/ is a page in its own right and is exactly the sort of thing that
+// picks up a CDN link when nobody is looking. A flat readdir missed it.
+function pages(dir, prefix = '') {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    if (e.name === 'vendor' || e.name === 'node_modules') return [];
+    const rel = prefix + e.name;
+    if (e.isDirectory()) return pages(path.join(dir, e.name), rel + '/');
+    return e.name.endsWith('.html') ? [rel] : [];
+  });
+}
+const files = pages(DIST);
 console.log(`scanning ${files.length} page(s) in dist/\n`);
 
 for (const f of files) {

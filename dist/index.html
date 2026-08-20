@@ -1403,6 +1403,11 @@ body { min-height: 100vh; }
     <input type="month" id="wtMonth" class="form-input" style="width:auto;direction:ltr;" onchange="renderWorktime()">
   </div>
   <div id="worktimeUnpaidBanner" style="display:none;background:var(--danger-light);color:var(--danger);border:1px solid var(--danger);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:600;"></div>
+  <!-- Dispatches from /clock/. Nothing here is wages until it is approved. -->
+  <div class="card" id="punchCard" style="display:none;border-color:var(--warning);">
+    <h3 class="card-title">📥 דיווחי עובדים ממתינים</h3>
+    <div id="punchList"></div>
+  </div>
   <div class="card">
     <h3 class="card-title">➕ רישום שעות</h3>
     <div class="form-row"><label>עובד</label>
@@ -4105,8 +4110,101 @@ function deleteExpense(id) { if (!confirm('למחוק הוצאה?')) return; let
 // WORKTIME (worker hours + wages)
 // ============================================================
 function getWorkers() { return Store.get('workers') || []; }
+
+// ---- דיווחי עובדים: the approval queue behind /clock/ ----
+// The clock page can INSERT into worker_punches and read nothing back (see
+// supabase/worker_punches.sql). That asymmetry is what lets it work with no login, and it
+// is why nothing a worker sends becomes wages by itself: it lands here, with the rate the
+// hub holds — never a rate the worker could state — and Daniel confirms it.
+let PENDING_PUNCHES = [];
+async function fetchPunches() {
+  const card = document.getElementById('punchCard');
+  if (!card || !Sync.isAuthed()) return;
+  try {
+    const h = await Sync._headers();
+    const r = await fetch(SB_URL + '/rest/v1/worker_punches?status=eq.pending&select=*&order=work_date.desc,created_at.desc', { headers: h });
+    // 404 means the table was never created. Stay silent rather than nag on every visit —
+    // the feature is simply not set up yet, and the SQL lives in supabase/worker_punches.sql.
+    if (!r.ok) { PENDING_PUNCHES = []; card.style.display = 'none'; return; }
+    PENDING_PUNCHES = await r.json();
+  } catch (e) { return; }
+  renderPunches();
+}
+// Takes the list as an argument so a test can render one without a server — and ADOPTS it,
+// rather than drawing from it and leaving PENDING_PUNCHES empty. Approve/reject read that
+// list, so drawing one thing while holding another gives a card whose buttons do nothing.
+// (`let` bindings are not window properties, so the argument is the only way in.)
+function renderPunches(punches) {
+  if (punches) PENDING_PUNCHES = punches;
+  const card = document.getElementById('punchCard'), list = document.getElementById('punchList');
+  if (!card || !list) return;
+  if (!PENDING_PUNCHES.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const workers = getWorkers();
+  // These two fields are the only strings in the hub that an anonymous stranger can write —
+  // the clock page inserts without a login. Escape them properly here; the `esc` used
+  // elsewhere in this file is local to another function and only handles quotes.
+  const h = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  list.innerHTML = PENDING_PUNCHES.map(p => {
+    const known = workers.find(w => w.name.trim() === String(p.worker || '').trim());
+    const rateNote = known
+      ? `₪${known.rate}/שעה`
+      : `<span style="color:var(--danger);">אין עובד בשם הזה</span>`;
+    const when = p.started_at && p.ended_at
+      ? `${new Date(p.started_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}–${new Date(p.ended_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`
+      : (p.source === 'manual' ? 'ידני' : '');
+    return `<div class="price-item">
+      <div class="price-item-name">${h(p.worker)} · ${p.hours} שע'${p.note ? ` · <span style="color:var(--text-muted);">${h(p.note)}</span>` : ''}
+        <div style="font-size:10.5px;color:var(--text-light);">${new Date(p.work_date + 'T00:00:00').toLocaleDateString('he-IL')}${when ? ' · ' + when : ''} · ${rateNote}</div>
+      </div><div></div>
+      <div class="price-item-final">
+        <span onclick="approvePunch('${p.id}')" style="cursor:pointer;color:var(--success);font-size:12px;">✓ אשר</span>
+        <span onclick="rejectPunch('${p.id}')" style="cursor:pointer;color:var(--text-muted);margin-inline-start:8px;">✕</span>
+      </div></div>`;
+  }).join('');
+}
+async function setPunchStatus(id, status) {
+  const h = await Sync._headers();
+  h['Content-Type'] = 'application/json';
+  const r = await fetch(SB_URL + '/rest/v1/worker_punches?id=eq.' + encodeURIComponent(id), {
+    method: 'PATCH', headers: h, body: JSON.stringify({ status })
+  });
+  return r.ok;
+}
+async function approvePunch(id) {
+  const p = PENDING_PUNCHES.find(x => x.id === id);
+  if (!p) return;
+  const worker = getWorkers().find(w => w.name.trim() === String(p.worker || '').trim());
+  if (!worker) {
+    alert(`אין עובד בשם "${p.worker}".\nהוסף אותו ב"ניהול עובדים ותעריפים" ואז אשר — התעריף נלקח משם, לא מהדיווח.`);
+    return;
+  }
+  // Mark it consumed on the server FIRST. The other order can pay the same hours twice: a
+  // failed PATCH would leave the punch pending and the local entry already written.
+  if (!await setPunchStatus(id, 'approved')) { alert('אין חיבור לענן — נסה שוב'); return; }
+  const wt = Store.get('worktime') || [];
+  wt.unshift({
+    id: 'w' + Date.now(), workerName: worker.name, rate: worker.rate,
+    hours: p.hours, note: p.note || '', date: new Date(p.work_date + 'T12:00:00').toISOString(),
+    paid: false, punchId: p.id
+  });
+  Store.set('worktime', wt);
+  PENDING_PUNCHES = PENDING_PUNCHES.filter(x => x.id !== id);
+  renderWorktime();
+}
+async function rejectPunch(id) {
+  if (!confirm('לדחות את הדיווח? הוא לא ייכנס לשעות.')) return;
+  if (!await setPunchStatus(id, 'rejected')) { alert('אין חיבור לענן — נסה שוב'); return; }
+  PENDING_PUNCHES = PENDING_PUNCHES.filter(x => x.id !== id);
+  renderPunches();
+}
+
 function renderWorktime() {
   const mk = ensureMonthInput('wtMonth'); ensureDateInput('wtDate');
+  fetchPunches();
+  renderPunches();
   const workers = getWorkers(), sel = document.getElementById('wtWorker');
   sel.innerHTML = workers.length ? workers.map(w => `<option value="${w.id}">${w.name} (₪${w.rate}/שעה)</option>`).join('') : '<option value="">הוסף עובד תחילה</option>';
   const allEntries = Store.get('worktime') || [];

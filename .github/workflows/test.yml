@@ -70,6 +70,11 @@ jobs:
       - name: Hub — edit/delete, sales page, warranty register
         run: node test/test-hub-jobedit.mjs
 
+      # A dropped punch is a day worked for free, and worker_punches is the one table an
+      # anonymous stranger can write to.
+      - name: Worker clock — offline queue and the approval gate
+        run: node test/test-worker-clock.mjs
+
       - name: Sticker — saved layout is versioned
         run: node test/test-sticker-state.mjs
 
