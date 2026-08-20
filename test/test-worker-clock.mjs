@@ -164,13 +164,75 @@ console.log('\n4. the hub shows the queue, and cannot be injected through it');
   check('the hostile markup created no elements', r.injectedNodes === 0, r.injectedNodes);
   check('and executed nothing', r.pwned === false);
   check('it is shown as text instead', r.text.includes('onerror'), r.text.slice(0, 80));
-  check('an unknown worker is flagged rather than paid', r.text.includes('אין עובד בשם הזה'), r.text.slice(0, 200));
+  check('an unknown worker is flagged rather than paid', r.text.includes('שם לא מוכר'), r.text.slice(0, 200));
 
-  // Approving an unknown name must refuse: the rate comes from the hub, never the report.
+  // With nobody on the payroll there is nothing to map to, so it must say so and stop.
   await p.evaluate(() => window.approvePunch('11111111-1111-1111-1111-111111111111'));
   await p.waitForTimeout(300);
-  check('approving an unknown worker is refused', dialogs.some(m => m.includes('אין עובד בשם')), dialogs);
+  check('with no workers yet, it says to add one', dialogs.some(m => m.includes('ניהול עובדים')), dialogs);
   check('and no hours were written', await p.evaluate(() => JSON.parse(localStorage.getItem('gp_worktime') || '[]').length) === 0);
+  await ctx.close();
+}
+
+console.log('\n5. an unmatched name is a question, not a dead end');
+{
+  // A worker's phone holds the name their link carried; the hub holds what Daniel typed.
+  // "יהודה כהן" and "יהודה" are one person and nothing can know that without asking.
+  const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
+  const p = await ctx.newPage();
+  const dialogs = [];
+  p.on('dialog', d => { dialogs.push(d.message()); d.dismiss(); });
+  let patched = null;
+  await p.route('**/rest/v1/worker_punches*', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      patched = JSON.parse(route.request().postData() || '{}');
+      return route.fulfill({ status: 204, body: '' });
+    }
+    return route.fulfill({ status: 200, body: '[]' });
+  });
+  await p.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
+  await p.waitForFunction(() => typeof window.approvePunch === 'function', { timeout: 30000 });
+
+  const PUNCH = '22222222-2222-2222-2222-222222222222';
+  await p.evaluate((id) => {
+    localStorage.setItem('gp_workers', JSON.stringify([
+      { id: 'wk1', name: 'יהודה', rate: 40 },
+      { id: 'wk2', name: 'שמואל', rate: 45 },
+    ]));
+    localStorage.setItem('gp_worktime', JSON.stringify([]));
+    // A session, so the approve path is not stopped by the auth guard before it starts.
+    Sync.session = { access_token: 'test.' + btoa('{"sub":"u1"}') + '.sig', expires_at: Date.now() + 3600000, email: 't@t' };
+    Sync.userId = 'u1';
+    // The login gate is a full-screen overlay and would swallow the modal's buttons. It is
+    // not what this section is about; the approval path behind it is.
+    const gate = document.getElementById('loginOverlay');
+    if (gate) gate.remove();
+    window.renderPunches([{ id, worker: 'יהודה כהן', hours: 6, work_date: '2026-08-20', source: 'clock', status: 'pending' }]);
+  }, PUNCH);
+  check('the mismatch is shown as fixable, not as an error',
+    (await p.textContent('#punchList')).includes('לחץ אשר כדי לשייך'));
+
+  await p.evaluate((id) => window.approvePunch(id), PUNCH);
+  await p.waitForSelector('#punchWorkerPick', { timeout: 5000 });
+  check('it asks who it is instead of refusing', await p.isVisible('#punchWorkerPick'));
+  check('the choice is between the real workers',
+    (await p.$$eval('#punchWorkerPick option', o => o.map(x => x.textContent.trim()))).join(' | ').includes('₪40/שעה'));
+
+  await p.selectOption('#punchWorkerPick', { label: 'יהודה — ₪40/שעה' });
+  await p.click('button:has-text("שייך ואשר")');
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem('gp_worktime') || '[]').length > 0, { timeout: 5000 });
+  const wt = await p.evaluate(() => JSON.parse(localStorage.getItem('gp_worktime'))[0]);
+  check('the hours land under the chosen worker', wt.workerName === 'יהודה', wt.workerName);
+  check("at the hub's rate, not the report's", wt.rate === (SELFTEST ? 999 : 40), wt.rate);
+  check('for the reported hours', wt.hours === 6, wt.hours);
+  check('and it is marked unpaid', wt.paid === false);
+  check('the punch is consumed on the server', patched && patched.status === 'approved', patched);
+
+  const alias = await p.evaluate(() => JSON.parse(localStorage.getItem('gp_workers')).find(w => w.id === 'wk1').aliases);
+  check('the name is remembered so it matches by itself next time',
+    Array.isArray(alias) && alias.includes('יהודה כהן'), alias);
+  const matched = await p.evaluate(() => { const w = window.findWorkerFor('יהודה כהן'); return w && w.name; });
+  check('and it does match by itself', matched === 'יהודה', matched);
   await ctx.close();
 }
 

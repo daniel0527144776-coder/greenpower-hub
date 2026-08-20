@@ -4134,24 +4134,37 @@ async function fetchPunches() {
 // rather than drawing from it and leaving PENDING_PUNCHES empty. Approve/reject read that
 // list, so drawing one thing while holding another gives a card whose buttons do nothing.
 // (`let` bindings are not window properties, so the argument is the only way in.)
+// The punch's `worker` and `note` are the only strings in the hub an anonymous stranger can
+// write. The `esc` used elsewhere in this file is local to another function and handles
+// quotes only, so these get their own.
+function escPunch(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// A worker's phone holds whatever name their link carried; the hub holds whatever Daniel
+// typed. "יהודה" and "יהודה כהן" are the same person and nothing here can know that, so a
+// name that doesn't match is a question to ask once — the answer is remembered on the
+// worker as an alias (`workers` is already a synced key, so no new sync contract).
+function findWorkerFor(name) {
+  const n = String(name || '').trim();
+  return getWorkers().find(w =>
+    String(w.name || '').trim() === n || (w.aliases || []).some(a => String(a).trim() === n));
+}
+
 function renderPunches(punches) {
   if (punches) PENDING_PUNCHES = punches;
   const card = document.getElementById('punchCard'), list = document.getElementById('punchList');
   if (!card || !list) return;
   if (!PENDING_PUNCHES.length) { card.style.display = 'none'; return; }
   card.style.display = '';
-  const workers = getWorkers();
-  // These two fields are the only strings in the hub that an anonymous stranger can write —
-  // the clock page inserts without a login. Escape them properly here; the `esc` used
-  // elsewhere in this file is local to another function and only handles quotes.
-  const h = (s) => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const h = escPunch;
   list.innerHTML = PENDING_PUNCHES.map(p => {
-    const known = workers.find(w => w.name.trim() === String(p.worker || '').trim());
+    const known = findWorkerFor(p.worker);
     const rateNote = known
       ? `₪${known.rate}/שעה`
-      : `<span style="color:var(--danger);">אין עובד בשם הזה</span>`;
+      : `<span style="color:var(--warning);">שם לא מוכר — לחץ אשר כדי לשייך</span>`;
     const when = p.started_at && p.ended_at
       ? `${new Date(p.started_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}–${new Date(p.ended_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`
       : (p.source === 'manual' ? 'ידני' : '');
@@ -4166,6 +4179,9 @@ function renderPunches(punches) {
   }).join('');
 }
 async function setPunchStatus(id, status) {
+  // Without a session the PATCH goes out as `Bearer null` and comes back 401, which would
+  // be reported as "no connection" — wrong advice for an expired login.
+  if (!Sync.isAuthed()) { alert('התחבר לענן כדי לאשר דיווחי עובדים.'); return false; }
   const h = await Sync._headers();
   h['Content-Type'] = 'application/json';
   const r = await fetch(SB_URL + '/rest/v1/worker_punches?id=eq.' + encodeURIComponent(id), {
@@ -4173,14 +4189,51 @@ async function setPunchStatus(id, status) {
   });
   return r.ok;
 }
-async function approvePunch(id) {
+// Unknown name: ask who this is, once, instead of dead-ending. The rate still comes from the
+// chosen worker — the report never states one — and the answer is stored as an alias so the
+// same phone matches by itself from then on.
+function askWhoPunched(id) {
   const p = PENDING_PUNCHES.find(x => x.id === id);
   if (!p) return;
-  const worker = getWorkers().find(w => w.name.trim() === String(p.worker || '').trim());
-  if (!worker) {
-    alert(`אין עובד בשם "${p.worker}".\nהוסף אותו ב"ניהול עובדים ותעריפים" ואז אשר — התעריף נלקח משם, לא מהדיווח.`);
+  const workers = getWorkers();
+  if (!workers.length) {
+    alert('אין עדיין עובדים ברשימה.\nהוסף אותם ב"ניהול עובדים ותעריפים" ואז אשר.');
     return;
   }
+  openModal('מי זה?',
+    `<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">
+       הדיווח נשלח בשם <b style="color:var(--text);">${escPunch(p.worker)}</b>, ואין עובד כזה ברשימה.
+       בחר למי לשייך אותו — התעריף יילקח מהעובד שתבחר.
+     </div>
+     <select class="form-select" id="punchWorkerPick" style="width:100%;">
+       ${workers.map(w => `<option value="${w.id}">${escPunch(w.name)} — ₪${w.rate}/שעה</option>`).join('')}
+     </select>
+     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;">
+       <input type="checkbox" id="punchRemember" checked> לזכור את השם הזה לפעם הבאה
+     </label>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">ביטול</button>
+     <button class="btn btn-primary" onclick="linkPunchWorker('${p.id}')">שייך ואשר</button>`);
+}
+function linkPunchWorker(id) {
+  const p = PENDING_PUNCHES.find(x => x.id === id);
+  const wid = document.getElementById('punchWorkerPick').value;
+  const remember = document.getElementById('punchRemember').checked;
+  const workers = getWorkers();
+  const w = workers.find(x => x.id === wid);
+  if (!p || !w) { closeModal(); return; }
+  if (remember) {
+    w.aliases = (w.aliases || []).concat([String(p.worker || '').trim()]);
+    Store.set('workers', workers);
+  }
+  closeModal();
+  approvePunch(id, w);
+}
+
+async function approvePunch(id, chosenWorker) {
+  const p = PENDING_PUNCHES.find(x => x.id === id);
+  if (!p) return;
+  const worker = chosenWorker || findWorkerFor(p.worker);
+  if (!worker) { askWhoPunched(id); return; }
   // Mark it consumed on the server FIRST. The other order can pay the same hours twice: a
   // failed PATCH would leave the punch pending and the local entry already written.
   if (!await setPunchStatus(id, 'approved')) { alert('אין חיבור לענן — נסה שוב'); return; }
