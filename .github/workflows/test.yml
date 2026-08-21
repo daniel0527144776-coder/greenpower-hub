@@ -85,6 +85,11 @@ jobs:
       - name: Sticker — printed current never exceeds the BMS
         run: node test/test-sticker-specs.mjs
 
+      # The editor is baked into the hub document. Two copies of one thing is the shape
+      # this repo keeps getting bitten by, so CI refuses a stale bake.
+      - name: The baked editor matches stickers.html
+        run: node tools/inline-sticker-editor.mjs --check
+
       # The phone has no browser, so opening the editor as its own page opened a block
       # screen instead. What is asserted is that the top-level document never changes.
       - name: Sticker — the editor opens without leaving the app

@@ -64,8 +64,12 @@ check('the top-level document never navigated away',
   topNavigations.length === 1 && topNavigations[0].endsWith('/index.html'), topNavigations);
 check('nothing tried to open a second window', popups.length === 0, popups);
 
-const frame = page.frames().find(f => f.url().includes('stickers.html'));
+// The frame has no URL any more — it is srcdoc — so it is found by being the only frame
+// that is not the main one. That is itself the thing under test: a frame WITH a url would
+// mean a second request had been made.
+const frame = page.frames().find(f => f !== page.mainFrame());
 check('the editor is loaded in a frame', !!frame, page.frames().map(f => f.url()));
+check('the frame fetched no second URL', !!frame && !/stickers\.html/.test(frame.url()), frame && frame.url());
 
 if (frame) {
   const inside = await frame.evaluate(() => ({
@@ -85,6 +89,25 @@ if (frame) {
     try { return !!document.getElementById('stickerFrame').contentDocument; } catch (e) { return false; }
   });
   check('the frame is same-origin with the hub', sameOrigin, sameOrigin);
+
+  // The whole point of the frame is that a label can be printed FROM it. Asserting the DOM
+  // exists would pass on a page whose fonts never loaded and whose html2canvas throws — and
+  // this is the one context where the fonts arrive as data-URIs rather than as files, which
+  // is exactly the kind of difference that only shows up in the finished raster.
+  const label = await frame.evaluate(async () => {
+    try {
+      const canvas = await captureStickerCanvas();
+      const ctx = canvas.getContext('2d');
+      const bytes = TSPL.buildLabel(ctx.getImageData(0, 0, canvas.width, canvas.height),
+        { widthMm: 100, heightMm: 50, gapMm: 2 });
+      let ink = 0;
+      for (let i = 300; i < bytes.length - 20; i++) { let v = bytes[i] ^ 0xff; while (v) { ink += v & 1; v >>= 1; } }
+      return { w: canvas.width, h: canvas.height, total: bytes.length, ink };
+    } catch (e) { return { error: String((e && e.message) || e) }; }
+  });
+  check('a label can be built inside the frame', !label.error, label.error);
+  check('captured at the printer\'s own resolution', label.w === 1181, label.w);
+  check('and it has ink on it', label.ink > 20000, label.ink);
 }
 
 await browser.close();
