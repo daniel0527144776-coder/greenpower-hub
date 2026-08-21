@@ -342,7 +342,15 @@
                         סרוק לאחריות:
                     </div>
                     <div id="qr-placeholder" class="cursor-pointer relative flex justify-center items-center bg-white rounded-xl shadow-md transform transition hover:scale-105 border-2 border-black">
-                        <img id="qr-image" src="" alt="QR Code" class="p-1 object-contain h-full w-full">
+                        <!-- No src attribute, deliberately. src="" is NOT "no image": the
+                             browser resolves the empty string against the document and
+                             requests the PAGE ITSELF as an image. On this network that hands
+                             the content filter an image request to answer, and what it
+                             answers with is its own "sent for approval" placeholder — sitting
+                             exactly where the QR belongs. An <img> with no src requests
+                             nothing at all. The real value is set from QRCodeLib.toDataURL,
+                             which is generated locally and never fetched. -->
+                        <img id="qr-image" alt="QR Code" class="p-1 object-contain h-full w-full">
                     </div>
                 </div>
                 
