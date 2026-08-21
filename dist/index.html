@@ -1862,12 +1862,26 @@ function sendWhatsApp(phone, msg, whoFor) {
 // is silently DISCARDED. That is why buttons appeared dead on the phone: the sticker editor
 // and the supplier PDF have been unreachable there, not just the links added this session.
 //
-// window.open returns null when it is refused (standalone PWA) instead of throwing, so it is
-// the one form that can actually be tested. If it gives back a window we are done; otherwise
-// navigate in place, which every environment honours and which the app recovers from — its
-// onBackPressed calls webView.goBack().
+// Rewriting it as window.open did not fix it, and 2026-08-21 is when we found out why: that
+// fix rested on "window.open returns null when it is refused", which is true of a standalone
+// PWA and NOT true of a WebView. There it hands back a live-looking proxy that never
+// navigates, so `if (w) return;` swallowed the click exactly as thoroughly as the anchor had.
+// Daniel's report six weeks later was still, word for word, that nothing happens.
+//
+// So the environment is detected now instead of inferred from a return value. Two independent
+// signals, because either one can be missing: the APK injects GP_NATIVE (builds from
+// 2026-08-21 on), and stock Android System WebView stamps " wv)" into its user agent. Written
+// with indexOf rather than a regex on purpose — this string is full of characters that a
+// regex has to escape, and it has already been mangled once in transit.
+//
+// On that device navigating in place is not a degraded fallback: there is no browser to hand
+// a URL to, and onBackPressed calls webView.goBack(), so back out of it still works.
+const IS_ANDROID_WEBVIEW = (typeof window !== 'undefined' && window.GP_NATIVE === true)
+  || navigator.userAgent.indexOf(' wv)') !== -1;
+
 function openExternal(url) {
   if (!url) return;
+  if (IS_ANDROID_WEBVIEW) { try { location.href = url; } catch (e) {} return; }
   let w = null;
   try { w = window.open(url, '_blank', 'noopener'); } catch (e) { w = null; }
   if (w) return;
