@@ -413,6 +413,10 @@ body { min-height: 100vh; }
             style="background:none;border:none;color:var(--text-muted,#94a3b8);font-size:11px;cursor:pointer;padding:6px;">
       גרסה <span id="buildTagVer"></span> · הקש לעדכון
     </button>
+    <button type="button" onclick="runSelfTest()"
+            style="background:none;border:none;color:var(--text-muted,#94a3b8);font-size:11px;cursor:pointer;padding:6px;">
+      · בדיקת מערכת
+    </button>
   </div>
 
 
@@ -2010,7 +2014,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v184';
+const HUB_BUILD = 'v185';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2030,6 +2034,45 @@ async function forceUpdate() {
     }
   } catch (e) { /* a failed cleanup must not block the reload */ }
   location.reload(true);
+}
+
+// Reports what is actually running, IN WORDS.
+//
+// Written on 2026-08-21 after an afternoon of diagnosing this app from screenshots — which
+// arrive from Daniel's phone downscaled to a few dozen pixels with the filter's placeholder
+// composited over them. Every reading taken from one of those images was a guess, and most of
+// the guesses were wrong. Text he can read back is the only channel between that device and
+// here that survives, so the app has to be able to say what it sees.
+//
+// Deliberately short: five lines someone can read aloud without scrolling.
+async function runSelfTest() {
+  const L = [];
+  L.push('גרסה: ' + HUB_BUILD);
+  L.push('גשר הדפסה: ' + (window.GPPrint ? 'יש' : 'אין'));
+
+  navigateTo('stickers');
+  await new Promise(r => setTimeout(r, 3000));
+
+  const f = document.getElementById('stickerFrame');
+  let doc = null;
+  try { doc = f && f.contentDocument; } catch (e) { doc = null; }
+
+  if (!doc) {
+    L.push('מסגרת: חסומה');
+  } else {
+    const body = doc.body ? doc.body.innerHTML : '';
+    const art = doc.getElementById('sticker-to-capture');
+    L.push('מסגרת: נטענה, ' + body.length + ' תווים');
+    L.push('עורך: ' + (art ? 'תקין' : 'חסר'));
+    if (!art) {
+      // What IS in there, then. If the filter substituted something, this is where it shows.
+      L.push('תוכן: ' + body.replace(/\s+/g, ' ').slice(0, 70));
+    }
+  }
+
+  openModal('בדיקת מערכת', '<div style="font-size:15px;line-height:2;direction:rtl;">'
+    + L.map(x => '<div>' + x.replace(/</g, '&lt;') + '</div>').join('')
+    + '</div><p style="margin-top:12px;color:#64748b;font-size:12px;">הקרא את השורות האלה — הן מה שהאפליקציה באמת רואה.</p>');
 }
 
 // ---- Modal ----
