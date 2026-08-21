@@ -1,4 +1,4 @@
-const CACHE = 'gp-hub-v179';
+const CACHE = 'gp-hub-v180';
 const ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const ASSETS = [
   // precached rather than left to be picked up on first use.
   './stickers.html',
   './qrcode.min.js',
+  './tspl.js',
   './vendor/heebo.css',
   './vendor/fonts/heebo-hebrew.woff2',
   './vendor/fonts/heebo-latin.woff2',

@@ -1868,16 +1868,19 @@ function sendWhatsApp(phone, msg, whoFor) {
 // navigates, so `if (w) return;` swallowed the click exactly as thoroughly as the anchor had.
 // Daniel's report six weeks later was still, word for word, that nothing happens.
 //
-// So the environment is detected now instead of inferred from a return value. Two independent
-// signals, because either one can be missing: the APK injects GP_NATIVE (builds from
-// 2026-08-21 on), and stock Android System WebView stamps " wv)" into its user agent. Written
-// with indexOf rather than a regex on purpose — this string is full of characters that a
-// regex has to escape, and it has already been mangled once in transit.
+// So the environment is detected now instead of inferred from a return value. Three signals,
+// because each one can be missing on its own: window.GPPrint is the printer bridge and is the
+// only one present before the page's own scripts run; GP_NATIVE is injected at onPageFinished,
+// i.e. too late for this line but true by the time anything is clicked; and stock Android
+// System WebView stamps " wv)" into its user agent, which covers builds older than both.
+// Written with indexOf rather than a regex on purpose — that string is full of characters a
+// regex has to escape, and it was mangled once in transit already.
 //
 // On that device navigating in place is not a degraded fallback: there is no browser to hand
 // a URL to, and onBackPressed calls webView.goBack(), so back out of it still works.
-const IS_ANDROID_WEBVIEW = (typeof window !== 'undefined' && window.GP_NATIVE === true)
-  || navigator.userAgent.indexOf(' wv)') !== -1;
+const IS_ANDROID_WEBVIEW = typeof window !== 'undefined'
+  && (!!window.GPPrint || window.GP_NATIVE === true
+      || navigator.userAgent.indexOf(' wv)') !== -1);
 
 function openExternal(url) {
   if (!url) return;

@@ -15,6 +15,7 @@
     <script src="vendor/interact.min.js"></script>
     <script src="vendor/jspdf-2.5.1.umd.min.js"></script>
     <script src="qrcode.min.js"></script>
+    <script src="tspl.js"></script>
     
 
     <script>
@@ -599,11 +600,18 @@
             </div>
         </div>
 
-        <!-- Downloading -->
+        <!-- Output. Two buttons for two different machines: the phone at the bench prints
+             over Bluetooth and cannot open a PDF at all (no browser, no viewer, and in the
+             WebView not even a download), while the PC still wants the file. -->
         <div class="control-section mt-4">
-            <h3 class="text-xl font-bold mb-4 text-dark-primary">הורדת קובץ PDF (300 DPI)</h3>
-            <div class="flex justify-center">
-                 <button class="action-button download-btn flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-lg font-semibold transition-colors duration-200" data-format="pdf">
+            <h3 class="text-xl font-bold mb-4 text-dark-primary">הדפסה (300 DPI)</h3>
+            <div class="flex flex-col items-center gap-3">
+                <button type="button" id="print-bt-btn" class="action-button flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-lg font-semibold transition-colors duration-200 w-full max-w-xs">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                    <span>הדפס מדבקה</span>
+                </button>
+                <p id="print-bt-hint" class="text-xs text-gray-500 text-center"></p>
+                 <button class="action-button download-btn flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-lg font-semibold transition-colors duration-200 w-full max-w-xs" data-format="pdf">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>
                     <span>הורד PDF בלבד</span>
                 </button>
@@ -1579,6 +1587,78 @@
             faultDescriptionInput.addEventListener('input', (e) => { faultDescriptionDisplay.innerText = e.target.value; });
             repairDetailsInput.addEventListener('input', (e) => { repairDetailsDisplay.innerText = e.target.value; });
             
+            // The capture that produces the printed artefact, in one place. There are two
+            // buttons now — the PDF file and the Bluetooth print — and a second copy of this
+            // layout prep would be a second answer to "what does the label look like". That
+            // exact split (preview 24px, capture 25px) is what fitValueSpansToRow was pulled
+            // out of the two paths to end.
+            async function captureStickerCanvas() {
+                const specsEl = document.getElementById('new-battery-specs');
+                const specRows = specsEl ? [...specsEl.children] : [];
+
+                // .sticker-wrapper is now a fixed 1000x500 artboard at all times
+                // (see its CSS comment) so this re-fit is redundant with the
+                // live view's own auto-fit -- kept anyway as a cheap, harmless
+                // safety net that guarantees the captured sizes reflect the
+                // very latest measurements right before the canvas is drawn.
+                const shrunkSpans = [];
+                VALUE_SPAN_IDS.forEach(id => {
+                    const span = document.getElementById(id);
+                    const cell = span && span.parentElement;
+                    const label = cell && cell.querySelector('span[id^="label-"]');
+                    if (!span || !cell || !label) return;
+                    shrunkSpans.push({
+                        id, span, cell, label,
+                        origValueSize: parseFloat(getComputedStyle(span).fontSize),
+                        origLabelSize: parseFloat(getComputedStyle(label).fontSize),
+                    });
+                });
+                // The capture path used to carry its own copy of the shrink logic, with
+                // a comment on each telling the next person to keep the two in sync.
+                // There is one now. Sizes are restored from shrunkSpans after capture.
+                fitValueSpansToRow();
+                fitSideColumn();
+
+                // גבהים מפורשים על שורות הspecs — מאפשר ל-html2canvas לחשב items-end בצורה תקינה
+                const origStickerH = sticker.style.height;
+                const origSpecFlex = specsEl ? specsEl.style.flex : '';
+                const origSpecH = specsEl ? specsEl.style.height : '';
+                const origRowH = specRows.map(r => ({ h: r.style.height, f: r.style.flex }));
+                sticker.style.height = sticker.offsetHeight + 'px';
+                if (specsEl && specRows.length) {
+                    const specsH = specsEl.offsetHeight;
+                    const rowH = Math.floor(specsH / specRows.length);
+                    specsEl.style.height = specsH + 'px'; specsEl.style.flex = 'none';
+                    specRows.forEach(r => { r.style.height = rowH + 'px'; r.style.flex = 'none'; });
+                }
+
+                const captureScale = get300DpiScale();
+
+                function _restoreAll() {
+                    sticker.style.height = origStickerH;
+                    if (specsEl) { specsEl.style.height = origSpecH; specsEl.style.flex = origSpecFlex; }
+                    specRows.forEach((r, i) => { r.style.height = origRowH[i].h; r.style.flex = origRowH[i].f; });
+                    shrunkSpans.forEach(({ span, label, origValueSize, origLabelSize }) => { span.style.fontSize = origValueSize + 'px'; label.style.fontSize = origLabelSize + 'px'; });
+                }
+                try {
+                    const canvas = await html2canvas(sticker, {
+                        scale: captureScale,
+                        useCORS: true,
+                        backgroundColor: "#ffffff"
+                    });
+                    _restoreAll();
+                    return canvas;
+                } catch (e) {
+                    _restoreAll();
+                    throw e;
+                }
+            }
+
+            // Exposed for test/test-tspl.mjs, which drives this through the page instead of
+            // reimplementing the capture in Node -- the point of that suite is the bytes the
+            // print button really sends, and a second implementation could not prove it.
+            window.captureStickerCanvas = captureStickerCanvas;
+
             document.querySelectorAll('.download-btn').forEach(button => {
                 button.addEventListener('click', async function() {
                     const currentSku = document.getElementById('sku-value').innerText;
@@ -1598,62 +1678,8 @@
 
                     await new Promise(resolve => setTimeout(resolve, 100));
 
-                    const specsEl = document.getElementById('new-battery-specs');
-                    const specRows = specsEl ? [...specsEl.children] : [];
-
-                    // .sticker-wrapper is now a fixed 1000x500 artboard at all times
-                    // (see its CSS comment) so this re-fit is redundant with the
-                    // live view's own auto-fit -- kept anyway as a cheap, harmless
-                    // safety net that guarantees the captured sizes reflect the
-                    // very latest measurements right before the canvas is drawn.
-                    const shrunkSpans = [];
-                    VALUE_SPAN_IDS.forEach(id => {
-                        const span = document.getElementById(id);
-                        const cell = span && span.parentElement;
-                        const label = cell && cell.querySelector('span[id^="label-"]');
-                        if (!span || !cell || !label) return;
-                        shrunkSpans.push({
-                            id, span, cell, label,
-                            origValueSize: parseFloat(getComputedStyle(span).fontSize),
-                            origLabelSize: parseFloat(getComputedStyle(label).fontSize),
-                        });
-                    });
-                    // The capture path used to carry its own copy of the shrink logic, with
-                    // a comment on each telling the next person to keep the two in sync.
-                    // There is one now. Sizes are restored from shrunkSpans after capture.
-                    fitValueSpansToRow();
-                fitSideColumn();
-
-                    // גבהים מפורשים על שורות הspecs — מאפשר ל-html2canvas לחשב items-end בצורה תקינה
-                    const origStickerH = sticker.style.height;
-                    const origSpecFlex = specsEl ? specsEl.style.flex : '';
-                    const origSpecH = specsEl ? specsEl.style.height : '';
-                    const origRowH = specRows.map(r => ({ h: r.style.height, f: r.style.flex }));
-                    sticker.style.height = sticker.offsetHeight + 'px';
-                    if (specsEl && specRows.length) {
-                        const specsH = specsEl.offsetHeight;
-                        const rowH = Math.floor(specsH / specRows.length);
-                        specsEl.style.height = specsH + 'px'; specsEl.style.flex = 'none';
-                        specRows.forEach(r => { r.style.height = rowH + 'px'; r.style.flex = 'none'; });
-                    }
-
-                    const captureScale = get300DpiScale();
-
-                    function _restoreAll() {
-                        sticker.style.height = origStickerH;
-                        if (specsEl) { specsEl.style.height = origSpecH; specsEl.style.flex = origSpecFlex; }
-                        specRows.forEach((r, i) => { r.style.height = origRowH[i].h; r.style.flex = origRowH[i].f; });
-                        shrunkSpans.forEach(({ span, label, origValueSize, origLabelSize }) => { span.style.fontSize = origValueSize + 'px'; label.style.fontSize = origLabelSize + 'px'; });
-                    }
-
                     try {
-                        const canvas = await html2canvas(sticker, {
-                            scale: captureScale,
-                            useCORS: true,
-                            backgroundColor: "#ffffff"
-                        });
-                        _restoreAll();
-
+                        const canvas = await captureStickerCanvas();
                         const imgData = canvas.toDataURL('image/png');
 
                         if (format === 'pdf') {
@@ -1669,13 +1695,151 @@
                         localStorage.setItem('skuCounter', skuCounter);
 
                     } catch (error) {
-                        _restoreAll();
+                        // captureStickerCanvas restores the layout itself before it rethrows.
                         console.error("Error during download:", error);
                         showNotification("שגיאה ביצירת הקובץ.");
                     }
                 });
             });
             
+            /*
+             * Printing the label instead of downloading it.
+             *
+             * The PDF was never the goal; it was the only thing a browser could hand over. On
+             * the phone it is worse than useless — that device has no browser, no PDF viewer
+             * and, inside the WebView, no download at all, so the red button there produces
+             * silence. TSPL skips the file entirely: the canvas becomes the printer's own
+             * language and goes to it over Bluetooth, with nothing in between that has to
+             * understand a page.
+             *
+             * window.GPPrint is injected by the Android app. In a desktop browser it is absent,
+             * and that is not an error state — the PC has a driver and a print dialog and is
+             * already doing fine there. So the button explains itself rather than failing.
+             */
+            const PRINTER_MAC_KEY = 'gp_printer_mac';
+            const PRINTER_NAME_KEY = 'gp_printer_name';
+            const PRINTER_GAP_KEY = 'gp_printer_gap';
+
+            function printerBridge() {
+                return (typeof window !== 'undefined' && window.GPPrint) ? window.GPPrint : null;
+            }
+
+            // Paired devices only. Discovery and pairing belong to Android settings: they need
+            // permissions, a PIN and patience, and doing them here would be a worse copy of a
+            // screen the phone already has.
+            function pickPrinter(bridge) {
+                let devices = [];
+                try { devices = JSON.parse(bridge.devices() || '[]'); } catch (e) { devices = []; }
+                return new Promise(resolve => {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 p-4';
+                    const box = document.createElement('div');
+                    box.className = 'bg-white rounded-xl shadow-2xl w-full max-w-sm p-5';
+                    const title = document.createElement('h2');
+                    title.className = 'text-xl font-bold mb-1 text-dark-primary';
+                    title.textContent = 'בחר מדפסת';
+                    const sub = document.createElement('p');
+                    sub.className = 'text-sm text-gray-600 mb-4';
+                    sub.textContent = devices.length
+                        ? 'מכשירים שכבר מותאמים בהגדרות הבלוטות של הטלפון.'
+                        : 'לא נמצא אף מכשיר מותאם. התאם את המדפסת בהגדרות הבלוטות של הטלפון, ואז חזור לכאן.';
+                    box.appendChild(title); box.appendChild(sub);
+
+                    const done = (val) => { wrap.remove(); resolve(val); };
+                    devices.forEach(d => {
+                        const b = document.createElement('button');
+                        b.type = 'button';
+                        b.className = 'w-full text-right bg-gray-100 hover:bg-gray-200 rounded-lg py-3 px-4 mb-2';
+                        b.textContent = (d.name || 'מכשיר') + '  —  ' + d.address;
+                        b.addEventListener('click', () => {
+                            localStorage.setItem(PRINTER_MAC_KEY, d.address);
+                            localStorage.setItem(PRINTER_NAME_KEY, d.name || d.address);
+                            done(d.address);
+                        });
+                        box.appendChild(b);
+                    });
+
+                    const cancel = document.createElement('button');
+                    cancel.type = 'button';
+                    cancel.className = 'w-full text-gray-500 py-2 mt-1';
+                    cancel.textContent = 'ביטול';
+                    cancel.addEventListener('click', () => done(null));
+                    box.appendChild(cancel);
+                    wrap.appendChild(box);
+                    document.body.appendChild(wrap);
+                });
+            }
+
+            function updatePrintHint() {
+                const hint = document.getElementById('print-bt-hint');
+                if (!hint) return;
+                hint.innerHTML = '';
+                if (!printerBridge()) {
+                    hint.textContent = 'הדפסה ישירה עובדת מתוך אפליקציית Green Power בטלפון. במחשב — הורד PDF והדפס כרגיל.';
+                    return;
+                }
+                const name = localStorage.getItem(PRINTER_NAME_KEY);
+                if (!name) { hint.textContent = 'בלחיצה הראשונה תתבקש לבחור את המדפסת.'; return; }
+                hint.appendChild(document.createTextNode('מדפיס אל ' + name + '  '));
+                const swap = document.createElement('button');
+                swap.type = 'button';
+                swap.className = 'underline text-blue-600';
+                swap.textContent = 'החלף מדפסת';
+                swap.addEventListener('click', () => {
+                    localStorage.removeItem(PRINTER_MAC_KEY);
+                    localStorage.removeItem(PRINTER_NAME_KEY);
+                    updatePrintHint();
+                });
+                hint.appendChild(swap);
+            }
+
+            async function printLabelOverBluetooth() {
+                const bridge = printerBridge();
+                if (!bridge) {
+                    showNotification('הדפסה ישירה זמינה רק מתוך האפליקציה בטלפון.');
+                    return;
+                }
+                let mac = localStorage.getItem(PRINTER_MAC_KEY);
+                if (!mac) { mac = await pickPrinter(bridge); updatePrintHint(); }
+                if (!mac) return;
+
+                // The dashed outline of a selected element belongs to the editor, not to the
+                // label, and html2canvas will happily print it.
+                const wasSelected = currentSelectedElement;
+                if (wasSelected) wasSelected.classList.remove('selected-element');
+                showNotification('מכין את המדבקה...');
+                try {
+                    const canvas = await captureStickerCanvas();
+                    const ctx = canvas.getContext('2d');
+                    const bytes = TSPL.buildLabel(ctx.getImageData(0, 0, canvas.width, canvas.height), {
+                        widthMm: 100,
+                        heightMm: 50,
+                        gapMm: Number(localStorage.getItem(PRINTER_GAP_KEY) || 2),
+                    });
+                    // Synchronous on purpose: a @JavascriptInterface method runs on its own
+                    // thread, so blocking here blocks nothing the user can see, and the return
+                    // value is the only place the printer can say it refused.
+                    const res = String(bridge.print(mac, TSPL.toBase64(bytes)));
+                    if (res !== 'OK') throw new Error(res);
+                    saveStickerRecord();
+                    skuCounter++;
+                    localStorage.setItem('skuCounter', skuCounter);
+                    initSkuCounter();
+                    showNotification('נשלח למדפסת');
+                } catch (e) {
+                    console.error('print', e);
+                    showNotification('ההדפסה נכשלה: ' + ((e && e.message) || e));
+                } finally {
+                    if (wasSelected) wasSelected.classList.add('selected-element');
+                }
+            }
+
+            (function wirePrintButton() {
+                const btn = document.getElementById('print-bt-btn');
+                if (btn) btn.addEventListener('click', printLabelOverBluetooth);
+                updatePrintHint();
+            })();
+
             // --- אתחול המערכת ---
             loadIconsFromLibrary();
             initSkuCounter();

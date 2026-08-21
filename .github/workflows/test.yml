@@ -85,6 +85,11 @@ jobs:
       - name: Sticker — printed current never exceeds the BMS
         run: node test/test-sticker-specs.mjs
 
+      # The bytes the phone sends to the label printer. Inverted polarity here prints a
+      # solid black label and eats a metre of ribbon, and nothing in TSPL reports it.
+      - name: Sticker — the TSPL the printer receives
+        run: node test/test-tspl.mjs
+
       # Fails on marks overflowing the artboard, text spilling its column, or a font weight
       # with no loaded face — all three have shipped to a printer before.
       - name: Sticker — renders, both modes
