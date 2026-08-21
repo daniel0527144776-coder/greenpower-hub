@@ -63,11 +63,23 @@ const left = skeleton.match(/<(script|link)[^>]*\s(src|href)="(?!data:)[^"]+"/gi
 if (left) throw new Error('still fetching: ' + left.join(', '));
 
 // ---- 2. splice it into the hub ----------------------------------------------------
-// Carried in a <script type="text/plain">, not a JS string literal: the payload is 1MB of
-// other people's minified code, and the only character sequence that can break this container
-// is </script — which is escaped here and put back at run time. A template literal would have
-// had to survive backticks and ${ as well, in code nobody here wrote.
-const payload = doc.replace(/<\/script/gi, '<\\/script');
+// BASE64, and not because it is elegant.
+//
+// The first version escaped </script to <\/script and undid that at run time. It shipped, and
+// the editor came up as a wall of source code on Daniel's phone, because jsPDF's own minified
+// source contains this, verbatim:
+//
+//     '<script src="'+o+'"'+s+'><\/script><script >PDFObject.embed(...)<\/script>'
+//
+// Un-escaping turned jsPDF's OWN <\/script> into a real one, which closed the block 46,753
+// characters in and dumped the remaining 300KB into the document as text. The escape was not
+// reversible: two different inputs mapped to the same output.
+//
+// Base64 ends the argument rather than winning it. The payload becomes [A-Za-z0-9+/=] and
+// carries no <, no </script, no <!--, and nothing else the HTML tokenizer reacts to — so no
+// reasoning about parser states is required from whoever reads this next. It costs ~33%,
+// which on a file the service worker caches once is the cheaper half of the trade.
+const payload = Buffer.from(doc, 'utf8').toString('base64').replace(/(.{120})/g, '$1\n');
 
 const HUB = path.join(DIST, 'index.html');
 let hub = fs.readFileSync(HUB, 'utf8');

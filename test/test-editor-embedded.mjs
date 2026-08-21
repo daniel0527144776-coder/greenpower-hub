@@ -83,6 +83,27 @@ if (frame) {
   check('tspl.js loaded in the frame', inside.tspl, inside);
   check('it really is the sticker', inside.title.includes('Green Power'), inside.title);
 
+  // The assertion this suite shipped without, and it cost Daniel an evening. Every check
+  // above passed while the editor came up on his phone as a wall of jsPDF source: a script
+  // block closed 46KB in and the remaining 300KB rendered as text. "The right things are
+  // present" says nothing about what ELSE is; a page can be correct and ruined at once.
+  const spill = await frame.evaluate(() => {
+    const t = document.body.innerText || '';
+    return {
+      len: t.length,
+      libSource: /pdfobjectnewwindow|splitTextToSize|Object\.defineProperty\(exports/.test(t),
+      scripts: document.querySelectorAll('script').length,
+      jspdf: typeof window.jspdf === 'object',
+      scrollH: document.documentElement.scrollHeight,
+    };
+  });
+  check('no library source is rendered as text', !spill.libSource, spill);
+  // The editor's own visible text is a few hundred characters of labels and buttons.
+  check('the visible text is the editor, not a source dump', spill.len < 4000, spill.len);
+  // A script that closed early splits one block into two, so the count is a direct read on it.
+  check('every script block parsed whole', spill.scripts === 8, spill.scripts);
+  check('jsPDF survived intact', spill.jspdf, spill.jspdf);
+
   // Same origin is not decoration: it is why the editor can write a key the hub reads, and
   // why the APK's window.GPPrint is reachable from inside the frame.
   const sameOrigin = await page.evaluate(() => {
