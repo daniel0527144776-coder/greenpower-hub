@@ -1,4 +1,4 @@
-const CACHE = 'gp-hub-v183';
+const CACHE = 'gp-hub-v184';
 const ASSETS = [
   './',
   './index.html',
@@ -49,6 +49,40 @@ self.addEventListener('fetch', (e) => {
   let sameOrigin = false;
   try { sameOrigin = new URL(e.request.url).origin === self.location.origin; } catch (err) { sameOrigin = false; }
   if (!sameOrigin) return;
+
+  // THE DOCUMENT IS NETWORK-FIRST. Everything else stays cache-first.
+  //
+  // Cache-first on the document meant a deploy never reached the phone on the first open:
+  // the old page was served from cache while the new one was fetched in the background, so
+  // the fix always landed one launch late. On 2026-08-21 that cost a whole round of
+  // "close it and open it again" per attempt, and made a fixed bug look unfixed.
+  //
+  // The bench is why it is a RACE and not a plain network-first: the signal there is bad,
+  // and a document request that hangs for thirty seconds is worse than a day-old page. Four
+  // seconds, then whatever is in the cache. Offline still opens instantly, because the fetch
+  // rejects at once rather than timing out.
+  if (e.request.mode === 'navigate') {
+    e.respondWith((async () => {
+      const cached = caches.match(e.request).then(r => r || caches.match('./index.html'));
+      try {
+        const fresh = await Promise.race([
+          fetch(e.request),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 4000)),
+        ]);
+        if (fresh && fresh.status === 200 && fresh.type === 'basic') {
+          const clone = fresh.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return fresh;
+      } catch (err) {
+        const fallback = await cached;
+        if (fallback) return fallback;
+        throw err;
+      }
+    })());
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fetchPromise = fetch(e.request).then(networkResp => {

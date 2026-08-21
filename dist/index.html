@@ -404,6 +404,17 @@ body { min-height: 100vh; }
     </div>
   </div>
 
+  <!-- Which build is actually running. Small, and worth its space: a fix deployed here and a
+       fix RUNNING on Daniel's phone are different things, and for a whole afternoon on
+       2026-08-21 there was no way to tell them apart from either end. Tapping it clears every
+       cache and reloads, which is the manual escape hatch for the same problem. -->
+  <div style="text-align:center;margin-top:18px;">
+    <button type="button" id="buildTag" onclick="forceUpdate()"
+            style="background:none;border:none;color:var(--text-muted,#94a3b8);font-size:11px;cursor:pointer;padding:6px;">
+      גרסה <span id="buildTagVer"></span> · הקש לעדכון
+    </button>
+  </div>
+
 
 </section>
 
@@ -1995,6 +2006,30 @@ function openStickerEditor() {
   // The payload carries <\/script so it can survive inside a <script> container; put it back.
   f.srcdoc = doc.textContent.replace(/<\\\/script/gi, '</script');
   f.dataset.loaded = '1';
+}
+
+// Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
+// for one build is exactly the kind of pair that drifts and then lies to you.
+const HUB_BUILD = 'v184';
+
+// The escape hatch when a deploy still has not arrived: drop every cache, unregister the
+// worker, and reload past it. The service worker is network-first for the document now, so
+// this should be needed rarely — but "rarely" is not "never", and the alternative on a phone
+// with no browser is clearing app data and logging in again.
+async function forceUpdate() {
+  const tag = document.getElementById('buildTagVer');
+  if (tag) tag.textContent = 'מעדכן...';
+  try {
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    if (navigator.serviceWorker) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  } catch (e) { /* a failed cleanup must not block the reload */ }
+  location.reload(true);
 }
 
 // ---- Modal ----
@@ -5282,6 +5317,11 @@ function openInstallGuide() {
 // tabs is a wall of text between the user and the thing they came to do. One line each,
 // opened on demand. See the exclusions above the querySelectorAll: a banner with an id is
 // something the app writes into, not a note.
+function showBuildTag() {
+  const el = document.getElementById('buildTagVer');
+  if (el) el.textContent = HUB_BUILD;
+}
+
 function collapseNotes() {
   document.querySelectorAll('.info-banner:not([id])').forEach((el) => {
     // A button is an action, and an id underneath is something the app renders into
@@ -5411,6 +5451,7 @@ async function startApp() {
 
 function boot() {
   collapseNotes();
+  showBuildTag();
   try {
     Sync.loadSession();
     if (Sync.isAuthed()) startApp();

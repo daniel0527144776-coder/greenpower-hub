@@ -91,6 +91,10 @@ jobs:
       - name: Sticker — printed current never exceeds the BMS
         run: node test/test-sticker-specs.mjs
 
+      # The badge the user reads must be the build they are running.
+      - name: The shown version is the deployed version
+        run: node tools/check-build-tag.mjs
+
       # The editor is baked into the hub document. Two copies of one thing is the shape
       # this repo keeps getting bitten by, so CI refuses a stale bake.
       - name: The baked editor matches stickers.html
