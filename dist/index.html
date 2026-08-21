@@ -1457,7 +1457,7 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">🗂️ מדבקות שמורות</h2>
     <div class="btn-group">
-      <button class="btn btn-primary btn-sm" onclick="openExternal('stickers.html')">🏷️ פתח עורך</button>
+      <button class="btn btn-primary btn-sm" onclick="navigateTo('stickers')">🏷️ פתח עורך</button>
       <button class="btn btn-secondary btn-sm" onclick="clearStickerLog()">🗑️ נקה הכל</button>
     </div>
   </div>
@@ -1471,6 +1471,30 @@ body { min-height: 100vh; }
     <input type="text" class="form-input-wide" id="stickerSearch" placeholder="🔍 חיפוש (שם לקוח / מק\"ט / דגם)" style="width:100%;margin-bottom:10px;" oninput="renderStickerLog()">
     <div id="stickerlogList"></div>
   </div>
+</section>
+
+<!-- ============ STICKER EDITOR PAGE ============ -->
+<!-- The editor used to be a link to a separate page. On Daniel's phone that is not a page,
+     it is a browser — and there is no browser on that device, so pressing the card put a
+     block screen on the screen instead of the editor. Nothing about the editor was wrong;
+     LEAVING the app was wrong.
+
+     An iframe keeps it in the same document and the same origin: no navigation, no browser,
+     no second URL to be approved by anything. Same origin also means localStorage is shared,
+     so gp_sticker_history still lands exactly where renderStickerLog() reads it, and the
+     APK's window.GPPrint bridge is reachable from inside the frame.
+
+     The src is set on first entry, not here: the editor pulls about 1.2MB of libraries and
+     nobody opening the hub to look up a price should pay for that. -->
+<section id="page-stickers" class="page">
+  <div class="page-header">
+    <h2 class="page-title">🏷️ עורך מדבקות</h2>
+    <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" onclick="navigateTo('stickerlog')">🗂️ מדבקות שמורות</button>
+    </div>
+  </div>
+  <iframe id="stickerFrame" title="עורך מדבקות"
+          style="width:100%;height:calc(100vh - 150px);min-height:520px;border:0;border-radius:12px;background:#fff;"></iframe>
 </section>
 
 <!-- ============ INVENTORY PAGE ============ -->
@@ -1945,9 +1969,17 @@ function navigateTo(page) {
   if (page === 'orders') renderOrders();
   if (page === 'dims') { calcPackDims(); renderDims(); }
   if (page === 'bizdocs') renderBizDocs();
+  if (page === 'stickers') openStickerEditor();
   if (page === 'stickerlog') renderStickerLog();
   if (page === 'inventory') renderInventory();
   if (page === 'supplier') renderSupplier();
+}
+
+// Loads the editor into its frame the first time the page is opened, and leaves it loaded
+// afterwards so returning to it is instant and an in-progress label is not thrown away.
+function openStickerEditor() {
+  const f = document.getElementById('stickerFrame');
+  if (f && !f.src) f.src = 'stickers.html';
 }
 
 // ---- Modal ----

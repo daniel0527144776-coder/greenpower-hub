@@ -85,6 +85,11 @@ jobs:
       - name: Sticker — printed current never exceeds the BMS
         run: node test/test-sticker-specs.mjs
 
+      # The phone has no browser, so opening the editor as its own page opened a block
+      # screen instead. What is asserted is that the top-level document never changes.
+      - name: Sticker — the editor opens without leaving the app
+        run: node test/test-editor-embedded.mjs
+
       # The bytes the phone sends to the label printer. Inverted polarity here prints a
       # solid black label and eats a metre of ribbon, and nothing in TSPL reports it.
       - name: Sticker — the TSPL the printer receives
