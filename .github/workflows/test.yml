@@ -50,7 +50,13 @@ jobs:
           node -e "
           const fs=require('fs');
           for (const f of ['dist/index.html','dist/stickers.html']) {
-            const t=fs.readFileSync(f,'utf8');
+            // The baked sticker editor is carried in a <script type=\"text/plain\"> and holds
+          // literal <script> OPENING tags of its own (only </script is escaped, which is all
+          // the HTML parser needs). A scan for <script>...</script> therefore reads a megabyte
+          // of HTML as if it were JavaScript and fails on a page that is perfectly valid.
+          // The block is delimited on purpose; drop it before scanning. Its contents are
+          // checked anyway, as dist/stickers.html, which is the same bytes.
+          const t=fs.readFileSync(f,'utf8').replace(/<!-- sticker-doc: generated[\s\S]*?<!-- \/sticker-doc -->/, '');
             const parts=[...t.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(s=>s.trim());
             fs.writeFileSync('/tmp/'+f.replace(/[^a-z]/gi,'_')+'.js', parts.join('\n;\n'));
             console.log(f, parts.length, 'inline block(s)');
