@@ -92,6 +92,19 @@ if (FROM_PDF) {
   }
   await p.waitForTimeout(900);
 
+  // Measure at 1:1, the way the label is printed — not the way a phone previews it.
+  //
+  // The artboard is painted scaled down on a narrow viewport (fitStickerToViewport), and this
+  // renderer runs at 390px. Left alone it reports the SCALED numbers: the marks' clearance
+  // came back as "6px clear (artboard 174px)" for a label that really has 16px of clearance
+  // on a 498px artboard. Both readings pass, and the small one would send the next reader
+  // hunting for a problem that is not there — 8px of slack in this column is a documented
+  // coin flip, so the absolute number is the whole point. The capture path unscales too.
+  await p.evaluate(() => {
+    const w = document.querySelector('.sticker-wrapper');
+    if (w) { w.style.transform = ''; w.style.marginLeft = ''; w.style.marginBottom = ''; }
+  });
+
   // Every piece of text on the sticker, with the size and weight it actually rendered at.
   // One table, because "are all the sizes and weights right?" is a question that cannot be
   // answered by looking at a picture — 27 and 25 are indistinguishable by eye, and a

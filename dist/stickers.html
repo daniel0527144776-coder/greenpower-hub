@@ -815,8 +815,12 @@
                 var target = event.target.closest('[data-editable="true"]') || event.target.closest('div[id*="placeholder"]');
                 if (!target) return;
                 if (target.classList.contains('editing')) return;
-                var x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-                var y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+                // interact reports deltas in SCREEN pixels. The artboard is painted scaled on a
+                // phone, so a finger moving 10px across the glass is 24px inside the label —
+                // dragging without this correction is unusably fast and overshoots every time.
+                const _s = stickerScale();
+                var x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx / _s;
+                var y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy / _s;
                 target.style.transform = `translate(${x}px, ${y}px)`;
                 target.setAttribute('data-x', x);
                 target.setAttribute('data-y', y);
@@ -826,15 +830,21 @@
                 var target = event.target;
                 var x = (parseFloat(target.getAttribute('data-x')) || 0);
                 var y = (parseFloat(target.getAttribute('data-y')) || 0);
-                target.style.width = event.rect.width + 'px';
-                target.style.height = event.rect.height + 'px';
-                x += event.deltaRect.left;
-                y += event.deltaRect.top;
+                // Same correction as the drag: event.rect is screen space, offsetWidth is the
+                // element's own. Adding a scaled delta to an unscaled width is what makes a
+                // resize handle run away from the finger.
+                const _s = stickerScale();
+                const _w = target.offsetWidth + event.deltaRect.width / _s;
+                const _h = target.offsetHeight + event.deltaRect.height / _s;
+                target.style.width = _w + 'px';
+                target.style.height = _h + 'px';
+                x += event.deltaRect.left / _s;
+                y += event.deltaRect.top / _s;
                 target.style.transform = `translate(${x}px, ${y}px)`;
                 target.setAttribute('data-x', x);
                 target.setAttribute('data-y', y);
                 if(currentSelectedElement === target) {
-                    designWidth.value = Math.round(event.rect.width);
+                    designWidth.value = Math.round(_w);
                 }
             }
 
@@ -1383,6 +1393,54 @@
                 repairWarrantyEndDisplay.innerText = `${endDay}/${endMonth}/${endYear}`;
             }
 
+            /*
+             * Fitting the artboard to a phone WITHOUT resizing it.
+             *
+             * The 1000x500 artboard is fixed on purpose (see the CSS comment): every
+             * measurement, the auto-fit shrink loop and the 300dpi capture all depend on it,
+             * and a responsive percentage width was tried in 2026-06 and rejected because the
+             * spec rows stopped fitting their own text once the real width dropped.
+             *
+             * A CSS transform is a different thing entirely: the DOM stays 1000x500 and only
+             * the painting is scaled, so nothing that measures anything can tell the
+             * difference. What it fixes is that on a 412px phone the label was drawn at full
+             * size inside a scrolling box — you saw a vertical slice of it, "n Power" and one
+             * column, and had to drag sideways to read your own sticker.
+             *
+             * The negative margins matter: a transform does not change layout, so without them
+             * the box still reserves 1000x500 and the page keeps a sideways scroll over empty
+             * space. transform-origin is the RIGHT edge because the page is RTL and that edge
+             * is where the label already sits.
+             */
+            function stickerScale() {
+                const wrap = document.querySelector('.sticker-wrapper');
+                if (!wrap) return 1;
+                const t = wrap.style.transform || '';
+                const m = t.match(/scale\(([\d.]+)\)/);
+                return m ? parseFloat(m[1]) : 1;
+            }
+
+            function fitStickerToViewport() {
+                const wrap = document.querySelector('.sticker-wrapper');
+                const frame = wrap && wrap.parentElement;
+                if (!wrap || !frame) return;
+                const avail = frame.clientWidth - 8;      // the frame's own 4px padding
+                const s = Math.min(1, avail / 1000);
+                if (s >= 1) {
+                    wrap.style.transform = '';
+                    wrap.style.marginLeft = '';
+                    wrap.style.marginBottom = '';
+                    return;
+                }
+                wrap.style.transformOrigin = 'top right';
+                wrap.style.transform = 'scale(' + s.toFixed(4) + ')';
+                wrap.style.marginLeft = '-' + Math.round(1000 * (1 - s)) + 'px';
+                wrap.style.marginBottom = '-' + Math.round(500 * (1 - s)) + 'px';
+            }
+
+            window.addEventListener('resize', fitStickerToViewport);
+            window.addEventListener('orientationchange', () => setTimeout(fitStickerToViewport, 200));
+
             function setupInteract(target) {
                  interact(target)
                     .draggable({
@@ -1642,7 +1700,25 @@
 
                 const captureScale = get300DpiScale();
 
+                // The preview may be painted scaled down to fit a phone. html2canvas would
+                // honour that transform and hand back a small, soft raster, so the artboard
+                // goes back to 1:1 for the capture and is refitted afterwards. This is the
+                // same reasoning as the explicit row heights above: capture what the label IS,
+                // not what the screen had room for.
+                const wrapEl = document.querySelector('.sticker-wrapper');
+                const origFit = wrapEl ? {
+                    transform: wrapEl.style.transform,
+                    marginLeft: wrapEl.style.marginLeft,
+                    marginBottom: wrapEl.style.marginBottom,
+                } : null;
+                if (wrapEl) { wrapEl.style.transform = ''; wrapEl.style.marginLeft = ''; wrapEl.style.marginBottom = ''; }
+
                 function _restoreAll() {
+                    if (wrapEl && origFit) {
+                        wrapEl.style.transform = origFit.transform;
+                        wrapEl.style.marginLeft = origFit.marginLeft;
+                        wrapEl.style.marginBottom = origFit.marginBottom;
+                    }
                     sticker.style.height = origStickerH;
                     if (specsEl) { specsEl.style.height = origSpecH; specsEl.style.flex = origSpecFlex; }
                     specRows.forEach((r, i) => { r.style.height = origRowH[i].h; r.style.flex = origRowH[i].f; });
@@ -1851,6 +1927,7 @@
             // --- אתחול המערכת ---
             loadIconsFromLibrary();
             initSkuCounter();
+            fitStickerToViewport();
             
             // ניקוי חד-פעמי: גופן 28px — מחיקת ברירות מחדל ישנות
             // טעינת מיקומים שנשמרו - שים לב, זה קורה לפני דריסת התאריכים

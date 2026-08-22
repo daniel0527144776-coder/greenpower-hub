@@ -98,6 +98,24 @@ if (frame) {
     };
   });
   check('no library source is rendered as text', !spill.libSource, spill);
+
+  // The label has to be VISIBLE on the phone it is edited on. The artboard is a fixed
+  // 1000x500 and was painted at that size inside a 412px scroll box, so Daniel saw a vertical
+  // slice of his own sticker — "n Power" and one column — and had to drag sideways to read
+  // the rest. It is scaled to fit now; the DOM is still 1000x500, which is what every
+  // measurement and the 300dpi capture depend on.
+  const fit = await frame.evaluate(() => {
+    const el = document.getElementById('sticker-to-capture');
+    const r = el.getBoundingClientRect();
+    return {
+      vw: document.documentElement.clientWidth,
+      left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width),
+      layoutWidth: el.offsetWidth,           // must stay 1000-ish: transform, not resize
+    };
+  });
+  check('the whole label is on screen', fit.left >= -1 && fit.right <= fit.vw + 1, fit);
+  check('and it is big enough to work with', fit.width > fit.vw * 0.8, fit);
+  check('the artboard itself was NOT resized', fit.layoutWidth > 950, fit.layoutWidth);
   // The editor's own visible text is a few hundred characters of labels and buttons.
   check('the visible text is the editor, not a source dump', spill.len < 4000, spill.len);
   // A script that closed early splits one block into two, so the count is a direct read on it.
