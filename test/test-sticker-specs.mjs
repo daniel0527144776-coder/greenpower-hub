@@ -127,10 +127,18 @@ console.log('\n5. the safety marks cannot be pushed off the label');
     const col = marks.closest('#sticker-to-capture > div');
     const sticker = document.getElementById('sticker-to-capture');
     const tag = document.querySelector('#manufacturer-info p');
-    const state = () => ({
-      clearance: Math.round(sticker.getBoundingClientRect().bottom - marks.getBoundingClientRect().bottom),
-      size: Math.round(parseFloat(getComputedStyle(tag).fontSize)),
-    });
+    // Unscaled, like fitSideColumn itself: the preview is painted scaled at this viewport, so
+    // a raw rect difference reports 6 for a label that has 16 layout pixels of clearance. The
+    // assertions only ask for >= 0 either way, but a log line that reads 6 where the renderer
+    // says 16 is the kind of number someone chases for an hour.
+    const state = () => {
+      const rect = sticker.getBoundingClientRect();
+      const scale = (rect.width && sticker.offsetWidth) ? rect.width / sticker.offsetWidth : 1;
+      return {
+        clearance: Math.round((rect.bottom - marks.getBoundingClientRect().bottom) / (scale || 1)),
+        size: Math.round(parseFloat(getComputedStyle(tag).fontSize)),
+      };
+    };
     window.fitSideColumn();
     const normal = state();
     const orig = col.style.width;
