@@ -34,15 +34,18 @@
    * backwards here. Getting it backwards does not error: it prints a solid black label and
    * eats a metre of ribbon. So the buffer starts as 0xFF (all white) and bits are cleared.
    */
-  function packMono(imageData, threshold) {
+  function packMono(imageData, threshold, useWidth) {
     const { width, height, data } = imageData;
-    const widthBytes = Math.ceil(width / 8);
+    // useWidth lets the caller pack fewer columns than the raster holds — see buildLabel,
+    // where a raster one dot too wide is trimmed instead of refused.
+    const cols = Math.min(useWidth || width, width);
+    const widthBytes = Math.ceil(cols / 8);
     const bytes = new Uint8Array(widthBytes * height).fill(0xFF);
     const cut = typeof threshold === 'number' ? threshold : 160;
 
     for (let y = 0; y < height; y++) {
       const row = y * widthBytes;
-      for (let x = 0; x < width; x++) {
+      for (let x = 0; x < cols; x++) {
         const i = (y * width + x) * 4;
         // A fully transparent pixel is white here: html2canvas is given a white
         // backgroundColor, but an un-composited corner would otherwise read as luminance 0
@@ -85,17 +88,27 @@
     const heightMm = o.heightMm || 50;
     const gapMm = o.gapMm === undefined ? 2 : o.gapMm;
     const copies = o.copies || 1;
-    const mono = packMono(imageData, o.threshold);
 
-    // A raster wider than the label is not a warning, it is a guarantee of a clipped label,
-    // and at 300dpi the numbers are big enough that nobody notices 40 dots by eye.
+    // A raster much wider than the label is a guarantee of a clipped label. A raster ONE dot
+    // wider is arithmetic.
+    //
+    // 100mm at 300dpi is 1181.10 dots, and the capture is 1000 CSS px times a scale that has
+    // to be rounded somewhere. On this machine it lands on 1181; on Daniel's S10+ it landed on
+    // 1182 and the first version of this guard refused to print at all — a correct label,
+    // stopped by a rounding difference of 1/1181 of its width. Up to a millimetre of overshoot
+    // is therefore trimmed rather than refused: the columns dropped are the outermost dots of
+    // a label that already carries a 10px white margin for the printer. Beyond that something
+    // is genuinely wrong with the capture and refusing is right.
     const maxDots = Math.round(widthMm * DOTS_PER_MM);
-    if (imageData.width > maxDots) {
+    const TRIM_TOLERANCE = Math.round(DOTS_PER_MM);      // 1mm, ~12 dots
+    const over = imageData.width - maxDots;
+    if (over > TRIM_TOLERANCE) {
       throw new Error(
         'raster is ' + imageData.width + ' dots wide but ' + widthMm + 'mm is only ' +
         maxDots + ' dots at 300dpi — the label would be cut off'
       );
     }
+    const mono = packMono(imageData, o.threshold, over > 0 ? maxDots : imageData.width);
 
     const header =
       'SIZE ' + widthMm + ' mm,' + heightMm + ' mm\r\n' +

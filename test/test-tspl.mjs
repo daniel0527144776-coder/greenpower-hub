@@ -70,6 +70,31 @@ check('the rest of row 0 stays blank', mono.bytes[1] === 0xff, mono.bytes[1]);
 check('black at x=8 lands in the second byte of row 1', mono.bytes[3] === 0x7f, mono.bytes[3]);
 check('row 1 first byte untouched', mono.bytes[2] === 0xff, mono.bytes[2]);
 
+// ---- 1b. rounding is not a reason to refuse a label -----------------------------------
+// Daniel's S10+ captured 1182 dots where this machine captures 1181, and the first version of
+// the width guard refused to print — a correct label stopped by 1/1181 of its own width, with
+// "the label would be cut off" on the screen of someone standing at the printer. One dot is
+// trimmed now; a raster that is genuinely the wrong size still has to fail, so both directions
+// are asserted here.
+const widthGuard = await page.evaluate(() => {
+  const make = (w) => ({ width: w, height: 4, data: new Uint8ClampedArray(w * 4 * 4).fill(255) });
+  const out = {};
+  try {
+    const bytes = TSPL.buildLabel(make(1182), { widthMm: 100, heightMm: 50 });
+    let head = '';
+    for (let i = 0; i < 120; i++) head += String.fromCharCode(bytes[i]);
+    out.oneOver = { ok: true, head };
+  } catch (e) { out.oneOver = { ok: false, err: String(e.message) }; }
+  try { TSPL.buildLabel(make(1400), { widthMm: 100, heightMm: 50 }); out.wayOver = { ok: true }; }
+  catch (e) { out.wayOver = { ok: false, err: String(e.message) }; }
+  return out;
+});
+check('a one-dot overshoot still prints', widthGuard.oneOver.ok, widthGuard.oneOver);
+check('and it is packed to the label width, not the raster width',
+  widthGuard.oneOver.ok && widthGuard.oneOver.head.includes('BITMAP 0,0,148,4,0,'),
+  widthGuard.oneOver.head && widthGuard.oneOver.head.split('BITMAP')[1]);
+check('a raster that is genuinely too wide is still refused', widthGuard.wayOver.ok === false, widthGuard.wayOver);
+
 // ---- 2. the real label ---------------------------------------------------------------
 const label = await page.evaluate(async (selftest) => {
   const canvas = await captureStickerCanvas();
@@ -89,7 +114,11 @@ const label = await page.evaluate(async (selftest) => {
 }, SELFTEST);
 
 check('no page errors', pageErrors.length === 0, pageErrors.slice(0, 2));
-check('the capture is 1181 dots wide (100mm at 300dpi)', label.canvasW === 1181, label.canvasW);
+// Within a dot or two of 1181, not exactly it. 100mm at 300dpi is 1181.10 dots and the
+// capture is 1000 CSS px times a rounded scale, so the last digit belongs to the device:
+// this machine gives 1181 and Daniel's S10+ gives 1182. Demanding one of them is demanding
+// a particular phone.
+check('the capture is ~1181 dots wide (100mm at 300dpi)', Math.abs(label.canvasW - 1181) <= 2, label.canvasW);
 check('the capture is 589-590 dots tall (50mm at 300dpi)', Math.abs(label.canvasH - 590) <= 1, label.canvasH);
 
 const widthBytes = Math.ceil(label.canvasW / 8);
