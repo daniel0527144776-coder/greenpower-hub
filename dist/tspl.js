@@ -97,7 +97,11 @@
       'DIRECTION ' + (o.direction === undefined ? 1 : o.direction) + ',0\r\n' +
       'REFERENCE ' + refX + ',' + refY + '\r\n' +
       'DENSITY ' + (o.density === undefined ? 8 : o.density) + '\r\n' +
-      'SPEED ' + (o.speed === undefined ? 4 : o.speed) + '\r\n' +
+      // Inches per second. 2, not 4: thermal transfer is heat over time, and a slower pass
+      // releases the ribbon more completely — Daniel asked for the slowest the printer will
+      // take, after the first labels off the phone came back poor. The Windows driver runs 4
+      // (JobPrintSpeed 101600), which is right for its own path and not a reason to match.
+      'SPEED ' + (o.speed === undefined ? 2 : o.speed) + '\r\n' +
       'CLS\r\n';
   }
 

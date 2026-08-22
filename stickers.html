@@ -628,6 +628,9 @@
                         <label class="flex flex-col text-xs text-gray-600">צפיפות (0-15)
                             <input type="number" id="calDensity" min="0" max="15" step="1" class="border rounded p-2 text-base">
                         </label>
+                        <label class="flex flex-col text-xs text-gray-600">מהירות (נמוך = איטי ואיכותי)
+                            <input type="number" id="calSpeed" min="1" max="6" step="0.5" class="border rounded p-2 text-base">
+                        </label>
                         <label class="flex flex-col text-xs text-gray-600">מרווח מדבקות מ"מ
                             <input type="number" id="calGap" min="0" max="10" step="0.5" class="border rounded p-2 text-base">
                         </label>
@@ -1917,6 +1920,7 @@
             const PRINTER_DENSITY_KEY = 'gp_printer_density';
             const PRINTER_OFFX_KEY = 'gp_printer_offx';
             const PRINTER_OFFY_KEY = 'gp_printer_offy';
+            const PRINTER_SPEED_KEY = 'gp_printer_speed';
 
             // One place that decides what the printer is told, so the calibration pattern and
             // the real label can never disagree — which would make the pattern worthless.
@@ -1934,12 +1938,20 @@
                     density: num(PRINTER_DENSITY_KEY, 8),
                     offsetXmm: num(PRINTER_OFFX_KEY, 0),
                     offsetYmm: num(PRINTER_OFFY_KEY, 0),
+                    // Inches per second, and slow on purpose (Daniel, 2026-08-23). Thermal
+                    // transfer is a heat-and-time process: the slower the head passes, the
+                    // more completely the ribbon releases, and edges stop smearing. 2 is the
+                    // slowest this class of 300dpi printer reliably accepts — the field allows
+                    // 1, which either works or is clamped by the printer, and one label says
+                    // which.
+                    speed: num(PRINTER_SPEED_KEY, 2),
                 };
             }
 
             function bindCalibration() {
                 const pairs = [
                     ['calDensity', PRINTER_DENSITY_KEY, 8],
+                    ['calSpeed', PRINTER_SPEED_KEY, 2],
                     ['calGap', PRINTER_GAP_KEY, 2],
                     ['calOffX', PRINTER_OFFX_KEY, 0],
                     ['calOffY', PRINTER_OFFY_KEY, 0],
