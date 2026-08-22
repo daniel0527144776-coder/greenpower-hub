@@ -1878,6 +1878,67 @@
             // measure the result, rather than waiting on a font swap it cannot observe.
             window.fitNoWrapLines = fitNoWrapLines;
 
+            /*
+             * Fill the editor from a repair or a sale, so a label that was already described
+             * once does not have to be described again.
+             *
+             * Called by the hub across the frame boundary — same origin, so this is an ordinary
+             * function call. It fills and stops: Daniel's choice was to see the label before it
+             * prints, because the fields it cannot know (a repair's real cell type, a BMS that
+             * was swapped) are exactly the ones that would go out wrong.
+             *
+             * Every field is set through its own control and a change event, never by writing
+             * to the sticker: the specs are derived from these inputs, and a value poked
+             * straight into the label would be overwritten the next time anything recalculated.
+             */
+            window.applyStickerJob = function (data) {
+                if (!data) return;
+                try {
+                    const wantRepair = data.type === 'repair';
+                    const modeBtn = document.querySelector(wantRepair ? '.mode-button.repair-mode' : '.mode-button.new-mode');
+                    if (modeBtn) modeBtn.click();
+
+                    const fire = (el) => {
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                    };
+                    // A select is only set to a value it actually offers. An 18650 build or a
+                    // BMS the editor does not list would otherwise blank the field, which reads
+                    // on the label as "no BMS" rather than "unknown".
+                    const setSel = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (!el || val === undefined || val === null || val === '') return false;
+                        const want = String(val);
+                        const opt = [...el.options].find(o => o.value === want || o.textContent.trim() === want);
+                        if (!opt) return false;
+                        el.value = opt.value;
+                        fire(el);
+                        return true;
+                    };
+                    const setVal = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (!el || val === undefined || val === null || val === '') return false;
+                        el.value = val;
+                        fire(el);
+                        return true;
+                    };
+
+                    setSel('voltage-select', data.voltage);
+                    setSel('capacity-select', data.capacity);
+                    setSel('cells-select', data.cells);
+                    setSel('bms-select', data.bmsLabel);
+                    setVal('client-name-input', data.client);
+                    setVal('client-ref-input', data.ref);
+                    if (data.warrantyMonths) {
+                        setVal(wantRepair ? 'repair-warranty-duration-input' : 'warranty-duration-input', data.warrantyMonths);
+                    }
+                    if (typeof updateAllSpecs === 'function') updateAllSpecs();
+                    showNotification('המדבקה מולאה — בדוק ולחץ הדפס');
+                } catch (err) {
+                    console.error('applyStickerJob', err);
+                }
+            };
+
             document.querySelectorAll('.download-btn').forEach(button => {
                 button.addEventListener('click', async function() {
                     const currentSku = document.getElementById('sku-value').innerText;

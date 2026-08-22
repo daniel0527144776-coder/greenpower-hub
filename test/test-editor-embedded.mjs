@@ -185,6 +185,63 @@ if (frame) {
   check('and it has ink on it', label.ink > 20000, label.ink);
 }
 
+// ---- a label filled in from a job, and from a sale ------------------------------------
+// The point of the feature is that a battery already described once is not described again,
+// so what is asserted is that the values ARRIVE — not merely that the editor opened. It fills
+// and stops on purpose (Daniel's choice): the fields the hub cannot know are exactly the ones
+// that would otherwise go out wrong.
+if (frame) {
+  await page.evaluate(() => {
+    Store.set('jobs', [{
+      id: 'jTEST1', date: new Date().toISOString(), customerName: 'ישראל ישראלי',
+      jobs: ['full'], voltage: '72', capacity: '35', cellType: '21700-50pl',
+      bmsBrand: 'daly', bmsAmps: '60', warrantyMonths: 12, price: 6000,
+    }, {
+      id: 'jTEST2', date: new Date().toISOString(), customerName: 'מוסך אלעד',
+      jobs: ['bms'], voltage: '60', capacity: '20', cellType: '21700-50e',
+      bmsBrand: 'jk', bmsAmps: '150', warrantyMonths: 6, price: 700,
+    }]);
+    Store.set('orders', [{
+      id: 'oTEST1', date: new Date().toISOString(), customer: 'דוד כהן', phone: '0500000000',
+      bmsBrand: 'ant', bmsAmps: '110', status: 'שולם', total: 4200,
+      items: [{ name: 'סוללת ליתיום 48V 30Ah ADVANCED', qty: 1, unit: 4200 }],
+    }]);
+  });
+
+  const read = () => frame.evaluate(() => ({
+    volt: document.getElementById('voltage-select').value,
+    cap: document.getElementById('capacity-select').value,
+    cells: document.getElementById('cells-select').value,
+    bms: document.getElementById('bms-select').value,
+    client: document.getElementById('client-name-input').value,
+    ref: document.getElementById('client-ref-input').value,
+    repairMode: !document.getElementById('repaired-battery-specs-on-sticker').classList.contains('hidden'),
+  }));
+
+  await page.evaluate(() => openStickerFor('job', 'jTEST1'));
+  await page.waitForTimeout(2500);
+  const built = await read();
+  check('a build fills the sticker from the job', built.volt === '72' && built.cap === '35', built);
+  check('including the cell type it was built from', built.cells === 'EVE 21700 50PL', built.cells);
+  check('and the BMS that went in it', built.bms === 'DALY 60A', built.bms);
+  check('the customer comes across', built.client === 'ישראל ישראלי', built.client);
+  check('a full build is a new battery, not a repair', built.repairMode === false, built.repairMode);
+
+  await page.evaluate(() => openStickerFor('job', 'jTEST2'));
+  await page.waitForTimeout(2000);
+  const repaired = await read();
+  check('a BMS job opens in repair mode', repaired.repairMode === true, repaired.repairMode);
+  check('with its own voltage and cells', repaired.volt === '60' && repaired.cells === 'EVE 21700 50E', repaired);
+
+  await page.evaluate(() => openStickerFor('order', 'oTEST1'));
+  await page.waitForTimeout(2000);
+  const sold = await read();
+  // A sale has no voltage field at all — these are read back out of the catalogue line.
+  check('a sale reads its volts and amp-hours out of the item name',
+    sold.volt === '48' && sold.cap === '30', sold);
+  check('and it prints as a new battery', sold.repairMode === false, sold.repairMode);
+}
+
 // ---- the two public sites, same invariant --------------------------------------------
 // They are shown in a frame for exactly the reason the editor is: a link on that phone is a
 // request for a browser that does not exist. Both are stubbed here rather than fetched — the
