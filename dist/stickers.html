@@ -2002,6 +2002,28 @@
                     showNotification('הדפסה ישירה זמינה רק מתוך האפליקציה בטלפון.');
                     return;
                 }
+                // The Bluetooth permission, asked for HERE rather than at launch.
+                //
+                // The app used to request it in onCreate, which is before there is any reason
+                // for it — and a prompt dismissed at that moment leaves printing permanently
+                // broken with no way back to it. Daniel got "חסרה הרשאת בלוטות" standing at the
+                // printer, with the printer paired and chosen.
+                //
+                // Older builds have no ensure(); the optional-call keeps them working exactly
+                // as before rather than throwing on a missing method.
+                if (typeof bridge.ensure === 'function') {
+                    const perm = String(bridge.ensure());
+                    if (perm === 'ASKED') {
+                        showNotification('אשר את בקשת הבלוטות ואז לחץ שוב על הדפס');
+                        return;
+                    }
+                    if (perm === 'BLOCKED') {
+                        showNotification('ההרשאה חסומה — נפתחות ההגדרות: מכשירים בקרבת מקום ← אפשר');
+                        if (typeof bridge.openSettings === 'function') bridge.openSettings();
+                        return;
+                    }
+                }
+
                 let mac = localStorage.getItem(PRINTER_MAC_KEY);
                 if (!mac) { mac = await pickPrinter(bridge); updatePrintHint(); }
                 if (!mac) return;
@@ -2023,6 +2045,11 @@
                     // thread, so blocking here blocks nothing the user can see, and the return
                     // value is the only place the printer can say it refused.
                     const res = String(bridge.print(mac, TSPL.toBase64(bytes)));
+                    if (res.indexOf('ERR_PERM') === 0) {
+                        showNotification('חסרה הרשאת בלוטות — נפתחות ההגדרות: מכשירים בקרבת מקום ← אפשר');
+                        if (typeof bridge.openSettings === 'function') bridge.openSettings();
+                        return;
+                    }
                     if (res !== 'OK') throw new Error(res);
                     saveStickerRecord();
                     skuCounter++;
