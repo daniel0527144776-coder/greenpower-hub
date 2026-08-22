@@ -396,6 +396,12 @@ body { min-height: 100vh; }
         <div class="quick-card-desc">היסטוריית מדבקות שהונפקו</div>
       </div>
 
+      <div class="quick-card" onclick="navigateTo('sites')">
+        <span class="quick-card-icon">🌐</span>
+        <div class="quick-card-title">האתרים שלי</div>
+        <div class="quick-card-desc">החנות והמחירון העסקי</div>
+      </div>
+
       <div class="quick-card" onclick="navigateTo('help')">
         <span class="quick-card-icon">❓</span>
         <div class="quick-card-title">עזרה ומדריך</div>
@@ -1488,6 +1494,26 @@ body { min-height: 100vh; }
   </div>
 </section>
 
+<!-- ============ MY SITES PAGE ============ -->
+<!-- The two public sites, shown INSIDE the app.
+     Not links. On Daniel's phone a link is a request for a browser and there is no browser —
+     that is the whole story of this month. Both sites send no X-Frame-Options and no
+     frame-ancestors, so a frame is allowed; checked, and both render fully in one (the shop
+     came back with 9,823 characters of text and 30 images, the B2B catalogue with 4,490).
+     Cross-origin, so nothing here can read or drive them, which is exactly the intent — this
+     is a window, not an integration. -->
+<section id="page-sites" class="page">
+  <div class="page-header">
+    <h2 class="page-title">🌐 האתרים שלי</h2>
+    <div class="btn-group">
+      <button class="btn btn-primary btn-sm" id="siteTabShop" onclick="showSite('shop')">🛒 החנות</button>
+      <button class="btn btn-secondary btn-sm" id="siteTabB2b" onclick="showSite('b2b')">🏢 מחירון עסקי</button>
+    </div>
+  </div>
+  <iframe id="siteFrame" title="האתר" referrerpolicy="no-referrer"
+          style="width:100%;height:calc(100vh - 150px);min-height:520px;border:0;border-radius:12px;background:#fff;"></iframe>
+</section>
+
 <!-- ============ STICKER EDITOR PAGE ============ -->
 <!-- The editor used to be a link to a separate page. On Daniel's phone that is not a page,
      it is a browser — and there is no browser on that device, so pressing the card put a
@@ -1984,10 +2010,34 @@ function navigateTo(page) {
   if (page === 'orders') renderOrders();
   if (page === 'dims') { calcPackDims(); renderDims(); }
   if (page === 'bizdocs') renderBizDocs();
+  if (page === 'sites') showSite(currentSite || 'shop');
   if (page === 'stickers') openStickerEditor();
   if (page === 'stickerlog') renderStickerLog();
   if (page === 'inventory') renderInventory();
   if (page === 'supplier') renderSupplier();
+}
+
+const SITE_URLS = {
+  shop: 'https://energylabgreen.com/',
+  b2b: 'https://b2b.energylabgreen.com/',
+};
+let currentSite = null;
+
+// Loaded on entry and only when the site actually changes: these are full sites, and
+// re-fetching one because the page was re-entered would cost a phone at the bench real time.
+function showSite(which) {
+  const f = document.getElementById('siteFrame');
+  if (!f || !SITE_URLS[which]) return;
+  if (currentSite !== which) {
+    f.src = SITE_URLS[which];
+    currentSite = which;
+  }
+  const shop = document.getElementById('siteTabShop');
+  const b2b = document.getElementById('siteTabB2b');
+  if (shop && b2b) {
+    shop.className = 'btn btn-sm ' + (which === 'shop' ? 'btn-primary' : 'btn-secondary');
+    b2b.className = 'btn btn-sm ' + (which === 'b2b' ? 'btn-primary' : 'btn-secondary');
+  }
 }
 
 // Loads the editor into its frame the first time the page is opened, and leaves it loaded
@@ -2024,7 +2074,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v194';
+const HUB_BUILD = 'v195';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so

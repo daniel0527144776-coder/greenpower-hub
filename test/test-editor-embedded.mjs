@@ -64,10 +64,11 @@ check('the top-level document never navigated away',
   topNavigations.length === 1 && topNavigations[0].endsWith('/index.html'), topNavigations);
 check('nothing tried to open a second window', popups.length === 0, popups);
 
-// The frame has no URL any more — it is srcdoc — so it is found by being the only frame
-// that is not the main one. That is itself the thing under test: a frame WITH a url would
-// mean a second request had been made.
-const frame = page.frames().find(f => f !== page.mainFrame());
+// Located through its own element, not as "the frame that is not the main one" — the hub has
+// a second iframe now (the sites page), and an iframe with no src is still a frame, so the
+// loose version silently started testing an empty about:blank document instead of the editor.
+const frameEl = await page.$('#stickerFrame');
+const frame = frameEl ? await frameEl.contentFrame() : null;
 check('the editor is loaded in a frame', !!frame, page.frames().map(f => f.url()));
 check('the frame fetched no second URL', !!frame && !/stickers\.html/.test(frame.url()), frame && frame.url());
 
@@ -183,6 +184,31 @@ if (frame) {
   check('captured at the printer\'s own resolution', label.w === 1181, label.w);
   check('and it has ink on it', label.ink > 20000, label.ink);
 }
+
+// ---- the two public sites, same invariant --------------------------------------------
+// They are shown in a frame for exactly the reason the editor is: a link on that phone is a
+// request for a browser that does not exist. Both are stubbed here rather than fetched — the
+// point under test is that the hub frames them and never navigates, not that Cloudflare is up.
+await page.route('https://energylabgreen.com/**', r => r.fulfill({ contentType: 'text/html', body: '<h1>shop stub</h1>' }));
+await page.route('https://b2b.energylabgreen.com/**', r => r.fulfill({ contentType: 'text/html', body: '<h1>b2b stub</h1>' }));
+
+await page.evaluate(() => navigateTo('sites'));
+await page.waitForTimeout(1500);
+const sites = await page.evaluate(() => {
+  const f = document.getElementById('siteFrame');
+  return { src: f ? f.src : null, tab: document.getElementById('siteTabShop').className };
+});
+check('the shop opens in a frame, not a navigation', /^https:\/\/energylabgreen\.com\//.test(sites.src || ''), sites.src);
+check('its tab is marked active', /btn-primary/.test(sites.tab), sites.tab);
+
+await page.evaluate(() => showSite('b2b'));
+await page.waitForTimeout(1500);
+const b2b = await page.evaluate(() => document.getElementById('siteFrame').src);
+check('and the B2B catalogue switches in the same frame', /^https:\/\/b2b\.energylabgreen\.com\//.test(b2b || ''), b2b);
+
+check('the app still never navigated away',
+  topNavigations.length === 1 && topNavigations[0].endsWith('/index.html'), topNavigations);
+check('and still opened no second window', popups.length === 0, popups);
 
 await browser.close();
 server.close();
