@@ -1227,7 +1227,12 @@
                 if (!col || !tagline) return;
                 const room = () => {
                     const cs = getComputedStyle(col);
-                    const used = [...col.children].reduce((a, c) => a + c.getBoundingClientRect().height, 0);
+                    // offsetHeight, not getBoundingClientRect(): clientHeight above is a LAYOUT
+                    // measure and the artboard is painted scaled on a phone, so a rect-based sum
+                    // is ~0.37x of it. Mixed like that this reads as a column with acres of room,
+                    // and the fitter never shrinks anything — which is exactly what
+                    // test-sticker-specs caught the moment the preview started scaling.
+                    const used = [...col.children].reduce((a, c) => a + c.offsetHeight, 0);
                     return col.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - used;
                 };
                 let size = TAGLINE_DEFAULT_SIZE;
@@ -1291,6 +1296,7 @@
                 if (bmsSpan) bmsSpan.innerText = formatBmsWithPeak(savedBms);
                 fitValueSpansToRow();
                 fitSideColumn();
+                fitNoWrapLines();
             }
             window.refreshComputedSpecDisplay = refreshComputedSpecDisplay;
 
@@ -1340,6 +1346,7 @@
                 updateWarrantyExpiration();
                 fitValueSpansToRow();
                 fitSideColumn();
+                fitNoWrapLines();
             }
             window.updateAllSpecs = updateAllSpecs;
 
@@ -1412,6 +1419,82 @@
              * space. transform-origin is the RIGHT edge because the page is RTL and that edge
              * is where the label already sits.
              */
+            /*
+             * A line that can wrap never makes its block wider than the column — the words
+             * simply go to the next line. Only a nowrap line can, and there is exactly one:
+             * the phone line, which is nowrap on purpose because at this size it split
+             * "Made in" from "Israel", a Latin run inside an RTL block.
+             *
+             * At 24px it needs 310px in a 295px column and pushed 15px out through the left
+             * edge of the sticker. Nothing caught it: the existing spill check compares each
+             * box to its COLUMN, and this box was inside its column — it was the TEXT that
+             * did not fit the box. Both checks are needed and they see different things.
+             *
+             * Same philosophy as fitValueSpansToRow and fitCellText: keep the designed size
+             * whenever it fits, give back a pixel at a time only when it does not. The
+             * designed size is remembered so a later reflow can grow back to it rather than
+             * ratcheting downwards.
+             */
+            // Guarded against the reset/shrink oscillation: the size is only restored to the
+            // designed one when the column has GROWN. Without that, the observer below sees
+            // the shrink, resets to 24, shrinks again, forever.
+            let _mfLastAvail = -1;
+
+            function fitNoWrapLines(force) {
+                const mf = document.getElementById('manufacturer-info');
+                const host = mf && mf.parentElement;
+                if (!mf || !host) return;
+                const avail = host.clientWidth;
+                if (!avail) return;
+                const grew = avail > _mfLastAvail;
+                _mfLastAvail = avail;
+
+                mf.querySelectorAll('p').forEach(p => {
+                    if (getComputedStyle(p).whiteSpace !== 'nowrap') return;
+                    if (!p.dataset.designSize) {
+                        p.dataset.designSize = String(parseFloat(getComputedStyle(p).fontSize));
+                    }
+                    let size = parseFloat(p.style.fontSize) || parseFloat(p.dataset.designSize);
+                    if (grew || force) {
+                        size = parseFloat(p.dataset.designSize);
+                        p.style.fontSize = size + 'px';
+                    }
+                    // Measure the BLOCK, not the line: the block carries the padding that the
+                    // overflow actually consists of — at 22px the line fitted in 295 and the
+                    // block was still 299.
+                    //
+                    // offsetWidth, NOT getBoundingClientRect(). The artboard is painted scaled
+                    // on a phone, so the rect is the on-screen size (121px) while clientWidth
+                    // is the layout size (295px) — comparing them said "fits" every time and
+                    // this fitter silently did nothing on the only device that needed it.
+                    // Same units on both sides, always. Same trap as the drag deltas.
+                    let guard = 0;
+                    while (mf.offsetWidth > avail && size > 10 && guard++ < 40) {
+                        size -= 1;
+                        p.style.fontSize = size + 'px';
+                    }
+                });
+            }
+
+            /*
+             * Re-fit when the block's size actually changes, instead of guessing when the font
+             * will have arrived.
+             *
+             * The first version ran once at init and once on document.fonts.ready, and the
+             * overflow survived both: fonts.ready resolves when nothing is PENDING, and at
+             * that moment the browser had not yet started fetching Heebo — it does that when
+             * the face is first used. So both passes measured a fallback face, found 24px fits
+             * in 295, and were wrong the instant the real font swapped in.
+             *
+             * A ResizeObserver has no timing to get wrong: the swap changes the block's width,
+             * which is the event.
+             */
+            if (window.ResizeObserver) {
+                const _mfObserver = new ResizeObserver(() => fitNoWrapLines(false));
+                const _mf = document.getElementById('manufacturer-info');
+                if (_mf) { _mfObserver.observe(_mf); if (_mf.parentElement) _mfObserver.observe(_mf.parentElement); }
+            }
+
             function stickerScale() {
                 const wrap = document.querySelector('.sticker-wrapper');
                 if (!wrap) return 1;
@@ -1438,7 +1521,7 @@
                 wrap.style.marginBottom = '-' + Math.round(500 * (1 - s)) + 'px';
             }
 
-            window.addEventListener('resize', fitStickerToViewport);
+            window.addEventListener('resize', () => { fitStickerToViewport(); fitNoWrapLines(); });
             window.addEventListener('orientationchange', () => setTimeout(fitStickerToViewport, 200));
 
             function setupInteract(target) {
@@ -1684,6 +1767,7 @@
                 // There is one now. Sizes are restored from shrunkSpans after capture.
                 fitValueSpansToRow();
                 fitSideColumn();
+                fitNoWrapLines();
 
                 // גבהים מפורשים על שורות הspecs — מאפשר ל-html2canvas לחשב items-end בצורה תקינה
                 const origStickerH = sticker.style.height;
@@ -1742,6 +1826,9 @@
             // reimplementing the capture in Node -- the point of that suite is the bytes the
             // print button really sends, and a second implementation could not prove it.
             window.captureStickerCanvas = captureStickerCanvas;
+            // Exposed for the same reason: the suite has to be able to force a re-fit and
+            // measure the result, rather than waiting on a font swap it cannot observe.
+            window.fitNoWrapLines = fitNoWrapLines;
 
             document.querySelectorAll('.download-btn').forEach(button => {
                 button.addEventListener('click', async function() {
@@ -1811,19 +1898,44 @@
             // Paired devices only. Discovery and pairing belong to Android settings: they need
             // permissions, a PIN and patience, and doing them here would be a worse copy of a
             // screen the phone already has.
+            /*
+             * The printer picker.
+             *
+             * Two things it has to survive, both learned on the bench. It is opened from
+             * inside an iframe whose box is a few hundred pixels tall, so a dialog positioned
+             * against THAT viewport lands wherever the frame happens to be scrolled — the
+             * report was "it opens the Bluetooth page but the page does not move". It mounts
+             * in the top document instead, where fixed means the phone's screen. Same origin,
+             * so this is a plain appendChild.
+             *
+             * And it is styled inline rather than with classes: Tailwind lives inside the
+             * frame, so a class-built dialog in the parent document would render as unstyled
+             * text. Inline styles work in either document, which is the point.
+             */
             function pickPrinter(bridge) {
                 let devices = [];
                 try { devices = JSON.parse(bridge.devices() || '[]'); } catch (e) { devices = []; }
+
+                let host = document;
+                try { if (window.parent && window.parent !== window && window.parent.document) host = window.parent.document; }
+                catch (e) { host = document; }
+
                 return new Promise(resolve => {
-                    const wrap = document.createElement('div');
-                    wrap.className = 'fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 p-4';
-                    const box = document.createElement('div');
-                    box.className = 'bg-white rounded-xl shadow-2xl w-full max-w-sm p-5';
-                    const title = document.createElement('h2');
-                    title.className = 'text-xl font-bold mb-1 text-dark-primary';
+                    const wrap = host.createElement('div');
+                    wrap.setAttribute('style', 'position:fixed;inset:0;background:rgba(15,23,42,.65);'
+                        + 'display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;'
+                        + 'overflow-y:auto;-webkit-overflow-scrolling:touch;');
+                    const box = host.createElement('div');
+                    box.setAttribute('style', 'background:#fff;border-radius:14px;width:100%;max-width:380px;'
+                        + 'max-height:80vh;overflow-y:auto;padding:18px;direction:rtl;'
+                        + 'font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;'
+                        + 'box-shadow:0 20px 50px rgba(0,0,0,.35);');
+
+                    const title = host.createElement('h2');
+                    title.setAttribute('style', 'font-size:20px;font-weight:700;margin:0 0 4px;color:#0f172a;');
                     title.textContent = 'בחר מדפסת';
-                    const sub = document.createElement('p');
-                    sub.className = 'text-sm text-gray-600 mb-4';
+                    const sub = host.createElement('p');
+                    sub.setAttribute('style', 'font-size:13px;color:#475569;margin:0 0 14px;line-height:1.5;');
                     sub.textContent = devices.length
                         ? 'מכשירים שכבר מותאמים בהגדרות הבלוטות של הטלפון.'
                         : 'לא נמצא אף מכשיר מותאם. התאם את המדפסת בהגדרות הבלוטות של הטלפון, ואז חזור לכאן.';
@@ -1831,9 +1943,10 @@
 
                     const done = (val) => { wrap.remove(); resolve(val); };
                     devices.forEach(d => {
-                        const b = document.createElement('button');
+                        const b = host.createElement('button');
                         b.type = 'button';
-                        b.className = 'w-full text-right bg-gray-100 hover:bg-gray-200 rounded-lg py-3 px-4 mb-2';
+                        b.setAttribute('style', 'display:block;width:100%;text-align:right;background:#f1f5f9;'
+                            + 'border:0;border-radius:10px;padding:14px 16px;margin-bottom:8px;font-size:15px;color:#0f172a;');
                         b.textContent = (d.name || 'מכשיר') + '  —  ' + d.address;
                         b.addEventListener('click', () => {
                             localStorage.setItem(PRINTER_MAC_KEY, d.address);
@@ -1843,14 +1956,20 @@
                         box.appendChild(b);
                     });
 
-                    const cancel = document.createElement('button');
+                    const cancel = host.createElement('button');
                     cancel.type = 'button';
-                    cancel.className = 'w-full text-gray-500 py-2 mt-1';
+                    cancel.setAttribute('style', 'display:block;width:100%;background:none;border:0;color:#64748b;'
+                        + 'padding:12px;font-size:15px;margin-top:4px;');
                     cancel.textContent = 'ביטול';
                     cancel.addEventListener('click', () => done(null));
                     box.appendChild(cancel);
+
+                    // Tapping the dark area closes it. Without this a dialog that somehow
+                    // renders empty is a dead end on a device with no browser chrome.
+                    wrap.addEventListener('click', (e) => { if (e.target === wrap) done(null); });
+
                     wrap.appendChild(box);
-                    document.body.appendChild(wrap);
+                    host.body.appendChild(wrap);
                 });
             }
 
@@ -1928,6 +2047,20 @@
             loadIconsFromLibrary();
             initSkuCounter();
             fitStickerToViewport();
+            fitNoWrapLines();
+
+            // Again once Heebo has actually loaded. Both fitters measure text, and at this
+            // point they are measuring a fallback face: the phone line came out 15px too
+            // wide the moment the real font arrived, and nothing re-measured. This is why
+            // the overflow was invisible to every check that ran at load.
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(() => {
+                    fitValueSpansToRow();
+                    fitSideColumn();
+                    fitNoWrapLines();
+                    fitStickerToViewport();
+                });
+            }
             
             // ניקוי חד-פעמי: גופן 28px — מחיקת ברירות מחדל ישנות
             // טעינת מיקומים שנשמרו - שים לב, זה קורה לפני דריסת התאריכים

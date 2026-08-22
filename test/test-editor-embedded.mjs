@@ -116,6 +116,41 @@ if (frame) {
   check('the whole label is on screen', fit.left >= -1 && fit.right <= fit.vw + 1, fit);
   check('and it is big enough to work with', fit.width > fit.vw * 0.8, fit);
   check('the artboard itself was NOT resized', fit.layoutWidth > 950, fit.layoutWidth);
+
+  // No text wider than the box holding it. The scaled preview is where this went wrong once
+  // already: the fitter compared getBoundingClientRect (on-screen, 121px) against clientWidth
+  // (layout, 295px), decided everything fitted, and did nothing on the only device that
+  // needed it. Mixing the two units is silent in both directions.
+  const tooWide = await frame.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('#sticker-to-capture *').forEach(el => {
+      if (el.offsetParent === null) return;
+      const over = el.scrollWidth - el.clientWidth;
+      if (over > 1) out.push({ over, txt: (el.textContent || '').trim().slice(0, 30) });
+    });
+    return out;
+  });
+  check('no text is wider than its own box', tooWide.length === 0, tooWide);
+
+  // The printer picker has to appear on the PHONE's screen, not inside the frame's box —
+  // "it opens the Bluetooth page but the page does not move" was a dialog centred on a
+  // viewport a few hundred pixels tall and scrolled somewhere else entirely.
+  await frame.evaluate(() => {
+    window.GPPrint = {
+      devices: () => JSON.stringify([{ name: 'XP-TT434B', address: 'AA:BB:CC:DD:EE:FF' }]),
+      print: () => 'OK',
+    };
+  });
+  await frame.evaluate(() => document.getElementById('print-bt-btn').click());
+  await page.waitForTimeout(1200);
+  const dialog = await page.evaluate(() => {
+    const els = [...document.body.children].filter(e => /position:fixed/.test(e.getAttribute('style') || ''));
+    const el = els[els.length - 1];
+    return el ? { inTopDocument: true, text: (el.textContent || '').slice(0, 200), scrolls: /overflow-y:auto/.test(el.getAttribute('style') || '') } : { inTopDocument: false };
+  });
+  check('the printer picker opens in the top document', dialog.inTopDocument, dialog);
+  check('it lists the paired printer', !!dialog.text && dialog.text.includes('XP-TT434B'), dialog.text);
+  check('and it can scroll if the list is long', dialog.scrolls === true, dialog);
   // The editor's own visible text is a few hundred characters of labels and buttons.
   check('the visible text is the editor, not a source dump', spill.len < 4000, spill.len);
   // A script that closed early splits one block into two, so the count is a direct read on it.

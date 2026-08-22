@@ -192,6 +192,29 @@ if (FROM_PDF) {
     errors.push(`${spill.length} element(s) overflow their column horizontally`);
   }
 
+  // Content against its OWN box, which is a different question again and the one that was
+  // missing. The phone line is whitespace-nowrap on purpose, so at 24px it needed 310px in a
+  // 295px box and pushed out through the left edge of the sticker — while the check above,
+  // which asks whether each box sits inside its column, reported everything fine. It was the
+  // box that fitted and the text that did not. A line that can wrap can never do this; only a
+  // nowrap one can, which is why there is a fitter for exactly those.
+  const burst = await p.evaluate(() => {
+    const out = [];
+    document.querySelectorAll('#sticker-to-capture *').forEach((el) => {
+      if (el.offsetParent === null) return;
+      const over = el.scrollWidth - el.clientWidth;
+      if (over > 1) {
+        const txt = (el.textContent || '').trim();
+        out.push({ over, txt: txt.length > 34 ? txt.slice(0, 34) + '…' : txt });
+      }
+    });
+    return out;
+  });
+  if (burst.length) {
+    burst.forEach(s => console.log(`TOO WIDE    text is ${s.over}px wider than its own box: ${s.txt}`));
+    errors.push(`${burst.length} element(s) hold text wider than themselves`);
+  }
+
   const dl = p.waitForEvent('download', { timeout: 120000 });
   await p.locator('.download-btn[data-format="pdf"]').click();
   await (await dl).saveAs(pdfPath);
