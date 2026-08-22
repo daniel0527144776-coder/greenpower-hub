@@ -619,6 +619,30 @@
                     <span>הדפס מדבקה</span>
                 </button>
                 <p id="print-bt-hint" class="text-xs text-gray-500 text-center"></p>
+                <!-- Collapsed by default. These four numbers are the whole difference between
+                     a label that lands on the paper and one that does not, and no amount of
+                     reasoning from a laptop can supply them — only a printed pattern can. -->
+                <details class="w-full max-w-xs text-sm">
+                    <summary class="cursor-pointer text-gray-600 py-1">כיול מדפסת</summary>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <label class="flex flex-col text-xs text-gray-600">צפיפות (0-15)
+                            <input type="number" id="calDensity" min="0" max="15" step="1" class="border rounded p-2 text-base">
+                        </label>
+                        <label class="flex flex-col text-xs text-gray-600">מרווח מדבקות מ"מ
+                            <input type="number" id="calGap" min="0" max="10" step="0.5" class="border rounded p-2 text-base">
+                        </label>
+                        <label class="flex flex-col text-xs text-gray-600">היסט לרוחב מ"מ
+                            <input type="number" id="calOffX" step="0.5" class="border rounded p-2 text-base">
+                        </label>
+                        <label class="flex flex-col text-xs text-gray-600">היסט לאורך מ"מ
+                            <input type="number" id="calOffY" step="0.5" class="border rounded p-2 text-base">
+                        </label>
+                    </div>
+                    <button type="button" id="print-cal-btn" class="w-full mt-2 bg-gray-700 hover:bg-gray-800 text-white py-2 rounded-lg text-sm">
+                        הדפס מדבקת כיול
+                    </button>
+                    <p class="text-xs text-gray-500 mt-1 leading-snug">מדפיסה מסגרת בדיוק על גבול המדבקה. מה שחסר מהנייר — זה ההיסט לתקן.</p>
+                </details>
                  <button class="action-button download-btn flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-3 px-4 rounded-lg font-semibold transition-colors duration-200 w-full max-w-xs" data-format="pdf">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>
                     <span>הורד PDF בלבד</span>
@@ -1890,6 +1914,76 @@
             const PRINTER_MAC_KEY = 'gp_printer_mac';
             const PRINTER_NAME_KEY = 'gp_printer_name';
             const PRINTER_GAP_KEY = 'gp_printer_gap';
+            const PRINTER_DENSITY_KEY = 'gp_printer_density';
+            const PRINTER_OFFX_KEY = 'gp_printer_offx';
+            const PRINTER_OFFY_KEY = 'gp_printer_offy';
+
+            // One place that decides what the printer is told, so the calibration pattern and
+            // the real label can never disagree — which would make the pattern worthless.
+            function printerOpts() {
+                const num = (k, dflt) => {
+                    const v = parseFloat(localStorage.getItem(k));
+                    return isNaN(v) ? dflt : v;
+                };
+                return {
+                    widthMm: 100,
+                    heightMm: 50,
+                    gapMm: num(PRINTER_GAP_KEY, 2),
+                    // 8 is what the Windows driver uses for this printer, and that driver has
+                    // been printing these labels correctly for months.
+                    density: num(PRINTER_DENSITY_KEY, 8),
+                    offsetXmm: num(PRINTER_OFFX_KEY, 0),
+                    offsetYmm: num(PRINTER_OFFY_KEY, 0),
+                };
+            }
+
+            function bindCalibration() {
+                const pairs = [
+                    ['calDensity', PRINTER_DENSITY_KEY, 8],
+                    ['calGap', PRINTER_GAP_KEY, 2],
+                    ['calOffX', PRINTER_OFFX_KEY, 0],
+                    ['calOffY', PRINTER_OFFY_KEY, 0],
+                ];
+                pairs.forEach(([id, key, dflt]) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const stored = parseFloat(localStorage.getItem(key));
+                    el.value = isNaN(stored) ? dflt : stored;
+                    el.addEventListener('change', () => {
+                        const v = parseFloat(el.value);
+                        if (isNaN(v)) localStorage.removeItem(key);
+                        else localStorage.setItem(key, String(v));
+                    });
+                });
+                const btn = document.getElementById('print-cal-btn');
+                if (btn) btn.addEventListener('click', printAlignmentPattern);
+            }
+
+            async function printAlignmentPattern() {
+                const bridge = printerBridge();
+                if (!bridge) { showNotification('הדפסה ישירה זמינה רק מתוך האפליקציה בטלפון.'); return; }
+                if (typeof bridge.ensure === 'function') {
+                    const perm = String(bridge.ensure());
+                    if (perm === 'ASKED') { showNotification('אשר את בקשת הבלוטות ונסה שוב'); return; }
+                    if (perm === 'BLOCKED') {
+                        showNotification('ההרשאה חסומה — נפתחות ההגדרות');
+                        if (typeof bridge.openSettings === 'function') bridge.openSettings();
+                        return;
+                    }
+                }
+                let mac = localStorage.getItem(PRINTER_MAC_KEY);
+                if (!mac) { mac = await pickPrinter(bridge); updatePrintHint(); }
+                if (!mac) return;
+                try {
+                    const bytes = TSPL.buildAlignmentPattern(printerOpts());
+                    const res = String(bridge.print(mac, TSPL.toBase64(bytes)));
+                    if (res !== 'OK') throw new Error(res);
+                    showNotification('מדבקת כיול נשלחה');
+                } catch (e) {
+                    console.error('calibration', e);
+                    showNotification('הכיול נכשל: ' + ((e && e.message) || e));
+                }
+            }
 
             function printerBridge() {
                 return (typeof window !== 'undefined' && window.GPPrint) ? window.GPPrint : null;
@@ -2036,11 +2130,7 @@
                 try {
                     const canvas = await captureStickerCanvas();
                     const ctx = canvas.getContext('2d');
-                    const bytes = TSPL.buildLabel(ctx.getImageData(0, 0, canvas.width, canvas.height), {
-                        widthMm: 100,
-                        heightMm: 50,
-                        gapMm: Number(localStorage.getItem(PRINTER_GAP_KEY) || 2),
-                    });
+                    const bytes = TSPL.buildLabel(ctx.getImageData(0, 0, canvas.width, canvas.height), printerOpts());
                     // Synchronous on purpose: a @JavascriptInterface method runs on its own
                     // thread, so blocking here blocks nothing the user can see, and the return
                     // value is the only place the printer can say it refused.
@@ -2067,6 +2157,7 @@
             (function wirePrintButton() {
                 const btn = document.getElementById('print-bt-btn');
                 if (btn) btn.addEventListener('click', printLabelOverBluetooth);
+                bindCalibration();
                 updatePrintHint();
             })();
 

@@ -77,6 +77,73 @@
   }
 
   /*
+   * The job header, shared by a real label and the alignment pattern — they have to agree on
+   * every one of these or the pattern measures a job nobody is printing.
+   *
+   * DENSITY defaults to 8, taken from the Windows driver that has been printing these labels
+   * correctly all along (JobDarknessLevel = 8, JobPrintSpeed = 101600 i.e. 4 in/s, offsets all
+   * zero). It was 10 for one evening, on no evidence, and the first label off the phone came
+   * back "too dark". When a working configuration for this exact printer is sitting on the
+   * machine, read it instead of picking a number.
+   *
+   * REFERENCE moves the origin. It exists here because the label came out shifted and no
+   * amount of reasoning from this side can say by how much — that is what the pattern is for.
+   */
+  function jobHeader(o, widthMm, heightMm, gapMm) {
+    const refX = Math.round((o.offsetXmm || 0) * DOTS_PER_MM);
+    const refY = Math.round((o.offsetYmm || 0) * DOTS_PER_MM);
+    return 'SIZE ' + widthMm + ' mm,' + heightMm + ' mm\r\n' +
+      (gapMm > 0 ? 'GAP ' + gapMm + ' mm,0 mm\r\n' : 'GAP 0,0\r\n') +
+      'DIRECTION ' + (o.direction === undefined ? 1 : o.direction) + ',0\r\n' +
+      'REFERENCE ' + refX + ',' + refY + '\r\n' +
+      'DENSITY ' + (o.density === undefined ? 8 : o.density) + '\r\n' +
+      'SPEED ' + (o.speed === undefined ? 4 : o.speed) + '\r\n' +
+      'CLS\r\n';
+  }
+
+  /*
+   * One label that says where the printer thinks the label is.
+   *
+   * "Cut off and shifted" cannot be diagnosed from here: the size is right (the driver agrees,
+   * 100.0 x 50.0mm), the offsets are zero, and everything else is the roll and the sensor.
+   * This prints a frame on the exact declared boundary with a tick at each corner and the
+   * parameters in the middle. Whatever is missing from the paper is the amount to correct, and
+   * it turns an unbounded conversation into one measurement.
+   */
+  function buildAlignmentPattern(opts) {
+    const o = opts || {};
+    const widthMm = o.widthMm || 100;
+    const heightMm = o.heightMm || 50;
+    const gapMm = o.gapMm === undefined ? 2 : o.gapMm;
+    const W = Math.round(widthMm * DOTS_PER_MM);
+    const H = Math.round(heightMm * DOTS_PER_MM);
+    const T = 6;                       // frame thickness in dots, thick enough to see
+    const TICK = Math.round(5 * DOTS_PER_MM);
+
+    let s = jobHeader(o, widthMm, heightMm, gapMm);
+    // Frame on the declared edge. Any edge missing from the label is an edge the printer
+    // places outside the paper.
+    s += 'BAR 0,0,' + W + ',' + T + '\r\n';
+    s += 'BAR 0,' + (H - T) + ',' + W + ',' + T + '\r\n';
+    s += 'BAR 0,0,' + T + ',' + H + '\r\n';
+    s += 'BAR ' + (W - T) + ',0,' + T + ',' + H + '\r\n';
+    // Corner ticks pointing inwards, 5mm long: they survive even when an edge is off the paper.
+    s += 'BAR ' + T + ',' + T + ',' + TICK + ',' + T + '\r\n';
+    s += 'BAR ' + T + ',' + T + ',' + T + ',' + TICK + '\r\n';
+    s += 'BAR ' + (W - T - TICK) + ',' + (H - 2 * T) + ',' + TICK + ',' + T + '\r\n';
+    s += 'BAR ' + (W - 2 * T) + ',' + (H - T - TICK) + ',' + T + ',' + TICK + '\r\n';
+    // A centre cross: if the frame is off the paper entirely, this still says which way.
+    s += 'BAR ' + Math.round(W / 2 - TICK) + ',' + Math.round(H / 2) + ',' + (2 * TICK) + ',3\r\n';
+    s += 'BAR ' + Math.round(W / 2) + ',' + Math.round(H / 2 - TICK) + ',3,' + (2 * TICK) + '\r\n';
+    // ASCII only: the built-in fonts have no Hebrew, and this is for me, not for a customer.
+    s += 'TEXT 40,' + Math.round(H / 2 - 60) + ',"3",0,1,1,"' + widthMm + 'x' + heightMm + 'mm gap' + gapMm + ' d'
+      + (o.density === undefined ? 8 : o.density) + ' ref' + Math.round((o.offsetXmm || 0) * 10) / 10
+      + ',' + Math.round((o.offsetYmm || 0) * 10) / 10 + '"\r\n';
+    s += 'PRINT 1,1\r\n';
+    return ascii(s);
+  }
+
+  /*
    * opts.gapMm is the one value that depends on the roll in the machine rather than on us:
    * die-cut labels have a 2-3mm gap, continuous stock has none (pass 0), and black-mark
    * stock needs BLINE instead of GAP. Wrong here means the printer feeds looking for a gap
@@ -110,14 +177,7 @@
     }
     const mono = packMono(imageData, o.threshold, over > 0 ? maxDots : imageData.width);
 
-    const header =
-      'SIZE ' + widthMm + ' mm,' + heightMm + ' mm\r\n' +
-      (gapMm > 0 ? 'GAP ' + gapMm + ' mm,0 mm\r\n' : 'GAP 0,0\r\n') +
-      'DIRECTION ' + (o.direction === undefined ? 1 : o.direction) + ',0\r\n' +
-      'REFERENCE 0,0\r\n' +
-      'DENSITY ' + (o.density === undefined ? 10 : o.density) + '\r\n' +
-      'SPEED ' + (o.speed === undefined ? 4 : o.speed) + '\r\n' +
-      'CLS\r\n' +
+    const header = jobHeader(o, widthMm, heightMm, gapMm) +
       'BITMAP 0,0,' + mono.widthBytes + ',' + mono.height + ',0,';
 
     return concat([
@@ -142,5 +202,5 @@
     return btoa(s);
   }
 
-  return { DOTS_PER_MM, packMono, buildLabel, fromCanvas, toBase64 };
+  return { DOTS_PER_MM, packMono, buildLabel, buildAlignmentPattern, fromCanvas, toBase64 };
 });
