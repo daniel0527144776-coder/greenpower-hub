@@ -167,6 +167,25 @@ if (FROM_PDF) {
     if (geom.clearance < 0) { errors.push(`safety marks overflow the artboard by ${-geom.clearance}px`); }
   }
 
+  // The masthead's own INK against the top edge. Its box top is not the answer — the box
+  // carries the font's leading, so #main-title reports -22px while the letters still have 2mm
+  // of white above them, and a check on the box would fail a perfectly good label. This is the
+  // top-edge twin of the marks clearance below, added when the title was raised 3mm on request
+  // and the obvious next request is another 3mm.
+  const topInk = await p.evaluate(() => {
+    const title = document.getElementById('main-title');
+    const art = document.getElementById('sticker-to-capture');
+    if (!title || !art) return null;
+    const ar = art.getBoundingClientRect(), tr = title.getBoundingClientRect();
+    // Everything in artboard pixels; the preview may be painted scaled.
+    const scale = ar.width / art.offsetWidth;
+    return Math.round((tr.top - ar.top) / (scale || 1));
+  });
+  if (topInk !== null && topInk < -34) {
+    // -34 leaves the ~2mm of leading the 60px face carries above its caps.
+    errors.push(`the masthead is ${-topInk}px above the artboard — its letters will be cut off the top`);
+  }
+
   // Horizontal overflow, which the vertical check above cannot see. Enlarging the side
   // column once pushed its text out through both edges while the marks still measured a
   // clean 16px of clearance — the render looked catastrophic and every number said fine.
