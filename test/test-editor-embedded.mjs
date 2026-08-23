@@ -269,6 +269,25 @@ check('the retail shop is not offered any more', sites.shopTabStillThere === fal
 check('and it is not reachable from the site list either',
   Array.isArray(sites.urls) && sites.urls.length === 1 && sites.urls[0] === 'b2b', sites.urls);
 
+// ---- a WhatsApp message is text, not a link -------------------------------------------
+// Daniel copies it to the customer himself. The property worth holding is that composing one
+// neither navigates nor opens anything: on his phone a wa.me link is a request for a browser
+// that does not exist, and whatsapp:// either takes over the app or silently does nothing.
+const wa = await page.evaluate(() => {
+  const before = location.href;
+  sendWhatsApp('0501234567', 'שלום, הסוללה מוכנה לאיסוף. סה"כ ₪1,400.', 'הלקוח');
+  const box = document.getElementById('waCopyBox');
+  return {
+    stayed: location.href === before,
+    text: box ? box.value : null,
+    selected: box ? (box.selectionEnd - box.selectionStart) : 0,
+  };
+});
+check('composing a message shows it as text', !!wa.text && wa.text.includes('מוכנה לאיסוף'), wa.text);
+check('and it is already selected, ready to copy', wa.selected > 10, wa.selected);
+check('and nothing was opened or navigated to', wa.stayed === true, wa.stayed);
+await page.evaluate(() => closeModal());
+
 check('the app still never navigated away',
   topNavigations.length === 1 && topNavigations[0].endsWith('/index.html'), topNavigations);
 check('and still opened no second window', popups.length === 0, popups);

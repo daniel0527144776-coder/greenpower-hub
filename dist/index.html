@@ -1889,13 +1889,52 @@ function waNumber(raw) {
 //
 // The clipboard copy happens FIRST and unconditionally. Whatever any environment does with a
 // link, the message is never lost — that is the behaviour this replaced, kept as the floor.
+/*
+ * Shows a message as text to copy, instead of trying to open WhatsApp with it.
+ *
+ * Daniel's call (2026-08-23): "שיהיה רק טקסט ואני יעתיק לבד ללקוח". It also removes the last
+ * guess in this file. Everything below about whatsapp:// against wa.me is an attempt to
+ * predict what an environment will do with a link — and on the phone that matters, a link is a
+ * request for a browser that does not exist. Text he copies works the same everywhere and
+ * cannot half-work.
+ *
+ * The textarea is selected on open, so on a phone a long-press is already on the right text
+ * even if the copy button does nothing. execCommand first and the async clipboard second, not
+ * the other way round: execCommand acts on the selection that is already there and is the one
+ * that behaves in a WebView.
+ */
+function showMessageToCopy(msg) {
+  openModal(
+    'הודעה ללקוח',
+    '<p style="font-size:13px;color:#64748b;margin:0 0 8px;">העתק והדבק לוואטסאפ.</p>'
+    + '<textarea id="waCopyBox" readonly style="width:100%;height:240px;direction:rtl;'
+    + 'font-size:14px;line-height:1.7;padding:10px;border-radius:10px;border:1px solid #cbd5e1;"></textarea>',
+    '<button class="btn btn-primary" onclick="copyMessageBox()">📋 העתק</button>'
+    + '<button class="btn btn-secondary" onclick="closeModal()">סגור</button>'
+  );
+  const box = document.getElementById('waCopyBox');
+  if (box) { box.value = msg; box.focus(); box.select(); }
+}
+
+function copyMessageBox() {
+  const box = document.getElementById('waCopyBox');
+  if (!box) return;
+  box.focus();
+  box.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  if (!ok) { try { navigator.clipboard.writeText(box.value); ok = true; } catch (e) { ok = false; } }
+  toast(ok ? 'ההודעה הועתקה' : 'סמן והעתק ידנית');
+}
+
 function sendWhatsApp(phone, msg, whoFor) {
-  // Only when there IS a message. callCustomer opens an empty chat and wants the NUMBER on
-  // the clipboard instead — writing '' would have quietly destroyed that fallback.
-  if (msg) { try { navigator.clipboard.writeText(msg); } catch (e) {} }
+  // With a message: show it and stop. Nothing is opened and nothing is navigated to.
+  if (msg) { showMessageToCopy(msg); return true; }
+  // Without one, the caller is callCustomer — "open this customer's chat" — which is a
+  // different job and still worth doing, since whatsapp:// reaches the app directly.
   const num = waNumber(phone);
   if (!num) {
-    alert('✅ ההודעה הועתקה ללוח.\n\nאין מספר טלפון תקין' + (whoFor ? ' ל' + whoFor : '') +
+    alert('אין מספר טלפון תקין' + (whoFor ? ' ל' + whoFor : '') +
           ' — הוסף מספר כדי שהוואטסאפ ייפתח ישירות על השיחה של הלקוח.');
     return false;
   }
@@ -2147,7 +2186,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v200';
+const HUB_BUILD = 'v201';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
