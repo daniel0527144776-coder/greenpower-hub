@@ -173,5 +173,108 @@ console.log('\n5. the safety marks cannot be pushed off the label');
     r.restored.size === r.normal.size && r.restored.clearance >= 0, r.restored);
 }
 
+console.log('\n6. every common repair on the list actually writes something');
+{
+  // The dropdown used to be a hand-written <option> list beside a hand-written map of texts,
+  // and three of its rows — החלפת שורת תאים, תיקון שורה, החלפת תא פגום — had no entry in the
+  // map at all. Choosing one and pressing הוסף filled nothing and said nothing, which is
+  // indistinguishable from a working feature until you look at the label. The list is
+  // generated from the map now, so this asserts the property that makes that safe: every
+  // option except the placeholder and "אחר" puts text in BOTH fields.
+  await p.evaluate(() => document.querySelector('.mode-button.repair-mode').click());
+  await p.waitForTimeout(300);
+  const r = await p.evaluate(async (selftest) => {
+    const sel = document.getElementById('common-repair-select');
+    const fault = document.getElementById('fault-description-input');
+    const repair = document.getElementById('repair-details-input');
+    const btn = document.getElementById('add-repair-btn');
+    const dead = [];
+    const values = [...sel.options].map((o) => o.value).filter((v) => v && v !== 'custom');
+    for (const v of values) {
+      fault.value = ''; repair.value = '';
+      fault.dispatchEvent(new Event('input')); repair.dispatchEvent(new Event('input'));
+      sel.value = selftest ? 'no_such_repair' : v;
+      btn.click();
+      if (!fault.value.trim() || !repair.value.trim()) dead.push(v);
+    }
+    fault.value = ''; repair.value = '';
+    fault.dispatchEvent(new Event('input')); repair.dispatchEvent(new Event('input'));
+    return { dead, count: values.length,
+             named: values.includes('row_replacement') && values.includes('row_repair')
+                    && values.includes('cell_replacement') };
+  }, SELFTEST);
+  check('the list is not empty', r.count > 20, r.count);
+  check('the three rows that were dead are on it', r.named, r);
+  check('and no option fills nothing', r.dead.length === 0, r.dead);
+}
+
+console.log('\n7. the repair date and the battery model cannot be pushed off the label');
+{
+  // Reported 2026-08-24: "if I do 2 repairs the date and the model run away from the sticker".
+  // The panels' grid row was content-sized, so the text grew the column and carried the whole
+  // footer past the bottom edge of a fixed 1000x500 artboard. Two invariants now: the footer
+  // never moves, and the text is FITTED rather than guillotined — a repair description cut in
+  // half is still a wrong label.
+  const measure = () => p.evaluate(() => {
+    const art = document.getElementById('sticker-to-capture').getBoundingClientRect();
+    const model = document.getElementById('battery-model-display').getBoundingClientRect();
+    const date = document.getElementById('repair-date-display').getBoundingClientRect();
+    const body = document.getElementById('fault-description-display');
+    const box = body.parentElement;
+    return {
+      modelBottom: Math.round(model.bottom - art.top),
+      dateBottom: Math.round(date.bottom - art.top),
+      art: Math.round(art.height),
+      size: Math.round(parseFloat(getComputedStyle(body).fontSize)),
+      clipped: box.scrollHeight > box.clientHeight + 1,
+      announced: !!(window.fitRepairPanels && window.fitRepairPanels.clipped),
+    };
+  });
+  const addRepairs = (n) => p.evaluate((n) => {
+    const sel = document.getElementById('common-repair-select');
+    const btn = document.getElementById('add-repair-btn');
+    const values = [...sel.options].map((o) => o.value).filter((v) => v && v !== 'custom');
+    for (let i = 0; i < n; i++) { sel.value = values[i % values.length]; btn.click(); }
+  }, n);
+  await p.evaluate(() => {
+    // Unscale: the artboard is painted shrunk at 390px and every reading below would be in
+    // screen pixels instead of label pixels. Same units trap that cost this file two fitters.
+    const w = document.querySelector('.sticker-wrapper');
+    if (w) { w.style.transform = ''; w.style.marginLeft = ''; w.style.marginBottom = ''; }
+    document.getElementById('battery-model-input').value = 'TITAN 60V 20Ah';
+    document.getElementById('battery-model-input').dispatchEvent(new Event('input'));
+    document.getElementById('repair-date-input').value = '24/08/2026';
+    document.getElementById('repair-date-input').dispatchEvent(new Event('input'));
+  });
+  const empty = await measure();
+  check('the model line is on the label to start with', empty.modelBottom <= empty.art, empty);
+  check('and it prints at the designed size', empty.size === 20, empty);
+
+  await addRepairs(2);
+  const two = await measure();
+  check('two repairs do not move the date', two.dateBottom === empty.dateBottom, [empty, two]);
+  check('two repairs do not move the model', two.modelBottom === empty.modelBottom, [empty, two]);
+  check('and two repairs do not shrink anything either', two.size === 20, two);
+
+  // Six is triple what was reported and still has to be fitted, not cut.
+  await addRepairs(4);
+  const six = await measure();
+  check('six repairs still do not move the model', six.modelBottom === empty.modelBottom, [empty, six]);
+  check('the text was shrunk to fit rather than cut off', six.clipped === false, six);
+  check('and it did shrink — nothing else could have made it fit', six.size < 20, six);
+
+  // Far past anything anyone would type, which is the point: the footer is not "usually"
+  // safe. Past the floor the text genuinely does not fit the label, and the only wrong
+  // answer there is a SILENT one — a description cut in half prints as a complete sentence
+  // and nobody reading it later can tell a clause is missing.
+  await addRepairs(SELFTEST ? 0 : 14);
+  const many = await measure();
+  check('twenty repairs still do not move the model',
+    many.modelBottom === empty.modelBottom && many.modelBottom <= many.art, [empty, many]);
+  check('it goes all the way to the floor before giving up', many.size === 11, many);
+  check('and a cut is said out loud rather than made in silence',
+    many.clipped === false || many.announced === true, many);
+}
+
 await b.close(); srv.close();
 process.exit(finish());

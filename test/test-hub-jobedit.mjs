@@ -56,7 +56,20 @@ const ORDER = { id: 'o1', date: '2026-08-02T09:00:00.000Z', customer: 'שרה', 
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
-page.on('dialog', d => d.accept());
+// Records rather than accepts. A native dialog draws NOTHING in the Android WebView the
+// hub runs in, so a delete that needs one is a delete that never happens on the phone —
+// which is what every confirm() in this file used to be. Asserted at the end: if one comes
+// back, this list is not empty.
+const dialogs = [];
+page.on('dialog', d => { dialogs.push(d.message()); d.dismiss(); });
+
+// Deletes ask in the page now. Press the אישור button the way a finger would.
+const confirmNotice = async () => {
+  await page.waitForSelector('#noticeBackdrop.active', { timeout: 5000 });
+  await page.click('#noticeFooter button.btn-primary');
+  await page.waitForSelector('#noticeBackdrop.active', { state: 'detached', timeout: 5000 })
+    .catch(() => page.waitForFunction(() => !document.querySelector('#noticeBackdrop.active'), { timeout: 5000 }));
+};
 const errors = [];
 page.on('pageerror', e => errors.push(String(e)));
 await page.addInitScript(([j, q, c, o]) => {
@@ -131,11 +144,12 @@ check('card offers edit + delete', card.includes("openJobEditor('j2'") && card.i
 await page.evaluate(() => closeModal());
 
 console.log('\n6. deleting a repair takes its money with it');
-const del = await page.evaluate(() => {
-  deleteJob('j2', 'orders');
-  return { jobs: JSON.parse(localStorage.getItem('gp_jobs')).map(j => j.id),
-           c: JSON.parse(localStorage.getItem('gp_customers')).find(x => x.phone === '050-2222222') };
-});
+await page.evaluate(() => deleteJob('j2', 'orders'));
+await confirmNotice();
+const del = await page.evaluate(() => ({
+  jobs: JSON.parse(localStorage.getItem('gp_jobs')).map(j => j.id),
+  c: JSON.parse(localStorage.getItem('gp_customers')).find(x => x.phone === '050-2222222'),
+}));
 check('job removed', !del.jobs.includes('j2'), del.jobs);
 check('customer total back to 0', del.c.totalSpent === 0, del.c.totalSpent);
 check('visit count back to 0', del.c.visitCount === 0, del.c.visitCount);
@@ -155,7 +169,9 @@ check('date edited', sale.date.slice(0, 7) === '2026-06', sale.date);
 check('status untouched by the edit', sale.status === 'שולם', sale.status);
 
 console.log('\n8. deleting a sale');
-const delSale = await page.evaluate(() => { deleteOrder('o1'); return JSON.parse(localStorage.getItem('gp_orders')).length; });
+await page.evaluate(() => deleteOrder('o1'));
+await confirmNotice();
+const delSale = await page.evaluate(() => JSON.parse(localStorage.getItem('gp_orders')).length);
 check('sale removed', delSale === 0, delSale);
 
 console.log('\n9. the sales page organises a realistic pile');
@@ -288,6 +304,7 @@ check('it names them', rem.text.includes('נגמר בקרוב') && rem.text.incl
 check('it ignores far-off and expired cover', !rem.text.includes('רחוק') && !rem.text.includes('פג'), rem.text);
 
 check('no JS errors on the page', errors.length === 0, errors);
+check('and nothing asked through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
 
 await browser.close();
 server.close();

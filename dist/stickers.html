@@ -167,6 +167,14 @@
             display: none;
         }
         
+        /* The two repair panels are the only variable-height content on this label, and the
+           artboard is a fixed 1000x500. A grid row is content-sized by default, so the boxes
+           grew with the text and carried the dashed rule, the repair date and the battery
+           model off the bottom edge -- reported as "the date and the model run away from the
+           sticker" at two repairs. Pinning the row to the track makes the footer immovable;
+           fitRepairPanels() then shrinks the text so it is fitted rather than guillotined. */
+        #repair-panels { grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+        #repair-panels > div { min-height: 0; }
         div[id*="icon-placeholder"] {
             width: 4.5rem; 
             height: 4.5rem; 
@@ -289,10 +297,10 @@
                 </div>
 
                 <!-- Repaired Battery Specs Section -->
-                <div class="flex-grow flex-col mt-4 hidden justify-between h-full" id="repaired-battery-specs-on-sticker">
-                    <div class="flex flex-col gap-2 text-lg h-full relative">
+                <div class="flex flex-col mt-4 hidden flex-1 min-h-0" id="repaired-battery-specs-on-sticker">
+                    <div class="flex flex-col gap-2 text-lg flex-1 min-h-0 relative">
                         
-                        <div class="grid grid-cols-2 gap-4 flex-grow min-h-0">
+                        <div class="grid grid-cols-2 gap-4 flex-1 min-h-0" id="repair-panels">
                              <div class="border-2 border-black p-2 rounded-lg bg-red-50 flex flex-col justify-start h-full overflow-hidden">
                                 <span id="label-fault-desc" class="font-bold underline text-2xl mb-1 block" data-editable="true" contenteditable="false">תיאור תקלה:</span>
                                 <div id="fault-description-display" data-editable="true" contenteditable="false" class="text-xl leading-snug font-semibold whitespace-pre-wrap break-words"></div>
@@ -357,7 +365,7 @@
                 <div class="flex flex-col items-center w-full mb-1 text-center mt-0 flex-grow justify-center">
                     <div id="manufacturer-info" data-editable="true" contenteditable="false" class="text-xl font-medium leading-snug mb-1 text-black">
                         <p class="text-[26px] font-semibold leading-snug mb-5">מעבדת סוללות ליתיום מקצועית לייצור, חידוש ותיקון סוללות לכלי תחבורה חשמליים.</p>
-                        <p class="text-[20px] font-semibold">ניסים גאון 6, אלעד, ישראל</p>
+                        <p class="text-[20px] font-semibold">ניסים גאון 8, אלעד, ישראל</p>
                         <p class="text-[20px] font-semibold whitespace-nowrap">053-3224879 | Made in Israel</p>
                     </div>
                 </div>
@@ -550,33 +558,6 @@
                     <div class="flex gap-2">
                         <select id="common-repair-select" class="w-full p-2 border border-black rounded-lg bg-gray-50">
                             <option value="">-- בחר מהרשימה --</option>
-                            <!-- (Common repairs list...) -->
-                            <option value="bms_replacement">החלפת BMS</option>
-                            <option value="row_replacement">החלפת שורת תאים (אחת או יותר)</option>
-                            <option value="row_repair">תיקון שורה (ללא החלפה)</option>
-                            <option value="row_repair_1">שיקום שורת תאים אחת (החלפת תאים)</option>
-                            <option value="row_repair_2">שיקום 2 שורות תאים (החלפת תאים)</option>
-                            <option value="row_repair_3">שיקום 3 שורות תאים (החלפת תאים)</option>
-                            <option value="reinforced_fuse_repair">תיקון פיוז פנימי מחוזק</option>
-                            <option value="cell_balancing">איזון תאים</option>
-                            <option value="cell_replacement">החלפת תא פגום</option>
-                            <option value="contact_repair">תיקון מגעים רופפים (ללא החלפת תאים)</option>
-                            <option value="connector_replacement">החלפת קונקטור טעינה/פריקה</option>
-                            <option value="fuse_replacement">החלפת פיוז</option>
-                            <option value="water_damage">טיפול בנזקי מים/קורוזיה</option>
-                            <option value="software_update">עדכון/כיול תוכנת BMS</option>
-                            <option value="housing_repair">תיקון מארז פלסטיק</option>
-                            <option value="general_checkup">בדיקה ותחזוקה כללית</option>
-                            <option value="wiring_repair">תיקון חיווט פנימי</option>
-                            <option value="capacity_test">בדיקת קיבולת ואבחון</option>
-                            <option value="overheating_repair">טיפול בבעיית התחממות יתר</option>
-                            <option value="short_circuit_repair">תיקון קצר חשמלי</option>
-                            <option value="battery_upgrade">שדרוג קיבולת/מתח סוללה</option>
-                            <option value="isolation_repair">תיקון בידוד פנימי</option>
-                            <option value="switch_replacement">החלפת מפסק ההפעלה</option>
-                            <option value="led_indicator_repair">תיקון חיווי LED</option>
-                            <option value="voltage_calibration">כיול חיישני מתח</option>
-                            <option value="custom">אחר (תיאור מותאם אישית)</option>
                         </select>
                         <button id="add-repair-btn" class="bg-green-500 text-white px-4 rounded-lg hover:bg-green-600">הוסף</button>
                         <button id="clear-repairs-btn" class="bg-red-500 text-white px-4 rounded-lg hover:bg-red-600">נקה</button>
@@ -690,30 +671,40 @@
             const designFontWeight = document.getElementById('design-font-weight');
 
             // Common repairs data (same as before)
+            // Every common repair, and the <option> list is BUILT from this object (see
+            // below). It used to be a hand-written dropdown beside a hand-written map, and
+            // three of its rows — החלפת שורת תאים, תיקון שורה, החלפת תא פגום — had no entry
+            // here at all. Choosing one and pressing הוסף filled nothing, said nothing, and
+            // looked exactly like a feature that works: the same failure shape as the sticker
+            // history that was dead for six weeks. Generated from one object, the list of
+            // choices and the list of texts cannot disagree.
             const commonRepairs = {
-                bms_replacement: { fault: "BMS תקול, הסוללה אינה נטענת/מתפרקת כראוי.", repair: "הוחלף BMS, בוצע איזון תאים ובדיקת תקינות כללית." },
-                row_repair_1: { fault: "זוהתה חריגה במתח שורת תאים אחת (תאים פגומים).", repair: "הוחלפו תאים פגומים בשורה ובוצע איזון מתחים." },
-                row_repair_2: { fault: "זוהתה חריגה במתח ב-2 שורות תאים (תאים פגומים).", repair: "הוחלפו תאים פגומים בשורות אלו ובוצע איזון מתחים." },
-                row_repair_3: { fault: "זוהתה חריגה במתח ב-3 שורות תאים (תאים פגומים).", repair: "הוחלפו תאים פגומים בשורות אלו ובוצע איזון מתחים." },
-                reinforced_fuse_repair: { fault: "פיוז פנימי נשרף עקב עומס יתר רגעי.", repair: "הותקן פיוז פנימי מחוזק ועמיד יותר לעומסים גבוהים." },
-                cell_balancing: { fault: "חוסר איזון בין התאים גורם לירידה בביצועי הסוללה.", repair: "בוצע איזון תאים מבוקר להשבת הקיבולת האפקטיבית." },
-                contact_repair: { fault: "מגע רופף/מנותק באחד החיבורים הפנימיים.", repair: "החיבור הרופף הולחם מחדש, המגעים נוקו ונבדקו." },
-                connector_replacement: { fault: "קונקטור טעינה או פריקה שבור או שחוק.", repair: "הקונקטור הפגום הוחלף בחדש, בוצעה בדיקת רציפות." },
-                fuse_replacement: { fault: "פיוז שרוף גורם לנתק מוחלט בסוללה.", repair: "הפיוז השרוף הוחלף בפיוז חדש בעל ערך מתאים." },
-                water_damage: { fault: "חדירת נוזלים גרמה לקורוזיה וקצרים.", repair: "נוקו שאריות קורוזיה, הוחלפו רכיבים שניזוקו ונאטם המארז." },
-                software_update: { fault: "תוכנת BMS אינה מעודכנת או מכוילת.", repair: "בוצע עדכון גרסה לתוכנת ה-BMS וכיול מחדש של הפרמטרים." },
-                housing_repair: { fault: "שבר או סדק במארז הסוללה.", repair: "המארז תוקן או הוחלף, בוצעה בדיקת אטימות." },
-                general_checkup: { fault: "הסוללה הגיעה לבדיקה ותחזוקה שגרתית.", repair: "בוצעה בדיקה כללית, ניקוי מגעים ואיזון תאים קל." },
-                wiring_repair: { fault: "נזק או נתק בחיווט הפנימי של הסוללה.", repair: "החיווט הפגום תוקן או הוחלף, בוצע בידוד מחדש." },
-                capacity_test: { fault: "ירידה בטווח הנסיעה, חשד לאובדן קיבולת.", repair: "בוצעה בדיקת קיבולת מבוקרת לאבחון מצב התאים." },
-                overheating_repair: { fault: "הסוללה מתחממת יתר על המידה בזמן עבודה.", repair: "נבדקו ואותרו גורמי ההתחממות, בוצע תיקון ושיפור אוורור." },
-                short_circuit_repair: { fault: "קצר פנימי גורם להתרוקנות מהירה או נתק.", repair: "אותר מקור הקצר, בודד ותוקן, הוחלפו רכיבים שניזוקו." },
-                battery_upgrade: { fault: "בקשת לקוח לשדרוג הסוללה הקיימת.", repair: "הסוללה שודרגה עם תאים בעלי קיבולת גבוהה יותר." },
-                isolation_repair: { fault: "בידוד פנימי פגום בין התאים או הרכיבים.", repair: "הבידוד הפגום הוחלף בחומר בידוד חדש ועמיד." },
-                switch_replacement: { fault: "מפסק ההפעלה של הסוללה אינו מגיב.", repair: "מפסק ההפעלה הוחלף בחדש." },
-                led_indicator_repair: { fault: "חיווי מצב טעינה (נורות LED) אינו תקין.", repair: "רכיב חיווי ה-LED או החיווט אליו תוקנו/הוחלפו." },
-                voltage_calibration: { fault: "קריאות מתח לא מדויקות מה-BMS.", repair: "בוצע כיול מחדש לחיישני המתח ב-BMS." },
-                custom: { fault: "", repair: "" }
+                bms_replacement: { label: "החלפת BMS", fault: "BMS תקול, הסוללה אינה נטענת/מתפרקת כראוי.", repair: "הוחלף BMS, בוצע איזון תאים ובדיקת תקינות כללית." },
+                row_replacement: { label: "החלפת שורת תאים (אחת או יותר)", fault: "זוהו תאים פגומים בשורה אחת או יותר.", repair: "הוחלפו שורות התאים הפגומות ובוצע איזון מתחים." },
+                row_repair: { label: "תיקון שורה (ללא החלפה)", fault: "מגע או הלחמה לקויים בשורת תאים, ללא תאים פגומים.", repair: "השורה הולחמה ותוקנה ללא החלפת תאים, בוצע איזון מתחים." },
+                row_repair_1: { label: "שיקום שורת תאים אחת (החלפת תאים)", fault: "זוהתה חריגה במתח שורת תאים אחת (תאים פגומים).", repair: "הוחלפו תאים פגומים בשורה ובוצע איזון מתחים." },
+                row_repair_2: { label: "שיקום 2 שורות תאים (החלפת תאים)", fault: "זוהתה חריגה במתח ב-2 שורות תאים (תאים פגומים).", repair: "הוחלפו תאים פגומים בשורות אלו ובוצע איזון מתחים." },
+                row_repair_3: { label: "שיקום 3 שורות תאים (החלפת תאים)", fault: "זוהתה חריגה במתח ב-3 שורות תאים (תאים פגומים).", repair: "הוחלפו תאים פגומים בשורות אלו ובוצע איזון מתחים." },
+                reinforced_fuse_repair: { label: "תיקון פיוז פנימי מחוזק", fault: "פיוז פנימי נשרף עקב עומס יתר רגעי.", repair: "הותקן פיוז פנימי מחוזק ועמיד יותר לעומסים גבוהים." },
+                cell_balancing: { label: "איזון תאים", fault: "חוסר איזון בין התאים גורם לירידה בביצועי הסוללה.", repair: "בוצע איזון תאים מבוקר להשבת הקיבולת האפקטיבית." },
+                cell_replacement: { label: "החלפת תא פגום", fault: "תא בודד פגום גורם לירידה בקיבולת ובביצועים.", repair: "התא הפגום הוחלף בתא תואם ובוצע איזון מתחים." },
+                contact_repair: { label: "תיקון מגעים רופפים (ללא החלפת תאים)", fault: "מגע רופף/מנותק באחד החיבורים הפנימיים.", repair: "החיבור הרופף הולחם מחדש, המגעים נוקו ונבדקו." },
+                connector_replacement: { label: "החלפת קונקטור טעינה/פריקה", fault: "קונקטור טעינה או פריקה שבור או שחוק.", repair: "הקונקטור הפגום הוחלף בחדש, בוצעה בדיקת רציפות." },
+                fuse_replacement: { label: "החלפת פיוז", fault: "פיוז שרוף גורם לנתק מוחלט בסוללה.", repair: "הפיוז השרוף הוחלף בפיוז חדש בעל ערך מתאים." },
+                water_damage: { label: "טיפול בנזקי מים/קורוזיה", fault: "חדירת נוזלים גרמה לקורוזיה וקצרים.", repair: "נוקו שאריות קורוזיה, הוחלפו רכיבים שניזוקו ונאטם המארז." },
+                software_update: { label: "עדכון/כיול תוכנת BMS", fault: "תוכנת BMS אינה מעודכנת או מכוילת.", repair: "בוצע עדכון גרסה לתוכנת ה-BMS וכיול מחדש של הפרמטרים." },
+                housing_repair: { label: "תיקון מארז פלסטיק", fault: "שבר או סדק במארז הסוללה.", repair: "המארז תוקן או הוחלף, בוצעה בדיקת אטימות." },
+                general_checkup: { label: "בדיקה ותחזוקה כללית", fault: "הסוללה הגיעה לבדיקה ותחזוקה שגרתית.", repair: "בוצעה בדיקה כללית, ניקוי מגעים ואיזון תאים קל." },
+                wiring_repair: { label: "תיקון חיווט פנימי", fault: "נזק או נתק בחיווט הפנימי של הסוללה.", repair: "החיווט הפגום תוקן או הוחלף, בוצע בידוד מחדש." },
+                capacity_test: { label: "בדיקת קיבולת ואבחון", fault: "ירידה בטווח הנסיעה, חשד לאובדן קיבולת.", repair: "בוצעה בדיקת קיבולת מבוקרת לאבחון מצב התאים." },
+                overheating_repair: { label: "טיפול בבעיית התחממות יתר", fault: "הסוללה מתחממת יתר על המידה בזמן עבודה.", repair: "נבדקו ואותרו גורמי ההתחממות, בוצע תיקון ושיפור אוורור." },
+                short_circuit_repair: { label: "תיקון קצר חשמלי", fault: "קצר פנימי גורם להתרוקנות מהירה או נתק.", repair: "אותר מקור הקצר, בודד ותוקן, הוחלפו רכיבים שניזוקו." },
+                battery_upgrade: { label: "שדרוג קיבולת/מתח סוללה", fault: "בקשת לקוח לשדרוג הסוללה הקיימת.", repair: "הסוללה שודרגה עם תאים בעלי קיבולת גבוהה יותר." },
+                isolation_repair: { label: "תיקון בידוד פנימי", fault: "בידוד פנימי פגום בין התאים או הרכיבים.", repair: "הבידוד הפגום הוחלף בחומר בידוד חדש ועמיד." },
+                switch_replacement: { label: "החלפת מפסק ההפעלה", fault: "מפסק ההפעלה של הסוללה אינו מגיב.", repair: "מפסק ההפעלה הוחלף בחדש." },
+                led_indicator_repair: { label: "תיקון חיווי LED", fault: "חיווי מצב טעינה (נורות LED) אינו תקין.", repair: "רכיב חיווי ה-LED או החיווט אליו תוקנו/הוחלפו." },
+                voltage_calibration: { label: "כיול חיישני מתח", fault: "קריאות מתח לא מדויקות מה-BMS.", repair: "בוצע כיול מחדש לחיישני המתח ב-BMS." },
+                custom: { label: "אחר (תיאור מותאם אישית)", fault: "", repair: "" },
             };
 
             const sticker = document.getElementById('sticker-to-capture');
@@ -727,6 +718,16 @@
             const repairDateInput = document.getElementById('repair-date-input');
             const repairWarrantyDurationInput = document.getElementById('repair-warranty-duration-input');
             const commonRepairSelect = document.getElementById('common-repair-select');
+
+            // Build the dropdown from commonRepairs, so a choice can never exist without
+            // the text behind it. The placeholder stays first; everything else is the map,
+            // in the map's order.
+            commonRepairSelect.innerHTML = '<option value="">-- בחר מהרשימה --</option>'
+                + Object.keys(commonRepairs).map((k) => {
+                    const label = commonRepairs[k].label
+                        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return `<option value="${k}">${label}</option>`;
+                  }).join('');
             const repairDetailsInput = document.getElementById('repair-details-input');
             const faultDescriptionInput = document.getElementById('fault-description-input');
             const faultDescriptionDisplay = document.getElementById('fault-description-display');
@@ -996,7 +997,7 @@
             // is not a hypothetical: the address, the type scale and the standards line
             // were each edited, deployed, verified live — and still did not appear on the
             // owner's phone, because his save kept restoring the old ones on top.
-            const STICKER_TEMPLATE_VERSION = '2026-08-19a';
+            const STICKER_TEMPLATE_VERSION = '2026-08-24a';
 
             // Record of every sticker produced. The hub's stickerlog page, its home card and
             // the "מדבקות שהונפקו" block on a customer card all read this key; between
@@ -1173,6 +1174,10 @@
             const AUTO_FIT_MANAGED_IDS = new Set([
                 ...VALUE_SPAN_IDS,
                 ...VALUE_SPAN_IDS.map((id) => 'label-' + id.replace(/-value$/, '')),
+                // fitRepairPanels() owns these two. Without them here, a size chosen by hand
+                // in the design panel is silently overwritten on the next refit, and there is
+                // no way back to automatic.
+                'fault-description-display', 'repair-details-display',
             ]);
             const VALUE_SPAN_DEFAULT_SIZE = 27;
             // Matches the label spans' text-xl class (20px). This was 10px between
@@ -1292,6 +1297,58 @@
             }
             window.fitSideColumn = fitSideColumn;
 
+            // The repair panels hold the only text on this label whose LENGTH is unbounded.
+            // The spec rows are generated and the side column is fixed, but "פירוט התיקון" is
+            // whatever was typed, or however many common repairs were added — and two of them
+            // was enough to carry the repair date and the battery model off the bottom of a
+            // fixed 500px artboard. Pinning the grid row (see #repair-panels in the <style>
+            // block) makes the footer immovable, which turns that overflow into a clip; and a
+            // repair description cut off mid-sentence is still a wrong label. So the same
+            // treatment fitValueSpansToRow() and fitSideColumn() already apply: keep the
+            // designed size whenever it fits, give back a pixel at a time only when it does
+            // not, and never shrink unconditionally.
+            //
+            // Both panels take ONE size. They sit side by side and are read as a pair; 20px
+            // beside 14px reads as an accident, which is the same complaint that made a spec
+            // row share one size between its label and its value.
+            const REPAIR_TEXT_DEFAULT_SIZE = 20;   // the text-xl in the markup
+            const REPAIR_TEXT_MIN_SIZE = 11;
+            function fitRepairPanels() {
+                const panels = document.getElementById('repair-panels');
+                // offsetParent, not getComputedStyle: in new-battery mode the whole section
+                // is display:none through an ANCESTOR, and computed display on the element
+                // itself reports flex there. That exact mistake is why a customer name was
+                // set on a block nobody could see for weeks.
+                if (!panels || panels.offsetParent === null) return;
+                const bodies = ['fault-description-display', 'repair-details-display']
+                    .map((id) => document.getElementById(id)).filter(Boolean);
+                if (bodies.length !== 2) return;
+                // A size chosen by hand in the design panel wins, the same way it does for a
+                // spec span — see AUTO_FIT_MANAGED_IDS.
+                if (bodies.some((el) => el.dataset.manualFontSize === 'true')) return;
+                const boxes = bodies.map((el) => el.parentElement);
+                let size = REPAIR_TEXT_DEFAULT_SIZE;
+                const apply = () => bodies.forEach((el) => { el.style.fontSize = size + 'px'; });
+                // +1 for subpixel: a box measuring 0.4px over is not overflowing.
+                const overflows = () => boxes.some((b) => b.scrollHeight > b.clientHeight + 1);
+                apply();
+                while (size > REPAIR_TEXT_MIN_SIZE && overflows()) { size -= 1; apply(); }
+
+                // Past the floor the text is genuinely longer than the label, and the box
+                // clips it. That has to be SAID: a description cut in half still prints as a
+                // complete-looking sentence, and the person reading it later has no way to
+                // know a clause is missing. Once per run of overflow, not once per keystroke.
+                const clipped = overflows();
+                fitRepairPanels.clipped = clipped;
+                if (clipped && !fitRepairPanels._warned) {
+                    fitRepairPanels._warned = true;
+                    showNotification('הטקסט ארוך מדי למדבקה וייחתך — קצר את התיאור');
+                } else if (!clipped) {
+                    fitRepairPanels._warned = false;
+                }
+            }
+            window.fitRepairPanels = fitRepairPanels;
+
             function getCellRates(cellsText) {
                 // EVE 50PL — PRO extreme cell (25C cont / 36C peak, per datasheet 125A/180A).
                 if (cellsText.includes("50PL")) {
@@ -1345,6 +1402,7 @@
                 fitValueSpansToRow();
                 fitSideColumn();
                 fitNoWrapLines();
+                fitRepairPanels();
             }
             window.refreshComputedSpecDisplay = refreshComputedSpecDisplay;
 
@@ -1395,6 +1453,7 @@
                 fitValueSpansToRow();
                 fitSideColumn();
                 fitNoWrapLines();
+                fitRepairPanels();
             }
             window.updateAllSpecs = updateAllSpecs;
 
@@ -1698,6 +1757,7 @@
                     repairedBatterySpecsOnSticker.classList.toggle('hidden', mode === 'new');
                     newBatteryControls.classList.toggle('hidden', mode !== 'new');
                     repairedBatteryControls.classList.toggle('hidden', mode === 'new');
+                    fitRepairPanels();
                 });
             });
 
@@ -1764,7 +1824,11 @@
             
             addRepairBtn.addEventListener('click', () => {
                 const selection = commonRepairSelect.value;
-                if (selection && commonRepairs[selection] && selection !== 'custom') {
+                // "אחר" has no text of its own by definition — it is the one that gets typed.
+                // Doing nothing at all is how the three dead options read too, so send the
+                // cursor to the field instead of leaving the press unanswered.
+                if (selection === 'custom') { faultDescriptionInput.focus(); return; }
+                if (selection && commonRepairs[selection]) {
                     const faultText = commonRepairs[selection].fault;
                     const repairText = commonRepairs[selection].repair;
                     faultDescriptionInput.value += (faultDescriptionInput.value ? '\n- ' : '- ') + faultText;
@@ -1781,8 +1845,8 @@
                 repairDetailsInput.dispatchEvent(new Event('input'));
             });
 
-            faultDescriptionInput.addEventListener('input', (e) => { faultDescriptionDisplay.innerText = e.target.value; });
-            repairDetailsInput.addEventListener('input', (e) => { repairDetailsDisplay.innerText = e.target.value; });
+            faultDescriptionInput.addEventListener('input', (e) => { faultDescriptionDisplay.innerText = e.target.value; fitRepairPanels(); });
+            repairDetailsInput.addEventListener('input', (e) => { repairDetailsDisplay.innerText = e.target.value; fitRepairPanels(); });
             
             // The capture that produces the printed artefact, in one place. There are two
             // buttons now — the PDF file and the Bluetooth print — and a second copy of this
@@ -1816,6 +1880,7 @@
                 fitValueSpansToRow();
                 fitSideColumn();
                 fitNoWrapLines();
+                fitRepairPanels();
 
                 // גבהים מפורשים על שורות הspecs — מאפשר ל-html2canvas לחשב items-end בצורה תקינה
                 const origStickerH = sticker.style.height;
@@ -2260,6 +2325,7 @@
             initSkuCounter();
             fitStickerToViewport();
             fitNoWrapLines();
+            fitRepairPanels();
 
             // Again once Heebo has actually loaded. Both fitters measure text, and at this
             // point they are measuring a fallback face: the phone line came out 15px too
@@ -2270,6 +2336,7 @@
                     fitValueSpansToRow();
                     fitSideColumn();
                     fitNoWrapLines();
+                    fitRepairPanels();
                     fitStickerToViewport();
                 });
             }

@@ -77,7 +77,7 @@ console.log('\n1. a device with the OLD saved format opens the editor');
     labelPx: Math.round(parseFloat(getComputedStyle(document.getElementById('label-capacity')).fontSize)),
     stored: localStorage.getItem('stickerElementStates'),
   }));
-  check('the new address is shown, not the saved old one', r.mfg.includes('ניסים גאון 6') && !r.mfg.includes('מברטנורא'), r.mfg);
+  check('the new address is shown, not the saved old one', r.mfg.includes('ניסים גאון 8') && !r.mfg.includes('מברטנורא'), r.mfg);
   check("the template's manufacturer block wins over the save", r.mfg === TEMPLATE_MFG, { rendered: r.mfg, template: TEMPLATE_MFG });
   check('the saved 10px label did not come back', r.labelPx > (SELFTEST ? 999 : 12), r.labelPx);
   check('the stale entry was dropped from storage', r.stored === null, r.stored && r.stored.slice(0, 40));
