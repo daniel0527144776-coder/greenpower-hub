@@ -242,10 +242,14 @@ if (frame) {
   check('and it prints as a new battery', sold.repairMode === false, sold.repairMode);
 }
 
-// ---- the two public sites, same invariant --------------------------------------------
-// They are shown in a frame for exactly the reason the editor is: a link on that phone is a
-// request for a browser that does not exist. Both are stubbed here rather than fetched — the
-// point under test is that the hub frames them and never navigates, not that Cloudflare is up.
+// ---- the B2B price list, same invariant ------------------------------------------------
+// It is shown in a frame for exactly the reason the editor is: a link on that phone is a
+// request for a browser that does not exist. Stubbed rather than fetched — the point under
+// test is that the hub frames it and never navigates, not that Cloudflare is up.
+//
+// The retail shop was here too until Daniel removed it (2026-08-23), so this also asserts
+// that it is GONE: a removal that leaves the old URL reachable from a stale handler is the
+// kind that comes back.
 await page.route('https://energylabgreen.com/**', r => r.fulfill({ contentType: 'text/html', body: '<h1>shop stub</h1>' }));
 await page.route('https://b2b.energylabgreen.com/**', r => r.fulfill({ contentType: 'text/html', body: '<h1>b2b stub</h1>' }));
 
@@ -253,15 +257,17 @@ await page.evaluate(() => navigateTo('sites'));
 await page.waitForTimeout(1500);
 const sites = await page.evaluate(() => {
   const f = document.getElementById('siteFrame');
-  return { src: f ? f.src : null, tab: document.getElementById('siteTabShop').className };
+  return {
+    src: f ? f.src : null,
+    shopTabStillThere: !!document.getElementById('siteTabShop'),
+    urls: typeof SITE_URLS === 'object' ? Object.keys(SITE_URLS) : null,
+  };
 });
-check('the shop opens in a frame, not a navigation', /^https:\/\/energylabgreen\.com\//.test(sites.src || ''), sites.src);
-check('its tab is marked active', /btn-primary/.test(sites.tab), sites.tab);
-
-await page.evaluate(() => showSite('b2b'));
-await page.waitForTimeout(1500);
-const b2b = await page.evaluate(() => document.getElementById('siteFrame').src);
-check('and the B2B catalogue switches in the same frame', /^https:\/\/b2b\.energylabgreen\.com\//.test(b2b || ''), b2b);
+check('the B2B price list opens in a frame, not a navigation',
+  /^https:\/\/b2b\.energylabgreen\.com\//.test(sites.src || ''), sites.src);
+check('the retail shop is not offered any more', sites.shopTabStillThere === false, sites);
+check('and it is not reachable from the site list either',
+  Array.isArray(sites.urls) && sites.urls.length === 1 && sites.urls[0] === 'b2b', sites.urls);
 
 check('the app still never navigated away',
   topNavigations.length === 1 && topNavigations[0].endsWith('/index.html'), topNavigations);

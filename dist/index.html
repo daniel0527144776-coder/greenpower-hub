@@ -397,9 +397,9 @@ body { min-height: 100vh; }
       </div>
 
       <div class="quick-card" onclick="navigateTo('sites')">
-        <span class="quick-card-icon">🌐</span>
-        <div class="quick-card-title">האתרים שלי</div>
-        <div class="quick-card-desc">החנות והמחירון העסקי</div>
+        <span class="quick-card-icon">🏢</span>
+        <div class="quick-card-title">מחירון עסקי</div>
+        <div class="quick-card-desc">האתר העסקי מתוך האפליקציה</div>
       </div>
 
       <div class="quick-card" onclick="navigateTo('help')">
@@ -1504,11 +1504,7 @@ body { min-height: 100vh; }
      is a window, not an integration. -->
 <section id="page-sites" class="page">
   <div class="page-header">
-    <h2 class="page-title">🌐 האתרים שלי</h2>
-    <div class="btn-group">
-      <button class="btn btn-primary btn-sm" id="siteTabShop" onclick="showSite('shop')">🛒 החנות</button>
-      <button class="btn btn-secondary btn-sm" id="siteTabB2b" onclick="showSite('b2b')">🏢 מחירון עסקי</button>
-    </div>
+    <h2 class="page-title">🏢 מחירון עסקי</h2>
   </div>
   <iframe id="siteFrame" title="האתר" referrerpolicy="no-referrer"
           style="width:100%;height:calc(100vh - 150px);min-height:520px;border:0;border-radius:12px;background:#fff;"></iframe>
@@ -2010,33 +2006,29 @@ function navigateTo(page) {
   if (page === 'orders') renderOrders();
   if (page === 'dims') { calcPackDims(); renderDims(); }
   if (page === 'bizdocs') renderBizDocs();
-  if (page === 'sites') showSite(currentSite || 'shop');
+  if (page === 'sites') showSite('b2b');
   if (page === 'stickers') openStickerEditor();
   if (page === 'stickerlog') renderStickerLog();
   if (page === 'inventory') renderInventory();
   if (page === 'supplier') renderSupplier();
 }
 
+// The retail shop was here too until Daniel removed it (2026-08-23): the hub is the tool he
+// works from, and the shop is not something he needs to look at while working. The B2B price
+// list is — it is what he quotes from.
 const SITE_URLS = {
-  shop: 'https://energylabgreen.com/',
   b2b: 'https://b2b.energylabgreen.com/',
 };
 let currentSite = null;
 
-// Loaded on entry and only when the site actually changes: these are full sites, and
-// re-fetching one because the page was re-entered would cost a phone at the bench real time.
+// Loaded on entry and only when the site actually changes: this is a whole site, and
+// re-fetching it because the page was re-entered would cost a phone at the bench real time.
 function showSite(which) {
   const f = document.getElementById('siteFrame');
   if (!f || !SITE_URLS[which]) return;
   if (currentSite !== which) {
     f.src = SITE_URLS[which];
     currentSite = which;
-  }
-  const shop = document.getElementById('siteTabShop');
-  const b2b = document.getElementById('siteTabB2b');
-  if (shop && b2b) {
-    shop.className = 'btn btn-sm ' + (which === 'shop' ? 'btn-primary' : 'btn-secondary');
-    b2b.className = 'btn btn-sm ' + (which === 'b2b' ? 'btn-primary' : 'btn-secondary');
   }
 }
 
@@ -2155,7 +2147,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v199';
+const HUB_BUILD = 'v200';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
