@@ -2164,7 +2164,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v203';
+const HUB_BUILD = 'v204';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5688,7 +5688,7 @@ function init() {
   // synced `biz` record — the default object above only ever applies to a hub that has
   // never been set up. Same trap as DEFAULT_REPLIES: shipping a new default changes
   // nothing on a device that already has data, so a stored address has to be replaced in
-  // place. Two moves are covered: עובדיה מברטנורא (2026-08-13) and house number 6, which
+  // place. Two changes are covered: the 2026-08-13 move, and the house number, which
   // was wrong and became 8 (2026-08-24). Leave both patterns here until every device has
   // synced at least once; adding to this list costs nothing, and a quote printing the
   // wrong building is not something anyone will notice from here.
