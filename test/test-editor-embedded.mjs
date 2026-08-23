@@ -242,32 +242,27 @@ if (frame) {
   check('and it prints as a new battery', sold.repairMode === false, sold.repairMode);
 }
 
-// ---- the B2B price list, same invariant ------------------------------------------------
-// It is shown in a frame for exactly the reason the editor is: a link on that phone is a
-// request for a browser that does not exist. Stubbed rather than fetched — the point under
-// test is that the hub frames it and never navigates, not that Cloudflare is up.
-//
-// The retail shop was here too until Daniel removed it (2026-08-23), so this also asserts
-// that it is GONE: a removal that leaves the old URL reachable from a stale handler is the
-// kind that comes back.
-await page.route('https://energylabgreen.com/**', r => r.fulfill({ contentType: 'text/html', body: '<h1>shop stub</h1>' }));
-await page.route('https://b2b.energylabgreen.com/**', r => r.fulfill({ contentType: 'text/html', body: '<h1>b2b stub</h1>' }));
+// ---- the public sites are no longer shown in the app -----------------------------------
+// Both were framed here for a week; Daniel removed the shop and then the catalogue too
+// (2026-08-23). Asserted as an ABSENCE rather than deleted, for the reason the quick pricer
+// left behind: a half-removed feature keeps live onclicks calling functions that are gone,
+// and that fails in the console rather than on screen. Any request to those domains would
+// also mean something is still trying.
+const outbound = [];
+await page.route('https://energylabgreen.com/**', r => { outbound.push(r.request().url()); return r.fulfill({ body: '' }); });
+await page.route('https://b2b.energylabgreen.com/**', r => { outbound.push(r.request().url()); return r.fulfill({ body: '' }); });
 
-await page.evaluate(() => navigateTo('sites'));
-await page.waitForTimeout(1500);
-const sites = await page.evaluate(() => {
-  const f = document.getElementById('siteFrame');
-  return {
-    src: f ? f.src : null,
-    shopTabStillThere: !!document.getElementById('siteTabShop'),
-    urls: typeof SITE_URLS === 'object' ? Object.keys(SITE_URLS) : null,
-  };
-});
-check('the B2B price list opens in a frame, not a navigation',
-  /^https:\/\/b2b\.energylabgreen\.com\//.test(sites.src || ''), sites.src);
-check('the retail shop is not offered any more', sites.shopTabStillThere === false, sites);
-check('and it is not reachable from the site list either',
-  Array.isArray(sites.urls) && sites.urls.length === 1 && sites.urls[0] === 'b2b', sites.urls);
+const gone = await page.evaluate(() => ({
+  card: !!document.querySelector('[onclick*="navigateTo(\'sites\')"]'),
+  section: !!document.getElementById('page-sites'),
+  frame: !!document.getElementById('siteFrame'),
+  loader: typeof showSite !== 'undefined',
+}));
+check('the sites page is gone from the app', !gone.section && !gone.frame, gone);
+check('nothing links to it any more', gone.card === false, gone);
+check('and its loader is gone with it', gone.loader === false, gone);
+await page.waitForTimeout(600);
+check('the app requested neither public site', outbound.length === 0, outbound);
 
 // ---- a WhatsApp message is text, not a link -------------------------------------------
 // Daniel copies it to the customer himself. The property worth holding is that composing one
