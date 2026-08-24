@@ -1435,6 +1435,13 @@ body { min-height: 100vh; }
     <h3 class="card-title">📥 דיווחי עובדים ממתינים</h3>
     <div id="punchList"></div>
   </div>
+  <!-- The clock Daniel runs himself, for a worker standing in front of him. Distinct from
+       /clock/, which is the worker reporting from their own phone into an approval queue —
+       here the person pressing IS the approver, so a punch becomes hours directly. -->
+  <div class="card" id="shiftCard">
+    <h3 class="card-title">⏱️ שעון — כניסה ויציאה</h3>
+    <div id="shiftList"></div>
+  </div>
   <div class="card">
     <h3 class="card-title">➕ רישום שעות</h3>
     <div class="form-row"><label>עובד</label>
@@ -2270,7 +2277,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v207';
+const HUB_BUILD = 'v208';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4606,6 +4613,120 @@ function deleteExpense(id) { askConfirm('למחוק הוצאה?', () => { const 
 // ============================================================
 function getWorkers() { return Store.get('workers') || []; }
 
+// ---- the in-hub shift clock ----
+//
+// "כמה בדיוק הוא עבד" — measured, not typed. The running shift lives as `shiftStart` on the
+// worker record inside `workers`, which is ALREADY a synced key: no new sync contract, and
+// the same reasoning that put `aliases` there. A separate key would be one more thing to
+// migrate and one more thing to disagree with itself.
+//
+// Note what this is NOT. /clock/ is a worker reporting from their own phone with no login,
+// which is why it can only INSERT and why nothing it sends becomes wages until it is
+// approved. Here the person pressing the button is the one who would approve it, so the
+// shift becomes hours the moment it ends — an approval queue for your own click is theatre.
+function shiftElapsedHours(startIso) {
+  const ms = Date.now() - new Date(startIso).getTime();
+  return ms > 0 ? ms / 3600000 : 0;
+}
+function fmtElapsed(h) {
+  const total = Math.round(h * 60);
+  return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0');
+}
+
+// Built by concatenation rather than nested in the row template: the ids go inside an
+// onclick attribute inside a template literal, and three levels of quoting is how a button
+// ends up calling nothing.
+function inBtn(id) {
+  return '<button class="btn btn-sm btn-secondary" onclick="shiftIn(\'' + id + '\')">▶️ כניסה</button>';
+}
+function outBtn(id) {
+  return '<button class="btn btn-sm btn-primary" onclick="shiftOut(\'' + id + '\')">⏹️ יציאה</button>';
+}
+
+function renderShifts() {
+  const box = document.getElementById('shiftList');
+  if (!box) return;
+  const workers = getWorkers();
+  if (!workers.length) {
+    box.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">אין עובדים ברשימה. '
+      + '<a href="#" onclick="manageWorkers();return false;" style="color:var(--primary);">הוסף עובד</a>'
+      + ' ואז אפשר להחתים לו כניסה ויציאה.</div>';
+    return;
+  }
+  box.innerHTML = workers.map((w) => {
+    const on = !!w.shiftStart;
+    const el = on ? shiftElapsedHours(w.shiftStart) : 0;
+    const since = on ? new Date(w.shiftStart).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '';
+    return `<div class="price-item">
+      <div class="price-item-name">${escPunch(w.name)}
+        <div style="font-size:10.5px;color:var(--text-light);">₪${w.rate}/שעה${on
+          ? ' · נכנס ב-' + since + ' · <b style="color:var(--success);">' + fmtElapsed(el) + '</b>'
+          : ''}</div>
+      </div><div></div>
+      <div class="price-item-final">${on ? outBtn(w.id) : inBtn(w.id)}
+      </div></div>`;
+  }).join('');
+}
+
+// A second press of כניסה must not silently move the start time forward and eat the hours
+// already worked — the whole point is that the figure is measured.
+function shiftIn(id) {
+  const workers = getWorkers();
+  const w = workers.find((x) => x.id === id);
+  if (!w) return;
+  if (w.shiftStart) { showNotice(escPunch(w.name) + ' כבר בפנים מאז ' + new Date(w.shiftStart).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })); return; }
+  w.shiftStart = new Date().toISOString();
+  Store.set('workers', workers);
+  renderShifts();
+}
+
+function shiftOut(id) {
+  const workers = getWorkers();
+  const w = workers.find((x) => x.id === id);
+  if (!w || !w.shiftStart) return;
+  const start = w.shiftStart;
+  const hours = shiftElapsedHours(start);
+  // A shift nobody closed is not eighteen hours of wages. The clock page refuses these and
+  // so does the database (check hours <= 24); guessing here would be the one place in this
+  // system where a forgotten button turns into money.
+  if (hours > 24) {
+    w.shiftStart = null;
+    Store.set('workers', workers);
+    renderShifts();
+    showNotice('המשמרת נשארה פתוחה ' + Math.round(hours) + ' שעות — כנראה נשכחה.\n'
+      + 'השעון אופס ולא נרשמו שעות. רשום אותן ידנית ב"רישום שעות" למטה.');
+    return;
+  }
+  // Two decimals, because he asked for exactly how long — not a rounded quarter hour.
+  const rounded = Math.round(hours * 100) / 100;
+  const wt = Store.get('worktime') || [];
+  const t = (iso) => new Date(iso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  wt.unshift({
+    id: 'w' + Date.now(), workerName: w.name, rate: w.rate, hours: rounded,
+    note: 'שעון: ' + t(start) + '–' + t(new Date().toISOString()),
+    date: start, paid: false,
+  });
+  Store.set('worktime', wt);
+  w.shiftStart = null;
+  Store.set('workers', workers);
+  renderWorktime();
+  showNotice(w.name + ' — נרשמו ' + rounded.toFixed(2) + ' שעות (' + fmtElapsed(hours) + ')'
+    + '\nלפי ₪' + w.rate + '/שעה = ₪' + Math.round(rounded * w.rate));
+}
+
+// Ticks the running shift so the figure on screen is the figure now. Only while the page is
+// actually showing — a timer left running behind another page is a battery drain on a phone
+// for a number nobody is looking at.
+let SHIFT_TIMER = null;
+function startShiftTicker() {
+  if (SHIFT_TIMER) clearInterval(SHIFT_TIMER);
+  SHIFT_TIMER = setInterval(() => {
+    const page = document.getElementById('page-worktime');
+    if (!page || !page.classList.contains('active')) { clearInterval(SHIFT_TIMER); SHIFT_TIMER = null; return; }
+    if (getWorkers().some((w) => w.shiftStart)) renderShifts();
+  }, 30000);
+}
+
 // ---- דיווחי עובדים: the approval queue behind /clock/ ----
 // The clock page can INSERT into worker_punches and read nothing back (see
 // supabase/worker_punches.sql). That asymmetry is what lets it work with no login, and it
@@ -4791,6 +4912,8 @@ function rejectPunch(id) {
 
 function renderWorktime() {
   const mk = ensureMonthInput('wtMonth'); ensureDateInput('wtDate');
+  renderShifts();
+  startShiftTicker();
   fetchPunches();
   renderPunches();
   const workers = getWorkers(), sel = document.getElementById('wtWorker');

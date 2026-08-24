@@ -347,5 +347,76 @@ console.log('\n7. alert() itself is drawn in the page');
   check('and no native dialog was raised', dialogs.length === 0, dialogs);
   await ctx.close();
 }
+console.log('\n8. the in-hub shift clock — Daniel punching a worker in and out himself');
+{
+  // Asked for on 2026-08-24: "שיהיה כאילו שעון, כמה בדיוק הוא עבד". Distinct from /clock/,
+  // which is the worker reporting from their own phone into an approval queue. Here the
+  // person pressing the button is the one who would approve it, so a closed shift becomes
+  // hours directly — and the figure has to be MEASURED, which is the whole point.
+  const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
+  const p = await ctx.newPage();
+  const dialogs = [];
+  p.on('dialog', d => { dialogs.push(d.message()); d.dismiss(); });
+  await p.route('**/rest/v1/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await p.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
+  await p.waitForFunction(() => typeof window.renderShifts === 'function', { timeout: 30000 });
+  await p.evaluate(() => {
+    localStorage.setItem('gp_workers', JSON.stringify([{ id: 'wk-sh', name: 'שמואל אמירי', rate: 55 }]));
+    localStorage.setItem('gp_worktime', JSON.stringify([]));
+    const g = document.getElementById('loginOverlay'); if (g) g.remove();
+    navigateTo('worktime');
+  });
+  await p.waitForSelector('#shiftList button', { timeout: 5000 });
+  check('the worker is offered a כניסה button', (await p.textContent('#shiftList')).includes('כניסה'));
+
+  // Clock in, then rewrite the stored start so a real span of time has passed. Waiting two
+  // hours in a test is not a test.
+  await p.click('#shiftList button');
+  check('pressing כניסה marks the shift open',
+    await p.evaluate(() => !!getWorkers()[0].shiftStart));
+  check('and the row now offers יציאה', (await p.textContent('#shiftList')).includes('יציאה'));
+
+  // A second כניסה must not move the start forward and eat the hours already worked.
+  const before = await p.evaluate(() => getWorkers()[0].shiftStart);
+  await p.evaluate(() => shiftIn('wk-sh'));
+  check('a second כניסה does not restart the clock',
+    (await p.evaluate(() => getWorkers()[0].shiftStart)) === before);
+  await p.evaluate(() => closeNotice());
+
+  await p.evaluate(() => {
+    const w = getWorkers();
+    w[0].shiftStart = new Date(Date.now() - 2.5 * 3600 * 1000).toISOString();
+    Store.set('workers', w);
+  });
+  await p.evaluate(() => shiftOut('wk-sh'));
+  await p.waitForTimeout(300);
+  const e = await p.evaluate(() => JSON.parse(localStorage.getItem('gp_worktime') || '[]')[0] || null);
+  check('יציאה writes the measured hours, to two decimals',
+    e && Math.abs(e.hours - (SELFTEST ? 9 : 2.5)) < 0.02, e && e.hours);
+  check('under the right worker, at the hub rate', e && e.workerName === 'שמואל אמירי' && e.rate === 55, e);
+  check('the note records the actual times', e && e.note.includes('שעון:'), e && e.note);
+  check('and it is unpaid until he says otherwise', e && e.paid === false);
+  check('the clock is cleared', await p.evaluate(() => !getWorkers()[0].shiftStart));
+  await p.evaluate(() => closeNotice());
+
+  // A shift nobody closed is not eighteen hours of wages. Same rule the clock page and the
+  // database already enforce — this is the one place a forgotten button could become money.
+  await p.evaluate(() => {
+    localStorage.setItem('gp_worktime', JSON.stringify([]));
+    const w = getWorkers();
+    w[0].shiftStart = new Date(Date.now() - 30 * 3600 * 1000).toISOString();
+    Store.set('workers', w);
+    shiftOut('wk-sh');
+  });
+  await p.waitForTimeout(300);
+  check('a 30-hour shift does not become wages',
+    (await p.evaluate(() => JSON.parse(localStorage.getItem('gp_worktime') || '[]').length)) === 0);
+  check('the clock is reset so nobody is stuck in', await p.evaluate(() => !getWorkers()[0].shiftStart));
+  check('and it says so, in the page', await p.isVisible('#noticeBackdrop.active'));
+
+  check('none of this went through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
+  await ctx.close();
+}
+
 await b.close(); srv.close();
 process.exit(finish());
