@@ -303,6 +303,84 @@ check('it counts both the repair and the sale', /\b2\b/.test(rem.text) === !SELF
 check('it names them', rem.text.includes('נגמר בקרוב') && rem.text.includes('קונה ותיק'), rem.text);
 check('it ignores far-off and expired cover', !rem.text.includes('רחוק') && !rem.text.includes('פג'), rem.text);
 
+console.log('\n12. the sticker opens FILLED from the repair or the sale it was opened from');
+{
+  // Asked directly: "תבדוק שבאמת המדבקה ממולאת לפי התיקון או המכירה". It was not.
+  //
+  // applyStickerJob set voltage, capacity, cells and BMS — every one of which lives in
+  // #new-battery-specs, which repair mode HIDES — plus a client name that was removed from
+  // the artboard in August. So a repair label came up with דגם סוללה reading "---" and both
+  // repair panels blank, over a date stamped TODAY rather than the day of the work. It
+  // looked filled. That is the whole failure mode, and it is why this asserts on the fields
+  // that PRINT rather than on the ones that were being set.
+  const read = async () => {
+    await page.waitForTimeout(2500);
+    return page.evaluate(() => {
+      const d = document.getElementById('stickerFrame').contentWindow.document;
+      const t = (id) => { const e = d.getElementById(id); return e ? (e.innerText || '').trim() : null; };
+      return {
+        repair: !d.getElementById('repaired-battery-specs-on-sticker').classList.contains('hidden'),
+        model: t('battery-model-display'), date: t('repair-date-display'),
+        fault: t('fault-description-display'), details: t('repair-details-display'),
+        cells: t('cells-value'), volt: t('voltage-value'), cap: t('capacity-value'),
+        prodDate: t('production-date-value'),
+      };
+    });
+  };
+  await page.evaluate(() => {
+    const jobs = JSON.parse(localStorage.getItem('gp_jobs') || '[]');
+    jobs.push({ id: 'j-st1', date: '2026-08-20T09:00:00.000Z', customerName: 'אבי', customerPhone: '050-7777777',
+                jobs: ['bms', 'rows'], vehicle: 'bike', voltage: '60', capacity: '20', cellType: '21700-50e',
+                bmsBrand: 'DALY', bmsAmps: '40', warrantyMonths: 6, customerNotes: 'לא נטענת, שורה 7 נפולה' });
+    localStorage.setItem('gp_jobs', JSON.stringify(jobs));
+  });
+
+  await page.evaluate(() => window.openStickerFor('job', 'j-st1'));
+  const r1 = await read();
+  check('a repair opens the repair side of the label', r1.repair === true, r1);
+  check('the model is filled, not "---"', r1.model === 'אופניים חשמליים 60V 20Ah', r1.model);
+  check('the date is the day of the WORK, not of the printing', r1.date === '20/08/2026', r1.date);
+  check('what the customer reported is the fault description',
+    r1.fault === 'לא נטענת, שורה 7 נפולה', r1.fault);
+  check('the work done is listed from the boxes that were ticked',
+    r1.details.includes('החלפת BMS') && r1.details.includes('החלפת שורות'), r1.details);
+
+  // The second job records no fault. setVal leaves a field alone when the new value is
+  // empty, so this used to keep the FIRST customer's complaint — printed on someone else's
+  // battery.
+  await page.evaluate(() => {
+    const jobs = JSON.parse(localStorage.getItem('gp_jobs') || '[]');
+    jobs.push({ id: 'j-st2', date: '2026-08-22T09:00:00.000Z', customerName: 'רון', customerPhone: '050-8888888',
+                jobs: ['balance'], vehicle: 'scooter', voltage: '48', capacity: '15', cellType: '21700-50sg',
+                bmsBrand: 'JK', bmsAmps: '150', warrantyMonths: 6, customerNotes: '' });
+    localStorage.setItem('gp_jobs', JSON.stringify(jobs));
+  });
+  await page.evaluate(() => window.openStickerFor('job', 'j-st2'));
+  const r2 = await read();
+  check('a second repair brings its own model and date',
+    r2.model === 'קורקינט 48V 15Ah' && r2.date === '22/08/2026', r2);
+  check("and does NOT keep the previous customer's fault", r2.fault === '', r2.fault);
+  check('nor their repair details', r2.details.includes('איזון תאים') && !r2.details.includes('BMS'), r2.details);
+
+  // A sale has no cellType field, so the editor stayed on its default: a 72V 35Ah PRO
+  // printed EVE 21700 50E and 2C/3C — the CLASSIC cell, on a pack built from 50PL at
+  // 25C/36C. A wrong spec on a customer-facing label, and nothing said so.
+  await page.evaluate(() => {
+    const orders = JSON.parse(localStorage.getItem('gp_orders') || '[]');
+    orders.push({ id: 'o-st1', date: '2026-08-21T09:00:00.000Z', customer: 'שרה', phone: '050-6666666',
+                  status: 'שולם', total: 3200, bmsBrand: 'DALY', bmsAmps: '60',
+                  items: [{ name: 'סוללת ליתיום 72V 35Ah PRO', cat: 'סוללות', qty: 1, unit: 3200 }] });
+    localStorage.setItem('gp_orders', JSON.stringify(orders));
+  });
+  await page.evaluate(() => window.openStickerFor('order', 'o-st1'));
+  const r3 = await read();
+  check('a sale opens the new-battery side', r3.repair === false, r3);
+  check('with the numbers read out of the line', r3.volt === '72V' && r3.cap === '35Ah', r3);
+  check('and the cell the TIER says, not the default',
+    r3.cells === (SELFTEST ? 'EVE 21700 50E' : 'EVE 21700 50PL'), r3.cells);
+  check('dated the day of the sale', r3.prodDate === '21/08/2026', r3.prodDate);
+}
+
 check('no JS errors on the page', errors.length === 0, errors);
 check('and nothing asked through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
 

@@ -1994,6 +1994,47 @@
                     setSel('bms-select', data.bmsLabel);
                     setVal('client-name-input', data.client);
                     setVal('client-ref-input', data.ref);
+
+                    // EVERYTHING ABOVE THIS LINE IS INVISIBLE ON A REPAIR LABEL.
+                    //
+                    // voltage, capacity, cells and BMS all live in #new-battery-specs, which is
+                    // hidden in repair mode; the client name was removed from the artboard in
+                    // 2026-08-18 and now only names the PDF. So until 2026-08-24 "open the
+                    // sticker from a repair" filled four fields that do not print and none of
+                    // the four that do — the label came up with דגם סוללה reading "---" and
+                    // both repair panels blank. It looked filled, because the editor was
+                    // showing today's date next to an empty label.
+                    // setValRaw, not setVal: these are the fields that BELONG to one job, and
+                    // setVal leaves a field alone when the new value is empty. Applying a second
+                    // job whose notes are blank therefore kept the FIRST customer their fault
+                    // description — someone else's complaint printed on their battery. Empty
+                    // here has to mean empty.
+                    const setValRaw = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (!el) return;
+                        el.value = (val === undefined || val === null) ? '' : val;
+                        fire(el);
+                    };
+                    if (wantRepair) {
+                        setValRaw('battery-model-input', data.model);
+                        setValRaw('fault-description-input', data.fault);
+                        setValRaw('repair-details-input', data.repairDetails);
+                    }
+
+                    // The date of the WORK, not of the printing. A repair recorded on Sunday
+                    // and labelled on Wednesday was stamped Wednesday by forceTodayDates(),
+                    // and the warranty end was computed from that — three days of cover the
+                    // customer was not promised. Both modes, because a sale has a date too.
+                    if (data.date) {
+                        if (wantRepair) {
+                            setVal('repair-date-input', data.date);
+                            if (typeof updateRepairWarranty === 'function') updateRepairWarranty();
+                        } else if (productionDateValue) {
+                            productionDateValue.innerText = data.date;
+                            if (typeof updateWarrantyExpiration === 'function') updateWarrantyExpiration();
+                        }
+                    }
+
                     if (data.warrantyMonths) {
                         setVal(wantRepair ? 'repair-warranty-duration-input' : 'warranty-duration-input', data.warrantyMonths);
                     }
