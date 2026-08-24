@@ -410,18 +410,30 @@ console.log('\n13. work that another job drags in is priced once, and only when 
 
   // 2. ONCE. You do not balance a pack twice because you also changed the BMS. If the
   //    marginal figures were summed instead of maxed, this would be 0.4h higher.
+  // Exact constants, not a loose tolerance that happens to absorb them: basePrep 0.3 is
+  // counted once, and BMS gives up its own 0.3 balance to the row swap's larger 0.4.
   check('two jobs that both imply a balance are charged one balance',
-    Math.abs(both - (rows + bms - 0.3 - 0.4)) < 0.15, { rows, bms, both });
+    Math.abs(both - (rows + bms - 0.3 - 0.3)) < 0.06, { rows, bms, both });
 
   // 3. and asking for the full standalone job outright replaces the marginal one rather
   //    than stacking on top of it — that would be the double-charge this exists to avoid.
   check('an explicit איזון תאים replaces the marginal one, it does not stack',
-    Math.abs(rowsExplicit - (rows - 0.5 + 1.5)) < 0.15, { rows, rowsExplicit });
+    Math.abs(rowsExplicit - (rows - 0.4 + 1.5)) < 0.06, { rows, rowsExplicit });
 
   // 4. and it says so. A number that appears in a quote with no reason beside it is one the
   //    customer asks about and nobody can answer.
-  const shown = await page.evaluate(() => document.body.innerText.includes('איזון תאים'));
-  check('the added work is named in the quote, not folded in silently', shown === true);
+  // Two elements, two textContents. The note was first appended to #priceBreakdown as
+  // `<br><span>…`, and that element is written with textContent — so the quote read literally
+  // "עבודה: ₪225<br><span style=...". Daniel sent a screenshot of it within the hour.
+  await hoursFor(['rows']);   // read the note in the state it is about, not whatever ran last
+  const note = await page.evaluate(() => ({
+    implied: (document.getElementById('priceImplied') || {}).textContent || '',
+    brk: (document.getElementById('priceBreakdown') || {}).textContent || '',
+  }));
+  check('the added work is named in the quote, not folded in silently',
+    note.implied.includes('איזון תאים'), note.implied);
+  check('and it is TEXT — no markup leaking into a line that shows a price',
+    !/<br>|<span|<\//.test(note.brk + note.implied), note.brk);
 }
 
 check('no JS errors on the page', errors.length === 0, errors);

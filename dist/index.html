@@ -762,6 +762,12 @@ body { min-height: 100vh; }
     <div class="result-label">מחיר סופי ללקוח</div>
     <div class="result-value" id="finalPrice">₪0</div>
     <div class="result-sub" id="priceBreakdown"></div>
+    <!-- Its own element, and its own textContent. The implied-work note was appended to
+         #priceBreakdown as `<br><span>…`, and that element is written with textContent —
+         so the quote read literally "עבודה: ₪225<br><span style=...". Reported with a
+         screenshot within the hour. Two lines of different weight want two elements; the
+         alternative is innerHTML on a line that shows a price, which is a worse trade. -->
+    <div class="result-sub" id="priceImplied" style="color:var(--text-muted);font-size:12px;margin-top:2px;"></div>
     <!-- Override the calculated price. Empty = use the calculation; typing a number wins
          and everything downstream (saved job, invoice, WhatsApp) uses it. The margin on
          whatever you typed is shown live, and it goes red below cost — the point of an
@@ -1678,14 +1684,18 @@ const BMS_PRICES = {
 // They land close to the 0.5h first guessed, which is reassuring about the magnitude and
 // says nothing about the reasoning, which was wrong.
 //
-// STILL NOT MEASURED: the re-wrap. Nothing published puts a time on heat-shrinking a pack,
-// so 0.2h stands as a guess. The build model carried an assumed 3 min/cell for months and
-// was out by more than 10x — only Daniel timing a real pack found it. Same shape, same risk.
+// MEASURED 2026-08-24, Daniel: the re-wrap is 2 MINUTES ("זה 2 דק לעשות שרינק"), not the 12
+// that was guessed here. Six times out, in the expensive direction, and it is the same shape
+// as the build model that carried an assumed 3 min/cell for months. Guesses about how long
+// his own hands take have now been wrong twice; ask him rather than reason about it.
+//
+// At 2 minutes the labour is noise and the ₪18 of sleeve is the whole cost of re-wrapping —
+// which is the right answer, not a rounding error.
 const IMPLIED_WORK = {
   // Pre-match a new group + read every cell before closing. Scales a little with how much
   // was opened, which is why a single surgical cell is cheaper than a whole row.
-  rows:        { balance: 0.4, shrinkHr: 0.2 },
-  swelling:    { balance: 0.4, shrinkHr: 0.2 },
+  rows:        { balance: 0.4, shrinkHr: 0.03 },
+  swelling:    { balance: 0.4, shrinkHr: 0.03 },
   surgical:    { balance: 0.3 },
   revival:     { balance: 0.4 },
   // "Always re-balance the pack after rebuilding, and after fitting a BMS" is the published
@@ -2277,7 +2287,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v208';
+const HUB_BUILD = 'v209';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2581,12 +2591,18 @@ function recalc() {
   const cellsCost = cellsNeeded * cellPrice;
   const nickelCost = nickelRows * 3;
   const shrinkCost = shrinkUsed * 18;
+  // Insulation between series groups. It was in no part of the cost model, and the published
+  // fire causes for a rebuilt pack are exposed nickel, inadequate insulation between series
+  // groups, and sharp edges cutting a cell wrapper — i.e. the thing that was not costed is a
+  // fire-safety item. Charged whenever new nickel goes in, because that is when new insulation
+  // goes in. ₪3 is Daniel's "כמה שקלים"; it is one number in one place if it is wrong.
+  const insulationCost = nickelRows > 0 ? 3 : 0;
   const wiresCost = wiresUsed * 25;
   const bmsCost = bmsUsed * bmsPrice;
   const chargerCost = chargerPort * 10;
   const socCost = socUsed * 40;
 
-  const partsNet = cellsCost + nickelCost + shrinkCost + wiresCost + bmsCost + chargerCost + socCost;
+  const partsNet = cellsCost + nickelCost + shrinkCost + wiresCost + bmsCost + chargerCost + socCost + insulationCost;
   const laborCost = hours * HOURLY;
   // "עלות לי" counted the ₪180/hr SHOP RATE as a cost, so a job that is mostly labour
   // looked like it barely made money: a 60V BMS swap showed ₪465 cost and ₪55 profit when
@@ -2747,11 +2763,20 @@ function recalc() {
   let breakdown = `חלפים: ₪${Math.round(partsMarg)} · עבודה: ₪${Math.round(laborCost)}${payNote}${bizNote}`;
   // Shown, never silent. An amount that appears in a quote without a reason beside it is
   // one the customer asks about and nobody can answer.
-  if (impliedHours > 0) {
-    const bits = [];
-    if (impliedBalance > 0) bits.push('איזון תאים');
-    if (impliedShrinkHr > 0) bits.push('עטיפה מחדש');
-    breakdown += `<br><span style="color:var(--text-muted);font-size:12px;">כולל ${bits.join(' + ')} (${impliedHours.toFixed(1)} ש\') — נדרש אחרי ${impliedFrom.join(', ')}</span>`;
+  const impliedNote = document.getElementById('priceImplied');
+  if (impliedNote) {
+    if (impliedHours > 0) {
+      const bits = [];
+      if (impliedBalance > 0) bits.push('איזון תאים');
+      if (impliedShrinkHr > 0) bits.push('עטיפה מחדש');
+      // Minutes. '0.03 ש'' is a true way of saying two minutes and a useless one — the
+      // figure is there to be read at a glance by whoever is quoting.
+      const mins = Math.round(impliedHours * 60);
+      const span = mins >= 60 ? (mins / 60).toFixed(1).replace('.0', '') + " ש'" : mins + " דק'";
+      impliedNote.textContent = `כולל ${bits.join(' + ')} (${span}) — נדרש אחרי ${impliedFrom.join(', ')}`;
+    } else {
+      impliedNote.textContent = '';
+    }
   }
   if (diagCredit > 0) breakdown += ` · קיזוז אבחון: -₪${diagCredit}`;
   document.getElementById('priceBreakdown').textContent = breakdown;
