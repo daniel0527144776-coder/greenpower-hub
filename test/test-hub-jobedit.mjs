@@ -332,7 +332,8 @@ console.log('\n12. the sticker opens FILLED from the repair or the sale it was o
     const jobs = JSON.parse(localStorage.getItem('gp_jobs') || '[]');
     jobs.push({ id: 'j-st1', date: '2026-08-20T09:00:00.000Z', customerName: 'אבי', customerPhone: '050-7777777',
                 jobs: ['bms', 'rows'], vehicle: 'bike', voltage: '60', capacity: '20', cellType: '21700-50e',
-                bmsBrand: 'DALY', bmsAmps: '40', warrantyMonths: 6, customerNotes: 'לא נטענת, שורה 7 נפולה' });
+                bmsBrand: 'DALY', bmsAmps: '40', warrantyMonths: 6, reason: 'לא נטענת, שורה 7 נפולה',
+                customerNotes: 'לקוח חוזר, OXO 60V' });
     localStorage.setItem('gp_jobs', JSON.stringify(jobs));
   });
 
@@ -341,8 +342,12 @@ console.log('\n12. the sticker opens FILLED from the repair or the sale it was o
   check('a repair opens the repair side of the label', r1.repair === true, r1);
   check('the model is filled, not "---"', r1.model === 'אופניים חשמליים 60V 20Ah', r1.model);
   check('the date is the day of the WORK, not of the printing', r1.date === '20/08/2026', r1.date);
-  check('what the customer reported is the fault description',
+  // `reason` — "סיבת הכניסה" in the job editor — not customerNotes, whose own placeholder is
+  // "לקוח חוזר, OXO 60V". The first version read the wrong one, filled, and looked right.
+  check('the fault is סיבת הכניסה, not the note about the customer',
     r1.fault === 'לא נטענת, שורה 7 נפולה', r1.fault);
+  check('and the customer note stays off the label entirely',
+    !r1.fault.includes('לקוח חוזר'), r1.fault);
   check('the work done is listed from the boxes that were ticked',
     r1.details.includes('החלפת BMS') && r1.details.includes('החלפת שורות'), r1.details);
 
@@ -352,16 +357,21 @@ console.log('\n12. the sticker opens FILLED from the repair or the sale it was o
   await page.evaluate(() => {
     const jobs = JSON.parse(localStorage.getItem('gp_jobs') || '[]');
     jobs.push({ id: 'j-st2', date: '2026-08-22T09:00:00.000Z', customerName: 'רון', customerPhone: '050-8888888',
-                jobs: ['balance'], vehicle: 'scooter', voltage: '48', capacity: '15', cellType: '21700-50sg',
-                bmsBrand: 'JK', bmsAmps: '150', warrantyMonths: 6, customerNotes: '' });
+                jobs: [], quickRepair: 'החלפת מחבר טעינה', warrantyMonths: 6 });
     localStorage.setItem('gp_jobs', JSON.stringify(jobs));
   });
   await page.evaluate(() => window.openStickerFor('job', 'j-st2'));
   const r2 = await read();
-  check('a second repair brings its own model and date',
-    r2.model === 'קורקינט 48V 15Ah' && r2.date === '22/08/2026', r2);
+  // A job saved through the old quick pricer carries `quickRepair` as a name and an EMPTY
+  // jobs array. Reading `jobs` alone put nothing on the label for that whole class of record;
+  // jobTypeLabel() is where the hub's own rule for this lives.
+  check('a quick-pricer job still describes the work it did',
+    r2.details.includes('החלפת מחבר טעינה'), r2.details);
+  check('and it carries its own date', r2.date === '22/08/2026', r2.date);
+  check('the model is left blank rather than filled with the work — that is not a model',
+    r2.model === '' || r2.model === '---', r2.model);
   check("and does NOT keep the previous customer's fault", r2.fault === '', r2.fault);
-  check('nor their repair details', r2.details.includes('איזון תאים') && !r2.details.includes('BMS'), r2.details);
+  check('nor their repair details', !r2.details.includes('שורות'), r2.details);
 
   // A build at a voltage and a capacity the sticker's own dropdowns do not carry. The lists
   // are 48/52/60/72 and multiples of five; the hub offers 12-84V and a FREE capacity input

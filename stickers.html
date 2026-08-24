@@ -2028,6 +2028,7 @@
                     // What could NOT be filled is said out loud. Silence is what made a
                     // half-filled label look like a filled one.
                     const missed = [];
+                    const missedRepair = [];
                     if (data.voltage && !setNum('voltage-select', data.voltage)) missed.push('מתח');
                     if (data.capacity && !setNum('capacity-select', data.capacity)) missed.push('קיבולת');
                     if (data.cells && !setSel('cells-select', data.cells)) missed.push('סוג תא');
@@ -2059,6 +2060,14 @@
                         setValRaw('battery-model-input', data.model);
                         setValRaw('fault-description-input', data.fault);
                         setValRaw('repair-details-input', data.repairDetails);
+                        // A repair prints these four and nothing else, so a gap in them is the
+                        // gap that matters — the specs the block below reports on are hidden in
+                        // this mode. A job from the old quick pricer legitimately knows neither
+                        // the model nor the fault, and that is worth being told rather than
+                        // discovering on the printed label.
+                        if (!data.model) missedRepair.push('דגם');
+                        if (!data.fault) missedRepair.push('תיאור תקלה');
+                        if (!data.repairDetails) missedRepair.push('פירוט התיקון');
                     }
 
                     // The date of the WORK, not of the printing. A repair recorded on Sunday
@@ -2079,8 +2088,11 @@
                         setVal(wantRepair ? 'repair-warranty-duration-input' : 'warranty-duration-input', data.warrantyMonths);
                     }
                     if (typeof updateAllSpecs === 'function') updateAllSpecs();
-                    showNotification(missed.length
-                        ? 'מולא חלקית — חסר: ' + missed.join(', ') + '. השלם ידנית לפני הדפסה'
+                    // In repair mode the specs are not on the label, so complaining that a BMS
+                    // could not be set would be noise; report what this label actually prints.
+                    const gaps = wantRepair ? missedRepair : missed;
+                    showNotification(gaps.length
+                        ? 'מולא חלקית — חסר: ' + gaps.join(', ') + '. השלם ידנית לפני הדפסה'
                         : 'המדבקה מולאה — בדוק ולחץ הדפס');
                 } catch (err) {
                     console.error('applyStickerJob', err);
