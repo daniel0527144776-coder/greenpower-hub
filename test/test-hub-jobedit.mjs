@@ -381,6 +381,49 @@ console.log('\n12. the sticker opens FILLED from the repair or the sale it was o
   check('dated the day of the sale', r3.prodDate === '21/08/2026', r3.prodDate);
 }
 
+console.log('\n13. work that another job drags in is priced once, and only when it is not asked for');
+{
+  // Daniel, 2026-08-24: some repairs have to be done together — replace a row and the pack
+  // also needs balancing and re-wrapping. They were independent checkboxes, so the same
+  // physical job quoted ₪460 or ₪810 depending on how many got ticked, and the cheaper
+  // number was the one you got by clicking less.
+  //
+  // Three properties, and the middle one is the one that is easy to get wrong.
+  const hoursFor = (jobs) => page.evaluate((jobs) => {
+    setVehicle('bike');
+    state.jobs = new Set();
+    document.querySelectorAll('[data-job]').forEach((e) => e.classList.remove('checked'));
+    jobs.forEach((j) => toggleJob(j));
+    recalc();
+    return parseFloat(document.getElementById('hoursDisplay').textContent.trim());
+  }, jobs);
+  await page.evaluate(() => navigateTo('calc'));
+
+  const rows = await hoursFor(['rows']);
+  const bms = await hoursFor(['bms']);
+  const both = await hoursFor(['rows', 'bms']);
+  const rowsExplicit = await hoursFor(['rows', 'balance']);
+
+  // 1. it is actually added — a row swap carries a balance and a re-wrap it never charged for
+  check('a row swap now carries the work it always required',
+    rows > 1.5 + (SELFTEST ? 99 : 0), rows);
+
+  // 2. ONCE. You do not balance a pack twice because you also changed the BMS. If the
+  //    marginal figures were summed instead of maxed, this would be 0.4h higher.
+  check('two jobs that both imply a balance are charged one balance',
+    Math.abs(both - (rows + bms - 0.3 - 0.4)) < 0.15, { rows, bms, both });
+
+  // 3. and asking for the full standalone job outright replaces the marginal one rather
+  //    than stacking on top of it — that would be the double-charge this exists to avoid.
+  check('an explicit איזון תאים replaces the marginal one, it does not stack',
+    Math.abs(rowsExplicit - (rows - 0.5 + 1.5)) < 0.15, { rows, rowsExplicit });
+
+  // 4. and it says so. A number that appears in a quote with no reason beside it is one the
+  //    customer asks about and nobody can answer.
+  const shown = await page.evaluate(() => document.body.innerText.includes('איזון תאים'));
+  check('the added work is named in the quote, not folded in silently', shown === true);
+}
+
 check('no JS errors on the page', errors.length === 0, errors);
 check('and nothing asked through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
 

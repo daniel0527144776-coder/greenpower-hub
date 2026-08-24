@@ -1638,6 +1638,30 @@ const BMS_PRICES = {
   ant:  { 20: 105, 30: 120, 40: 135, 60: 150, 80: 170, 100: 195, 120: 220, 150: 240, 200: 280, 220: 295, 300: 345 }
 };
 
+// Work another job DRAGS IN. Not a suggestion, and not a box to remember: cutting into a
+// pack to replace a row means the wrap comes off and the new cells arrive at a different
+// voltage from the rest, so the battery does not leave the bench without being balanced and
+// re-wrapped. Those were separate checkboxes, so the SAME physical job cost ₪460 or ₪810
+// depending on how many boxes got ticked — and the cheaper number is the one you get by
+// clicking less. A quote that rewards forgetting is a quote that loses money quietly.
+//
+// Priced MARGINALLY, not at the standalone rate, for exactly the reason basePrep is added
+// once however many jobs are ticked: the pack is already open and on the bench. A standalone
+// איזון תאים is 1.5h because it includes receiving the battery, hooking it up and sitting
+// through a charge cycle. The balance at the end of a row swap is the cycle alone.
+//
+// THESE HOURS ARE ESTIMATES AND ARE THE ONE THING HERE THAT SHOULD BE TIMED. The build model
+// carried an assumed 3 min/cell for months and it was out by more than 10x; it took Daniel
+// timing a real pack to find that. Same shape, same risk.
+const IMPLIED_WORK = {
+  rows:        { balance: 0.5, shrinkHr: 0.2 },
+  swelling:    { balance: 0.5, shrinkHr: 0.2 },
+  surgical:    { balance: 0.4 },
+  revival:     { balance: 0.5 },
+  bms:         { balance: 0.4 },
+  bms_upgrade: { balance: 0.4 },
+};
+
 const JOB_LABELS = {
   diag: 'אבחון ובדיקה', captest: 'בדיקת קיבולת', full: 'בנייה מלאה מאפס',
   rows: 'החלפת שורות', surgical: 'תיקון נקודתי', swelling: 'החלפת תאים נפוחים',
@@ -2220,7 +2244,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v205';
+const HUB_BUILD = 'v206';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2496,6 +2520,28 @@ function recalc() {
   if (state.jobs.has('shrink')) { shrinkUsed = 1; hours += 0.3; }
   if (state.jobs.has('case')) hours += 1.5;
 
+  // Balance happens ONCE however many of these were done — you do not balance a pack twice
+  // because you both swapped a row and changed the BMS. Largest marginal figure, not the sum;
+  // the same rule that makes the materials above flags rather than counters.
+  let impliedBalance = 0, impliedShrinkHr = 0;
+  const impliedFrom = [];
+  Object.keys(IMPLIED_WORK).forEach((job) => {
+    if (!state.jobs.has(job)) return;
+    const imp = IMPLIED_WORK[job];
+    if (imp.balance) impliedBalance = Math.max(impliedBalance, imp.balance);
+    if (imp.shrinkHr) impliedShrinkHr = Math.max(impliedShrinkHr, imp.shrinkHr);
+    impliedFrom.push(JOB_LABELS[job]);
+  });
+  // An explicit tick wins outright. Asking for איזון תאים as a job means the full standalone
+  // 1.5h, which already covers this and more — adding the marginal half hour on top would be
+  // the double-charge this whole mechanism is built to avoid.
+  if (state.jobs.has('balance')) impliedBalance = 0;
+  if (state.jobs.has('shrink') || state.jobs.has('full')) impliedShrinkHr = 0;
+  const impliedHours = impliedBalance + impliedShrinkHr;
+  hours += impliedHours;
+  // The wrap material itself, on the same flag the explicit job uses, so it is charged once.
+  if (impliedShrinkHr > 0) shrinkUsed = 1;
+
   hours += basePrep;
   hours = Math.round(hours * 10) / 10;
 
@@ -2660,6 +2706,14 @@ function recalc() {
   document.getElementById('profitDisplay').textContent = '₪' + Math.round(profit);
   document.getElementById('finalPrice').textContent = '₪' + rounded.toLocaleString('he-IL');
   let breakdown = `חלפים: ₪${Math.round(partsMarg)} · עבודה: ₪${Math.round(laborCost)}${payNote}${bizNote}`;
+  // Shown, never silent. An amount that appears in a quote without a reason beside it is
+  // one the customer asks about and nobody can answer.
+  if (impliedHours > 0) {
+    const bits = [];
+    if (impliedBalance > 0) bits.push('איזון תאים');
+    if (impliedShrinkHr > 0) bits.push('עטיפה מחדש');
+    breakdown += `<br><span style="color:var(--text-muted);font-size:12px;">כולל ${bits.join(' + ')} (${impliedHours.toFixed(1)} ש\') — נדרש אחרי ${impliedFrom.join(', ')}</span>`;
+  }
   if (diagCredit > 0) breakdown += ` · קיזוז אבחון: -₪${diagCredit}`;
   document.getElementById('priceBreakdown').textContent = breakdown;
   syncWarrantyLabel();   // ticking "בנייה מלאה" switches the quote from 6 months to 12
