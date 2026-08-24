@@ -1988,10 +1988,50 @@
                         return true;
                     };
 
-                    setSel('voltage-select', data.voltage);
-                    setSel('capacity-select', data.capacity);
-                    setSel('cells-select', data.cells);
-                    setSel('bms-select', data.bmsLabel);
+                    // A NUMERIC select takes any real value, creating the option if the list
+                    // does not happen to carry it. This is the whole of "it only fills part of
+                    // it", reported 2026-08-24:
+                    //
+                    //   capacity — the list is 5,10,15…200 in steps of five, and the hub's
+                    //   capacity is a free number input whose DEFAULT IS 21. So the commonest
+                    //   value in the whole system could not be transferred, and the label kept
+                    //   whatever it already had. 17.5Ah, 13Ah, 28Ah: the same.
+                    //
+                    //   voltage — the list is 48/52/60/72. The hub offers 12, 14.8, 18, 24, 36,
+                    //   48, 52, 60, 72, 84. A 36V bike, an 84V motorcycle and every power-tool
+                    //   pack silently kept the previous label's voltage.
+                    //
+                    // These are numbers, not a catalogue: an odd capacity is a real pack, not a
+                    // typo, and refusing it is what produced a wrong label rather than an empty
+                    // one. Cells and BMS keep setSel exactly because they ARE catalogues —
+                    // inventing an option there would print a part that does not exist.
+                    const setNum = (id, val) => {
+                        const el = document.getElementById(id);
+                        if (!el || val === undefined || val === null || val === '') return false;
+                        const want = String(parseFloat(val));
+                        if (!isFinite(parseFloat(want))) return false;
+                        let opt = [...el.options].find((o) => String(parseFloat(o.value)) === want);
+                        if (!opt) {
+                            opt = document.createElement('option');
+                            opt.value = want;
+                            opt.text = want + (id.startsWith('capacity') ? 'Ah' : 'V');
+                            // In place, so the list stays readable rather than gaining a stray
+                            // value at the bottom.
+                            const after = [...el.options].find((o) => parseFloat(o.value) > parseFloat(want));
+                            el.insertBefore(opt, after || null);
+                        }
+                        el.value = opt.value;
+                        fire(el);
+                        return true;
+                    };
+
+                    // What could NOT be filled is said out loud. Silence is what made a
+                    // half-filled label look like a filled one.
+                    const missed = [];
+                    if (data.voltage && !setNum('voltage-select', data.voltage)) missed.push('מתח');
+                    if (data.capacity && !setNum('capacity-select', data.capacity)) missed.push('קיבולת');
+                    if (data.cells && !setSel('cells-select', data.cells)) missed.push('סוג תא');
+                    if (data.bmsLabel && !setSel('bms-select', data.bmsLabel)) missed.push('BMS');
                     setVal('client-name-input', data.client);
                     setVal('client-ref-input', data.ref);
 
@@ -2039,7 +2079,9 @@
                         setVal(wantRepair ? 'repair-warranty-duration-input' : 'warranty-duration-input', data.warrantyMonths);
                     }
                     if (typeof updateAllSpecs === 'function') updateAllSpecs();
-                    showNotification('המדבקה מולאה — בדוק ולחץ הדפס');
+                    showNotification(missed.length
+                        ? 'מולא חלקית — חסר: ' + missed.join(', ') + '. השלם ידנית לפני הדפסה'
+                        : 'המדבקה מולאה — בדוק ולחץ הדפס');
                 } catch (err) {
                     console.error('applyStickerJob', err);
                 }

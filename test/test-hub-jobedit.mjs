@@ -323,6 +323,7 @@ console.log('\n12. the sticker opens FILLED from the repair or the sale it was o
         model: t('battery-model-display'), date: t('repair-date-display'),
         fault: t('fault-description-display'), details: t('repair-details-display'),
         cells: t('cells-value'), volt: t('voltage-value'), cap: t('capacity-value'),
+        sku: t('sku-value'),
         prodDate: t('production-date-value'),
       };
     });
@@ -361,6 +362,27 @@ console.log('\n12. the sticker opens FILLED from the repair or the sale it was o
     r2.model === 'קורקינט 48V 15Ah' && r2.date === '22/08/2026', r2);
   check("and does NOT keep the previous customer's fault", r2.fault === '', r2.fault);
   check('nor their repair details', r2.details.includes('איזון תאים') && !r2.details.includes('BMS'), r2.details);
+
+  // A build at a voltage and a capacity the sticker's own dropdowns do not carry. The lists
+  // are 48/52/60/72 and multiples of five; the hub offers 12-84V and a FREE capacity input
+  // whose default is 21. setSel required an exact option and silently kept the default, so
+  // this pack printed 60V 20Ah and a GP-60V-20A- SKU — not a blank label, a confident wrong
+  // one. Reported as 'ממלא בצורה חלקית'.
+  await page.evaluate(() => {
+    const jobs = JSON.parse(localStorage.getItem('gp_jobs') || '[]');
+    jobs.push({ id: 'j-st3', date: '2026-08-23T09:00:00.000Z', customerName: 'נועה', customerPhone: '050-5555555',
+                jobs: ['full'], vehicle: 'bike', voltage: '36', capacity: '21', cellType: '21700-50sg',
+                bmsBrand: 'DALY', bmsAmps: '40', warrantyMonths: 12 });
+    localStorage.setItem('gp_jobs', JSON.stringify(jobs));
+  });
+  await page.evaluate(() => window.openStickerFor('job', 'j-st3'));
+  const r4 = await read();
+  check('a voltage the dropdown never listed still reaches the label',
+    r4.volt === (SELFTEST ? '60V' : '36V'), r4.volt);
+  check('and an odd capacity does too — 21 is the hub default, not an edge case',
+    r4.cap === '21Ah', r4.cap);
+  check('and the SKU follows both rather than the leftovers',
+    r4.sku && r4.sku.includes('36V') && r4.sku.includes('21A'), r4.sku);
 
   // A sale has no cellType field, so the editor stayed on its default: a 72V 35Ah PRO
   // printed EVE 21700 50E and 2C/3C — the CLASSIC cell, on a pack built from 50PL at
