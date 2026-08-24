@@ -1650,16 +1650,42 @@ const BMS_PRICES = {
 // איזון תאים is 1.5h because it includes receiving the battery, hooking it up and sitting
 // through a charge cycle. The balance at the end of a row swap is the cycle alone.
 //
-// THESE HOURS ARE ESTIMATES AND ARE THE ONE THING HERE THAT SHOULD BE TIMED. The build model
-// carried an assumed 3 min/cell for months and it was out by more than 10x; it took Daniel
-// timing a real pack to find that. Same shape, same risk.
+// ---- what the trade actually does, looked up rather than assumed (2026-08-24) ----
+//
+// The first version of this table charged "a balance" as one figure, and that conflated two
+// different things. The published practice splits them:
+//
+//   ATTENDED. New cells are brought to the pack's voltage BEFORE they are welded in — the
+//   standard is to match within 0.05V with a single-cell charger, not to weld a mismatched
+//   group in and leave the BMS to sort it out. Then every cell is read again before the pack
+//   is closed. That is hands-on bench time and it is what an hour of labour should be sold
+//   for. (Redway; Cell Saviors.)
+//
+//   UNATTENDED. Passive BMS balancing runs at 50-100mA and takes 6-12 HOURS to finish. It
+//   is a pack sitting on a charger. Billing it as labour would put ~₪1,100 of "work" on a
+//   row swap for time nobody is standing there — so it is NOT in these hours at all. It is
+//   why the job takes days, not why it costs money, and it is surfaced in the checklist
+//   instead. (Flash Battery; Bonnen.)
+//
+// So the numbers below are the attended half only: pre-match the new group, then verify.
+// They land close to the 0.5h first guessed, which is reassuring about the magnitude and
+// says nothing about the reasoning, which was wrong.
+//
+// STILL NOT MEASURED: the re-wrap. Nothing published puts a time on heat-shrinking a pack,
+// so 0.2h stands as a guess. The build model carried an assumed 3 min/cell for months and
+// was out by more than 10x — only Daniel timing a real pack found it. Same shape, same risk.
 const IMPLIED_WORK = {
-  rows:        { balance: 0.5, shrinkHr: 0.2 },
-  swelling:    { balance: 0.5, shrinkHr: 0.2 },
-  surgical:    { balance: 0.4 },
-  revival:     { balance: 0.5 },
-  bms:         { balance: 0.4 },
-  bms_upgrade: { balance: 0.4 },
+  // Pre-match a new group + read every cell before closing. Scales a little with how much
+  // was opened, which is why a single surgical cell is cheaper than a whole row.
+  rows:        { balance: 0.4, shrinkHr: 0.2 },
+  swelling:    { balance: 0.4, shrinkHr: 0.2 },
+  surgical:    { balance: 0.3 },
+  revival:     { balance: 0.4 },
+  // "Always re-balance the pack after rebuilding, and after fitting a BMS" is the published
+  // rule, not our inference — a new BMS starts with no history of the pack. Nothing is
+  // welded here, so there is no pre-match, only the verify pass.
+  bms:         { balance: 0.3 },
+  bms_upgrade: { balance: 0.3 },
 };
 
 const JOB_LABELS = {
@@ -2244,7 +2270,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v206';
+const HUB_BUILD = 'v207';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2692,6 +2718,12 @@ function recalc() {
   if (cellsNeeded >= 20) cl.push('בדיקת מתח כל תא לפני ריתוך');
   if (bmsUsed) cl.push('בדיקת BMS לפני התקנה');
   if (state.jobs.has('full')) cl.push('בדיקת קצר לפני סגירת מארז');
+  // Said out loud because it decides the DATE promised to the customer, not the price.
+  // Passive balancing is 50-100mA and runs 6-12 hours; quoting a two-day turnaround on a
+  // pack that has had a row replaced is quoting a balance that has not finished.
+  if (impliedBalance > 0 || state.jobs.has('balance')) {
+    cl.push('איזון פסיבי = 6-12 שעות על המטען (לא שעות עבודה) — לקחת בחשבון במועד האיסוף');
+  }
 
   if (cl.length > 0) {
     document.getElementById('checklistBox').style.display = 'block';
