@@ -2301,7 +2301,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v211';
+const HUB_BUILD = 'v212';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2744,7 +2744,12 @@ function recalc() {
   document.getElementById('alertsContainer').innerHTML = alerts.map(a => `<div class="alert alert-${a.type}">${a.text}</div>`).join('');
 
   // Delivery time
-  const delivery = { 0: 'זמן אספקה: 5-7 ימי עסקים', 15: 'זמן אספקה: 2-3 ימים', 30: 'זמן אספקה: 24 שעות', 50: 'זמן אספקה: עד סוף היום' }[urg];
+  // 3-5, not 5-7. The site's FAQ publishes "3-5 ימי עבודה מקבלת הסוללה למעבדה" and this
+  // quote promised 5-7 — the same business making two different promises, with the slower
+  // one going to the customer who is deciding. Exactly the drift that had the hub printing
+  // 19:30 while the site said 19:00 for months. business.json carries it now and
+  // audit-business-facts checks both ends.
+  const delivery = { 0: 'זמן טיפול: 3-5 ימי עבודה', 15: 'זמן טיפול: 2-3 ימים', 30: 'זמן טיפול: באותו יום', 50: 'זמן טיפול: עד סוף היום' }[urg];
   document.getElementById('deliveryTime').textContent = delivery;
 
   // Safety checklist
@@ -2908,7 +2913,31 @@ function generateWhatsApp() {
   const custName = document.getElementById('custName').value;
   const delivery = document.getElementById('deliveryTime').textContent;
 
-  const msg = `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך:\n🔋 ${v}V ${cap}Ah · תצורת ${config.s}S${config.p}P\n\n📋 העבודה כוללת:\n${selected}\n\n⏱️ ${hours} שעות עבודה\n📦 ${delivery}\n\n💰 *מחיר סופי: ${price}*\n\n${warrantyFor() ? '✅ אחריות מלאה ' + warrantyFor() + ' חודשים על העבודה והחלקים' : 'ℹ️ אבחון בלבד — ללא אחריות'}\n🔧 תאים מסוג Grade A · מעבדה מקצועית\n\nאשמח לקבוע מועד! 🔋⚡\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
+  // What a customer is sent, and what they are NOT.
+  //
+  // Removed 2026-08-25 at Daniel's word ("יש כאן טקסט שאינו נצרך ולא מקצועי"):
+  //
+  //   "2.6 שעות עבודה" — this hands the customer the cost structure. ₪200 over 2.6 hours
+  //   is ₪77/hr in their head, and the next message is about the hourly rate rather than
+  //   the battery. It is also nothing they can act on. Kept on OUR screen, where it is
+  //   the figure the price is built from.
+  //
+  //   "תצורת 16S5P" — true, and meaningless to the person reading it. Expertise shown by
+  //   jargon is not shown.
+  //
+  //   "מעבדה מקצועית" — self-praise carrying no information, in a message that is already
+  //   signed by the lab.
+  //
+  // The cell line is CONDITIONAL now, which is the part that was actually unprofessional:
+  // it went out on every quote, including a BMS swap or a charging-port repair where not a
+  // single cell is supplied. Claiming a cell grade on a job with no cells in it is a claim
+  // about nothing.
+  //
+  // U+200E after the "+": a plus is a NEUTRAL character in bidi, so "Grade A+" beside
+  // Hebrew renders as "+Grade A". No <bdi> to reach for in a plain-text message.
+  const cellsInvolved = ['full', 'rows', 'surgical', 'swelling'].some((k) => state.jobs.has(k));
+  const cellLine = cellsInvolved ? '\n🔧 תאי Grade A+\u200E — נבדקים וממוינים במפעל' : '';
+  const msg = `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך: ${v}V ${cap}Ah\n\n📋 מה יבוצע:\n${selected}\n\n📦 ${delivery}\n\n💰 *מחיר סופי: ${price}*\n\n${warrantyFor() ? '✅ אחריות ' + warrantyFor() + ' חודשים על העבודה והחלקים' : 'ℹ️ אבחון בלבד — ללא אחריות'}${cellLine}\n\nאשמח לקבוע מועד.\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
 
   const ta = document.getElementById('whatsappPreview');
   ta.textContent = msg;
@@ -2997,7 +3026,7 @@ function generateInvoice() {
     <div style="font-size: 11px; color: #555; line-height: 1.7; border-top: 2px solid #E5E7EB; padding-top: 14px;">
       <div><strong style="color: #1F4E79;">🛡️ אחריות:</strong> ${warrantyFor() ? warrantyFor() + ' חודשים על העבודה והחלקים' : 'אבחון בלבד — ללא אחריות'}, מתאריך הוצאת ההצעה.</div>
       <div style="margin-top: 6px;"><strong>⏱️ זמן עבודה:</strong> 3-5 ימי עבודה מרגע קבלת הסוללה למעבדה.</div>
-      <div style="margin-top: 6px;"><strong>איכות:</strong> תאי Grade A בלבד · עבודה במעבדה מקצועית · ציוד מתקדם</div>
+      <div style="margin-top: 6px;"><strong>איכות:</strong> תאי Grade A+&lrm; — נבדקים וממוינים במפעל</div>
       <div style="margin-top: 6px;"><strong>שעות פעילות:</strong> א'-ה' 11:00-19:00 · ו'-ש' סגור</div>
       <div style="margin-top: 14px; text-align: center; color: #999; font-size: 11px;">תודה רבה על האמון!</div>
     </div>
