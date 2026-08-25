@@ -384,6 +384,11 @@ body { min-height: 100vh; }
         <div class="quick-card-title">כספים</div>
         <div class="quick-card-desc">רווח-הפסד חודשי</div>
       </div>
+      <div class="quick-card" onclick="navigateTo('worktime')">
+        <span class="quick-card-icon">⏱️</span>
+        <div class="quick-card-title">שעון עובדים</div>
+        <div class="quick-card-desc">כניסה · יציאה · שעות</div>
+      </div>
 
       <div class="quick-card" onclick="navigateTo('calcs')">
         <span class="quick-card-icon">📐</span>
@@ -2070,7 +2075,12 @@ const PAGE_GROUPS = [
   // long way; that button is now the strip.
   { tabs: [['orders', '🛒 מכירות ותיקונים'], ['calc', '🧮 מחשבון מפורט']] },
   { tabs: [['customers', '👥 לקוחות'], ['warranties', '🛡️ אחריות'], ['bizdocs', '🏢 תיעוד עסקי']] },
-  { tabs: [['finances', '💰 כספים'], ['worktime', '⏱️ שעון עובדים'], ['stats', '📊 סטטיסטיקה']] },
+  // שעון עובדים used to be the middle tab here, which put it two clicks from the home page
+  // and gave it no card at all. That was right while it was a monthly wages ledger read
+  // beside the P&L; it stopped being right on 2026-08-24, when it gained a כניסה/יציאה clock
+  // that gets pressed twice a day. Frequency of use decides where something lives, not which
+  // report it resembles.
+  { tabs: [['finances', '💰 כספים'], ['stats', '📊 סטטיסטיקה']] },
 ];
 function renderPageTabs(page) {
   document.querySelectorAll('.page-group-tabs').forEach((e) => e.remove());
@@ -2301,7 +2311,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v212';
+const HUB_BUILD = 'v213';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so

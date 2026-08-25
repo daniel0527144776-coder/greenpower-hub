@@ -366,6 +366,21 @@ console.log('\n8. the in-hub shift clock — Daniel punching a worker in and out
     const g = document.getElementById('loginOverlay'); if (g) g.remove();
     navigateTo('worktime');
   });
+  // Reached from the home page in ONE click. It was the middle tab of the כספים group with no
+  // card at all — two clicks and no signpost — which was right while it was a monthly wages
+  // ledger and stopped being right the day it grew a clock that is pressed twice a day.
+  const card = await p.evaluate(() => {
+    const c = [...document.querySelectorAll('.quick-card')]
+      .find((x) => x.getAttribute('onclick') === "navigateTo('worktime')");
+    if (!c) return null;
+    c.click();
+    return c.innerText.split('\n').join(' ');
+  });
+  check('there is a home card for it', card !== null && /שעון עובדים/.test(card || ''), card);
+  check('and one click lands on the page',
+    (await p.evaluate(() => (document.querySelector('.page.active') || {}).id)) === 'page-worktime');
+  check('standalone — no tab strip shared with כספים',
+    (await p.evaluate(() => !document.querySelector('#page-worktime .page-group-tabs'))) === true);
   await p.waitForSelector('#shiftList button', { timeout: 5000 });
   check('the worker is offered a כניסה button', (await p.textContent('#shiftList')).includes('כניסה'));
 
