@@ -2311,7 +2311,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v216';
+const HUB_BUILD = 'v217';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3518,16 +3518,31 @@ const SUPPLIER_FREIGHT = 0.39;
 // measured 0.39 came from. So 0.39 stays the default for anything with no category rate:
 // it is the route he actually uses. The numbers below say what a one-off direct order
 // really costs, which is the question a quote for a single motor has to answer.
-// EMPTY, DELIBERATELY, after the rates above were measured and then rejected. Applying them
-// made every QS motor read below cost — QS273 at -32% retail — and that is false. Those are
-// the DIRECT-to-Israel quotes, and the same chats show him turning them down every time
-// ("Sorry your offer is not attractive", "The shipping cost is expensive") and shipping to a
-// Chinese agent for $3-7 to be consolidated. The consolidated leg IS the measured 0.39.
+// $/kg, because freight is bought by the kilo and 0.39 is a share of VALUE. The comment on
+// SUPPLIER_FREIGHT above names the rate this supplier actually flies at — $11-16/kg — and
+// says in as many words that a value-based share "over-charges a 200g BMS and under-charges
+// a 1kg nickel roll". Where a weight is known, it is used instead of any percentage.
 //
-// So the numbers are kept as a record of what a one-off direct order costs — which is a real
-// question when a customer wants a motor next week — and NOT as the cost basis. Being more
-// precise about the wrong route is less true than an average of the right one.
-const SUPPLIER_FREIGHT_BY = [];
+// The weights come from the QS Motor chats: a 1500W hub motor parcel is 31.5×31.5×32cm at
+// 14.5kg, a 3000W is 16kg, a bare stator is 9kg, and "motor and controller" together is
+// 17kg — which is where the controller's ~1.8kg comes from, by subtraction.
+const FREIGHT_USD_PER_KG = 13;
+
+// AND THE 0.39 DOES NOT BELONG TO THESE ROWS AT ALL (Daniel, 2026-08-26: "הספק של המנועים
+// והבקרים זה לא GO GOGOGO זה QS MOTOR"). It was measured on five IC GOGOGO shipments whose
+// cargo the comment above lists as nickel, copper, shrink and paper — heavy, cheap building
+// material. It never described a motor. At $13/kg a 16kg hub motor is 76% of its own value
+// and a 1.5kg controller is 17%: the two sit either side of 39% and neither is near it.
+//
+// These are the CONSOLIDATED rates — the route through a Chinese agent that he actually
+// uses. The direct-to-Israel express quotes in the same chats run 102-299% on motors, and
+// he turns them down every time ("The shipping cost is expensive"), so they are not the
+// cost basis; they are what a rush order would cost.
+const SUPPLIER_FREIGHT_BY = [
+  [/QS Motor · מנועים/, 0.75],
+  [/QS Motor · בקרים/, 0.12],
+  [/QS Motor · צגים/, 0.15],
+];
 function freightRateFor(cat) {
   const hit = SUPPLIER_FREIGHT_BY.find(([re]) => re.test(String(cat || '')));
   return hit ? hit[1] : SUPPLIER_FREIGHT;
@@ -3606,7 +3621,11 @@ function supplierIls(r, vat, freight) {
   // A row that carries its OWN shipping quote beats every average: `frUsd` is the freight
   // actually quoted for that item, in dollars, not a share of anything.
   if (freight) {
-    v += r.frUsd != null ? Number(r.frUsd) * SUPPLIER_USD : v * freightRateFor(r.cat);
+    // Most exact first: a quoted shipping price for this very item, then its weight at the
+    // per-kilo rate, then the category's share of value, then the order-level average.
+    if (r.frUsd != null) v += Number(r.frUsd) * SUPPLIER_USD;
+    else if (r.kg != null) v += Number(r.kg) * FREIGHT_USD_PER_KG * SUPPLIER_USD;
+    else v += v * freightRateFor(r.cat);
   }
   return vat ? v * (1 + SUPPLIER_VAT) : v;
 }
