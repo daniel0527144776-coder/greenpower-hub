@@ -1162,6 +1162,11 @@ body { min-height: 100vh; }
     </div>
     <div style="font-size:11px;color:var(--text-muted);">לאומדן רווח על מוצרים שאינם סוללות (מנועים/בקרים/צגים/מטענים), כל עוד לא הוזנה עלות מדויקת.</div>
     <div class="form-row">
+      <label>שילוח מסין ($ לק"ג)</label>
+      <input type="number" class="form-input" id="setFreightKg" value="10" min="0" max="40" step="0.5" onchange="saveSettings();">
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);">התעריף שמשלמים בפועל, לא מחירון DHL. שוק 2026: אקספרס דרך משלח <b>$8-12</b>, מטען אווירי $5-8.5, ימי זול בהרבה. QS ציטטו ישירות $17-21 — מחירון מלא, ולכן דוחים אותו. <b>כשהתעריף משתנה, זה השדה היחיד שצריך לשנות.</b></div>
+    <div class="form-row">
       <label>הנחת לקוח עסקי על תיקונים (%)</label>
       <input type="number" class="form-input" id="setBizDisc" value="15" min="0" max="40" step="1" onchange="saveSettings();">
     </div>
@@ -2311,7 +2316,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v217';
+const HUB_BUILD = 'v218';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3526,7 +3531,16 @@ const SUPPLIER_FREIGHT = 0.39;
 // The weights come from the QS Motor chats: a 1500W hub motor parcel is 31.5×31.5×32cm at
 // 14.5kg, a 3000W is 16kg, a bare stator is 9kg, and "motor and controller" together is
 // 17kg — which is where the controller's ~1.8kg comes from, by subtraction.
-const FREIGHT_USD_PER_KG = 13;
+// A SETTING, not a constant, because it is the number in this whole model that moves most
+// (Daniel, 2026-08-26: "המחיר משתנה מפעם לפעם"). It lives on the settings page beside the
+// dollar rate, and changing it re-costs every weighed row at once.
+//
+// 10 is the middle of the 2026 market for express China->Israel through a forwarder, $8-12
+// per kg (air freight is $5-8.5, sea far less). Not 13, which came from a note about this
+// lab's own past shipments, and emphatically not the $17-21/kg QS quote directly — that is
+// the published DHL/FedEx rate, forwarders discount it heavily, and he declines it every
+// time it is offered.
+let FREIGHT_USD_PER_KG = 10;
 
 // AND THE 0.39 DOES NOT BELONG TO THESE ROWS AT ALL (Daniel, 2026-08-26: "הספק של המנועים
 // והבקרים זה לא GO GOGOGO זה QS MOTOR"). It was measured on five IC GOGOGO shipments whose
@@ -3569,7 +3583,11 @@ function fmtIls(n) { return n >= 20 ? '₪' + Math.round(n) : '₪' + n.toFixed(
 // VAT would be charged twice.
 function supplierRows() {
   const rows = [];
-  (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'ספק', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils }));
+  // kg / frUsd / on are carried through: this projection used to list five fields, so a
+  // weight or a quoted shipping price in the imported file was dropped on the way in and the
+  // per-kilo freight silently fell back to the category share. Whitelisting fields is how a
+  // new one goes missing without an error.
+  (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'ספק', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils, kg: r.kg, frUsd: r.frUsd, on: r.on }));
   // Labelled "מחשבון תיקונים", not "BMS": these sat next to the supplier's own BMS rows
   // under near-identical category names, so the screen showed what looked like the same
   // board twice at two prices. They are a different thing — the ₪ figures the repair
@@ -5865,7 +5883,8 @@ function saveSettings() {
   const cp = parseFloat(document.getElementById('setCostPct').value); COST_PCT = isNaN(cp) ? 60 : cp;
   const bd = parseFloat(document.getElementById('setBizDisc').value); BIZ_DISCOUNT = isNaN(bd) ? 15 : bd;
   const lc = parseFloat(document.getElementById('setLabourCost').value); LABOUR_COST = isNaN(lc) ? 60 : lc;
-  Store.set('settings', { hourly: HOURLY, margin: MARGIN * 100, usd: USD, warranty: WARRANTY_MONTHS, warrantyBuild: WARRANTY_BUILD, costPct: COST_PCT, bizDisc: BIZ_DISCOUNT, labourCost: LABOUR_COST });
+  const fk = parseFloat(document.getElementById('setFreightKg').value); FREIGHT_USD_PER_KG = isNaN(fk) ? 10 : fk;
+  Store.set('settings', { hourly: HOURLY, margin: MARGIN * 100, usd: USD, warranty: WARRANTY_MONTHS, warrantyBuild: WARRANTY_BUILD, costPct: COST_PCT, bizDisc: BIZ_DISCOUNT, labourCost: LABOUR_COST, freightKg: FREIGHT_USD_PER_KG });
   if (typeof recalc === 'function') recalc();
   syncWarrantyLabel();
 }
@@ -6108,6 +6127,7 @@ function init() {
     COST_PCT = (s.costPct != null) ? s.costPct : 60;
     BIZ_DISCOUNT = (s.bizDisc != null) ? s.bizDisc : 15;
     LABOUR_COST = (s.labourCost != null) ? s.labourCost : 60;
+    FREIGHT_USD_PER_KG = (s.freightKg != null) ? s.freightKg : 10;
     document.getElementById('setHourly').value = HOURLY;
     document.getElementById('setMargin').value = Math.round(MARGIN * 100);
     document.getElementById('setUsd').value = USD;
@@ -6116,6 +6136,7 @@ function init() {
     document.getElementById('setCostPct').value = COST_PCT;
     document.getElementById('setBizDisc').value = BIZ_DISCOUNT;
     document.getElementById('setLabourCost').value = LABOUR_COST;
+    document.getElementById('setFreightKg').value = FREIGHT_USD_PER_KG;
   }
 
   // Load biz details
