@@ -1,4 +1,4 @@
-const CACHE = 'gp-hub-v213';
+const CACHE = 'gp-hub-v214';
 const ASSETS = [
   './',
   './index.html',

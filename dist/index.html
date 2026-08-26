@@ -2311,7 +2311,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v213';
+const HUB_BUILD = 'v214';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3535,6 +3535,38 @@ function supplierRows() {
   (Store.get('supplier_costs') || []).forEach((r, i) => rows.push({ ...r, custom: true, idx: i }));
   return rows;
 }
+// A catalogue line and the supplier row it is BOUGHT as. Without this, productCost() falls
+// back to COST_PCT — 60% of retail — for every resold item, which is not an estimate so much
+// as a restatement of the price: a margin column computed that way reads 40% on everything
+// and can never tell you anything. With real quotes behind them, five of these turned out to
+// clear under 30% on the B2B side and one under 15%.
+//
+// Names, not ids, because that is what a PRICING row carries. Only items QS Motor actually
+// quoted are here; anything unmatched keeps the old estimate rather than being guessed at.
+const SUPPLIER_MATCH = {
+  'SVMC72100': 'Sabvoton SVMC72100',
+  'SVMC72150': 'Sabvoton SVMC72150 + BT',
+  'SVMC72200': 'Sabvoton SVMC72200 + BT',
+  'ND72450': 'Far Driver ND72450',
+  '061DKD (LCD)': 'צג LCD ל-ND72450',
+  'DKD (LIN-BUS)': 'צג DKD',
+  'N7 (TFT)': 'צג ל-Votol',
+  'QS205 3000W': 'QS205 3000W V3',
+  'QS180 8000W': 'QS180 100H',
+  'QS273 8000W': 'QS273 4000W (משווק כ-8000W)',
+  'QS138 4000W (90H)': 'QS138 4000W 90H (רגיל)',
+  'QS138 3000W (70H)': 'QS138 3000W 70H',
+};
+// Landed cost of a catalogue row from the supplier list, or null when nothing matches.
+// Freight and VAT both on, which is the only honest default: he is an עוסק פטור, so the
+// import VAT never comes back and is a real cost.
+function supplierCostFor(name) {
+  const want = SUPPLIER_MATCH[name];
+  if (!want) return null;
+  const row = supplierRows().find((r) => r.name === want);
+  return row ? Math.round(supplierIls(row, true, true)) : null;
+}
+
 // VAT is charged on CIF, so it applies after freight — not to the goods alone.
 function supplierIls(r, vat, freight) {
   if (r.ils != null) return Number(r.ils);              // already landed ₪ — never re-VAT
@@ -3611,6 +3643,12 @@ function renderSupplier() {
     html += `<div onclick="toggleSupCat(${i})" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">
       <span>${open ? '▾' : '▸'} ${c}</span>
       <span style="font-weight:400;font-size:11px;color:var(--text-muted);white-space:nowrap;">${note}</span></div>`;
+    // What the whole category costs landed — the question the page could not answer, and the
+    // one actually asked ("מה העלות סך הכל של כל מוצר"). Shown on the header so it is there
+    // whether the group is open or shut.
+    const catTotal = list.reduce((a, r) => a + supplierIls(r, vat, freight), 0);
+    html = html.replace(/(<span style="font-weight:400;font-size:11px;color:var\(--text-muted\);white-space:nowrap;">)([^<]*)(<\/span><\/div>)$/,
+      (mm, a, b, c) => a + b + ' · סה"כ ' + fmtIls(catTotal) + c);
     if (!open) return;
     list.forEach((r) => {
       const usd = r.usd != null ? `<span style="color:var(--text-muted);">$${r.usd}</span>` : '';
@@ -3934,7 +3972,11 @@ function productCost(it) {
     const c = CELL_UNIT_COST[String(it.name).split(/\s+—\s+/)[0]];
     if (c != null) return c;
   }
-  // resold items (motors/controllers/displays/chargers): estimate as % of retail
+  // A real quote from the supplier list beats the percentage every time. COST_PCT is a
+  // stand-in for not knowing; where the supplier told us the price, we know.
+  const quoted = supplierCostFor(it.name);
+  if (quoted != null) return quoted;
+  // resold items with no quote on file: estimate as % of retail
   if (typeof it.retail === 'number' && COST_PCT > 0) return Math.round(it.retail * COST_PCT / 100);
   return null;
 }
