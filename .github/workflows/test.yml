@@ -87,6 +87,12 @@ jobs:
       - name: Supplier import — every field in the file survives
         run: node test/test-supplier-import.mjs
 
+      # Inlined, not linked: the phone is behind a filter that can hold a fetched image
+      # forever. Decodes every distinct thumbnail, because a sample of six left a corrupted
+      # seventh green.
+      - name: Catalogue thumbnails decode, and nothing is fetched
+        run: node test/test-hub-thumbs.mjs
+
       - name: Sticker — saved layout is versioned
         run: node test/test-sticker-state.mjs
 
