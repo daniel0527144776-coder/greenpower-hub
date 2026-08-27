@@ -113,32 +113,46 @@ console.log('3. the import says what it took in');
   check('it reports how many carried a weight, so a lost weight is visible', /משקל/.test(txt || ''), (txt || '').slice(0, 120));
 }
 
-console.log('4. when two rows describe the same part, the newest one is the cost');
+console.log('4. two rows with the same name — the newest is the cost');
 {
-  // The file keeps superseded quotes on purpose — they are the record of what was paid.
-  // supplierCostFor used to take whichever sat first in the array, which was the oldest:
-  // the DKD display was costed at the $55 quoted in 2022 while the 2025 invoice says $34.
-  // An inflated cost is the dangerous direction, because it only makes a margin look worse
-  // and nobody questions that.
-  await p.evaluate(() => {
+  // One row per product is built upstream now (generate/build-supplier-list.mjs), so the
+  // five-rows-for-one-display case cannot reach here any more. What still can is an APPEND
+  // import run twice, or the same part re-quoted: two rows, one name, two dates. .find()
+  // took whichever sat first, which is the older one, and an inflated cost is the direction
+  // nobody questions — it only makes a margin look worse than it is.
+  const WANT = 'צג DKD (LIN-BUS)';
+  await p.evaluate((want) => {
     Store.set('supplier_prices', [
-      { who: 'QS Motor', cat: 'ישן', name: 'צג DKD', usd: 55, on: '2022-09-14' },
-      { who: 'QS Motor', cat: 'חשבונית', name: 'צג DKD (חשבונית)', usd: 34, kg: 0.5, on: '2025-04-02' },
+      { who: 'QS Motor', cat: 'QS Motor · צגים', name: want, usd: 55, kg: 0.5, on: '2022-09-14', src: 'ציטוט' },
+      { who: 'QS Motor', cat: 'QS Motor · צגים', name: want, usd: 34, kg: 0.5, on: '2025-04-02', src: 'חשבונית' },
     ]);
-  });
+  }, WANT);
   const got = await p.evaluate(() => supplierCostFor('DKD (LIN-BUS)'));
   const rate = await p.evaluate(() => FREIGHT_USD_PER_KG);
   const usd = await p.evaluate(() => SUPPLIER_USD);
   const newest = Math.round((34 + 0.5 * rate) * usd * 1.18);
-  const oldest = Math.round(55 * usd * 1.18 * 1.39);   // the stale row, roughly, via the category share
-  check('the 2025 invoice is used, not the 2022 quote', got === (SELFTEST ? oldest : newest), `${got} (invoice ${newest}, stale ~${oldest})`);
-  check('which is materially cheaper, not a rounding difference', got < oldest * 0.8, `${got} vs ${oldest}`);
+  const oldest = Math.round((55 + 0.5 * rate) * usd * 1.18);
+  check('the 2025 price is used, not the 2022 one', got === (SELFTEST ? oldest : newest), `${got} (new ${newest}, old ${oldest})`);
+  check('which is materially cheaper, not a rounding difference', got < oldest * 0.85, `${got} vs ${oldest}`);
 
   // Order in the file must not decide it — reverse them and the answer must not move.
-  await p.evaluate(() => {
-    Store.set('supplier_prices', (Store.get('supplier_prices') || []).slice().reverse());
-  });
+  await p.evaluate(() => Store.set('supplier_prices', (Store.get('supplier_prices') || []).slice().reverse()));
   check('and file order does not change the answer', (await p.evaluate(() => supplierCostFor('DKD (LIN-BUS)'))) === got);
+}
+
+console.log('5. every mapped catalogue name still exists');
+{
+  // SUPPLIER_MATCH keys are CATALOG names, and CATALOG is REGENERATED from products.ts by
+  // inject-catalog. A rename there orphans the mapping — supplierCostFor returns null, the
+  // margin column falls back to the flat COST_PCT guess, and nothing anywhere says so.
+  const bad = await p.evaluate(() => {
+    const names = new Set(CATALOG.map((r) => r.name));
+    return Object.keys(SUPPLIER_MATCH).filter((k) => !names.has(k));
+  });
+  check('no mapping points at a catalogue name that no longer exists', bad.length === (SELFTEST ? 1 : 0), bad);
+
+  const n = await p.evaluate(() => Object.keys(SUPPLIER_MATCH).length);
+  check('and the map is not empty, which would pass the check above vacuously', n > 10, n);
 }
 
 check('none of this went through a dialog the phone cannot draw', dialogs.length === 0, dialogs);

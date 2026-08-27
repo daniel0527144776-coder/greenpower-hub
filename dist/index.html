@@ -2316,7 +2316,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v221';
+const HUB_BUILD = 'v222';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3600,7 +3600,7 @@ function supplierRows() {
   // weight or a quoted shipping price in the imported file was dropped on the way in and the
   // per-kilo freight silently fell back to the category share. Whitelisting fields is how a
   // new one goes missing without an error.
-  (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'ספק', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils, kg: r.kg, frUsd: r.frUsd, on: r.on, img: r.img }));
+  (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'ספק', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils, kg: r.kg, frUsd: r.frUsd, on: r.on, img: r.img, src: r.src }));
   // Labelled "מחשבון תיקונים", not "BMS": these sat next to the supplier's own BMS rows
   // under near-identical category names, so the screen showed what looked like the same
   // board twice at two prices. They are a different thing — the ₪ figures the repair
@@ -3621,21 +3621,28 @@ function supplierRows() {
 //
 // Names, not ids, because that is what a PRICING row carries. Only items QS Motor actually
 // quoted are here; anything unmatched keeps the old estimate rather than being guessed at.
+// Hub catalogue name → the one supplier row that costs it. Keys are exactly what CATALOG
+// calls the product; values are the consolidated names built by generate/build-supplier-list.mjs,
+// which is now ONE row per product. Before that, three sources sat side by side and the same
+// DKD display appeared five times between $34 and $63; picking between them was left to
+// whoever read the screen, and to .find(), which took the oldest.
 const SUPPLIER_MATCH = {
   'SVMC72100': 'Sabvoton SVMC72100',
-  // A value may be one name or several describing the same part — a chat quote and the
-  // invoice that later superseded it. supplierCostFor takes the NEWEST of them.
-  'SVMC72150': ['Sabvoton SVMC72150 (חשבונית)', 'Sabvoton SVMC72150 + BT'],
+  'SVMC72150': 'Sabvoton SVMC72150 + BT',
   'SVMC72200': 'Sabvoton SVMC72200 + BT',
   'ND72450': 'Far Driver ND72450',
+  'ND72680': 'Far Driver ND72680 + BT',
+  'H6 (LCD)': 'צג H6',
+  'DKD (LIN-BUS)': 'צג DKD (LIN-BUS)',
+  'DKD (CAN-BUS)': 'צג DKD CAN-BUS',
+  'N7 (TFT)': 'צג N7 (ל-Votol)',
   '061DKD (LCD)': 'צג LCD ל-ND72450',
-  'DKD (LIN-BUS)': ['צג DKD (חשבונית)', 'צג DKD'],
-  'N7 (TFT)': 'צג ל-Votol',
   'QS205 3000W': 'QS205 3000W V3',
-  'QS180 8000W': 'QS180 100H',
-  'QS273 8000W': 'QS273 4000W (משווק כ-8000W)',
-  'QS138 4000W (90H)': 'QS138 4000W 90H (רגיל)',
+  'QS273 8000W': 'QS273 8000W V3',
+  'QS180 8000W': 'QS180 8000W (100H)',
+  'QS138 4000W (90H)': 'QS138 4000W 90H',
   'QS138 3000W (70H)': 'QS138 3000W 70H',
+  'QS120 2000W (60H)': 'QS120 2000W (60H)',
 };
 // Landed cost of a catalogue row from the supplier list, or null when nothing matches.
 // Freight and VAT both on, which is the only honest default: he is an עוסק פטור, so the
@@ -3753,10 +3760,18 @@ function renderSupplier() {
     if (!open) return;
     list.forEach((r) => {
       const usd = r.usd != null ? `<span style="color:var(--text-muted);">$${r.usd}</span>` : '';
+      // WHERE THE PRICE CAME FROM, on the row. Three sources were merged into one list and
+      // the same DKD display appeared at $34, $36, $45, $55 and $63 — every figure true about
+      // something, and together an answer to nothing (Daniel: "זה עושה בלגן"). The list is one
+      // row per product now; this says which source won, so the number can be argued with.
+      const SRC_COLOUR = { 'חשבונית': '#10b981', 'ציטוט': 'var(--text-muted)' };
+      const stale = r.src && r.src.includes('ישן');
+      const est = r.src && r.src.includes('מחירון');
+      const src = r.src ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;white-space:nowrap;color:${stale ? '#f59e0b' : est ? '#f59e0b' : (SRC_COLOUR[r.src] || 'var(--text-muted)')};border:1px solid currentColor;opacity:.85;">${r.src}${r.on && !stale ? ' ' + r.on.slice(0, 7) : ''}</span>` : '';
       const del = r.custom ? `<span onclick="event.stopPropagation();removeSupplierRow(${r.idx})" style="color:#ef4444;cursor:pointer;">🗑️</span>` : '';
       html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;">
         <span>${r.name}${r.custom ? ' <span style="font-size:10px;color:var(--text-muted);">(שלי)</span>' : ''}</span>
-        <span style="display:flex;gap:12px;white-space:nowrap;align-items:center;">${usd}<span style="font-weight:700;color:var(--primary);min-width:52px;text-align:left;">${fmtIls(supplierIls(r, vat, freight))}</span>${del}</span></div>`;
+        <span style="display:flex;gap:12px;white-space:nowrap;align-items:center;">${src}${usd}<span style="font-weight:700;color:var(--primary);min-width:52px;text-align:left;">${fmtIls(supplierIls(r, vat, freight))}</span>${del}</span></div>`;
     });
   });
   el.innerHTML = html;
@@ -3828,7 +3843,7 @@ function importSupplierPrices(append) {
       const v = r[k] != null ? Number(r[k]) : null;
       if (v != null && !isNaN(v)) row[k] = v;
     }
-    for (const k of ['on', 'img']) if (r[k]) row[k] = String(r[k]);
+    for (const k of ['on', 'img', 'src']) if (r[k]) row[k] = String(r[k]);
     clean.push(row);
   }
   if (!clean.length) { alert('לא נמצאו שורות תקינות (צריך name + usd או ils)'); return; }
