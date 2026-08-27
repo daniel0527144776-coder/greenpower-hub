@@ -121,6 +121,56 @@ console.log('3. the bytes actually decode');
   }
   check('and the rendered ones are real, not the broken signature', shown.every((x) => x.w > 0 && !x.broken), shown);
 }
+console.log('4. the technical spec line');
+{
+  // Categories are COLLAPSED by default — 788 rows in one scroll was the reason — so a
+  // query has to be typed before any row exists to inspect. A first version asserted on an
+  // empty list and reported "0 of 0", which is a check passing over nothing.
+  await p.fill('#catalogSearch', '72V');
+  await p.evaluate(() => renderCatalog());
+  await p.waitForSelector('.price-item-name', { timeout: 8000 });
+
+  const r = await p.evaluate(() => {
+    const rows = [...document.querySelectorAll('.price-item-name')];
+    const cover = CATALOG.filter((x) => specOf(x)).length / CATALOG.length;
+    return {
+      rows: rows.length,
+      withSpec: rows.filter((el) => el.querySelector('div')).length,
+      cover,
+      batt: specOf(CATALOG.find((x) => /סוללות אופניים/.test(x.cat))),
+      ctrl: specOf(CATALOG.find((x) => x.name === 'ND72450')),
+    };
+  });
+  check('most catalogue rows carry a spec', r.cover > (SELFTEST ? 1 : 0.9), Math.round(r.cover * 100) + '%');
+  check('the specs are rendered on the page, not merely computed', r.withSpec > 5, r.withSpec + ' of ' + r.rows);
+
+  // Assert the PARTS are present rather than matching one exact layout, so reordering the
+  // line does not fail a spec that is still correct.
+  const has = (t, ...bits) => bits.every((b) => (t || '').includes(b));
+  check('a battery states volts, capacity, energy and cell count',
+    has(r.batt, 'V', 'Ah', 'Wh', 'תאים') && /\d+S\d+P/.test(r.batt || ''), r.batt);
+  check('and names the actual cell it is built from',
+    /EVE|Tenpower/.test(r.batt || ''), r.batt);
+  check('a controller states real current ratings, not a model code',
+    has(r.ctrl, '150A', '450A'), r.ctrl);
+
+  // PRICING includes hand-written EXTRA_SERVICES rows, so this text is not all generated.
+  // An unescaped < would close the div and swallow the rest of the category.
+  await p.evaluate(() => {
+    const row = PRICING.find((x) => specOf(x));
+    PRODUCT_SPECS[row.cat + '|' + row.name] = '<img src=x onerror="window.__pwned=1"> & 5 < 6';
+    renderCatalog();
+  });
+  const injected = await p.evaluate(() => ({
+    img: document.querySelectorAll('.price-item-name img').length,
+    pwned: !!window.__pwned,
+    shown: document.body.innerText.includes('onerror'),
+  }));
+  check('markup in a spec is escaped, not executed',
+    injected.img === 0 && !injected.pwned && injected.shown, JSON.stringify(injected));
+
+  await p.fill('#catalogSearch', '');
+}
 check('nothing was fetched from another origin', external.length === 0, external.slice(0, 5));
 check('none of this went through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
 
