@@ -2316,7 +2316,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v219';
+const HUB_BUILD = 'v220';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3600,7 +3600,7 @@ function supplierRows() {
   // weight or a quoted shipping price in the imported file was dropped on the way in and the
   // per-kilo freight silently fell back to the category share. Whitelisting fields is how a
   // new one goes missing without an error.
-  (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'ספק', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils, kg: r.kg, frUsd: r.frUsd, on: r.on }));
+  (Store.get('supplier_prices') || []).forEach((r) => rows.push({ who: r.who || 'ספק', cat: r.cat, name: r.name, usd: r.usd, ils: r.ils, kg: r.kg, frUsd: r.frUsd, on: r.on, img: r.img }));
   // Labelled "מחשבון תיקונים", not "BMS": these sat next to the supplier's own BMS rows
   // under near-identical category names, so the screen showed what looked like the same
   // board twice at two prices. They are a different thing — the ₪ figures the repair
@@ -3806,15 +3806,28 @@ function importSupplierPrices(append) {
     if ((usd == null || isNaN(usd)) && (ils == null || isNaN(ils))) continue;
     const row = { who: String(r.who || 'ספק'), cat: String(r.cat || r.who || 'כללי'), name: String(r.name) };
     if (usd != null && !isNaN(usd)) row.usd = usd; else row.ils = ils;
+    // CARRY EVERYTHING ELSE THE FILE KNOWS. This rebuilt each row from four fields and
+    // dropped the rest, which is the same bug supplierRows() had one layer up and the same
+    // way it hid: kg never reached storage, so the per-kilo freight fell back to a category
+    // share and produced a plausible wrong number instead of an error. `on` is the quote
+    // date — the thing that says whether a price is from 2022 or from today — and `img` is
+    // the catalogue photo, which the hub does not display but must not destroy on a
+    // round-trip. Copy by NAME, not by whitelist, so the next field added doesn't vanish.
+    for (const k of ['kg', 'frUsd']) {
+      const v = r[k] != null ? Number(r[k]) : null;
+      if (v != null && !isNaN(v)) row[k] = v;
+    }
+    for (const k of ['on', 'img']) if (r[k]) row[k] = String(r[k]);
     clean.push(row);
   }
   if (!clean.length) { alert('לא נמצאו שורות תקינות (צריך name + usd או ils)'); return; }
   const dropped = data.length - clean.length;
+  const withKg = clean.filter((r) => r.kg != null).length;
   const list = append ? (Store.get('supplier_prices') || []).concat(clean) : clean;
   Store.set('supplier_prices', list);
   closeModal();
   renderSupplier();
-  alert(`✅ יובאו ${clean.length} פריטים${dropped ? ` (${dropped} שורות דולגו — חסר מחיר או שם)` : ''}.\nסה"כ ברשימה: ${list.length}`);
+  alert(`✅ יובאו ${clean.length} פריטים${dropped ? ` (${dropped} שורות דולגו — חסר מחיר או שם)` : ''}.\nמתוכם ${withKg} עם משקל (שילוח מחושב לק"ג).\nסה"כ ברשימה: ${list.length}`);
 }
 function openSupplierAdd() {
   const whos = [...new Set(supplierRows().map((r) => r.who))];

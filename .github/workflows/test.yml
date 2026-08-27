@@ -81,6 +81,12 @@ jobs:
       - name: Worker clock — offline queue and the approval gate
         run: node test/test-worker-clock.mjs
 
+      # The import rebuilt every row from four fields, so a weight in the file never reached
+      # storage and the landed cost quietly fell back to a percentage — ₪960 where the answer
+      # was ₪1313. Nothing failed; it just costed the motor 27% light.
+      - name: Supplier import — every field in the file survives
+        run: node test/test-supplier-import.mjs
+
       - name: Sticker — saved layout is versioned
         run: node test/test-sticker-state.mjs
 
