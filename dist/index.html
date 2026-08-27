@@ -2316,7 +2316,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v226';
+const HUB_BUILD = 'v227';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3555,11 +3555,15 @@ const SUPPLIER_FREIGHT = 0.39;
 // $8-12 forwarder band, and it happened to land within 10% of the truth, which is luck.
 let FREIGHT_USD_PER_KG = 11;
 
-// AND THE 0.39 DOES NOT BELONG TO THESE ROWS AT ALL (Daniel, 2026-08-26: "הספק של המנועים
-// והבקרים זה לא GO GOGOGO זה QS MOTOR"). It was measured on five IC GOGOGO shipments whose
-// cargo the comment above lists as nickel, copper, shrink and paper — heavy, cheap building
-// material. It never described a motor. At $13/kg a 16kg hub motor is 76% of its own value
-// and a 1.5kg controller is 17%: the two sit either side of 39% and neither is near it.
+// AND THE 0.39 DOES NOT BELONG TO THESE ROWS AT ALL (Daniel, 2026-08-26: the motors and
+// controllers do not come from the components supplier). NOTE: this file is served publicly
+// — the login gate is client-side JavaScript — so the components supplier is described here
+// and never named. It was named in this comment for a day, quoted verbatim out of a
+// WhatsApp message, and audit/audit-hub.mjs's secrets check is what caught it.
+//
+// The 0.39 was measured on five shipments of nickel, copper, shrink and paper: heavy, cheap
+// building material. It never described a motor. At $13/kg a 16kg hub motor is 76% of its
+// own value and a 1.5kg controller is 17% — either side of 39%, and neither near it.
 //
 // These are the CONSOLIDATED rates — the route through a Chinese agent that he actually
 // uses. The direct-to-Israel express quotes in the same chats run 102-299% on motors, and
