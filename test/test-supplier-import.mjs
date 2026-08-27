@@ -113,6 +113,34 @@ console.log('3. the import says what it took in');
   check('it reports how many carried a weight, so a lost weight is visible', /משקל/.test(txt || ''), (txt || '').slice(0, 120));
 }
 
+console.log('4. when two rows describe the same part, the newest one is the cost');
+{
+  // The file keeps superseded quotes on purpose — they are the record of what was paid.
+  // supplierCostFor used to take whichever sat first in the array, which was the oldest:
+  // the DKD display was costed at the $55 quoted in 2022 while the 2025 invoice says $34.
+  // An inflated cost is the dangerous direction, because it only makes a margin look worse
+  // and nobody questions that.
+  await p.evaluate(() => {
+    Store.set('supplier_prices', [
+      { who: 'QS Motor', cat: 'ישן', name: 'צג DKD', usd: 55, on: '2022-09-14' },
+      { who: 'QS Motor', cat: 'חשבונית', name: 'צג DKD (חשבונית)', usd: 34, kg: 0.5, on: '2025-04-02' },
+    ]);
+  });
+  const got = await p.evaluate(() => supplierCostFor('DKD (LIN-BUS)'));
+  const rate = await p.evaluate(() => FREIGHT_USD_PER_KG);
+  const usd = await p.evaluate(() => SUPPLIER_USD);
+  const newest = Math.round((34 + 0.5 * rate) * usd * 1.18);
+  const oldest = Math.round(55 * usd * 1.18 * 1.39);   // the stale row, roughly, via the category share
+  check('the 2025 invoice is used, not the 2022 quote', got === (SELFTEST ? oldest : newest), `${got} (invoice ${newest}, stale ~${oldest})`);
+  check('which is materially cheaper, not a rounding difference', got < oldest * 0.8, `${got} vs ${oldest}`);
+
+  // Order in the file must not decide it — reverse them and the answer must not move.
+  await p.evaluate(() => {
+    Store.set('supplier_prices', (Store.get('supplier_prices') || []).slice().reverse());
+  });
+  check('and file order does not change the answer', (await p.evaluate(() => supplierCostFor('DKD (LIN-BUS)'))) === got);
+}
+
 check('none of this went through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
 
 await ctx.close();

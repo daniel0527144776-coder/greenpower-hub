@@ -2316,7 +2316,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v220';
+const HUB_BUILD = 'v221';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3623,11 +3623,13 @@ function supplierRows() {
 // quoted are here; anything unmatched keeps the old estimate rather than being guessed at.
 const SUPPLIER_MATCH = {
   'SVMC72100': 'Sabvoton SVMC72100',
-  'SVMC72150': 'Sabvoton SVMC72150 + BT',
+  // A value may be one name or several describing the same part — a chat quote and the
+  // invoice that later superseded it. supplierCostFor takes the NEWEST of them.
+  'SVMC72150': ['Sabvoton SVMC72150 (חשבונית)', 'Sabvoton SVMC72150 + BT'],
   'SVMC72200': 'Sabvoton SVMC72200 + BT',
   'ND72450': 'Far Driver ND72450',
   '061DKD (LCD)': 'צג LCD ל-ND72450',
-  'DKD (LIN-BUS)': 'צג DKD',
+  'DKD (LIN-BUS)': ['צג DKD (חשבונית)', 'צג DKD'],
   'N7 (TFT)': 'צג ל-Votol',
   'QS205 3000W': 'QS205 3000W V3',
   'QS180 8000W': 'QS180 100H',
@@ -3641,8 +3643,17 @@ const SUPPLIER_MATCH = {
 function supplierCostFor(name) {
   const want = SUPPLIER_MATCH[name];
   if (!want) return null;
-  const row = supplierRows().find((r) => r.name === want);
-  return row ? Math.round(supplierIls(row, true, true)) : null;
+  const names = Array.isArray(want) ? want : [want];
+  const cands = supplierRows().filter((r) => names.includes(r.name));
+  if (!cands.length) return null;
+  // NEWEST WINS, and this is not a tidiness rule. The file keeps old quotes on purpose —
+  // they are the record of what was paid — but `.find()` returned whichever sat first in
+  // the array, which was the oldest. The DKD display was costed at the $55 quoted in 2022
+  // while the 2025 invoice says $34: 62% over, in the direction nobody questions, because
+  // an inflated cost only ever makes the margin look worse than it is. A dated quote beats
+  // an undated one; among undated, the order in the file stands.
+  cands.sort((a, b) => String(b.on || '').localeCompare(String(a.on || '')));
+  return Math.round(supplierIls(cands[0], true, true));
 }
 
 // VAT is charged on CIF, so it applies after freight — not to the goods alone.
