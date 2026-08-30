@@ -2342,7 +2342,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v244';
+const HUB_BUILD = 'v245';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5340,6 +5340,11 @@ const DIM_CELLS = {
 // 40-70mm on the length, so the number is doing real work.
 const DIM_PITCH = {
   18650: { square: [20.2, 20.2], 'square-sp': [20.2, 20.2], honeycomb: [20.2, 17.5], 'honeycomb-sp': [19.5, 16.9],
+           // DERIVED, not measured: Daniel gave the diagonal spacings for 21700 only, and
+           // these are those scaled by the cell diameter (18/21). Good enough to plan with,
+           // wrong enough to check before cutting a bracket — the result line says 'משוער'
+           // whenever one of them is in use. Replace with real numbers the first time an
+           // 18650 pack is laid out on a diagonal holder.
            diag: [16.5, 18.5], 'diag-tpl': [17.5, 22], 'diag-alt': [18.7, 21.3] },
   21700: { square: [21.4, 21.4], 'square-sp': [23, 23], honeycomb: [21.4, 18.5], 'honeycomb-sp': [22.5, 19.5],
            diag: [19, 21.4], 'diag-tpl': [20.2, 25.5], 'diag-alt': [21.6, 24.6] },
@@ -5359,7 +5364,9 @@ function calcPackDims() {
   const pair = holder === 'custom'
     ? [num('dimPitchAlong', 19), num('dimPitchAcross', 21.4)]
     : (DIM_PITCH[fmt] || {})[holder] || [c.dia + 1, c.dia + 1];
-  const [pitch, rowPitch] = pair;
+    const [pitch, rowPitch] = pair;
+  // 18650 + a diagonal holder is the one combination running on numbers nobody measured.
+  const derived = fmt === 18650 && (holder.startsWith('diag'));
   const V = parseFloat(document.getElementById('dimV').value);
   const Ah = parseFloat(document.getElementById('dimAh').value) || 1;
   const perRow = Math.max(1, parseInt(document.getElementById('dimPerRow').value) || 1);
@@ -5394,7 +5401,7 @@ function calcPackDims() {
   out.innerHTML =
     `תצורה <strong>${S}S ${P}P</strong> · <strong>${N}</strong> תאים · <strong>${wh} Wh</strong><br>` +
     `אומדן בלוק: <strong>${L} × ${W} × ${H} מ"מ</strong> (א×ר×ג) · משקל ~<strong>${kg.toFixed(1)} ק"ג</strong><br>` +
-    `<span style="font-size:11px;color:var(--text-muted);">${c.label} · ${c.ah}Ah לתא · מרווח ${pitch}/${rowPitch} מ"מ · ${layers > 1 ? layers + ' שכבות × ' : ''}${cols} × ${rows} שורות${cols * rows * layers > N ? ' (שורה אחרונה חלקית)' : ''}</span>` +
+    `<span style="font-size:11px;color:var(--text-muted);">${c.label} · ${c.ah}Ah לתא · מרווח ${pitch}/${rowPitch} מ"מ${derived ? ' (משוער — לא נמדד ל-18650)' : ''} · ${layers > 1 ? layers + ' שכבות × ' : ''}${cols} × ${rows} שורות${cols * rows * layers > N ? ' (שורה אחרונה חלקית)' : ''}</span>` +
     // Parenthesised: `a + b ? c : d` binds as `(a + b) ? c : d`, which threw the whole
     // block away and rendered the fit line alone. Caught before it shipped, by reading it.
     ((getDims() || []).length
