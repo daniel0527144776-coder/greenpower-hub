@@ -215,6 +215,18 @@ const nickels = await page.evaluate(() => {
 check('the two diagonal nickels give different blocks', nickels.a[0] !== nickels.b[0] || nickels.a[1] !== nickels.b[1], JSON.stringify(nickels));
 check('and the 23mm square block is larger in area than either diagonal', nickels.sq[0]*nickels.sq[1] > nickels.a[0]*nickels.a[1] && nickels.sq[0]*nickels.sq[1] > nickels.b[0]*nickels.b[1], JSON.stringify(nickels));
 
+// The table checks itself: 16S and 20S in one tray should want roughly the same number of
+// cells, and every consistent row drops P by one or two going up in voltage. Four rows carry
+// the SAME P for both, which makes the 60V build 25% smaller in the same box — the shape of a
+// number copied across rather than recalculated. They are flagged on the row, not corrected.
+const flagged = await page.evaluate(() => {
+  renderVehiclePacks();
+  const rows = [...document.querySelectorAll('#vpList .list-item')];
+  return rows.filter(r => /חלוקים על גודל/.test(r.textContent)).map(r => r.querySelector('strong').textContent.replace(/s*⚠s*/, '').trim());
+});
+check('the four disagreeing rows are flagged', flagged.length === 4, flagged.join(', '));
+check('and they are the expected four', ['Nami Blast','Nami Klima','Mantis King','Teverun'].every(m => flagged.includes(m)), flagged.join(', '));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();

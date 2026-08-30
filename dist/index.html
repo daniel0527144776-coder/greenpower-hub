@@ -992,11 +992,11 @@ body { min-height: 100vh; }
     <div class="form-row"><label>תוספת מארז / BMS (מ"מ)</label><input type="number" class="form-input" id="dimExtra" value="18" min="0" step="1" oninput="calcPackDims()"></div>
     <div class="info-banner" style="margin-top:8px;"><span>📦</span><div id="dimResult"></div></div>
     <div id="dimDraw" style="margin-top:10px;overflow-x:auto;"></div>
-    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">המרווחים הם של מחזיקי התאים בפועל (קטלוג Wellgo): 18650 ‎20.2 מ"מ‎ (19.5 בכוורת עם מפריד), 21700 ‎21.4 מ"מ‎ (23 ריבועי עם מפריד, 22.5 כוורת עם מפריד). כוורת חוסכת ‎13%‎ ברוחב כי כל שורה שנייה נכנסת לשקע שבין התאים.</p>
+    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">מרווח = מרחק בין מרכזי תאים. באלכסוני השורות מקוננות, ולכן צפוף יותר.</p>
   </div>
   <div class="card">
     <h3 class="card-title">🏍️ מה נכנס לכל כלי</h3>
-    <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">התצורה שנכנסת בפועל לתא המצבר של כל דגם, לפי מדידות שלנו. לחיצה ממלאת את המחשבון למעלה.</p>
+    <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">לחיצה ממלאת את המחשבון.</p>
     <input type="text" class="form-input" id="vpSearch" placeholder="חפש דגם…" oninput="renderVehiclePacks()" style="margin-bottom:10px;">
     <div id="vpList"></div>
   </div>
@@ -2341,7 +2341,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v251';
+const HUB_BUILD = 'v252';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5412,7 +5412,7 @@ function drawPackLayout(o) {
     lab(W / 2, H - 8, `${Math.round(wMM)} מ"מ · ${cols} תאים בשורה`) +
     `<g transform="translate(12,${H / 2}) rotate(-90)">` + lab(0, 0, `${Math.round(hMM)} מ"מ · ${rows} שורות`) + "</g>" +
     "</svg>" +
-    `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">כל עיגול = תא. הצללה לסירוגין = קבוצת ${P}P אחת (ריתוך אחד)${layers > 1 ? ` · שכבה אחת מתוך ${layers}` : ""}.</div>`;
+    `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">עיגול = תא · הצללה = קבוצת ${P}P${layers > 1 ? ` · שכבה מתוך ${layers}` : ""}</div>`;
 }
 
 function calcPackDims() {
@@ -5465,7 +5465,7 @@ function calcPackDims() {
   out.innerHTML =
     `תצורה <strong>${S}S ${P}P</strong> · <strong>${N}</strong> תאים · <strong>${wh} Wh</strong><br>` +
     `אומדן בלוק: <strong>${L} × ${W} × ${H} מ"מ</strong> (א×ר×ג) · משקל ~<strong>${kg.toFixed(1)} ק"ג</strong><br>` +
-    `<span style="font-size:11px;color:var(--text-muted);">${c.label} · ${c.ah}Ah לתא · מרווח ${pitch}/${rowPitch} מ"מ${derived ? ' (משוער — לא נמדד ל-18650)' : ''} · ${layers > 1 ? layers + ' שכבות × ' : ''}${cols} × ${rows} שורות${cols * rows * layers > N ? ' (שורה אחרונה חלקית)' : ''}</span>` +
+    `<span style="font-size:11px;color:var(--text-muted);">${pitch}/${rowPitch} מ"מ${derived ? ' (משוער)' : ''} · ${layers > 1 ? layers + '×' : ''}${cols} × ${rows}${cols * rows * layers > N ? ' (שורה חלקית)' : ''}</span>` +
     // Parenthesised: `a + b ? c : d` binds as `(a + b) ? c : d`, which threw the whole
     // block away and rendered the fit line alone. Caught before it shipped, by reading it.
     ((getDims() || []).length
@@ -5580,13 +5580,17 @@ function renderVehiclePacks() {
     if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
     const cfg = (s, p) => (s ? `${s}S ${p}P · ${p * CELL_AH_DEFAULT}Ah` : "—");
     // Counted-per-bracket models say so, because that is the number to build to.
+    // 16S and 20S in the same tray should land within ~15% of each other on cell count.
+    const c60 = v.s60 * v.p60, c72 = v.s72 * v.p72;
+    const odd = c60 && c72 && Math.max(c60, c72) / Math.min(c60, c72) > 1.15;
     const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ "square-23": "ריבועי 23", "diag-225": "אלכסוני 22.5", "diag-224": "אלכסוני 22.4" })[k] || k}: ${n}`).join(" · ") : "";
     html += `<div class="list-item" onclick="useVehiclePack('${v.m}')" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
-        <strong>${v.m}</strong><span style="font-size:11px;color:var(--text-muted);">מרווח ${v.p} מ"מ · עד ${v.max} תאים${v.tub ? " · אמבטיה " + v.tub : ""}</span>
+        <strong>${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong><span style="font-size:11px;color:var(--text-muted);">${v.p} מ"מ · עד ${v.max}</span>
       </div>
       <div style="font-size:12px;margin-top:2px;">60V: ${cfg(v.s60, v.p60)} &nbsp;·&nbsp; 72V: ${cfg(v.s72, v.p72)}</div>
-      ${capsTxt ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">נספר בפועל — ${capsTxt}</div>` : ""}
+      ${capsTxt ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">נספר: ${capsTxt}</div>` : ""}
+      ${odd ? `<div style="font-size:11px;color:var(--warning,#f59e0b);margin-top:2px;">⚠ שני המתחים חלוקים על גודל האמבטיה (${c60} מול ${c72} תאים) — כדאי לבדוק</div>` : ""}
     </div>`;
   }
   box.innerHTML = html;
