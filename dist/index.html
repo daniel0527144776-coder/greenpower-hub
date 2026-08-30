@@ -973,13 +973,11 @@ body { min-height: 100vh; }
     <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="dimAh" value="20" min="1" step="1" oninput="calcPackDims()"></div>
     <div class="form-row"><label>מחזיק</label>
       <select class="form-select" id="dimHolder" onchange="calcPackDims()">
-        <option value="diag" selected>אלכסוני ללא תבנית — 19 / 21.4</option>
-        <option value="diag-tpl">אלכסוני עם תבנית · ארוך וצר — 20.2 / 25.5</option>
-        <option value="diag-tpl-rot">אלכסוני עם תבנית · מסובב (רחב וקצר) — 25.5 / 20.2</option>
-        <option value="honeycomb">כוורת — ללא מפריד</option>
-        <option value="honeycomb-sp">כוורת עם מפריד</option>
-        <option value="square">ריבועי — ללא מפריד</option>
-        <option value="square-sp">ריבועי עם מפריד</option>
+        <option value="diag-225" selected>אלכסוני 22.5 (ניקל א׳)</option>
+        <option value="diag-224">אלכסוני 22.4 (ניקל ב׳)</option>
+        <option value="square-23">ריבועי 23</option>
+        <option value="square">ריבועי 21.4 — ללא מפריד (קטלוג)</option>
+        <option value="honeycomb">כוורת 21.4 — ללא מפריד (קטלוג)</option>
         <option value="custom">מותאם אישית ↓</option>
       </select>
     </div>
@@ -2343,7 +2341,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v250';
+const HUB_BUILD = 'v251';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5352,24 +5350,24 @@ const BRACKET_MAX = { 21700: { cols: 15, rows: 10 }, 18650: { cols: 22, rows: 16
 // Validated against a pack he measured: 72V 30Ah = 20S6P = 120 cells, twenty to a row, came
 // out 390 x 135mm. This table gives 385 x 131 — 1.3% out. Every other spacing here misses by
 // 40-70mm on the length, so the number is doing real work.
+// [along the row, between rows]. THE FIRST THREE ARE THE BRACKETS DANIEL OWNS (2026-08-31):
+// square at 23mm, and two diagonal nickels at 22.5 and 22.4. Everything else is the Wellgo
+// catalogue, kept for reference and for a bracket he might buy.
+//
+// For a diagonal bracket the two numbers are NOT independent: the cells sit at the stated
+// centre distance within a row, and the rows nest at d x sin60 = d x 0.866. That is geometry,
+// not a measurement, and it is what makes the diagonal worth using — 22.5mm cells packed
+// 19.5mm apart row to row.
+//
+// Checked against the one pack he measured (72V 30Ah, 120 cells, 390 x 135mm): six cells to
+// a row at 22.4 and twenty rows at 19.40 gives 389.7 x 133.2, which is 0.3mm and 1.8mm out.
+// The 22.5 nickel gives 391.4 x 133.7. Both fit the measurement; the square 23 misses the
+// long side by 68mm, so that pack was built on a diagonal bracket and the numbers say which.
 const DIM_PITCH = {
-  18650: { square: [20.2, 20.2], 'square-sp': [20.2, 20.2], honeycomb: [20.2, 17.5], 'honeycomb-sp': [19.5, 16.9],
-           // DERIVED, not measured: Daniel gave the diagonal spacings for 21700 only, and
-           // these are those scaled by the cell diameter (18/21). Good enough to plan with,
-           // wrong enough to check before cutting a bracket — the result line says 'משוער'
-           // whenever one of them is in use. Replace with real numbers the first time an
-           // 18650 pack is laid out on a diagonal holder.
-           diag: [16.5, 18.5], 'diag-tpl': [17.5, 22], 'diag-tpl-rot': [22, 17.5] },
-  21700: { square: [21.4, 21.4], 'square-sp': [23, 23], honeycomb: [21.4, 18.5], 'honeycomb-sp': [22.5, 19.5],
-           // 20.2/25.5 is the bracket's own spacing; ON THE BENCH Daniel measures 21.6/24.6,
-           // which is the same holder plus the tolerance a real build accumulates. The
-           // designed number is what the arithmetic uses — the measured one is why a layout
-           // that computes to exactly the tray width does not go in.
-           // The template bracket is ONE bracket you can lay out two ways, not two brackets:
-           // 20.2 along the row and 25.5 between them, or the same thing turned 90°. Daniel's
-           // own counts in the Inokim OX tub settle it — 21 x 6 = 126 the long way, 17 x 8 =
-           // 136 the wide way, and the long one reproduces EXACTLY at a nominal 21mm cell.
-           diag: [19, 21.4], 'diag-tpl': [20.2, 25.5], 'diag-tpl-rot': [25.5, 20.2] },
+  18650: { 'diag-225': [22.5, 19.49], 'diag-224': [22.4, 19.4], 'square-23': [23, 23],
+           square: [20.2, 20.2], honeycomb: [20.2, 17.5] },
+  21700: { 'diag-225': [22.5, 19.49], 'diag-224': [22.4, 19.4], 'square-23': [23, 23],
+           square: [21.4, 21.4], honeycomb: [21.4, 18.53] },
 };
 const DIM_WALL = 1.5;        // bracket edge either side
 const DIM_CAP = 4;           // holder caps above and below the cell
@@ -5385,7 +5383,9 @@ function drawPackLayout(o) {
   if (!box) return;
   const { cols, rows, pitch, rowPitch, dia, stagger, N, P, layers } = o;
   if (!cols || !rows) { box.innerHTML = ""; return; }
-  const wMM = (cols - 1) * pitch + dia + (stagger ? pitch / 2 : 0);
+  // Drawn flush: the offset rows are nested inside the block edge rather than hanging off it,
+  // which is how the packs measure. The circles still sit at their real offsets.
+  const wMM = (cols - 1) * pitch + dia;
   const hMM = (rows - 1) * rowPitch + dia;
   const PAD = 26;                       // room for the dimension labels
   const scale = Math.min(1, (340 - PAD * 2) / wMM);
@@ -5444,7 +5444,7 @@ function calcPackDims() {
   const rows = Math.ceil(perLayer / cols);
   const stagger = (holder.startsWith('honeycomb') || holder.startsWith('diag') || holder === 'custom') && rows > 1;
   // Outer size of the block: centres span (n-1) pitches, then half a cell each end.
-  const L = Math.round((cols - 1) * pitch + c.dia + 2 * DIM_WALL + (stagger ? pitch / 2 : 0));
+  const L = Math.round((cols - 1) * pitch + c.dia + 2 * DIM_WALL);
   const W = Math.round((rows - 1) * rowPitch + c.dia + 2 * DIM_WALL);
   const H = Math.round(layers * (c.len + DIM_CAP) + extra);
   const kg = (N * c.g + 500) / 1000;
@@ -5542,7 +5542,7 @@ const VEHICLE_PACKS = [
   // enough to plan with and not close enough to cut a bracket to. Where he has counted, his
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', p: 21.4, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
-    tub: '425×165 + 60×140 מ"מ', caps: { square: 140, 'diag-tpl': 126, 'diag-tpl-rot': 136 } },
+    tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-225': 126, 'diag-224': 136 } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
@@ -5580,7 +5580,7 @@ function renderVehiclePacks() {
     if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
     const cfg = (s, p) => (s ? `${s}S ${p}P · ${p * CELL_AH_DEFAULT}Ah` : "—");
     // Counted-per-bracket models say so, because that is the number to build to.
-    const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ square: "ריבועי", "diag-tpl": "אלכסוני ארוך-וצר", "diag-tpl-rot": "אלכסוני רחב-וקצר" })[k] || k}: ${n}`).join(" · ") : "";
+    const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ "square-23": "ריבועי 23", "diag-225": "אלכסוני 22.5", "diag-224": "אלכסוני 22.4" })[k] || k}: ${n}`).join(" · ") : "";
     html += `<div class="list-item" onclick="useVehiclePack('${v.m}')" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
         <strong>${v.m}</strong><span style="font-size:11px;color:var(--text-muted);">מרווח ${v.p} מ"מ · עד ${v.max} תאים${v.tub ? " · אמבטיה " + v.tub : ""}</span>
@@ -5605,7 +5605,7 @@ function useVehiclePack(model) {
   // The vehicle table records the pitch it was measured at, so match the holder to it
   // instead of leaving whatever was selected before. 23 -> square+spacer, 22.5 -> honeycomb
   // with spacer; both are in the bracket catalogue at exactly those numbers.
-  set('dimHolder', v.p >= 23 ? 'square-sp' : 'honeycomb-sp');
+  set('dimHolder', v.p >= 23 ? 'square-23' : 'diag-225');
   // Cells per row: the long axis of a scooter tray takes the S count in one run on almost
   // every one of these, which is how they are actually laid out.
   set('dimPerRow', S);

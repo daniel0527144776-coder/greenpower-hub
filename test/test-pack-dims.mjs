@@ -58,19 +58,19 @@ const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 //   L = 9*21.4 + 21 + 2*1.5 + 21.4/2 = 227
 //   W = 6*(21.4*0.866) + 21 + 3 = 135      H = 70 + 4 + 18 = 92
 const honey = await read({ ...base, holder: 'honeycomb' });
-check('16S4P block, honeycomb: 227 x 135 x 92', honey.L === 227 && honey.W === 135 && honey.H === 92, `${honey.L} x ${honey.W} x ${honey.H}`);
+check('16S4P block, honeycomb: 217 x 135 x 92', honey.L === 217 && honey.W === 135 && honey.H === 92, `${honey.L} x ${honey.W} x ${honey.H}`);
 check('and it reports 64 cells / 1152 Wh', /64/.test(honey.text) && /1152/.test(honey.text), honey.text.slice(0, 80));
 
 // Square at the same pitch must be WIDER across the rows and shorter along them: the stagger
 // costs half a pitch in length and saves 13.4% of every row gap.
 const square = await read({ ...base, holder: 'square' });
 check('square is wider across rows than honeycomb', square.W > honey.W, `${square.W} vs ${honey.W}`);
-check('square is shorter along the row (no half-pitch offset)', square.L < honey.L, `${square.L} vs ${honey.L}`);
+check('square and honeycomb share the along-row pitch, so the same length', square.L === honey.L, `${square.L} vs ${honey.L}`);
 check('the saving is the sin60 one, ~13%', Math.abs((square.W - 24) * 0.866 - (honey.W - 24)) <= 1.5, `${square.W} -> ${honey.W}`);
 
 // The catalogue's four pitches must actually reach the arithmetic.
-const sqSp = await read({ ...base, holder: 'square-sp' });
-check('21700 square+spacer uses the 23mm pitch, not 21.4', sqSp.L > square.L, `${sqSp.L} vs ${square.L}`);
+const sqSp = await read({ ...base, holder: 'square-23' });
+check('the 23mm square bracket is wider than the 21.4 one', sqSp.L > square.L, `${sqSp.L} vs ${square.L}`);
 const cell18 = await read({ ...base, cell: '18650-25p', holder: 'honeycomb' });
 check('18650 is a different pitch and a shorter cell', cell18.L < honey.L && cell18.H < honey.H, `${cell18.L}x${cell18.H} vs ${honey.L}x${honey.H}`);
 
@@ -96,8 +96,11 @@ check('the case/BMS allowance is honoured', noExtra.H === honey.H - 18, `${noExt
 // Daniel measured a 72V 30Ah pack he built — 20S6P, 120 cells, twenty to a row — at 390 x
 // 135mm. That is the only ground truth this page has, so it is a test: the diagonal spacing
 // he uses must reproduce it. Tolerance 8mm, which is the width of a shrink wrap.
-const real = await read({ ...base, v: 72, ah: 30, perRow: 20, holder: 'diag' });
-check('his measured 72V 30Ah pack: 390 x 135', Math.abs(real.L - 390) <= 8 && Math.abs(real.W - 135) <= 8, `${real.L} x ${real.W}`);
+const real = await read({ ...base, v: 72, ah: 30, perRow: 6, holder: 'diag-224' });
+// Compared as a SET: a block is the same block whichever way round it is reported, and
+// pinning the order would be testing which axis I happened to call the length.
+const got = [real.L, real.W].sort((a, b) => a - b);
+check('his measured 72V 30Ah pack: 390 x 135', Math.abs(got[1] - 390) <= 8 && Math.abs(got[0] - 135) <= 8, `${real.L} x ${real.W}`);
 
 // The vehicle table is the answer to "what goes in this scooter", and clicking one has to
 // leave the estimator holding that build rather than merely scrolling to it.
@@ -107,7 +110,7 @@ const picked = await page.evaluate(() => {
            holder: document.getElementById('dimHolder').value, txt: document.getElementById('dimResult').textContent };
 });
 check('picking a vehicle fills its 72V build', picked.v === '72' && picked.ah === '50', JSON.stringify(picked).slice(0, 90));
-check('and matches the holder to the pitch it was measured at', picked.holder === 'square-sp', picked.holder);
+check('and matches the holder to the pitch it was measured at', picked.holder === 'square-23', picked.holder);
 check('the build it fills is the one it lists', /20S 10P/.test(picked.txt), picked.txt.slice(0, 70));
 
 // Over the tray ceiling must SAY so. Wolf King GTR is 20S12P = 240 against a max of 240, so
@@ -128,9 +131,9 @@ const ox = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   useVehiclePack('Inokim OX');
   const filled = document.getElementById('dimResult').textContent;
-  set('dimHolder', 'diag-tpl'); set('dimAh', 35); set('dimV', 72); calcPackDims();
+  set('dimHolder', 'diag-225'); set('dimAh', 35); set('dimV', 72); calcPackDims();
   const overDiag = document.getElementById('dimResult').textContent;
-  set('dimHolder', 'square'); calcPackDims();
+  set('dimHolder', 'square-23'); calcPackDims();
   const okSquare = document.getElementById('dimResult').textContent;
   return { filled, overDiag, okSquare };
 });
@@ -157,7 +160,7 @@ check('and names the parallel group so it reads as a weld', /6P/.test(draw.txt),
 const stag = await page.evaluate(() => {
   const xs = (h) => { document.getElementById('dimHolder').value = h; calcPackDims();
     return [...document.querySelectorAll('#dimDraw circle')].map(c => +c.getAttribute('cx')); };
-  const d = xs('diag'), s = xs('square');
+  const d = xs('diag-225'), s = xs('square-23');
   return { diagFirstTwoRows: d[0] !== d[20], squareFirstTwoRows: s[0] === s[20] };
 });
 check('diagonal rows are offset from each other', stag.diagFirstTwoRows, JSON.stringify(stag));
@@ -185,7 +188,7 @@ const clear = await page.evaluate(() => {
   const run = (cell, holder) => { set('dimCell', cell); set('dimHolder', holder); set('dimV', 72); set('dimAh', 20); calcPackDims();
     return document.getElementById('dimResult').textContent; };
   return { sgTight: run('21700-50sg', 'square'), eOk: run('21700-50e', 'square'),
-           honey: run('21700-50e', 'honeycomb-sp') };
+           honey: run('21700-50e', 'diag-225') };
 });
 check('a 21.35mm 50SG is flagged in a 21.4mm bracket', /לא נכנס/.test(clear.sgTight), clear.sgTight.slice(-80));
 check('a 21.15mm 50E in the same bracket is not', !/לא נכנס/.test(clear.eOk), clear.eOk.slice(-80));
@@ -202,6 +205,15 @@ const pieces = await page.evaluate(() => {
 });
 check('a 240-cell layout says it needs more than one bracket', /חלקי תושבת/.test(pieces.big), pieces.big.slice(-70));
 check('a small pack does not', !/חלקי תושבת/.test(pieces.small), pieces.small.slice(-70));
+
+const nickels = await page.evaluate(() => {
+  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  const run = (h) => { set('dimHolder', h); set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
+    const m = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/); return [+m[1], +m[2]]; };
+  return { a: run('diag-225'), b: run('diag-224'), sq: run('square-23') };
+});
+check('the two diagonal nickels give different blocks', nickels.a[0] !== nickels.b[0] || nickels.a[1] !== nickels.b[1], JSON.stringify(nickels));
+check('and the 23mm square block is larger in area than either diagonal', nickels.sq[0]*nickels.sq[1] > nickels.a[0]*nickels.a[1] && nickels.sq[0]*nickels.sq[1] > nickels.b[0]*nickels.b[1], JSON.stringify(nickels));
 
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
