@@ -2343,7 +2343,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v248';
+const HUB_BUILD = 'v249';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5481,6 +5481,23 @@ function calcPackDims() {
 //
 // 0S/0P means Daniel does not build that voltage for that model, which is a real answer and
 // is shown as "—" rather than as a zero-cell pack.
+// CHECKED ONLINE 2026-08-31, at Daniel's request, for the four rows carrying max 240 while
+// their largest listed build is 200. Nothing found supports 240, and one thing contradicts it:
+//
+//   Bomber (Stealth Bomber)  builders report ~156 cells as the usual ceiling, and 20S10P = 200
+//                            fits only by angling the pack in. 240 appears nowhere.
+//   Zero 11X                 the stock compartment is published at 360x210x70mm. At a 21.4mm
+//                            pitch that floor takes 16 x 9 = 144 cells in ONE layer, and 70mm
+//                            of depth cannot take a second standing layer — a 21700 is 70mm
+//                            tall. Stock packs are 26-32Ah.
+//   Nami Burn-E              stock is 30Ah (Burn-E 2) and 40Ah = 160 cells (Burn-E 3 MAX, LG
+//                            21700). 200 is already 25% above stock.
+//   Bronco                   nothing found either way.
+//
+// The numbers are LEFT AS DANIEL GAVE THEM. He builds these and the internet does not, and a
+// rebuild routinely beats the OEM's own packing. But 240 is unverified on three of the four
+// and looks impossible on the Zero 11X in one standing layer, so treat it as headroom to be
+// measured rather than a target to build to.
 const VEHICLE_PACKS = [
   { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
   { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140 },
