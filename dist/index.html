@@ -2341,7 +2341,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v254';
+const HUB_BUILD = 'v255';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4137,7 +4137,11 @@ function estimateBatteryCost(it) {
   const cells = S * P;
   const cellsCost = cells * cellPrice;
   const bms = powerTool ? 0 : (V >= 72 ? 260 : V >= 60 ? 200 : 150);
-  const nickel = S * 3;
+  // Nickel off his own plate prices (2026-08-31): every shape on the shelf works out at
+  // ~$0.0109 per hole and a pack needs two contacts per cell. Folding does not double it —
+  // he folds the same piece to shorten it, not to add a second. This is the TRUE cost; the
+  // published prices were built on ₪3/S and that anchor lives in cost-model.mjs.
+  const nickel = cells * 2 * 0.0109 * 3 * 1.371;
   const materials = powerTool ? 30 : 60;
   // Build time refitted 2026-07-17: ~22s/cell welding + 1.68h fixed (0.75h on a power-tool
   // rebuild, which skips BMS/wiring/shrink), at ₪60/hr — Daniel does everything but the
@@ -5556,6 +5560,11 @@ function calcPackDims() {
 // rebuild routinely beats the OEM's own packing. But 240 is unverified on three of the four
 // and looks impossible on the Zero 11X in one standing layer, so treat it as headroom to be
 // measured rather than a target to build to.
+// Four 60V builds were corrected on 2026-08-31 (Daniel: "טעות העתקה — תתקן"). Nami Blast,
+// Nami Klima, Mantis King and Teverun each carried the SAME P for both voltages, which makes
+// the 60V pack 25% smaller in the same tray — the shape of a number copied across a column.
+// They are 10P / 7P / 7P / 12P now, i.e. 50Ah / 35Ah / 35Ah / 60Ah instead of 40/30/30/50.
+// The row check that found them is still live for the next one.
 const VEHICLE_PACKS = [
   { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, pack: '380×170×140 (XXL)' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, pack: '381×171×140' },
@@ -5577,18 +5586,18 @@ const VEHICLE_PACKS = [
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 11+', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', p: 22.5, s60: 16, p60: 8, s72: 20, p72: 8, max: 160 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 6, max: 120 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 8, max: 160 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', p: 22.5, s60: 16, p60: 13, s72: 20, p72: 10, max: 208 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Wolf King GTR', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 12, max: 240 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 6, max: 120 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Thunder 2/3', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160 },
   { g: 'קורקינטים · ללא הגבהה', m: 'DT Storm', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 8, max: 160 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Achilleus', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Spider 2', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
   { g: 'קורקינטים · ללא הגבהה', m: 'DT X2', p: 23, s60: 0, p60: 0, s72: 20, p72: 14, max: 280 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Blade GT', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 5, max: 112 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Teverun', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 10, max: 200 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Teverun', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 200 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Bronco', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
 ];
 const CELL_AH_DEFAULT = 5;

@@ -224,8 +224,10 @@ const flagged = await page.evaluate(() => {
   const rows = [...document.querySelectorAll('#vpList .list-item')];
   return rows.filter(r => /חלוקים על גודל/.test(r.textContent)).map(r => r.querySelector('strong').textContent.replace(/s*⚠s*/, '').trim());
 });
-check('the four disagreeing rows are flagged', flagged.length === 4, flagged.join(', '));
-check('and they are the expected four', ['Nami Blast','Nami Klima','Mantis King','Teverun'].every(m => flagged.includes(m)), flagged.join(', '));
+// Corrected on 2026-08-31, so nothing should be flagged now — and the check stays, because
+// its job is the NEXT row someone adds, not the four that have been fixed.
+check('no row disagrees with itself any more', flagged.length === 0, flagged.join(', '));
+check('and the corrected four are the ones that used to be', /10P|12P/.test(await page.evaluate(() => document.getElementById('vpList').textContent)), 'ok');
 
 // The nickel line prices off his own stock. Every shape costs almost the same per hole, so
 // the number to get right is the COUNT — two contacts per cell — and the plate name is about
