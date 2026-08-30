@@ -2341,7 +2341,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v252';
+const HUB_BUILD = 'v254';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5378,6 +5378,31 @@ const DIM_CAP = 4;           // holder caps above and below the cell
 //
 // The parallel groups are shaded in alternating bands: cells welded to each other are one
 // band, which is the thing a photo of someone else's pack never tells you.
+// The nickel he holds, at what he paid (2026-08-31). A "hole" is one cell contact, and a
+// pack needs two per cell: one on the top plane, one on the bottom.
+//
+// The striking thing is that every shape costs almost the same per hole — $0.0094 on the
+// 4x3 to $0.0138 on the 1x2 strip — so which plate to use is a question about the shape of
+// the group, never about the price. Some plates are folded double for current, which halves
+// the coverage and doubles the cost per contact; the estimate below is for a single layer.
+const NICKEL_STOCK = [
+  { name: '8×7', holes: 56, qty: 80,  usd: 48 },
+  { name: '6×5', holes: 30, qty: 140, usd: 44 },
+  { name: '4×3', holes: 12, qty: 160, usd: 18 },
+  { name: '1×3', holes: 3,  qty: 300, usd: 9 },
+  { name: '1×2', holes: 2,  qty: 800, usd: 22 },   // 23mm pitch
+];
+const NICKEL_USD_PER_HOLE = NICKEL_STOCK.reduce((a, s) => a + s.usd / s.qty / s.holes, 0) / NICKEL_STOCK.length;
+// The plate whose short side matches the parallel group: a 3P group wants a 1x3, a 4P group
+// the 4x3, and so on. Daniel builds 3P or 4P on the diagonal, which is what the two smallest
+// shapes are for.
+function nickelFor(P) {
+  if (P <= 2) return '1×2';
+  if (P === 3) return '1×3';
+  if (P <= 4) return '4×3';
+  if (P <= 6) return '6×5';
+  return '8×7';
+}
 function drawPackLayout(o) {
   const box = document.getElementById("dimDraw");
   if (!box) return;
@@ -5490,6 +5515,10 @@ function calcPackDims() {
     const pieces = Math.ceil(cols / bm.cols) * Math.ceil(rows / bm.rows);
     out.innerHTML += `<br><span style="font-size:11px;color:var(--text-muted);">📐 מעבר לתבנית אחת (${bm.cols}×${bm.rows}) — צריך ${pieces} חלקי תושבת</span>`;
   }
+  // Two contacts per cell, priced off his own stock rather than a rule of thumb.
+  const holes = N * 2;
+  const nickelIls = holes * NICKEL_USD_PER_HOLE * 3 * 1.371;
+  out.innerHTML += `<br><span style="font-size:11px;color:var(--text-muted);">ניקל: ${holes} מגעים ≈ ₪${nickelIls.toFixed(0)} · תבנית ${nickelFor(P)}</span>`;
   drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers });
   if (dimVehicle) {
     const cap = (dimVehicle.caps && dimVehicle.caps[holder] != null) ? dimVehicle.caps[holder] : dimVehicle.max;
@@ -5528,8 +5557,8 @@ function calcPackDims() {
 // and looks impossible on the Zero 11X in one standing layer, so treat it as headroom to be
 // measured rather than a target to build to.
 const VEHICLE_PACKS = [
-  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
-  { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140 },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, pack: '380×170×140 (XXL)' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, pack: '381×171×140' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Enduro', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
@@ -5543,8 +5572,8 @@ const VEHICLE_PACKS = [
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', p: 21.4, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
     tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-225': 126, 'diag-224': 136 } },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, pack: '315×133×57' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, pack: '360×210×70' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 11+', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
@@ -5583,12 +5612,18 @@ function renderVehiclePacks() {
     // 16S and 20S in the same tray should land within ~15% of each other on cell count.
     const c60 = v.s60 * v.p60, c72 = v.s72 * v.p72;
     const odd = c60 && c72 && Math.max(c60, c72) / Math.min(c60, c72) > 1.15;
+    // Area a max build occupies at this model's pitch: cells x (pitch x row pitch). The
+    // rows nest on a diagonal bracket, so the row spacing is p x 0.866 and the number is
+    // meaningfully smaller than a square layout would give.
+    const areaMM2 = v.max * v.p * (v.p * 0.866);
+    const minCM2 = Math.round(areaMM2 / 100);
     const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ "square-23": "ריבועי 23", "diag-225": "אלכסוני 22.5", "diag-224": "אלכסוני 22.4" })[k] || k}: ${n}`).join(" · ") : "";
     html += `<div class="list-item" onclick="useVehiclePack('${v.m}')" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
         <strong>${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong><span style="font-size:11px;color:var(--text-muted);">${v.p} מ"מ · עד ${v.max}</span>
       </div>
       <div style="font-size:12px;margin-top:2px;">60V: ${cfg(v.s60, v.p60)} &nbsp;·&nbsp; 72V: ${cfg(v.s72, v.p72)}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${v.pack ? `חבילה ${v.pack} מ"מ · ` : ""}שטח מינימלי ${minCM2} סמ״ר</div>
       ${capsTxt ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">נספר: ${capsTxt}</div>` : ""}
       ${odd ? `<div style="font-size:11px;color:var(--warning,#f59e0b);margin-top:2px;">⚠ שני המתחים חלוקים על גודל האמבטיה (${c60} מול ${c72} תאים) — כדאי לבדוק</div>` : ""}
     </div>`;

@@ -227,6 +227,20 @@ const flagged = await page.evaluate(() => {
 check('the four disagreeing rows are flagged', flagged.length === 4, flagged.join(', '));
 check('and they are the expected four', ['Nami Blast','Nami Klima','Mantis King','Teverun'].every(m => flagged.includes(m)), flagged.join(', '));
 
+// The nickel line prices off his own stock. Every shape costs almost the same per hole, so
+// the number to get right is the COUNT — two contacts per cell — and the plate name is about
+// the shape of the parallel group.
+const nick = await page.evaluate(() => {
+  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  set('dimCell', '21700-50e'); set('dimHolder', 'diag-224'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
+  const six = document.getElementById('dimResult').textContent;
+  set('dimAh', 15); calcPackDims();
+  return { six, three: document.getElementById('dimResult').textContent };
+});
+check('120 cells means 240 contacts', /240 מגעים/.test(nick.six), nick.six.slice(-90));
+check('and a 6P group wants the 6×5 plate', /תבנית 6×5/.test(nick.six), nick.six.slice(-60));
+check('a 3P group wants the 1×3 strip', /תבנית 1×3/.test(nick.three), nick.three.slice(-60));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();
