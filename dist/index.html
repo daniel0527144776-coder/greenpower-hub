@@ -974,8 +974,8 @@ body { min-height: 100vh; }
     <div class="form-row"><label>מחזיק</label>
       <select class="form-select" id="dimHolder" onchange="calcPackDims()">
         <option value="diag" selected>אלכסוני ללא תבנית — 19 / 21.4</option>
-        <option value="diag-tpl">אלכסוני עם תבנית — 20.2 / 25.5</option>
-        <option value="diag-alt">אלכסוני (תושבת 2) — 21.6 / 24.6</option>
+        <option value="diag-tpl">אלכסוני עם תבנית · ארוך וצר — 20.2 / 25.5</option>
+        <option value="diag-tpl-rot">אלכסוני עם תבנית · מסובב (רחב וקצר) — 25.5 / 20.2</option>
         <option value="honeycomb">כוורת — ללא מפריד</option>
         <option value="honeycomb-sp">כוורת עם מפריד</option>
         <option value="square">ריבועי — ללא מפריד</option>
@@ -2342,7 +2342,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v246';
+const HUB_BUILD = 'v247';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5345,9 +5345,13 @@ const DIM_PITCH = {
            // wrong enough to check before cutting a bracket — the result line says 'משוער'
            // whenever one of them is in use. Replace with real numbers the first time an
            // 18650 pack is laid out on a diagonal holder.
-           diag: [16.5, 18.5], 'diag-tpl': [17.5, 22], 'diag-alt': [18.7, 21.3] },
+           diag: [16.5, 18.5], 'diag-tpl': [17.5, 22], 'diag-tpl-rot': [22, 17.5] },
   21700: { square: [21.4, 21.4], 'square-sp': [23, 23], honeycomb: [21.4, 18.5], 'honeycomb-sp': [22.5, 19.5],
-           diag: [19, 21.4], 'diag-tpl': [20.2, 25.5], 'diag-alt': [21.6, 24.6] },
+           // The template bracket is ONE bracket you can lay out two ways, not two brackets:
+           // 20.2 along the row and 25.5 between them, or the same thing turned 90°. Daniel's
+           // own counts in the Inokim OX tub settle it — 21 x 6 = 126 the long way, 17 x 8 =
+           // 136 the wide way, and the long one reproduces EXACTLY at a nominal 21mm cell.
+           diag: [19, 21.4], 'diag-tpl': [20.2, 25.5], 'diag-tpl-rot': [25.5, 20.2] },
 };
 const DIM_WALL = 1.5;        // bracket edge either side
 const DIM_CAP = 4;           // holder caps above and below the cell
@@ -5444,7 +5448,7 @@ const VEHICLE_PACKS = [
   // enough to plan with and not close enough to cut a bracket to. Where he has counted, his
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', p: 21.4, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
-    tub: '425×165 + 60×140 מ"מ', caps: { square: 140, 'diag-tpl': 136, 'diag-alt': 126 } },
+    tub: '425×165 + 60×140 מ"מ', caps: { square: 140, 'diag-tpl': 126, 'diag-tpl-rot': 136 } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
@@ -5482,7 +5486,7 @@ function renderVehiclePacks() {
     if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
     const cfg = (s, p) => (s ? `${s}S ${p}P · ${p * CELL_AH_DEFAULT}Ah` : "—");
     // Counted-per-bracket models say so, because that is the number to build to.
-    const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ square: "ריבועי", "diag-tpl": "אלכסוני+תבנית", "diag-alt": "אלכסוני 2" })[k] || k}: ${n}`).join(" · ") : "";
+    const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ square: "ריבועי", "diag-tpl": "אלכסוני ארוך-וצר", "diag-tpl-rot": "אלכסוני רחב-וקצר" })[k] || k}: ${n}`).join(" · ") : "";
     html += `<div class="list-item" onclick="useVehiclePack('${v.m}')" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
         <strong>${v.m}</strong><span style="font-size:11px;color:var(--text-muted);">מרווח ${v.p} מ"מ · עד ${v.max} תאים${v.tub ? " · אמבטיה " + v.tub : ""}</span>

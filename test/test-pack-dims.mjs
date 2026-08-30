@@ -128,7 +128,7 @@ const ox = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   useVehiclePack('Inokim OX');
   const filled = document.getElementById('dimResult').textContent;
-  set('dimHolder', 'diag-alt'); set('dimAh', 35); set('dimV', 72); calcPackDims();
+  set('dimHolder', 'diag-tpl'); set('dimAh', 35); set('dimV', 72); calcPackDims();
   const overDiag = document.getElementById('dimResult').textContent;
   set('dimHolder', 'square'); calcPackDims();
   const okSquare = document.getElementById('dimResult').textContent;
