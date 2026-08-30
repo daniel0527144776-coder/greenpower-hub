@@ -175,6 +175,34 @@ const seeded = await page.evaluate(() => {
 check('the OX tub seeds once', seeded.first === 1, JSON.stringify(seeded));
 check('and does not come back after deletion', seeded.second === 0, JSON.stringify(seeded));
 
+// Real datasheet dimensions, not the format name. The 50SG is 21.35mm across against the 50E
+// and 50PL at 21.15, and in a 21.4mm no-spacer bracket that is 0.05mm of clearance — it does
+// not go in. A staggered layout is the opposite case: 19.5mm between rows holds 21.15mm cells
+// because the nearest neighbour sits half a pitch sideways, and the first version of this
+// check condemned every honeycomb pack in the table.
+const clear = await page.evaluate(() => {
+  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  const run = (cell, holder) => { set('dimCell', cell); set('dimHolder', holder); set('dimV', 72); set('dimAh', 20); calcPackDims();
+    return document.getElementById('dimResult').textContent; };
+  return { sgTight: run('21700-50sg', 'square'), eOk: run('21700-50e', 'square'),
+           honey: run('21700-50e', 'honeycomb-sp') };
+});
+check('a 21.35mm 50SG is flagged in a 21.4mm bracket', /לא נכנס/.test(clear.sgTight), clear.sgTight.slice(-80));
+check('a 21.15mm 50E in the same bracket is not', !/לא נכנס/.test(clear.eOk), clear.eOk.slice(-80));
+check('and a honeycomb row pitch under the diameter is fine', !/לא נכנס/.test(clear.honey), clear.honey.slice(-80));
+
+// One 21700 bracket is 10x15 holes. Anything bigger is two pieces butted together, which is a
+// thing to order and a seam in the build.
+const pieces = await page.evaluate(() => {
+  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  set('dimCell', '21700-50e'); set('dimHolder', 'square'); set('dimV', 72); set('dimAh', 60); set('dimPerRow', 20); calcPackDims();
+  const big = document.getElementById('dimResult').textContent;
+  set('dimAh', 10); set('dimPerRow', 10); calcPackDims();
+  return { big, small: document.getElementById('dimResult').textContent };
+});
+check('a 240-cell layout says it needs more than one bracket', /חלקי תושבת/.test(pieces.big), pieces.big.slice(-70));
+check('a small pack does not', !/חלקי תושבת/.test(pieces.small), pieces.small.slice(-70));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();

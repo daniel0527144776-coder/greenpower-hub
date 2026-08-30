@@ -2343,7 +2343,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v249';
+const HUB_BUILD = 'v250';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5311,16 +5311,29 @@ function saveWorkers() {
 // came out 16S4P / 64 cells when it is really 16S8P / 128: half the cells, half the
 // weight, and a block roughly half the size. On a tool whose whole job is "will it fit in
 // the scooter", that is the one number that must not be guessed.
+// Measured off the datasheets, 2026-08-31, not rounded to the format name. The round numbers
+// (21 x 70, 18 x 65) were within a few tenths on most cells and wrong in a way that mattered
+// at the margin: whether a column fits is decided by fractions of a millimetre, and on the
+// Inokim OX tub the twenty-first column lands at 425.15mm in a 425mm tray.
+//
+// The 50SG is the one to watch — 21.35mm against the 50E and 50PL at 21.15. In a 21.4mm
+// no-spacer bracket that leaves 0.05mm, i.e. it does not go in. calcPackDims warns.
 const DIM_CELLS = {
-  '21700-50e':  { label: '21700 EVE 50E',        ah: 5.0,  dia: 21, len: 70, g: 70 },
-  '21700-50sg': { label: '21700 Tenpower 50SG',  ah: 5.0,  dia: 21, len: 70, g: 70 },
-  '21700-50pl': { label: '21700 EVE 50PL',       ah: 5.0,  dia: 21, len: 70, g: 70 },
-  '21700-40p':  { label: '21700 EVE 40P',        ah: 4.0,  dia: 21, len: 70, g: 70 },
-  '18650-35v':  { label: '18650 EVE 35V',        ah: 3.5,  dia: 18, len: 65, g: 45 },
-  '18650-jp30': { label: '18650 Ampace JP30P1',  ah: 3.0,  dia: 18, len: 65, g: 45 },
-  '18650-26v':  { label: '18650 EVE 26V',        ah: 2.55, dia: 18, len: 65, g: 45 },
-  '18650-25p':  { label: '18650 EVE 25P',        ah: 2.5,  dia: 18, len: 65, g: 45 },
+  '21700-50e':  { label: '21700 EVE 50E',        ah: 5.0,  dia: 21.15, len: 70.15, g: 69 },
+  '21700-50sg': { label: '21700 Tenpower 50SG',  ah: 5.0,  dia: 21.35, len: 70.6,  g: 71 },
+  '21700-50pl': { label: '21700 EVE 50PL',       ah: 5.0,  dia: 21.15, len: 70.15, g: 72 },
+  // 40P: no datasheet to hand, so the EVE 21700 body is assumed — same case, different chemistry.
+  '21700-40p':  { label: '21700 EVE 40P',        ah: 4.0,  dia: 21.15, len: 70.15, g: 70 },
+  '18650-35v':  { label: '18650 EVE 35V',        ah: 3.5,  dia: 18.35, len: 65.0,  g: 47 },
+  '18650-jp30': { label: '18650 Ampace JP30P1',  ah: 3.0,  dia: 18.35, len: 65.0,  g: 45 },
+  '18650-26v':  { label: '18650 EVE 26V',        ah: 2.55, dia: 18.35, len: 65.0,  g: 45 },
+  '18650-25p':  { label: '18650 EVE 25P',        ah: 2.5,  dia: 18.35, len: 65.0,  g: 44.5 },
 };
+// A single bracket from the Wellgo catalogue is not unlimited: 21700 tops out at 10x15 holes
+// square and the same honeycomb, 18650 at 15x20 square and 16x22 honeycomb. A bigger pack is
+// two or more brackets butted together, which is a real thing to order and a real seam in the
+// build — so the estimator says when a layout has crossed that line.
+const BRACKET_MAX = { 21700: { cols: 15, rows: 10 }, 18650: { cols: 22, rows: 16 } };
 // Cell-centre distances, off the Wellgo bracket catalogue Daniel supplied (2026-08-30).
 // These are the numbers that decide whether a pack fits: the old code used dia + 1mm,
 // which is 22mm for a 21700 — narrower than every bracket in the catalogue except the
@@ -5461,6 +5474,22 @@ function calcPackDims() {
   // Against the count for THIS holder where one exists, not the tray's overall ceiling: on an
   // OX a diagonal holder takes 126 and no holder 140, so a 140-cell build is fine on one and
   // over on the other. One `max` cannot express that and would pass both.
+  // A cell wider than the space it goes in cannot be assembled. But the distance to check is
+  // the NEAREST NEIGHBOUR, not the row pitch — and in a staggered layout those are different
+  // things: the rows nest into each other, so a row pitch of 19.5mm holds 21.15mm cells
+  // perfectly well because the nearest cell in the next row sits half a pitch sideways.
+  // The first version of this check compared the diameter to the row pitch and condemned
+  // every honeycomb pack ever built, including one already in the vehicle table.
+  const near = stagger ? Math.sqrt((pitch / 2) ** 2 + rowPitch ** 2) : rowPitch;
+  const tight = Math.min(pitch, near);
+  if (c.dia > tight - 0.2) {
+    out.innerHTML += `<br><span style="font-size:11px;color:var(--danger);">⚠ ${c.label} בקוטר ${c.dia} מ"מ לא נכנס — המרחק הקצר ביותר בין מרכזים הוא ${tight.toFixed(1)} מ"מ</span>`;
+  }
+  const bm = BRACKET_MAX[fmt];
+  if (bm && (cols > bm.cols || rows > bm.rows)) {
+    const pieces = Math.ceil(cols / bm.cols) * Math.ceil(rows / bm.rows);
+    out.innerHTML += `<br><span style="font-size:11px;color:var(--text-muted);">📐 מעבר לתבנית אחת (${bm.cols}×${bm.rows}) — צריך ${pieces} חלקי תושבת</span>`;
+  }
   drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers });
   if (dimVehicle) {
     const cap = (dimVehicle.caps && dimVehicle.caps[holder] != null) ? dimVehicle.caps[holder] : dimVehicle.max;
