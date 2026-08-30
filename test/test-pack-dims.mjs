@@ -121,6 +121,23 @@ const over = await page.evaluate(() => {
 });
 check('no warning when the build equals the ceiling', !/⚠/.test(over.atMax), over.atMax.slice(-60));
 
+// The Inokim OX is counted per bracket, not computed: Daniel took 140 cells out of its tub
+// with no diagonal holder, 136 on one and 126 on the other. A build of 136 is therefore fine
+// on the square holder and over on the 21.6/24.6 one, which a single ceiling cannot express.
+const ox = await page.evaluate(() => {
+  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  useVehiclePack('Inokim OX');
+  const filled = document.getElementById('dimResult').textContent;
+  set('dimHolder', 'diag-alt'); set('dimAh', 35); set('dimV', 72); calcPackDims();
+  const overDiag = document.getElementById('dimResult').textContent;
+  set('dimHolder', 'square'); calcPackDims();
+  const okSquare = document.getElementById('dimResult').textContent;
+  return { filled, overDiag, okSquare };
+});
+check('the OX fills its own 20S7P build', /20S 7P/.test(ox.filled), ox.filled.slice(0, 60));
+check('140 cells is over the 126 counted on the diagonal holder', /⚠/.test(ox.overDiag) && /126/.test(ox.overDiag), ox.overDiag.slice(-70));
+check('and not over the 140 counted on the square one', !/⚠/.test(ox.okSquare), ox.okSquare.slice(-70));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();
