@@ -68,6 +68,11 @@ jobs:
       - name: Pages load nothing from outside their origin
         run: node test/test-self-contained.mjs
 
+      # The pack-size estimator answers "will it fit in the scooter", and the previous
+      # version spaced cells at diameter+1mm against real brackets of 21.4-23mm.
+      - name: Pack size — bracket pitch, honeycomb, fit check
+        run: node test/test-pack-dims.mjs
+
       - name: Hub — edit/delete, sales page, warranty register
         run: node test/test-hub-jobedit.mjs
 

@@ -971,9 +971,19 @@ body { min-height: 100vh; }
       </select>
     </div>
     <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="dimAh" value="20" min="1" step="1" oninput="calcPackDims()"></div>
+    <div class="form-row"><label>מחזיק</label>
+      <select class="form-select" id="dimHolder" onchange="calcPackDims()">
+        <option value="honeycomb" selected>כוורת (משובץ) — ללא מפריד</option>
+        <option value="honeycomb-sp">כוורת עם מפריד</option>
+        <option value="square">ריבועי — ללא מפריד</option>
+        <option value="square-sp">ריבועי עם מפריד</option>
+      </select>
+    </div>
     <div class="form-row"><label>תאים לאורך שורה</label><input type="number" class="form-input" id="dimPerRow" value="10" min="1" step="1" oninput="calcPackDims()"></div>
+    <div class="form-row"><label>שכבות</label><input type="number" class="form-input" id="dimLayers" value="1" min="1" max="6" step="1" oninput="calcPackDims()"></div>
+    <div class="form-row"><label>תוספת מארז / BMS (מ"מ)</label><input type="number" class="form-input" id="dimExtra" value="18" min="0" step="1" oninput="calcPackDims()"></div>
     <div class="info-banner" style="margin-top:8px;"><span>📦</span><div id="dimResult"></div></div>
-    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">אומדן לבלוק תאים עומדים בשכבה אחת (לפני מארז). חבילות שטוחות/רב-שכבתיות יהיו שונות — המידות בפועל תלויות בסידור ובמארז.</p>
+    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">המרווחים הם של מחזיקי התאים בפועל (קטלוג Wellgo): 18650 ‎20.2 מ"מ‎ (19.5 בכוורת עם מפריד), 21700 ‎21.4 מ"מ‎ (23 ריבועי עם מפריד, 22.5 כוורת עם מפריד). כוורת חוסכת ‎13%‎ ברוחב כי כל שורה שנייה נכנסת לשקע שבין התאים.</p>
   </div>
   <div class="card">
     <h3 class="card-title">🛴 מידות תא מצבר לפי דגם</h3>
@@ -2316,7 +2326,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v242';
+const HUB_BUILD = 'v243';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5294,32 +5304,69 @@ const DIM_CELLS = {
   '18650-26v':  { label: '18650 EVE 26V',        ah: 2.55, dia: 18, len: 65, g: 45 },
   '18650-25p':  { label: '18650 EVE 25P',        ah: 2.5,  dia: 18, len: 65, g: 45 },
 };
+// Cell-centre distances, off the Wellgo bracket catalogue Daniel supplied (2026-08-30).
+// These are the numbers that decide whether a pack fits: the old code used dia + 1mm,
+// which is 22mm for a 21700 — narrower than every bracket in the catalogue except the
+// no-spacer ones, so a 20-cell row came out 12mm short and "fits" was a guess.
+//
+// HONEYCOMB IS NOT A STYLE CHOICE, it is 13% of the width: staggered rows nest into the
+// gap between cells, so row pitch is pitch x sin60 = 0.866. On a 16-row block that is
+// 48mm, which is the difference between fitting a scooter tray and not.
+const DIM_PITCH = {
+  18650: { square: 20.2, 'square-sp': 20.2, honeycomb: 20.2, 'honeycomb-sp': 19.5 },
+  21700: { square: 21.4, 'square-sp': 23,   honeycomb: 21.4, 'honeycomb-sp': 22.5 },
+};
+const DIM_WALL = 1.5;        // bracket edge either side
+const DIM_CAP = 4;           // holder caps above and below the cell
 function calcPackDims() {
   const out = document.getElementById('dimResult');
   if (!out) return;
-  const c = DIM_CELLS[document.getElementById('dimCell').value] || DIM_CELLS['21700-50e'];
+  const key = document.getElementById('dimCell').value;
+  const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
+  const fmt = key.startsWith('18650') ? 18650 : 21700;
+  const holder = (document.getElementById('dimHolder') || {}).value || 'honeycomb';
+  const pitch = (DIM_PITCH[fmt] || {})[holder] || c.dia + 1;
   const V = parseFloat(document.getElementById('dimV').value);
   const Ah = parseFloat(document.getElementById('dimAh').value) || 1;
   const perRow = Math.max(1, parseInt(document.getElementById('dimPerRow').value) || 1);
+  const layers = Math.max(1, parseInt((document.getElementById('dimLayers') || {}).value) || 1);
+  const extra = Math.max(0, parseFloat((document.getElementById('dimExtra') || {}).value) || 0);
   const S = seriesForV(V);
   const P = Math.max(1, Math.ceil(Ah / c.ah));
   const N = S * P;
-  const cols = perRow, rows = Math.ceil(N / perRow);
-  // Holders add ~1mm of wall per cell pitch; the old version packed cells at exactly one
-  // diameter, which reads narrower than anything actually built.
-  const pitch = c.dia + 1;
-  const L = cols * pitch, W = rows * pitch, H = c.len + 18;   // +18 for wrap / BMS / wiring
+  const perLayer = Math.ceil(N / layers);
+  const cols = Math.min(perRow, perLayer);
+  const rows = Math.ceil(perLayer / cols);
+  const stagger = holder.startsWith('honeycomb') && rows > 1;
+  // Outer size of the block: centres span (n-1) pitches, then half a cell each end.
+  const L = Math.round((cols - 1) * pitch + c.dia + 2 * DIM_WALL + (stagger ? pitch / 2 : 0));
+  const rowPitch = stagger ? pitch * 0.866 : pitch;
+  const W = Math.round((rows - 1) * rowPitch + c.dia + 2 * DIM_WALL);
+  const H = Math.round(layers * (c.len + DIM_CAP) + extra);
   const kg = (N * c.g + 500) / 1000;
   // 3.6V nominal per cell, which is what the series table is built on; 3.7 here overstated
   // a 20S pack by 2%.
   const wh = Math.round(S * 3.6 * P * c.ah);
+  // Does it go in? The saved models carry the tray they have to sit in, so compare against
+  // them instead of leaving the fit to be eyeballed — and allow the block to be TURNED,
+  // because a 300x180 block goes into a 190x310 tray and a naive compare says it does not.
+  const fits = [];
+  for (const d of (getDims() || [])) {
+    const t3 = [+d.l, +d.w, +d.h];
+    if (t3.some((x) => !x)) continue;
+    const b = [L, W, H].slice().sort((a, z) => a - z);
+    const tr = t3.slice().sort((a, z) => a - z);
+    if (b[0] <= tr[0] && b[1] <= tr[1] && b[2] <= tr[2]) fits.push(d.model);
+  }
   out.innerHTML =
     `תצורה <strong>${S}S ${P}P</strong> · <strong>${N}</strong> תאים · <strong>${wh} Wh</strong><br>` +
     `אומדן בלוק: <strong>${L} × ${W} × ${H} מ"מ</strong> (א×ר×ג) · משקל ~<strong>${kg.toFixed(1)} ק"ג</strong><br>` +
-    // cols×rows is the PHYSICAL grid, which can exceed N when the last row is partial
-    // (152 cells laid 20-per-row is 8 rows = 160 slots). Labelling it "תאים" next to the
-    // real cell count read as a contradiction, so it is named as a layout.
-    `<span style="font-size:11px;color:var(--text-muted);">${c.label} · ${c.ah}Ah לתא · סידור ${cols} × ${rows} שורות${cols * rows > N ? ` (שורה אחרונה חלקית)` : ''}</span>`;
+    `<span style="font-size:11px;color:var(--text-muted);">${c.label} · ${c.ah}Ah לתא · מרווח ${pitch} מ"מ · ${layers > 1 ? layers + ' שכבות × ' : ''}${cols} × ${rows} שורות${cols * rows * layers > N ? ' (שורה אחרונה חלקית)' : ''}</span>` +
+    // Parenthesised: `a + b ? c : d` binds as `(a + b) ? c : d`, which threw the whole
+    // block away and rendered the fit line alone. Caught before it shipped, by reading it.
+    ((getDims() || []).length
+      ? `<br><span style="font-size:11px;">${fits.length ? '✅ נכנס ל: ' + fits.join(', ') : '❌ לא נכנס לאף דגם שמור'}</span>`
+      : '');
 }
 function getDims() { return Store.get('dims') || []; }
 function renderDims() {
