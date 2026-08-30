@@ -93,6 +93,34 @@ check('a turned tray still counts as a fit', /מסובב/.test(rotated.text), ro
 const noExtra = await read({ ...base, holder: 'honeycomb', extra: SELFTEST ? 18 : 0 });
 check('the case/BMS allowance is honoured', noExtra.H === honey.H - 18, `${noExtra.H} vs ${honey.H}`);
 
+// Daniel measured a 72V 30Ah pack he built — 20S6P, 120 cells, twenty to a row — at 390 x
+// 135mm. That is the only ground truth this page has, so it is a test: the diagonal spacing
+// he uses must reproduce it. Tolerance 8mm, which is the width of a shrink wrap.
+const real = await read({ ...base, v: 72, ah: 30, perRow: 20, holder: 'diag' });
+check('his measured 72V 30Ah pack: 390 x 135', Math.abs(real.L - 390) <= 8 && Math.abs(real.W - 135) <= 8, `${real.L} x ${real.W}`);
+
+// The vehicle table is the answer to "what goes in this scooter", and clicking one has to
+// leave the estimator holding that build rather than merely scrolling to it.
+const picked = await page.evaluate(() => {
+  useVehiclePack('Nami Burn-E');
+  return { v: document.getElementById('dimV').value, ah: document.getElementById('dimAh').value,
+           holder: document.getElementById('dimHolder').value, txt: document.getElementById('dimResult').textContent };
+});
+check('picking a vehicle fills its 72V build', picked.v === '72' && picked.ah === '50', JSON.stringify(picked).slice(0, 90));
+check('and matches the holder to the pitch it was measured at', picked.holder === 'square-sp', picked.holder);
+check('the build it fills is the one it lists', /20S 10P/.test(picked.txt), picked.txt.slice(0, 70));
+
+// Over the tray ceiling must SAY so. Wolf King GTR is 20S12P = 240 against a max of 240, so
+// the warning must NOT fire there — a check that always warns is the same as one that never does.
+const over = await page.evaluate(() => {
+  useVehiclePack('Wolf King GTR');
+  const ok = document.getElementById('dimResult').textContent;
+  document.getElementById('dimAh').value = '80'; calcPackDims();
+  useVehiclePack('Blade GT');
+  return { atMax: ok, blade: document.getElementById('dimResult').textContent };
+});
+check('no warning when the build equals the ceiling', !/⚠/.test(over.atMax), over.atMax.slice(-60));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();

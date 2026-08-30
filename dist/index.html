@@ -973,17 +973,33 @@ body { min-height: 100vh; }
     <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="dimAh" value="20" min="1" step="1" oninput="calcPackDims()"></div>
     <div class="form-row"><label>מחזיק</label>
       <select class="form-select" id="dimHolder" onchange="calcPackDims()">
-        <option value="honeycomb" selected>כוורת (משובץ) — ללא מפריד</option>
+        <option value="diag" selected>אלכסוני ללא תבנית — 19 / 21.4</option>
+        <option value="diag-tpl">אלכסוני עם תבנית — 20.2 / 25.5</option>
+        <option value="diag-alt">אלכסוני (תושבת 2) — 21.6 / 24.6</option>
+        <option value="honeycomb">כוורת — ללא מפריד</option>
         <option value="honeycomb-sp">כוורת עם מפריד</option>
         <option value="square">ריבועי — ללא מפריד</option>
         <option value="square-sp">ריבועי עם מפריד</option>
+        <option value="custom">מותאם אישית ↓</option>
       </select>
+    </div>
+    <div class="form-row" id="dimCustomRow" style="display:none;"><label>מרווח: לאורך / בין שורות</label>
+      <div style="display:flex;gap:6px;">
+        <input type="number" class="form-input" id="dimPitchAlong" value="19" min="10" step="0.1" oninput="calcPackDims()">
+        <input type="number" class="form-input" id="dimPitchAcross" value="21.4" min="10" step="0.1" oninput="calcPackDims()">
+      </div>
     </div>
     <div class="form-row"><label>תאים לאורך שורה</label><input type="number" class="form-input" id="dimPerRow" value="10" min="1" step="1" oninput="calcPackDims()"></div>
     <div class="form-row"><label>שכבות</label><input type="number" class="form-input" id="dimLayers" value="1" min="1" max="6" step="1" oninput="calcPackDims()"></div>
     <div class="form-row"><label>תוספת מארז / BMS (מ"מ)</label><input type="number" class="form-input" id="dimExtra" value="18" min="0" step="1" oninput="calcPackDims()"></div>
     <div class="info-banner" style="margin-top:8px;"><span>📦</span><div id="dimResult"></div></div>
     <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">המרווחים הם של מחזיקי התאים בפועל (קטלוג Wellgo): 18650 ‎20.2 מ"מ‎ (19.5 בכוורת עם מפריד), 21700 ‎21.4 מ"מ‎ (23 ריבועי עם מפריד, 22.5 כוורת עם מפריד). כוורת חוסכת ‎13%‎ ברוחב כי כל שורה שנייה נכנסת לשקע שבין התאים.</p>
+  </div>
+  <div class="card">
+    <h3 class="card-title">🏍️ מה נכנס לכל כלי</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">התצורה שנכנסת בפועל לתא המצבר של כל דגם, לפי מדידות שלנו. לחיצה ממלאת את המחשבון למעלה.</p>
+    <input type="text" class="form-input" id="vpSearch" placeholder="חפש דגם…" oninput="renderVehiclePacks()" style="margin-bottom:10px;">
+    <div id="vpList"></div>
   </div>
   <div class="card">
     <h3 class="card-title">🛴 מידות תא מצבר לפי דגם</h3>
@@ -2326,7 +2342,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v243';
+const HUB_BUILD = 'v244';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5312,9 +5328,21 @@ const DIM_CELLS = {
 // HONEYCOMB IS NOT A STYLE CHOICE, it is 13% of the width: staggered rows nest into the
 // gap between cells, so row pitch is pitch x sin60 = 0.866. On a 16-row block that is
 // 48mm, which is the difference between fitting a scooter tray and not.
+// Cell-centre distances as [along the row, between rows]. The square and honeycomb numbers
+// are off the Wellgo bracket catalogue; the three DIAGONAL ones are what Daniel measures on
+// his own bench (2026-08-30), and they are the ones that matter because they are what he
+// builds with. Between-rows is NOT derived by sin60 for those — a real bracket does not
+// obey the ideal packing, and his 19 / 21.4 has the rows FURTHER apart than the cells within
+// a row, which no formula would have produced.
+//
+// Validated against a pack he measured: 72V 30Ah = 20S6P = 120 cells, twenty to a row, came
+// out 390 x 135mm. This table gives 385 x 131 — 1.3% out. Every other spacing here misses by
+// 40-70mm on the length, so the number is doing real work.
 const DIM_PITCH = {
-  18650: { square: 20.2, 'square-sp': 20.2, honeycomb: 20.2, 'honeycomb-sp': 19.5 },
-  21700: { square: 21.4, 'square-sp': 23,   honeycomb: 21.4, 'honeycomb-sp': 22.5 },
+  18650: { square: [20.2, 20.2], 'square-sp': [20.2, 20.2], honeycomb: [20.2, 17.5], 'honeycomb-sp': [19.5, 16.9],
+           diag: [16.5, 18.5], 'diag-tpl': [17.5, 22], 'diag-alt': [18.7, 21.3] },
+  21700: { square: [21.4, 21.4], 'square-sp': [23, 23], honeycomb: [21.4, 18.5], 'honeycomb-sp': [22.5, 19.5],
+           diag: [19, 21.4], 'diag-tpl': [20.2, 25.5], 'diag-alt': [21.6, 24.6] },
 };
 const DIM_WALL = 1.5;        // bracket edge either side
 const DIM_CAP = 4;           // holder caps above and below the cell
@@ -5324,8 +5352,14 @@ function calcPackDims() {
   const key = document.getElementById('dimCell').value;
   const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
   const fmt = key.startsWith('18650') ? 18650 : 21700;
-  const holder = (document.getElementById('dimHolder') || {}).value || 'honeycomb';
-  const pitch = (DIM_PITCH[fmt] || {})[holder] || c.dia + 1;
+  const holder = (document.getElementById('dimHolder') || {}).value || 'diag';
+  const customRow = document.getElementById('dimCustomRow');
+  if (customRow) customRow.style.display = holder === 'custom' ? '' : 'none';
+  const num = (id, d) => { const el = document.getElementById(id); const v = el ? parseFloat(el.value) : NaN; return isNaN(v) ? d : v; };
+  const pair = holder === 'custom'
+    ? [num('dimPitchAlong', 19), num('dimPitchAcross', 21.4)]
+    : (DIM_PITCH[fmt] || {})[holder] || [c.dia + 1, c.dia + 1];
+  const [pitch, rowPitch] = pair;
   const V = parseFloat(document.getElementById('dimV').value);
   const Ah = parseFloat(document.getElementById('dimAh').value) || 1;
   const perRow = Math.max(1, parseInt(document.getElementById('dimPerRow').value) || 1);
@@ -5337,10 +5371,9 @@ function calcPackDims() {
   const perLayer = Math.ceil(N / layers);
   const cols = Math.min(perRow, perLayer);
   const rows = Math.ceil(perLayer / cols);
-  const stagger = holder.startsWith('honeycomb') && rows > 1;
+  const stagger = (holder.startsWith('honeycomb') || holder.startsWith('diag') || holder === 'custom') && rows > 1;
   // Outer size of the block: centres span (n-1) pitches, then half a cell each end.
   const L = Math.round((cols - 1) * pitch + c.dia + 2 * DIM_WALL + (stagger ? pitch / 2 : 0));
-  const rowPitch = stagger ? pitch * 0.866 : pitch;
   const W = Math.round((rows - 1) * rowPitch + c.dia + 2 * DIM_WALL);
   const H = Math.round(layers * (c.len + DIM_CAP) + extra);
   const kg = (N * c.g + 500) / 1000;
@@ -5361,15 +5394,97 @@ function calcPackDims() {
   out.innerHTML =
     `תצורה <strong>${S}S ${P}P</strong> · <strong>${N}</strong> תאים · <strong>${wh} Wh</strong><br>` +
     `אומדן בלוק: <strong>${L} × ${W} × ${H} מ"מ</strong> (א×ר×ג) · משקל ~<strong>${kg.toFixed(1)} ק"ג</strong><br>` +
-    `<span style="font-size:11px;color:var(--text-muted);">${c.label} · ${c.ah}Ah לתא · מרווח ${pitch} מ"מ · ${layers > 1 ? layers + ' שכבות × ' : ''}${cols} × ${rows} שורות${cols * rows * layers > N ? ' (שורה אחרונה חלקית)' : ''}</span>` +
+    `<span style="font-size:11px;color:var(--text-muted);">${c.label} · ${c.ah}Ah לתא · מרווח ${pitch}/${rowPitch} מ"מ · ${layers > 1 ? layers + ' שכבות × ' : ''}${cols} × ${rows} שורות${cols * rows * layers > N ? ' (שורה אחרונה חלקית)' : ''}</span>` +
     // Parenthesised: `a + b ? c : d` binds as `(a + b) ? c : d`, which threw the whole
     // block away and rendered the fit line alone. Caught before it shipped, by reading it.
     ((getDims() || []).length
       ? `<br><span style="font-size:11px;">${fits.length ? '✅ נכנס ל: ' + fits.join(', ') : '❌ לא נכנס לאף דגם שמור'}</span>`
       : '');
 }
+// What actually fits each vehicle, measured on the bench (Daniel, 2026-08-30). This is the
+// question the estimator exists to answer, and it is not derivable from a tray size: the
+// tray is rarely a box, the wiring and the BMS take a corner of it, and the riser changes
+// the answer for half the scooters here.
+//
+// `max` is the tray's own ceiling and is NOT always the larger of the two configurations —
+// a Zero 11X takes 240 cells while its listed 72V build is 200. Read it as headroom, and
+// as the number a build must not exceed.
+//
+// 0S/0P means Daniel does not build that voltage for that model, which is a real answer and
+// is shown as "—" rather than as a zero-cell pack.
+const VEHICLE_PACKS = [
+  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140 },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Enduro', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 11+', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', p: 22.5, s60: 16, p60: 8, s72: 20, p72: 8, max: 160 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 6, max: 120 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', p: 22.5, s60: 16, p60: 13, s72: 20, p72: 10, max: 208 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf King GTR', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 12, max: 240 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 6, max: 120 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Thunder 2/3', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'DT Storm', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 8, max: 160 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Achilleus', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Spider 2', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'DT X2', p: 23, s60: 0, p60: 0, s72: 20, p72: 14, max: 280 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Blade GT', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 5, max: 112 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Teverun', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 10, max: 200 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Bronco', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
+];
+const CELL_AH_DEFAULT = 5;
+function renderVehiclePacks() {
+  const box = document.getElementById('vpList');
+  if (!box) return;
+  const q = ((document.getElementById('vpSearch') || {}).value || '').trim().toLowerCase();
+  const hit = VEHICLE_PACKS.filter((v) => !q || v.m.toLowerCase().includes(q) || v.g.toLowerCase().includes(q));
+  if (!hit.length) { box.innerHTML = '<div class="empty-state"><div class="empty-state-text">אין דגם כזה</div></div>'; return; }
+  let html = "", group = "";
+  for (const v of hit) {
+    if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
+    const cfg = (s, p) => (s ? `${s}S ${p}P · ${p * CELL_AH_DEFAULT}Ah` : "—");
+    html += `<div class="list-item" onclick="useVehiclePack('${v.m}')" style="cursor:pointer;">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
+        <strong>${v.m}</strong><span style="font-size:11px;color:var(--text-muted);">מרווח ${v.p} מ"מ · עד ${v.max} תאים</span>
+      </div>
+      <div style="font-size:12px;margin-top:2px;">60V: ${cfg(v.s60, v.p60)} &nbsp;·&nbsp; 72V: ${cfg(v.s72, v.p72)}</div>
+    </div>`;
+  }
+  box.innerHTML = html;
+}
+// Fills the estimator from a vehicle. 72V is the default because it is what most of these
+// are built at now; a model with no 72V entry falls back to its 60V one.
+function useVehiclePack(model) {
+  const v = VEHICLE_PACKS.find((x) => x.m === model);
+  if (!v) return;
+  const use72 = !!v.s72;
+  const S = use72 ? v.s72 : v.s60, P = use72 ? v.p72 : v.p60;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = String(val); };
+  set('dimV', use72 ? 72 : 60);
+  set('dimAh', P * CELL_AH_DEFAULT);
+  // The vehicle table records the pitch it was measured at, so match the holder to it
+  // instead of leaving whatever was selected before. 23 -> square+spacer, 22.5 -> honeycomb
+  // with spacer; both are in the bracket catalogue at exactly those numbers.
+  set('dimHolder', v.p >= 23 ? 'square-sp' : 'honeycomb-sp');
+  // Cells per row: the long axis of a scooter tray takes the S count in one run on almost
+  // every one of these, which is how they are actually laid out.
+  set('dimPerRow', S);
+  set('dimLayers', 1);
+  calcPackDims();
+  const out = document.getElementById('dimResult');
+  if (out && S * P > v.max) {
+    out.innerHTML += `<br><span style="font-size:11px;color:var(--danger);">⚠ ${S * P} תאים על תא מצבר שנמדד ל-${v.max}</span>`;
+  }
+  document.getElementById('dimResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 function getDims() { return Store.get('dims') || []; }
 function renderDims() {
+  renderVehiclePacks();
   const dims = getDims();
   const list = document.getElementById('dimsList');
   if (dims.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛴</div><div class="empty-state-text">אין דגמים שמורים. הוסף דגם עם מידות תא המצבר.</div></div>'; return; }
