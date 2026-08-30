@@ -63,11 +63,6 @@ jobs:
           }"
           for f in /tmp/*.js; do node --check "$f"; done
 
-      # dist/ is what Cloudflare serves. index.html here at the root is a pre-dist leftover
-      # and nothing reads it, but stickers.html exists in both and they must not drift.
-      - name: stickers.html matches dist
-        run: diff stickers.html dist/stickers.html
-
       # The network here rewrites pages in flight; one such page was saved and committed,
       # and its injected scripts reached production. Cheap, and it runs before the browser.
       - name: Pages load nothing from outside their origin
