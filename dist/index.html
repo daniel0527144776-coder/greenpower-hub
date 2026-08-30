@@ -2316,7 +2316,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v241';
+const HUB_BUILD = 'v242';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3565,7 +3565,7 @@ const SUPPLIER_FREIGHT = 0.39;
 // SVMC72150 carries $110 of freight on a $200 part — so the real lever here is consolidating
 // orders, not haggling the rate. And this replaces a guess: 10 was the middle of a quoted
 // $8-12 forwarder band, and it happened to land within 10% of the truth, which is luck.
-let FREIGHT_USD_PER_KG = 11;
+let FREIGHT_USD_PER_KG = 24;
 
 // AND THE 0.39 DOES NOT BELONG TO THESE ROWS AT ALL (Daniel, 2026-08-26: the motors and
 // controllers do not come from the components supplier). NOTE: this file is served publicly
@@ -5977,7 +5977,7 @@ function saveSettings() {
   const cp = parseFloat(document.getElementById('setCostPct').value); COST_PCT = isNaN(cp) ? 60 : cp;
   const bd = parseFloat(document.getElementById('setBizDisc').value); BIZ_DISCOUNT = isNaN(bd) ? 15 : bd;
   const lc = parseFloat(document.getElementById('setLabourCost').value); LABOUR_COST = isNaN(lc) ? 60 : lc;
-  const fk = parseFloat(document.getElementById('setFreightKg').value); FREIGHT_USD_PER_KG = isNaN(fk) ? 11 : fk;
+  const fk = parseFloat(document.getElementById('setFreightKg').value); FREIGHT_USD_PER_KG = isNaN(fk) ? 24 : fk;
   Store.set('settings', { hourly: HOURLY, margin: MARGIN * 100, usd: USD, warranty: WARRANTY_MONTHS, warrantyBuild: WARRANTY_BUILD, costPct: COST_PCT, bizDisc: BIZ_DISCOUNT, labourCost: LABOUR_COST, freightKg: FREIGHT_USD_PER_KG });
   if (typeof recalc === 'function') recalc();
   syncWarrantyLabel();
@@ -6221,7 +6221,7 @@ function init() {
     COST_PCT = (s.costPct != null) ? s.costPct : 60;
     BIZ_DISCOUNT = (s.bizDisc != null) ? s.bizDisc : 15;
     LABOUR_COST = (s.labourCost != null) ? s.labourCost : 60;
-    FREIGHT_USD_PER_KG = (s.freightKg != null) ? s.freightKg : 11;
+    FREIGHT_USD_PER_KG = (s.freightKg != null) ? s.freightKg : 24;
     document.getElementById('setHourly').value = HOURLY;
     document.getElementById('setMargin').value = Math.round(MARGIN * 100);
     document.getElementById('setUsd').value = USD;
