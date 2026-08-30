@@ -993,6 +993,7 @@ body { min-height: 100vh; }
     <div class="form-row"><label>שכבות</label><input type="number" class="form-input" id="dimLayers" value="1" min="1" max="6" step="1" oninput="calcPackDims()"></div>
     <div class="form-row"><label>תוספת מארז / BMS (מ"מ)</label><input type="number" class="form-input" id="dimExtra" value="18" min="0" step="1" oninput="calcPackDims()"></div>
     <div class="info-banner" style="margin-top:8px;"><span>📦</span><div id="dimResult"></div></div>
+    <div id="dimDraw" style="margin-top:10px;overflow-x:auto;"></div>
     <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">המרווחים הם של מחזיקי התאים בפועל (קטלוג Wellgo): 18650 ‎20.2 מ"מ‎ (19.5 בכוורת עם מפריד), 21700 ‎21.4 מ"מ‎ (23 ריבועי עם מפריד, 22.5 כוורת עם מפריד). כוורת חוסכת ‎13%‎ ברוחב כי כל שורה שנייה נכנסת לשקע שבין התאים.</p>
   </div>
   <div class="card">
@@ -2342,7 +2343,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v247';
+const HUB_BUILD = 'v248';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5347,6 +5348,10 @@ const DIM_PITCH = {
            // 18650 pack is laid out on a diagonal holder.
            diag: [16.5, 18.5], 'diag-tpl': [17.5, 22], 'diag-tpl-rot': [22, 17.5] },
   21700: { square: [21.4, 21.4], 'square-sp': [23, 23], honeycomb: [21.4, 18.5], 'honeycomb-sp': [22.5, 19.5],
+           // 20.2/25.5 is the bracket's own spacing; ON THE BENCH Daniel measures 21.6/24.6,
+           // which is the same holder plus the tolerance a real build accumulates. The
+           // designed number is what the arithmetic uses — the measured one is why a layout
+           // that computes to exactly the tray width does not go in.
            // The template bracket is ONE bracket you can lay out two ways, not two brackets:
            // 20.2 along the row and 25.5 between them, or the same thing turned 90°. Daniel's
            // own counts in the Inokim OX tub settle it — 21 x 6 = 126 the long way, 17 x 8 =
@@ -5355,6 +5360,48 @@ const DIM_PITCH = {
 };
 const DIM_WALL = 1.5;        // bracket edge either side
 const DIM_CAP = 4;           // holder caps above and below the cell
+// Draws the cell grid to scale — every circle is a cell where it actually sits, so the
+// picture IS the build instruction: count along a row, count the rows, see where the last
+// row runs short. Drawn in real millimetres and scaled once at the end, because doing the
+// arithmetic in screen pixels is how a diagram stops matching the numbers printed above it.
+//
+// The parallel groups are shaded in alternating bands: cells welded to each other are one
+// band, which is the thing a photo of someone else's pack never tells you.
+function drawPackLayout(o) {
+  const box = document.getElementById("dimDraw");
+  if (!box) return;
+  const { cols, rows, pitch, rowPitch, dia, stagger, N, P, layers } = o;
+  if (!cols || !rows) { box.innerHTML = ""; return; }
+  const wMM = (cols - 1) * pitch + dia + (stagger ? pitch / 2 : 0);
+  const hMM = (rows - 1) * rowPitch + dia;
+  const PAD = 26;                       // room for the dimension labels
+  const scale = Math.min(1, (340 - PAD * 2) / wMM);
+  const W = Math.round(wMM * scale) + PAD * 2, H = Math.round(hMM * scale) + PAD * 2;
+  const r = (dia / 2) * scale;
+  let cells = "", n = 0;
+  for (let row = 0; row < rows; row++) {
+    const off = stagger && row % 2 ? pitch / 2 : 0;
+    for (let col = 0; col < cols; col++) {
+      if (n >= Math.ceil(N / (layers || 1))) break;      // the last row is usually partial
+      const cx = PAD + (off + col * pitch + dia / 2) * scale;
+      const cy = PAD + (row * rowPitch + dia / 2) * scale;
+      // Alternating bands of P cells: one band is one parallel group, i.e. one weld.
+      const band = P > 1 ? Math.floor(n / P) % 2 : 0;
+      cells += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${band ? "var(--primary)" : "var(--bg-card, #1e293b)"}" fill-opacity="${band ? 0.35 : 0.9}" stroke="var(--primary)" stroke-width="1"/>`;
+      n++;
+    }
+  }
+  const lab = (x, y, s, anchor2) => `<text x="${x}" y="${y}" fill="var(--text-muted)" font-size="11" text-anchor="${anchor2 || "middle"}">${s}</text>`;
+  box.innerHTML =
+    `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;">` +
+    `<rect x="${PAD - 4}" y="${PAD - 4}" width="${W - PAD * 2 + 8}" height="${H - PAD * 2 + 8}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>` +
+    cells +
+    lab(W / 2, H - 8, `${Math.round(wMM)} מ"מ · ${cols} תאים בשורה`) +
+    `<g transform="translate(12,${H / 2}) rotate(-90)">` + lab(0, 0, `${Math.round(hMM)} מ"מ · ${rows} שורות`) + "</g>" +
+    "</svg>" +
+    `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">כל עיגול = תא. הצללה לסירוגין = קבוצת ${P}P אחת (ריתוך אחד)${layers > 1 ? ` · שכבה אחת מתוך ${layers}` : ""}.</div>`;
+}
+
 function calcPackDims() {
   const out = document.getElementById('dimResult');
   if (!out) return;
@@ -5414,6 +5461,7 @@ function calcPackDims() {
   // Against the count for THIS holder where one exists, not the tray's overall ceiling: on an
   // OX a diagonal holder takes 126 and no holder 140, so a 140-cell build is fine on one and
   // over on the other. One `max` cannot express that and would pass both.
+  drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers });
   if (dimVehicle) {
     const cap = (dimVehicle.caps && dimVehicle.caps[holder] != null) ? dimVehicle.caps[holder] : dimVehicle.max;
     if (N > cap) {
@@ -5520,7 +5568,26 @@ function useVehiclePack(model) {
   document.getElementById('dimResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 function getDims() { return Store.get('dims') || []; }
+// The Inokim OX tub, seeded once from the measurement Daniel sent (2026-08-30). Guarded by
+// its own flag rather than by "is it already there": re-adding a model he deleted is the
+// DEFAULT_REPLIES trap — a default that keeps coming back is worse than no default.
+//
+// Height is left at 0 on purpose. He measured the floor of the tub, not its depth, and the
+// fit check skips any model with a missing dimension rather than pretending the pack clears
+// a lid nobody measured. Fill it in from the editor and the check starts working.
+function seedOxTub() {
+  try {
+    if (localStorage.getItem('gp_dims_seed_ox')) return;
+    localStorage.setItem('gp_dims_seed_ox', '1');
+    const dims = getDims();
+    if (dims.some((d) => /Inokim OX\b/i.test(d.model || ''))) return;
+    dims.push({ id: Date.now(), model: 'Inokim OX', l: 425, w: 165, h: 0,
+      notes: 'אמבטיה בשני חלקים: רחב 425×165 + צר 60×140 מ"מ. גובה טרם נמדד. נספרו 140 תאים ללא תושבת אלכסונית, 136 ו-126 בשני כיווני התושבת.' });
+    Store.set('dims', dims);
+  } catch (e) { /* private mode, or storage refused — the page still works without it */ }
+}
 function renderDims() {
+  seedOxTub();
   renderVehiclePacks();
   const dims = getDims();
   const list = document.getElementById('dimsList');

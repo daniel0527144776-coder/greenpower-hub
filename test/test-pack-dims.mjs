@@ -138,6 +138,43 @@ check('the OX fills its own 20S7P build', /20S 7P/.test(ox.filled), ox.filled.sl
 check('140 cells is over the 126 counted on the diagonal holder', /⚠/.test(ox.overDiag) && /126/.test(ox.overDiag), ox.overDiag.slice(-70));
 check('and not over the 140 counted on the square one', !/⚠/.test(ox.okSquare), ox.okSquare.slice(-70));
 
+// The drawing is the answer to "how do I lay it out", so it has to BE the layout: one circle
+// per cell, in the grid the numbers above it describe. A picture that disagrees with the
+// figures is worse than no picture.
+const draw = await page.evaluate(() => {
+  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30);
+  set('dimHolder', 'diag'); set('dimPerRow', 20); set('dimLayers', 1); calcPackDims();
+  const svg = document.getElementById('dimDraw');
+  return { circles: svg.querySelectorAll('circle').length, hasSvg: !!svg.querySelector('svg'),
+           txt: svg.textContent };
+});
+check('the drawing has one circle per cell (120)', draw.circles === 120, String(draw.circles));
+check('and labels the row length and the row count', /20 תאים בשורה/.test(draw.txt) && /6 שורות/.test(draw.txt), draw.txt.slice(0, 80));
+check('and names the parallel group so it reads as a weld', /6P/.test(draw.txt), draw.txt.slice(0, 80));
+
+// A staggered layout must actually be drawn staggered, or the picture lies about the shape.
+const stag = await page.evaluate(() => {
+  const xs = (h) => { document.getElementById('dimHolder').value = h; calcPackDims();
+    return [...document.querySelectorAll('#dimDraw circle')].map(c => +c.getAttribute('cx')); };
+  const d = xs('diag'), s = xs('square');
+  return { diagFirstTwoRows: d[0] !== d[20], squareFirstTwoRows: s[0] === s[20] };
+});
+check('diagonal rows are offset from each other', stag.diagFirstTwoRows, JSON.stringify(stag));
+check('square rows are not', stag.squareFirstTwoRows, JSON.stringify(stag));
+
+// The OX tub is seeded once and never re-seeded — a default that comes back after you delete
+// it is the DEFAULT_REPLIES trap.
+const seeded = await page.evaluate(() => {
+  localStorage.removeItem('gp_dims_seed_ox'); localStorage.setItem('gp_dims', '[]');
+  seedOxTub(); const first = (JSON.parse(localStorage.getItem('gp_dims')) || []).length;
+  localStorage.setItem('gp_dims', '[]'); seedOxTub();
+  const second = (JSON.parse(localStorage.getItem('gp_dims')) || []).length;
+  return { first, second };
+});
+check('the OX tub seeds once', seeded.first === 1, JSON.stringify(seeded));
+check('and does not come back after deletion', seeded.second === 0, JSON.stringify(seeded));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();
