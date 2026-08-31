@@ -2341,7 +2341,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v258';
+const HUB_BUILD = 'v259';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5550,6 +5550,22 @@ function calcPackDims() {
 //
 // 0S/0P means Daniel does not build that voltage for that model, which is a real answer and
 // is shown as "—" rather than as a zero-cell pack.
+// `oem` IS THE TRAY, READ BACKWARDS — Daniel's idea on 2026-08-31, and the one that worked
+// where searching for the cavity did not: the biggest pack anyone sells for a scooter is a
+// measurement of what fits in it. Twenty of the twenty-three now carry the largest capacity
+// the factory or the trade offers.
+//
+// It corroborates his counts where it can be compared directly. Thunder 3 tops out at 72V
+// 40Ah = 20S8P = 160 cells and his row says 20S8P. Blade GT is 60V 35Ah = 16S7P = 112 and
+// his row says 16S7P. Achilleus, Vsett 10+ and Talaria land within ~10%.
+//
+// THE TRAP, and it is why this cannot be automated: an OEM Ah figure only converts to a cell
+// count if you know the OEM CELL. The Bronco Xtreme ships 35Ah on LG MJ1, which is a 3.5Ah
+// cell — 160 cells, not the 112 a 5Ah assumption would give. Half the OEM packs here are on
+// 3.5Ah or 4Ah cells, so a bare "35Ah" understates the tray by up to 43%. That is also why
+// his numbers exceed the OEM figures rather than contradicting them: the same box on 5.0Ah
+// cells is simply a bigger battery.
+//
 // SEARCHED AND NOT FOUND, so nobody repeats it (2026-08-31, at Daniel's request to look
 // "in every forum in the world"): Endless Sphere — including a thread titled exactly "Sur Ron
 // Light Bee X Battery Dimensions", where the asker is told it cannot be found — electricbike.com,
@@ -5603,11 +5619,11 @@ const VEHICLE_PACKS = [
   // single layer, so it fits without stacking — which is what a 170mm-deep box would allow.
   { g: 'אופנועים וריקשות', m: 'אופנוע שליחויות 72V', p: 22.4, s60: 0, p60: 0, s72: 20, p72: 8, max: 168,
     tub: '485×170×170 מ"מ (נמדד ע"י הלקוח)' },
-  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, pack: '380×170×140 (XXL)' },
-  { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, pack: '381×171×140' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 32Ah', pack: '380×170×140 (XXL)' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, oem: '60V 45Ah', pack: '381×171×140' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Enduro', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
-  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 50Ah' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah' },
   // The OX is NOT the OXO. Its tub is two rectangles — 425x165 wide plus 60x140 narrow —
   // and Daniel counted what each bracket actually takes in it: 140 with no diagonal holder,
   // 136 on the 20.2/25.5 one, 126 on the 21.6/24.6 one. `caps` therefore beats `max` when
@@ -5618,24 +5634,24 @@ const VEHICLE_PACKS = [
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', p: 21.4, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
     tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-224': 136, 'diag-214': 126 } },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, pack: '315×133×57' },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, pack: '360×210×70' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, pack: '320×155×70' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 11+', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 8, max: 160 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', p: 22.5, s60: 16, p60: 13, s72: 20, p72: 10, max: 208 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf King GTR', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 12, max: 240 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, pack: '467×124×57' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Thunder 2/3', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160 },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, oem: '60V 24Ah', pack: '315×133×57' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', pack: '360×210×70' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, oem: '60V 28Ah', pack: '320×155×70' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 11+', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160, oem: '60V 31.2Ah' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 40Ah' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 8, max: 160, oem: '60V 40Ah' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 30Ah' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', p: 22.5, s60: 16, p60: 13, s72: 20, p72: 10, max: 208, oem: '60V 35Ah' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf King GTR', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 12, max: 240, oem: '72V 40Ah' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 24.5Ah', pack: '467×124×57' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Thunder 2/3', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160, oem: '72V 40Ah' },
   { g: 'קורקינטים · ללא הגבהה', m: 'DT Storm', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 8, max: 160 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Achilleus', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Achilleus', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 35Ah' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Spider 2', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'DT X2', p: 23, s60: 0, p60: 0, s72: 20, p72: 14, max: 280 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Blade GT', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 5, max: 112 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Teverun', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 200 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Bronco', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'DT X2', p: 23, s60: 0, p60: 0, s72: 20, p72: 14, max: 280, oem: '72V 42Ah' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Blade GT', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 5, max: 112, oem: '60V 35Ah' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Teverun', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 200, oem: '60V 35Ah' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Bronco', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '60V 35Ah (MJ1)' },
 ];
 const CELL_AH_DEFAULT = 5;
 // Which vehicle the estimator is currently answering for. It has to be remembered rather
@@ -5666,7 +5682,7 @@ function renderVehiclePacks() {
     const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ "square-23": "ריבועי 23", "diag-224": "אלכסוני 22.4", "diag-214": "אלכסוני 21.4" })[k] || k}: ${n}`).join(" · ") : "";
     html += `<div class="list-item" onclick="useVehiclePack('${v.m}')" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
-        <strong>${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong><span style="font-size:11px;color:var(--text-muted);">${v.p} מ"מ · עד ${v.max}</span>
+        <strong>${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong><span style="font-size:11px;color:var(--text-muted);">${v.p} מ"מ · עד ${v.max}${v.oem ? ` · מקורי ${v.oem}` : ""}</span>
       </div>
       <div style="font-size:12px;margin-top:2px;">60V: ${cfg(v.s60, v.p60)} &nbsp;·&nbsp; 72V: ${cfg(v.s72, v.p72)}</div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${v.pack ? `חבילה ${v.pack} מ"מ · ` : ""}שטח מינימלי ${minCM2} סמ״ר</div>

@@ -245,6 +245,20 @@ check('120 cells means 240 contacts', /240 מגעים/.test(nick.six), nick.six.
 check('and a 6P group wants the 6×5 plate', /תבנית 6×5/.test(nick.six), nick.six.slice(-60));
 check('a 3P group wants the 1×3 strip', /תבנית 1×3/.test(nick.three), nick.three.slice(-60));
 
+// The OEM capacity is the tray read backwards, so it has to reach the screen — and where it
+// can be compared directly it must AGREE: Thunder 3 tops out at 72V 40Ah, which is 20S8P,
+// which is the row.
+const oem = await page.evaluate(() => {
+  renderVehiclePacks();
+  const rows = [...document.querySelectorAll('#vpList .list-item')];
+  const txt = (m) => (rows.find(r => r.textContent.includes(m)) || {}).textContent || '';
+  return { count: rows.filter(r => /מקורי/.test(r.textContent)).length,
+           thunder: txt('Thunder'), blade: txt('Blade GT') };
+});
+check('twenty rows carry an OEM capacity', oem.count >= 20, String(oem.count));
+check('Thunder 3: OEM 40Ah and the row is 20S8P', /מקורי 72V 40Ah/.test(oem.thunder) && /20S 8P/.test(oem.thunder), oem.thunder.slice(0,110));
+check('Blade GT: OEM 35Ah and the row is 16S7P', /מקורי 60V 35Ah/.test(oem.blade) && /16S 7P/.test(oem.blade), oem.blade.slice(0,110));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();
