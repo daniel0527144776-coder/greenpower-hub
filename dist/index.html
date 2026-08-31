@@ -5644,11 +5644,26 @@ const VEHICLE_PACKS = [
   // single layer, so it fits without stacking — which is what a 170mm-deep box would allow.
   { g: 'אופנועים וריקשות', m: 'אופנוע שליחויות 72V', src: 'AI', p: 22.4, s60: 0, p60: 0, s72: 20, p72: 8, max: 168,
     tub: '485×170×170 מ"מ (נמדד ע"י הלקוח)' },
-  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 32Ah', oemSrc: 'zippycycles', pack: '380×170×140 (XXL)', packSrc: 'citylion (XXL אחרי-שוק)' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', src: 'AI', p: 22.4, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 32Ah', oemSrc: 'zippycycles', pack: '380×170×140 (XXL)', packSrc: 'citylion (XXL אחרי-שוק)' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', src: 'AI', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, oem: '60V 45Ah', oemSrc: 'talaria.cn.com', pack: '381×171×140', packSrc: 'talaria.cn.com' },
-  { g: 'אופנועי שטח (E-Moto)', m: 'Enduro', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
-  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 50Ah', oemSrc: 'endless-sphere + risunmotor', pack: '340×120×150', packSrc: 'theebikemotorkit (יצרן המסגרת)' },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Enduro', src: 'AI', p: 22.4, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
+  // ── Bomber / Stealth Bomber: a frame FAMILY, and the versions are not close to each other.
+  // 84 cells in the 48V frame against 300 in the Plus is 3.5x, so 'a Bomber came in' is not
+  // yet a question anyone can answer. Ask which frame, then read the row.
+  //
+  // Every dimension here is the frame maker's published figure; the S/P and max are computed
+  // from it with calcPackDims' own formula (21.4 diagonal). src: 'מחושב' says exactly that.
+  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber FC-1 48V', src: 'מחושב', p: 21.4, s60: 16, p60: 5, s72: 20, p72: 4, max: 84,
+    oem: '48V 43.5Ah', oemSrc: 'risunmotor FC-1 48V', tub: '280×75×150 מ"מ (יצרן השלדה)' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber FC-1 72V', src: 'מחושב', p: 21.4, s60: 16, p60: 7, s72: 20, p72: 5, max: 119,
+    tub: '370×150×70 מ"מ (יצרן השלדה, risunmotor FC-1 72V) · חלל לא מלבני — המספר הוא מלבן חוסם' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber רגיל 3-12kW', src: 'מחושב', p: 21.4, s60: 16, p60: 9, s72: 20, p72: 7, max: 144,
+    tub: '355×120×185 מ"מ (14\" × 4.7\" × 7.3\")', packSrc: 'theebikemotorkit — טבלת מידות' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber 72V מלא', src: 'יצרן', p: 21.4, s60: 16, p60: 11, s72: 20, p72: 9, max: 180,
+    oem: '72V 45Ah', oemSrc: 'risunmotor — אופניים מוכנים', pack: '425×250×78 (לא מלבני)', packSrc: 'risunmotor' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber Plus 15kW', src: 'יצרן', p: 21.4, s60: 16, p60: 18, s72: 20, p72: 15, max: 300,
+    oem: '72V 75Ah', oemSrc: 'theebikemotorkit — שלדת Plus' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.4, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' },
   // The OX is NOT the OXO. Its tub is two rectangles — 425x165 wide plus 60x140 narrow —
   // and Daniel counted what each bracket actually takes in it: 140 with no diagonal holder,
   // 136 on the 20.2/25.5 one, 126 on the 21.6/24.6 one. `caps` therefore beats `max` when
@@ -5659,24 +5674,24 @@ const VEHICLE_PACKS = [
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', src: 'AI', p: 21.4, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
     tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-224': 136, 'diag-214': 126 } },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, oem: '60V 28Ah', oemSrc: 'maxblinker', pack: '320×155×70', packSrc: 'falconpev' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 11+', src: 'AI', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160, oem: '60V 31.2Ah', oemSrc: 'vsettscooters' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 22.4, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', src: 'AI', p: 22.4, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', src: 'AI', p: 22.4, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, oem: '60V 28Ah', oemSrc: 'maxblinker', pack: '320×155×70', packSrc: 'falconpev' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 11+', src: 'AI', p: 22.4, s60: 16, p60: 9, s72: 20, p72: 8, max: 160, oem: '60V 31.2Ah', oemSrc: 'vsettscooters' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', src: 'AI', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 40Ah', oemSrc: 'fluidfreeride' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', src: 'AI', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 8, max: 160, oem: '60V 40Ah', oemSrc: 'maxblinker' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 30Ah', oemSrc: 'fluidfreeride' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', src: 'AI', p: 22.5, s60: 16, p60: 13, s72: 20, p72: 10, max: 208, oem: '60V 35Ah', oemSrc: 'fluidfreeride' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf King GTR', src: 'AI', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 12, max: 240, oem: '72V 40Ah', oemSrc: 'kaaboeu' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 24.5Ah', oemSrc: 'ebikescooter', pack: '467×124×57', packSrc: 'ebikescooter' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Thunder 2/3', src: 'AI', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160, oem: '72V 40Ah', oemSrc: 'dualtronusa' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'DT Storm', src: 'AI', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 8, max: 160 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Achilleus', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 35Ah', oemSrc: 'dualtron-shop' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Spider 2', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', src: 'AI', p: 22.4, s60: 16, p60: 10, s72: 20, p72: 8, max: 160, oem: '60V 40Ah', oemSrc: 'maxblinker' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', src: 'AI', p: 22.4, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 30Ah', oemSrc: 'fluidfreeride' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', src: 'AI', p: 22.4, s60: 16, p60: 13, s72: 20, p72: 10, max: 208, oem: '60V 35Ah', oemSrc: 'fluidfreeride' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Wolf King GTR', src: 'AI', p: 22.4, s60: 0, p60: 0, s72: 20, p72: 12, max: 240, oem: '72V 40Ah', oemSrc: 'kaaboeu' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', src: 'AI', p: 22.4, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 24.5Ah', oemSrc: 'ebikescooter', pack: '467×124×57', packSrc: 'ebikescooter' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Thunder 2/3', src: 'AI', p: 22.4, s60: 16, p60: 9, s72: 20, p72: 8, max: 160, oem: '72V 40Ah', oemSrc: 'dualtronusa' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'DT Storm', src: 'AI', p: 22.4, s60: 0, p60: 0, s72: 20, p72: 8, max: 160 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Achilleus', src: 'AI', p: 22.4, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 35Ah', oemSrc: 'dualtron-shop' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Spider 2', src: 'AI', p: 22.4, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
   { g: 'קורקינטים · ללא הגבהה', m: 'DT X2', src: 'AI', p: 23, s60: 0, p60: 0, s72: 20, p72: 14, max: 280, oem: '72V 42Ah', oemSrc: 'rafplay' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Blade GT', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 5, max: 112, oem: '60V 35Ah', oemSrc: 'maxblinker' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Teverun', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 200, oem: '60V 35Ah', oemSrc: 'maxblinker' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Bronco', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '60V 35Ah (MJ1)', oemSrc: 'scooter.guide' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Blade GT', src: 'AI', p: 22.4, s60: 16, p60: 7, s72: 20, p72: 5, max: 112, oem: '60V 35Ah', oemSrc: 'maxblinker' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Teverun', src: 'AI', p: 22.4, s60: 16, p60: 12, s72: 20, p72: 10, max: 200, oem: '60V 35Ah', oemSrc: 'maxblinker' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Bronco', src: 'AI', p: 22.4, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '60V 35Ah (MJ1)', oemSrc: 'scooter.guide' },
 ];
 const CELL_AH_DEFAULT = 5;
 // Which vehicle the estimator is currently answering for. It has to be remembered rather
@@ -5684,6 +5699,50 @@ const CELL_AH_DEFAULT = 5;
 // it vanished the moment anything was adjusted afterwards — change the holder from square
 // to diagonal on an OX and the "over by 14 cells" warning quietly disappeared, which is the
 // exact moment it mattered most.
+// ── A picture per vehicle: DRAWN, never fetched ────────────────────────────────────────
+// Two reasons it cannot be a photo, and the second is the decisive one.
+//
+// The hub is a single self-contained file that has to open with no network. And the phone it
+// opens on sits behind Askan's filter, which does not fail an unapproved image — it SUBSTITUTES
+// one. Verified here on 2026-08-31 against two unrelated suppliers: the product photo came back
+// HTTP 200, with valid JPEG magic bytes, 33KB, and a grey mosaic reading 'כעת התמונה נשלחה
+// לנטפרי לבדיקה'. So the usual proof that an image arrived — status plus magic bytes — passes
+// on a picture of nothing. An <img> here is a thing that can be permanently missing on the one
+// device that matters; an inline path cannot be.
+//
+// It is a symbol for the CATEGORY, not a portrait of the model. Telling a delivery bike from a
+// Sur-Ron from a kick scooter at a glance is what 44 pixels can honestly do, and a drawing that
+// implied per-model accuracy would be this table's own mistake again, in pictures. The Bomber
+// gets a shaded frame triangle because on that frame the triangle IS the battery bay.
+function vehType(v) {
+  if (/Bomber/i.test(v.m)) return 'bomber';
+  if (v.g.indexOf('אופנועים') === 0 || v.g.indexOf('ריקשות') > -1) return 'moto';
+  if (v.g.indexOf('E-Moto') > -1) return 'emoto';
+  return 'scooter';
+}
+const VEH_ART = {
+  scooter:
+    '<circle cx="9" cy="23" r="6"/><circle cx="39" cy="23" r="6"/>' +
+    '<path d="M9 26H32" stroke-width="3"/><path d="M32 26L38 11"/><path d="M33 11h10"/>',
+  emoto:
+    '<circle cx="9" cy="22" r="7"/><circle cx="39" cy="22" r="7"/>' +
+    '<path d="M9 22L19 12h11l9 10"/><path d="M17 11h14" stroke-width="3"/>' +
+    '<path d="M30 12l8-3"/><path d="M34 9h8"/>',
+  bomber:
+    '<circle cx="9" cy="22" r="7"/><circle cx="39" cy="22" r="7"/>' +
+    '<path d="M14 21l7-9h9l-2 9z" fill="currentColor" fill-opacity=".22"/>' +
+    '<path d="M9 22L19 12h11l9 10"/><path d="M17 11h14" stroke-width="3"/>' +
+    '<circle cx="24" cy="24" r="2.5"/><path d="M30 12l8-3"/><path d="M34 9h8"/>',
+  moto:
+    '<circle cx="10" cy="23" r="6"/><circle cx="38" cy="23" r="6"/>' +
+    '<rect x="5" y="7" width="12" height="8" rx="1"/>' +
+    '<path d="M10 22h10l2-9h9l3 9"/><path d="M19 13h12" stroke-width="3"/><path d="M33 20l4-12"/>',
+};
+function vehIcon(v) {
+  return '<svg viewBox="0 0 48 32" width="44" height="29" aria-hidden="true" style="flex:none;"' +
+    ' fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"' +
+    ' stroke-linejoin="round" opacity=".72">' + (VEH_ART[vehType(v)] || '') + '</svg>';
+}
 let dimVehicle = null;
 function renderVehiclePacks() {
   const box = document.getElementById('vpList');
@@ -5706,8 +5765,8 @@ function renderVehiclePacks() {
     const minCM2 = Math.round(areaMM2 / 100);
     const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ "square-23": "ריבועי 23", "diag-224": "אלכסוני 22.4", "diag-214": "אלכסוני 21.4" })[k] || k}: ${n}`).join(" · ") : "";
     html += `<div class="list-item" onclick="useVehiclePack('${v.m}')" style="cursor:pointer;">
-      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
-        <strong>${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong><span style="font-size:11px;color:var(--text-muted);">${v.p} מ"מ · עד ${v.max}${v.oem ? ` · מקורי ${v.oem}` : ""}</span>
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+        <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong>${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong></span><span style="font-size:11px;color:var(--text-muted);text-align:left;flex:none;">${v.p} מ"מ · עד ${v.max}${v.oem ? ` · מקורי ${v.oem}` : ""}</span>
       </div>
       <div style="font-size:12px;margin-top:2px;">60V: ${cfg(v.s60, v.p60)} &nbsp;·&nbsp; 72V: ${cfg(v.s72, v.p72)}</div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${v.pack ? `חבילה ${v.pack} מ"מ · ` : ""}שטח מינימלי ${minCM2} סמ״ר</div>

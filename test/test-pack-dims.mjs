@@ -259,6 +259,42 @@ check('twenty rows carry an OEM capacity', oem.count >= 20, String(oem.count));
 check('Thunder 3: OEM 40Ah and the row is 20S8P', /מקורי 72V 40Ah/.test(oem.thunder) && /20S 8P/.test(oem.thunder), oem.thunder.slice(0,110));
 check('Blade GT: OEM 35Ah and the row is 16S7P', /מקורי 60V 35Ah/.test(oem.blade) && /16S 7P/.test(oem.blade), oem.blade.slice(0,110));
 
+// Every row gets a picture, and every picture is DRAWN. The check that matters is the last
+// one: an <img> here would look perfect on this machine and arrive as the filter's grey
+// placeholder on the phone the hub is actually used on — HTTP 200, valid JPEG magic bytes,
+// a picture of nothing. That failure is invisible to every other check in this file.
+const art = await page.evaluate(() => {
+  renderVehiclePacks();
+  const list = document.getElementById('vpList');
+  const rows = [...list.querySelectorAll('.list-item')];
+  const kinds = new Set(VEHICLE_PACKS.map((v) => vehType(v)));
+  return {
+    rows: rows.length,
+    svgs: list.querySelectorAll('svg').length,
+    imgs: list.querySelectorAll('img').length,
+    kinds: [...kinds].sort().join(),
+    inked: [...list.querySelectorAll('svg')].every((s) => s.querySelector('circle, path, rect')),
+  };
+});
+check('every vehicle row carries a drawing', art.svgs === art.rows && art.rows > 25, art.svgs + '/' + art.rows);
+check('and none of them is empty', art.inked, 'ok');
+// A vehType that quietly answered "scooter" for everything would still pass the count above
+// and give 29 identical pictures — which is worse than no picture, because it looks right.
+check('all four vehicle kinds are drawn', art.kinds === 'bomber,emoto,moto,scooter', art.kinds);
+check('nothing in the list fetches an image', art.imgs === 0, String(art.imgs));
+
+// The Bomber is a frame family whose versions differ by 3.5x in what they hold, so one row
+// called "Bomber" was a wrong answer wearing the shape of a right one.
+const bomb = await page.evaluate(() => {
+  renderVehiclePacks();
+  const rows = [...document.querySelectorAll('#vpList .list-item')]
+    .filter((r) => /Bomber/.test(r.textContent)).map((r) => r.textContent);
+  return { n: rows.length,
+           max: VEHICLE_PACKS.filter((v) => /Bomber/.test(v.m)).map((v) => v.max).sort((a, b) => a - b) };
+});
+check('the Bomber is listed as five frames', bomb.n === 5, String(bomb.n));
+check('and they are not the same battery bay', bomb.max[0] === 84 && bomb.max[4] === 300, bomb.max.join('/'));
+
 // The provenance warning is the most important thing on this page. The table reads like
 // measurements and is not — it came from another model — so the page has to say so where the
 // numbers are used, not only in a comment nobody opens.
@@ -278,4 +314,7 @@ check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();
 srv.close();
-finish();
+// finish() RETURNS the code, it does not exit. Bare, every check in this file could fail and
+// the run would still be green — which is precisely the failure this suite exists to catch,
+// sitting in the suite itself. Ten of the eleven suites here already had it right.
+process.exit(finish());
