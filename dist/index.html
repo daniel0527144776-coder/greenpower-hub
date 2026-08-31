@@ -2341,7 +2341,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v256';
+const HUB_BUILD = 'v257';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5543,6 +5543,17 @@ function calcPackDims() {
 //
 // 0S/0P means Daniel does not build that voltage for that model, which is a real answer and
 // is shown as "—" rather than as a zero-cell pack.
+// SEARCHED AND NOT FOUND, so nobody repeats it (2026-08-31, at Daniel's request to look
+// "in every forum in the world"): Endless Sphere — including a thread titled exactly "Sur Ron
+// Light Bee X Battery Dimensions", where the asker is told it cannot be found — electricbike.com,
+// the scooter press, the replacement-battery trade in four countries, the French rebuild shops
+// (savemybattery, wee-bot), Minimotors' own spare-parts pages, a Chinese pack maker's Nami
+// listing, and a Russian-language search. Seventeen of the twenty-three models have no
+// published figure of any kind. Two sites answer 418 to a fetch; the rest simply do not state it.
+//
+// The conclusion is not "look harder". Nobody publishes the cavity, and the trade publishes the
+// PACK, which is smaller. Measuring is the only way, and one measured tray beats six inferred.
+//
 // PACK SIZES, NOT COMPARTMENT SIZES — and the difference is the whole story. Six were found
 // across the retail and forum web (Zero 10X 315×133×57, Zero 11X 360×210×70, Talaria
 // 381×171×140, Sur-Ron XXL 380×170×140, Mantis 467×124×57, Vsett 10+ 320×155×70). Four of
