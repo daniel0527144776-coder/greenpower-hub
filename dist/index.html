@@ -2341,7 +2341,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v255';
+const HUB_BUILD = 'v256';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5543,6 +5543,18 @@ function calcPackDims() {
 //
 // 0S/0P means Daniel does not build that voltage for that model, which is a real answer and
 // is shown as "—" rather than as a zero-cell pack.
+// PACK SIZES, NOT COMPARTMENT SIZES — and the difference is the whole story. Six were found
+// across the retail and forum web (Zero 10X 315×133×57, Zero 11X 360×210×70, Talaria
+// 381×171×140, Sur-Ron XXL 380×170×140, Mantis 467×124×57, Vsett 10+ 320×155×70). Four of
+// them are 57-70mm deep, which CANNOT take a standing 21700 at 70.15mm, and lying flat they
+// hold 28-102 cells against the 100-240 Daniel counts.
+//
+// The reconciliation is that a drop-in replacement matches the STOCK PACK, and the stock pack
+// does not fill the cavity. He builds to the cavity, which is why he fits more — and it is why
+// Zero 10X, Zero 11X and Inokim OXO are on his riser list in the first place: their stock packs
+// are too shallow for a cell to stand in. So treat a published pack size as a LOWER BOUND on
+// the tray and never as the tray.
+//
 // CHECKED ONLINE 2026-08-31, at Daniel's request, for the four rows carrying max 240 while
 // their largest listed build is 200. Nothing found supports 240, and one thing contradicts it:
 //
@@ -5583,14 +5595,14 @@ const VEHICLE_PACKS = [
     tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-225': 126, 'diag-224': 136 } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, pack: '315×133×57' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, pack: '360×210×70' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, pack: '320×155×70' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 11+', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, max: 240 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 8, max: 160 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', p: 22.5, s60: 16, p60: 13, s72: 20, p72: 10, max: 208 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Wolf King GTR', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 12, max: 240 },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, pack: '467×124×57' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Thunder 2/3', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160 },
   { g: 'קורקינטים · ללא הגבהה', m: 'DT Storm', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 8, max: 160 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Achilleus', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
