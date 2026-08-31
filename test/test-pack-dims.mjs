@@ -131,7 +131,9 @@ const ox = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   useVehiclePack('Inokim OX');
   const filled = document.getElementById('dimResult').textContent;
-  set('dimHolder', 'diag-225'); set('dimAh', 35); set('dimV', 72); calcPackDims();
+  // The 21.4 nickel is the OX's tightest: 126 counted, against 136 on the 22.4 and 140 with
+  // no diagonal holder at all. A 140-cell build is over on this one and fine on the square.
+  set('dimHolder', 'diag-214'); set('dimAh', 35); set('dimV', 72); calcPackDims();
   const overDiag = document.getElementById('dimResult').textContent;
   set('dimHolder', 'square-23'); calcPackDims();
   const okSquare = document.getElementById('dimResult').textContent;
@@ -160,7 +162,7 @@ check('and names the parallel group so it reads as a weld', /6P/.test(draw.txt),
 const stag = await page.evaluate(() => {
   const xs = (h) => { document.getElementById('dimHolder').value = h; calcPackDims();
     return [...document.querySelectorAll('#dimDraw circle')].map(c => +c.getAttribute('cx')); };
-  const d = xs('diag-225'), s = xs('square-23');
+  const d = xs('diag-224'), s = xs('square-23');
   return { diagFirstTwoRows: d[0] !== d[20], squareFirstTwoRows: s[0] === s[20] };
 });
 check('diagonal rows are offset from each other', stag.diagFirstTwoRows, JSON.stringify(stag));
@@ -188,7 +190,7 @@ const clear = await page.evaluate(() => {
   const run = (cell, holder) => { set('dimCell', cell); set('dimHolder', holder); set('dimV', 72); set('dimAh', 20); calcPackDims();
     return document.getElementById('dimResult').textContent; };
   return { sgTight: run('21700-50sg', 'square'), eOk: run('21700-50e', 'square'),
-           honey: run('21700-50e', 'diag-225') };
+           honey: run('21700-50e', 'diag-214') };
 });
 check('a 21.35mm 50SG is flagged in a 21.4mm bracket', /לא נכנס/.test(clear.sgTight), clear.sgTight.slice(-80));
 check('a 21.15mm 50E in the same bracket is not', !/לא נכנס/.test(clear.eOk), clear.eOk.slice(-80));
@@ -210,7 +212,7 @@ const nickels = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   const run = (h) => { set('dimHolder', h); set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
     const m = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/); return [+m[1], +m[2]]; };
-  return { a: run('diag-225'), b: run('diag-224'), sq: run('square-23') };
+  return { a: run('diag-224'), b: run('diag-214'), sq: run('square-23') };
 });
 check('the two diagonal nickels give different blocks', nickels.a[0] !== nickels.b[0] || nickels.a[1] !== nickels.b[1], JSON.stringify(nickels));
 check('and the 23mm square block is larger in area than either diagonal', nickels.sq[0]*nickels.sq[1] > nickels.a[0]*nickels.a[1] && nickels.sq[0]*nickels.sq[1] > nickels.b[0]*nickels.b[1], JSON.stringify(nickels));

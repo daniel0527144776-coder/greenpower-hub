@@ -973,8 +973,8 @@ body { min-height: 100vh; }
     <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="dimAh" value="20" min="1" step="1" oninput="calcPackDims()"></div>
     <div class="form-row"><label>מחזיק</label>
       <select class="form-select" id="dimHolder" onchange="calcPackDims()">
-        <option value="diag-225" selected>אלכסוני 22.5 (ניקל א׳)</option>
-        <option value="diag-224">אלכסוני 22.4 (ניקל ב׳)</option>
+        <option value="diag-224" selected>אלכסוני 22.4 (ניקל א׳)</option>
+        <option value="diag-214">אלכסוני 21.4 (ניקל ב׳)</option>
         <option value="square-23">ריבועי 23</option>
         <option value="square">ריבועי 21.4 — ללא מפריד (קטלוג)</option>
         <option value="honeycomb">כוורת 21.4 — ללא מפריד (קטלוג)</option>
@@ -2341,7 +2341,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v257';
+const HUB_BUILD = 'v258';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5354,7 +5354,14 @@ const BRACKET_MAX = { 21700: { cols: 15, rows: 10 }, 18650: { cols: 22, rows: 16
 // Validated against a pack he measured: 72V 30Ah = 20S6P = 120 cells, twenty to a row, came
 // out 390 x 135mm. This table gives 385 x 131 — 1.3% out. Every other spacing here misses by
 // 40-70mm on the length, so the number is doing real work.
-// [along the row, between rows]. THE FIRST THREE ARE THE BRACKETS DANIEL OWNS (2026-08-31):
+// [along the row, between rows]. THE FIRST THREE ARE THE BRACKETS DANIEL OWNS: square at
+// 23mm and two diagonal nickels at 22.4 and 21.4 (corrected 2026-08-31 — the second was
+// written 22.5 first). Everything else is the Wellgo catalogue, kept for reference.
+//
+// The measured pack settles which is which: 72V 30Ah, 120 cells, six to a row, came out
+// 390 x 135mm. The 22.4 nickel gives 389.7 x 133.2 and the 21.4 gives 373 x 128 — 17mm
+// short on the long side, so that build was the 22.4.
+// (superseded header below)
 // square at 23mm, and two diagonal nickels at 22.5 and 22.4. Everything else is the Wellgo
 // catalogue, kept for reference and for a bracket he might buy.
 //
@@ -5368,9 +5375,9 @@ const BRACKET_MAX = { 21700: { cols: 15, rows: 10 }, 18650: { cols: 22, rows: 16
 // The 22.5 nickel gives 391.4 x 133.7. Both fit the measurement; the square 23 misses the
 // long side by 68mm, so that pack was built on a diagonal bracket and the numbers say which.
 const DIM_PITCH = {
-  18650: { 'diag-225': [22.5, 19.49], 'diag-224': [22.4, 19.4], 'square-23': [23, 23],
+  18650: { 'diag-224': [22.4, 19.4], 'diag-214': [21.4, 18.53], 'square-23': [23, 23],
            square: [20.2, 20.2], honeycomb: [20.2, 17.5] },
-  21700: { 'diag-225': [22.5, 19.49], 'diag-224': [22.4, 19.4], 'square-23': [23, 23],
+  21700: { 'diag-224': [22.4, 19.4], 'diag-214': [21.4, 18.53], 'square-23': [23, 23],
            square: [21.4, 21.4], honeycomb: [21.4, 18.53] },
 };
 const DIM_WALL = 1.5;        // bracket edge either side
@@ -5589,6 +5596,13 @@ function calcPackDims() {
 // They are 10P / 7P / 7P / 12P now, i.e. 50Ah / 35Ah / 35Ah / 60Ah instead of 40/30/30/50.
 // The row check that found them is still live for the next one.
 const VEHICLE_PACKS = [
+  // From the WhatsApp thread with Oral Paiman, 24.8.2025: a 72V 40Ah pack for a delivery
+  // motorcycle, measured by the customer at 'רוחב 17 · גובה 17 · אורך 48.5' — 485 x 170 x 170mm.
+  // It is the only dimension stated in text in that whole thread; every other 'זה המידות' was
+  // a photo. 20S8P = 160 cells, and at the 22.4 nickel a 485x170 floor takes 21 x 8 = 168 in a
+  // single layer, so it fits without stacking — which is what a 170mm-deep box would allow.
+  { g: 'אופנועים וריקשות', m: 'אופנוע שליחויות 72V', p: 22.4, s60: 0, p60: 0, s72: 20, p72: 8, max: 168,
+    tub: '485×170×170 מ"מ (נמדד ע"י הלקוח)' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, pack: '380×170×140 (XXL)' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, pack: '381×171×140' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Enduro', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
@@ -5603,7 +5617,7 @@ const VEHICLE_PACKS = [
   // enough to plan with and not close enough to cut a bracket to. Where he has counted, his
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', p: 21.4, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
-    tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-225': 126, 'diag-224': 136 } },
+    tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-224': 136, 'diag-214': 126 } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, pack: '315×133×57' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, pack: '360×210×70' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, max: 100, pack: '320×155×70' },
@@ -5649,7 +5663,7 @@ function renderVehiclePacks() {
     // meaningfully smaller than a square layout would give.
     const areaMM2 = v.max * v.p * (v.p * 0.866);
     const minCM2 = Math.round(areaMM2 / 100);
-    const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ "square-23": "ריבועי 23", "diag-225": "אלכסוני 22.5", "diag-224": "אלכסוני 22.4" })[k] || k}: ${n}`).join(" · ") : "";
+    const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ "square-23": "ריבועי 23", "diag-224": "אלכסוני 22.4", "diag-214": "אלכסוני 21.4" })[k] || k}: ${n}`).join(" · ") : "";
     html += `<div class="list-item" onclick="useVehiclePack('${v.m}')" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
         <strong>${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong><span style="font-size:11px;color:var(--text-muted);">${v.p} מ"מ · עד ${v.max}</span>
@@ -5676,7 +5690,7 @@ function useVehiclePack(model) {
   // The vehicle table records the pitch it was measured at, so match the holder to it
   // instead of leaving whatever was selected before. 23 -> square+spacer, 22.5 -> honeycomb
   // with spacer; both are in the bracket catalogue at exactly those numbers.
-  set('dimHolder', v.p >= 23 ? 'square-23' : 'diag-225');
+  set('dimHolder', v.p >= 23 ? 'square-23' : 'diag-224');
   // Cells per row: the long axis of a scooter tray takes the S count in one run on almost
   // every one of these, which is how they are actually laid out.
   set('dimPerRow', S);
