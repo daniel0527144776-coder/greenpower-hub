@@ -93,6 +93,11 @@ jobs:
       - name: Catalogue thumbnails decode, and nothing is fetched
         run: node test/test-hub-thumbs.mjs
 
+      # The presentation on the help page is generated from cost-model and product-specs. A slide
+      # quoting a cell cost is a price restated in prose, and those rot silently here.
+      - name: The presentation renders, and its numbers are the live ones
+        run: node test/test-deck.mjs
+
       - name: Sticker — saved layout is versioned
         run: node test/test-sticker-state.mjs
 

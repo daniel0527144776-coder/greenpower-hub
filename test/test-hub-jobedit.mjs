@@ -190,15 +190,19 @@ const org = await page.evaluate(() => {
   localStorage.setItem('gp_orders', JSON.stringify(orders));
   localStorage.setItem('gp_jobs', JSON.stringify(jobs));
   setSalesFilter('all');
-  const statBoxes = document.querySelectorAll('#salesStats .stat-box').length;
+  // The summary CARD is gone — it repeated the first month header underneath it. The figures
+  // moved into the headers, where they answer for every month instead of only this one.
+  const headerMoney = [...document.querySelectorAll('#ordersList .price-cat')]
+    .map((e) => e.textContent.replace(/\s+/g, ' ').trim());
   const monthHeaders = (document.getElementById('ordersList').innerHTML.match(/price-cat/g) || []).length;
   const rows = document.querySelectorAll('#ordersList .list-item').length;
   const more = document.getElementById('ordersList').innerHTML.includes('salesShowMore');
   const pendingShown = document.getElementById('salesPending').style.display !== 'none';
   const chips = [...document.querySelectorAll('#salesFilterBar .sub-tab')].map(e => e.textContent);
-  return { statBoxes, monthHeaders, rows, more, pendingShown, chips };
+  return { headerMoney, monthHeaders, rows, more, pendingShown, chips };
 });
-check('month summary shows three figures', org.statBoxes === 3, org.statBoxes);
+check('every month header carries its own money', org.headerMoney.every((h) => /₪/.test(h)), org.headerMoney[0]);
+check('and it is a split, not one lump', /🛒|🔧/.test(org.headerMoney[0] || ''), org.headerMoney[0]);
 check('four filter chips incl. open quotes', org.chips.length === 4 && org.chips[3].includes('הצעות'), org.chips);
 check('open-quotes banner is showing', org.pendingShown);
 check('list is capped, not all 180 rows', org.rows === 60, org.rows);
@@ -468,6 +472,60 @@ console.log('\n13. work that another job drags in is priced once, and only when 
     !/<br>|<span|<\//.test(note.brk + note.implied), note.brk);
 }
 
+// ---- 12. the sales page says each thing once ----
+// Daniel, 2026-08-31: "בטאב מכירות ותיקונים יש דברים כפולים". There were five, and four of
+// them are the kind that only a rendered page shows: the h2 and the active tab carried the
+// same string one line apart, two controls led to page-calc, a quote said "הצעה" three ways
+// in one row, and the month total appeared in a summary card and again in the header below it.
+// These are assertions about what is ON SCREEN, because that is where the duplication was.
+{
+  await page.evaluate(() => {
+    const today = new Date().toISOString();
+    localStorage.setItem('gp_orders', JSON.stringify([
+      { id: 'dup1', date: today, customer: 'בדיקה', status: 'הצעה', total: 2400, items: [{ name: 'x', cat: 'y' }] },
+      { id: 'dup2', date: today, customer: 'בדיקה ג', status: 'שולם', total: 1800, items: [{ name: 'x', cat: 'y' }] },
+    ]));
+    localStorage.setItem('gp_jobs', JSON.stringify([
+      { id: 'dupj', date: today, customerName: 'בדיקה ב', price: 650, jobs: ['bms'] },
+    ]));
+    navigateTo('orders');
+  });
+  await page.waitForTimeout(200);
+  const sales = await page.evaluate(() => {
+    const sec = document.getElementById('page-orders');
+    const seen = (el) => {
+      // A clipped heading is still in innerText, so visibility has to be measured.
+      const r = el.getBoundingClientRect();
+      return r.width > 2 && r.height > 2;
+    };
+    const title = sec.querySelector('.page-title');
+    const tabs = [...sec.querySelectorAll('.page-group-tabs .sub-tab')];
+    const toCalc = [...sec.querySelectorAll('.page-header button, .page-header .sub-tab')]
+      .filter((b) => /navigateTo\('calc'\)/.test(b.getAttribute('onclick') || ''));
+    const row = [...sec.querySelectorAll('#ordersList .list-item')].find((r) => /מכירה/.test(r.textContent));
+    return {
+      titleVisible: seen(title),
+      titleText: title.textContent.trim(),
+      activeTab: (tabs.find((t) => t.classList.contains('active')) || {}).textContent || '',
+      calcRoutes: toCalc.length,
+      quoteMentions: (row.textContent.match(/הצעה/g) || []).length,
+      cycleLabel: (row.querySelector('button[onclick^="cycleOrderStatus"]') || {}).textContent || '',
+      statsCard: !!sec.querySelector('#salesStats'),
+      monthHeads: [...sec.querySelectorAll('#ordersList .price-cat')].map((e) => e.textContent.replace(/\s+/g, ' ').trim()),
+    };
+  });
+  check('the page does not print its own name twice', !sales.titleVisible, sales.titleText + ' / ' + sales.activeTab);
+  check('and the tab strip still names it', /מכירות ותיקונים/.test(sales.activeTab), sales.activeTab);
+  // Two buttons to one page is the duplicate you only notice on the phone, where they touch.
+  check('one route to the calculator, not two', sales.calcRoutes === 1, String(sales.calcRoutes));
+  // The pill says הצעה. The button used to say it again, and a third line said 'לא בהכנסות'.
+  check('a quote row says הצעה once', sales.quoteMentions === 1, String(sales.quoteMentions));
+  check('and the button says what it DOES', /סמן/.test(sales.cycleLabel), sales.cycleLabel);
+  check('the month total lives in one place', !sales.statsCard, sales.statsCard ? 'summary card is back' : 'ok');
+  check('and the month header carries the split', /🛒/.test(sales.monthHeads[0]) && /🔧/.test(sales.monthHeads[0]), sales.monthHeads[0] || 'none');
+  // Counts came out of this app on purpose; the header is read after scrolling, not before.
+  check('with no row count on it', !/^[^0-9]*\d+ ·/.test(sales.monthHeads[0].replace(/^[^ ]+ \d{4}/, '')), sales.monthHeads[0]);
+}
 check('no JS errors on the page', errors.length === 0, errors);
 check('and nothing asked through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
 
