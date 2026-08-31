@@ -996,7 +996,7 @@ body { min-height: 100vh; }
   </div>
   <div class="card">
     <h3 class="card-title">🏍️ מה נכנס לכל כלי</h3>
-    <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">לחיצה ממלאת את המחשבון.</p>
+    <p style="font-size:11px;color:var(--warning,#f59e0b);margin:0 0 8px;">⚠ הנתונים כאן מ-AI, לא נמדדו. נקודת פתיחה בלבד — מדוד לפני שאתה בונה. לחיצה ממלאת את המחשבון.</p>
     <input type="text" class="form-input" id="vpSearch" placeholder="חפש דגם…" oninput="renderVehiclePacks()" style="margin-bottom:10px;">
     <div id="vpList"></div>
   </div>
@@ -2341,7 +2341,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v259';
+const HUB_BUILD = 'v260';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5535,11 +5535,36 @@ function calcPackDims() {
     const cap = (dimVehicle.caps && dimVehicle.caps[holder] != null) ? dimVehicle.caps[holder] : dimVehicle.max;
     if (N > cap) {
       const how = (dimVehicle.caps && dimVehicle.caps[holder] != null) ? 'עם המחזיק הזה' : 'בתא המצבר';
-      out.innerHTML += `<br><span style="font-size:11px;color:var(--danger);">⚠ ${dimVehicle.m}: ${N} תאים — ${how} נספרו ${cap}</span>`;
+      out.innerHTML += `<br><span style="font-size:11px;color:var(--danger);">⚠ ${dimVehicle.m}: ${N} תאים — ${how} ${dimVehicle.tub ? 'נספרו' : 'לפי הערכת AI'} ${cap}</span>`;
     }
   }
 }
-// What actually fits each vehicle, measured on the bench (Daniel, 2026-08-30). This is the
+// ⚠ PROVENANCE: THIS TABLE IS AI OUTPUT, NOT MEASUREMENT (Daniel, 2026-08-31: "המידות
+// ששלחתי לך זה מידות ש-AI נתן לי לא מדדתי אותם"). It was written into this file on 2026-08-30
+// described as bench measurements, and it is not. Every S, P, pitch and ceiling below is
+// another model's guess until someone puts a tape on the tray.
+//
+// WHAT THAT INVALIDATES, including things this file claimed as evidence:
+//
+//   * "Two independent numbers agreeing to the cell" — Thunder 3 at 20S8P matching its 72V
+//     40Ah OEM pack, Blade GT at 16S7P matching 60V 35Ah. That is not corroboration. An AI
+//     asked for a scooter's pack configuration reproduces the published OEM spec, so both
+//     numbers came from the same place and agreeing proves only that.
+//   * The Inokim OX reconciliation. 21 columns x 6 rows = 126 came out exact only when the
+//     cell was taken at a round 21.0mm; at the datasheet 21.15mm the same arithmetic gives
+//     20 x 6 = 120. A number that needs the wrong cell diameter to work is not a measurement.
+//   * The four "copy errors" corrected on 2026-08-31 (Nami Blast, Nami Klima, Mantis King,
+//     Teverun carrying the same P at both voltages). That is a language model repeating a
+//     column, and "correcting" it produced four more invented numbers, not four fixed ones.
+//
+// WHAT IS STILL REAL and can be relied on: the three bracket pitches (23 / 22.4 / 21.4 — his
+// own stock), the nickel plate prices (a supplier quote in the WhatsApp export), the OEM
+// capacities in `oem` (sourced and cited, found independently), and the cell datasheets.
+//
+// Treat every row as a STARTING POINT for a measurement, never as one. The estimator says so
+// on screen. The moment a tray is actually measured, that row stops being a guess — and it is
+// worth more than the other twenty-two put together.
+// What actually fits each vehicle, AI-generated (see above). This is the
 // question the estimator exists to answer, and it is not derivable from a tray size: the
 // tray is rarely a box, the wiring and the BMS take a corner of it, and the riser changes
 // the answer for half the scooters here.
@@ -5729,7 +5754,7 @@ function seedOxTub() {
     const dims = getDims();
     if (dims.some((d) => /Inokim OX\b/i.test(d.model || ''))) return;
     dims.push({ id: Date.now(), model: 'Inokim OX', l: 425, w: 165, h: 0,
-      notes: 'אמבטיה בשני חלקים: רחב 425×165 + צר 60×140 מ"מ. גובה טרם נמדד. נספרו 140 תאים ללא תושבת אלכסונית, 136 ו-126 בשני כיווני התושבת.' });
+      notes: '⚠ מ-AI, לא נמדד. אמבטיה בשני חלקים: רחב 425×165 + צר 60×140 מ"מ, גובה לא ידוע. 140 / 136 / 126 תאים לפי סוג התושבת — כל המספרים האלה טעונים אימות עם סרט מדידה.' });
     Store.set('dims', dims);
   } catch (e) { /* private mode, or storage refused — the page still works without it */ }
 }

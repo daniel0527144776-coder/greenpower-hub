@@ -259,6 +259,21 @@ check('twenty rows carry an OEM capacity', oem.count >= 20, String(oem.count));
 check('Thunder 3: OEM 40Ah and the row is 20S8P', /מקורי 72V 40Ah/.test(oem.thunder) && /20S 8P/.test(oem.thunder), oem.thunder.slice(0,110));
 check('Blade GT: OEM 35Ah and the row is 16S7P', /מקורי 60V 35Ah/.test(oem.blade) && /16S 7P/.test(oem.blade), oem.blade.slice(0,110));
 
+// The provenance warning is the most important thing on this page. The table reads like
+// measurements and is not — it came from another model — so the page has to say so where the
+// numbers are used, not only in a comment nobody opens.
+const prov = await page.evaluate(() => {
+  renderVehiclePacks();
+  const card = [...document.querySelectorAll('#calctab-dims p')].map(e => e.textContent).join(' ');
+  // Seed fresh: an earlier case in this file deliberately clears the list to prove the seed
+  // does not come back, so reading it as-is here would test that case's leftovers.
+  localStorage.removeItem('gp_dims_seed_ox'); localStorage.setItem('gp_dims', '[]'); seedOxTub();
+  const seeded = JSON.parse(localStorage.getItem('gp_dims') || '[]');
+  return { card, ox: (seeded.find(d => /Inokim OX/.test(d.model)) || {}).notes || '' };
+});
+check('the page says the vehicle data is AI, not measured', /מ-AI, לא נמדדו/.test(prov.card), prov.card.slice(0, 90));
+check('and the seeded OX tub says it too', /לא נמדד/.test(prov.ox), prov.ox.slice(0, 70));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();
