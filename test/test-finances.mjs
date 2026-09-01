@@ -116,7 +116,12 @@ const after = await page.evaluate((d) => {
   };
 }, payload);
 
-check('customers came in', after.customers > 1, String(after.customers));
+// Against the PAYLOAD's own size, not a hardcoded `> 1`. accounting-import.json lives in the
+// tools root, which has no remote, so CI always takes the dummy branch — and that payload has
+// exactly one customer, so `> 1` could never pass there. The suite was red on the runner and
+// green here for that reason alone.
+check('customers came in', after.customers >= payload.customers.length,
+  `${after.customers} < ${payload.customers.length}`);
 check('and the ones with a ח.פ are marked business', after.businesses > 0, String(after.businesses));
 // The whole point of "fill blanks only": his note survives, the accountant's ח.פ arrives.
 check('a note he typed is NOT overwritten', after.note === 'שילם במזומן, לא לשכוח', after.note);
