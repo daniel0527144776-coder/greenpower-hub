@@ -109,6 +109,11 @@ jobs:
       - name: The pack calculator rules
         run: node test/test-pack-calc.mjs
 
+      # Each replaces a manual step, and a step that silently stops happening is worse
+      # than one that was never automated.
+      - name: The daily-work shortcuts
+        run: node test/test-daily-work.mjs
+
       - name: Finances and the accounting import
         run: node test/test-finances.mjs
 

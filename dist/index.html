@@ -368,6 +368,12 @@ body { min-height: 100vh; }
        income ledger, the expense ledger and wages. Two "רווח נטו" for the same month, one
        of them wrong. It belongs where the full picture is (Daniel, 2026-08-02). -->
 
+  <div class="card" style="padding:12px;">
+    <input type="search" id="homePrice" class="form-input-wide" style="width:100%;"
+           placeholder="🔎 מחיר מהיר — 72V 30 · מטען · BMS" oninput="homePriceSearch()" autocomplete="off">
+    <div id="homePriceOut" style="margin-top:8px;"></div>
+  </div>
+
   <!-- Quick actions -->
   <div class="card">
     <h3 class="card-title">⚡ פעולות מהירות</h3>
@@ -1897,6 +1903,7 @@ document.addEventListener('keydown', function (e) {
   <div class="page-header">
     <h2 class="page-title">📦 ניהול מלאי</h2>
     <div class="btn-group">
+      <button class="btn btn-secondary btn-sm" onclick="copyOrderList()">🛒 מה להזמין</button>
       <button class="btn btn-secondary btn-sm" onclick="openInventoryBulkImport()">📥 ייבוא מהיר</button>
       <button class="btn btn-primary btn-sm" onclick="openInventoryEditor(null)">➕ פריט</button>
     </div>
@@ -2664,7 +2671,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v273';
+const HUB_BUILD = 'v275';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3235,6 +3242,20 @@ function saveJob() {
   jobs.unshift(entry);
   if (jobs.length > 500) jobs.pop();
   Store.set('jobs', jobs);
+  // Only a FULL BUILD consumes cells. A BMS swap or a balance does not, and deducting for
+  // those would drain the shelf on paper while the cells are still in the drawer.
+  if ((entry.jobs || []).includes('full') && entry.voltage && entry.capacity && entry.cellType) {
+    const S = seriesForV(+entry.voltage);
+    const P = Math.max(1, Math.ceil(+entry.capacity / 5));
+    const hit = inventoryDeduct(entry.cellType, S * P, entry.customerName || '');
+    if (hit && hit.matched) {
+      showNotice(`הופחתו ${hit.cells} תאים · נשארו ${hit.left}`);
+    } else if (hit) {
+      // Said out loud rather than swallowed: a build that did not find its cell on the shelf
+      // means the stock figure is now wrong, and only he can say which row it should have hit.
+      showNotice(`⚠ ${hit.cellModel} לא נמצא במלאי — לא הופחת`);
+    }
+  }
 
   // Say which month it landed in. The finances page remembers the month you last looked
   // at, so a repair saved today can be invisible simply because the picker is on August.
@@ -4578,6 +4599,47 @@ function topicOf(cat) {
   const hit = CATALOG_TOPICS.find((x) => x.re.test(cat || ''));
   return hit ? hit.title : CATALOG_TOPIC_REST;
 }
+// Checking a price is the thing he does most in this app (his answer, 2026-09-01) and it cost
+// four presses: home, catalogue, open a category, read. One now.
+//
+// Both prices at once, because the next question after "how much" is always "and for a shop".
+// It reads PRICING, so it can never disagree with the catalogue page.
+function homePriceSearch() {
+  const el = document.getElementById('homePrice');
+  const out = document.getElementById('homePriceOut');
+  if (!el || !out) return;
+  const q = (el.value || '').trim().toLowerCase();
+  if (q.length < 2) { out.innerHTML = ''; return; }
+  // Every word must appear, so "72 30" finds 72V 30Ah without caring about order or units —
+  // which is how a size actually gets said out loud, and typed with one hand.
+  const words = q.split(/\s+/).filter(Boolean);
+  const hit = PRICING.filter((it) => {
+    const hay = ((it.name || '') + ' ' + (it.cat || '')).toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+  if (!hit.length) {
+    out.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:4px 2px;">אין תוצאה — נסה 72V 30 או מטען</div>';
+    return;
+  }
+  const money = (v) => (typeof v === 'number' ? shek(v) : (v || '—'));
+  const rows = hit.slice(0, 6).map((it) => {
+    // A lab service and a battery are different kinds of answer; the icon says which.
+    const svc = /שירותי מעבדה|שירותים נוספים/.test(it.cat || '');
+    return '<div class="price-item" style="padding:6px 2px;">'
+      + '<div class="price-item-name"><span style="font-size:13px;">' + it.name + '</span>'
+      + '<div style="font-size:10.5px;color:var(--text-light);">' + (svc ? '🔧 ' : '') + it.cat + '</div></div>'
+      + '<div></div>'
+      + '<div class="price-item-final" style="text-align:left;white-space:nowrap;">' + money(it.retail)
+      + '<div style="font-size:11px;color:var(--text-muted);font-weight:400;">עסקי ' + money(it.b2b) + '</div></div>'
+      + '</div>';
+  }).join('');
+  const more = hit.length > 6
+    ? '<div style="font-size:11px;color:var(--text-muted);padding:4px 2px;">ועוד ' + (hit.length - 6)
+      + ' — <span onclick="navigateTo(\'catalog\')" style="color:var(--primary);cursor:pointer;">פתח מחירון</span></div>'
+    : '';
+  out.innerHTML = rows + more;
+}
+
 function renderCatalog() {
   const sel = document.getElementById('catalogCat');
   if (sel && sel.options.length === 0) {
@@ -4864,6 +4926,39 @@ function salesShowMore() { salesLimit += 60; renderOrders(); }
 // number and the sales page is where the disagreement would be noticed last.
 function saleIsIncome(o) { return o.status === 'שולם' || o.status === 'נמסר'; }
 
+// A quote is good for 14 days (Daniel, 2026-09-01). Cell prices move with every import, so an
+// old quote is a promise made at a cost that no longer exists — and the open-quote pile is
+// exactly where one would sit unnoticed. Stale quotes are MARKED, never auto-cancelled: only he
+// knows whether a customer is still deciding.
+const QUOTE_VALID_DAYS = 14;
+function quoteAge(o) {
+  if (!o || saleIsIncome(o)) return null;
+  const days = Math.floor((Date.now() - new Date(o.date).getTime()) / 86400000);
+  return { days, stale: days > QUOTE_VALID_DAYS };
+}
+
+// A repair has carried its own cost and profit since the calculator was written; a sale never
+// did, so half the business had no profit figure at all. productCost is the same function the
+// catalogue margin column uses, so the two cannot disagree.
+//
+// Computed at READ time rather than stamped on the order: an order can be edited, and a
+// profit stamped at save would then describe a sale that no longer exists.
+function saleProfit(o) {
+  if (!o || !Array.isArray(o.items)) return null;
+  let cost = 0, known = 0;
+  for (const it of o.items) {
+    const row = typeof PRICING !== 'undefined' ? PRICING.find((r) => r.name === it.name && r.cat === it.cat) : null;
+    const c = row ? productCost(row) : null;
+    if (c == null) continue;
+    cost += c * (Number(it.qty) || 1);
+    known++;
+  }
+  // Partial knowledge is worse than none here — a profit computed over half the lines reads
+  // as a fact and is a guess.
+  if (!known || known < o.items.length) return null;
+  return { cost: Math.round(cost), profit: Math.round((Number(o.total) || 0) - cost) };
+}
+
 // A sale makes a customer, exactly as a repair does. Identity only — see the note at the
 // call site for why no money is written here.
 function upsertCustomerFromOrder(o) {
@@ -4907,6 +5002,15 @@ function salesBadge(kind) {
 }
 // Status as a coloured pill rather than grey text: "הצעה" and "נמסר" mean opposite things
 // about whether the money arrived, and they used to render identically.
+// A quote past its 14 days says so on the row. The open-quote pile is the one place these get
+// looked at, and an age that lives only in a date field is an age nobody reads.
+function quoteAgePill(o) {
+  const q = quoteAge(o);
+  if (!q) return '';
+  const style = q.stale ? "color:var(--danger);" : "color:var(--text-muted);";
+  const text = q.stale ? ("פג · " + q.days + " ימים") : (q.days + "/" + QUOTE_VALID_DAYS + " ימים");
+  return ' <span style="font-size:10px;white-space:nowrap;' + style + '">' + text + '</span>';
+}
 function saleStatusPill(status) {
   const st = status || 'הצעה';
   const c = st === 'נמסר' ? '#34d399' : st === 'שולם' ? 'var(--primary)' : 'var(--warning)';
@@ -4926,7 +5030,7 @@ function saleRow(o) {
         <div><div class="list-item-title">${salesBadge('sale')} ${o.customer || 'ללא שם'} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
           <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')} · ${o.items.length === 1 ? 'פריט אחד' : o.items.length + ' פריטים'}${o.bms ? ' · BMS ' + o.bms : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${saleCats(o)}</div></div>
-        <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div><div style="margin-top:3px;">${saleStatusPill(o.status)}</div></div>
+        <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div>${(() => { const pr = saleProfit(o); return pr ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(pr.profit)}</div>` : ''; })()}<div style="margin-top:3px;">${saleStatusPill(o.status)}${quoteAgePill(o)}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
         <button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="orderWhatsApp('${o.id}')">💬 שלח</button>
@@ -4950,7 +5054,7 @@ function repairRow(j) {
         <div><div class="list-item-title">${salesBadge('repair')} ${j.customerName || 'ללא שם'} ${j.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
           <div class="list-item-subtitle">${new Date(j.date).toLocaleDateString('he-IL')}${spec ? ' · ' + spec : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${jobTypeLabel(j)}</div></div>
-        <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div><div class="list-item-subtitle">${warr}</div></div>
+        <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div>${Number(j.profit) ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(Number(j.profit))}</div>` : ''}<div class="list-item-subtitle">${warr}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
         ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="callCustomer('${j.customerPhone}')">💬 הודעה</button>` : ''}
@@ -5009,9 +5113,9 @@ function renderOrders() {
   const totals = new Map();
   for (const x of all) {
     const k = monthKeyOf(x.date);
-    const t = totals.get(k) || { sale: 0, repair: 0, quoted: 0 };
-    if (x.kind === 'repair') t.repair += Number(x.raw.price) || 0;
-    else if (saleIsIncome(x.raw)) t.sale += x.raw.total || 0;
+    const t = totals.get(k) || { sale: 0, repair: 0, quoted: 0, profit: 0 };
+    if (x.kind === 'repair') { t.repair += Number(x.raw.price) || 0; t.profit += Number(x.raw.profit) || 0; }
+    else if (saleIsIncome(x.raw)) { t.sale += x.raw.total || 0; const pr = saleProfit(x.raw); if (pr) t.profit += pr.profit; }
     else t.quoted += x.raw.total || 0;
     totals.set(k, t);
   }
@@ -5023,6 +5127,7 @@ function renderOrders() {
     if (t.sale) parts.push(`🛒 ${shek(t.sale)}`);
     if (t.repair) parts.push(`🔧 ${shek(t.repair)}`);
     if (t.sale && t.repair) parts.push(`<b>${shek(t.sale + t.repair)}</b>`);
+    if (t.profit) parts.push(`<span style="color:#34d399;">רווח ${shek(t.profit)}</span>`);
     const money = parts.join(' · ');
     // The quotes hang off the end with a space, not another dot separator: '· + ₪2,400' reads
     // as a fourth figure in the list rather than as an aside about the first three.
@@ -6979,6 +7084,65 @@ function invShortages() {
     if (q <= 0) out.push(i); else if (q <= t) low.push(i);
   }
   return { out, low, total: out.length + low.length };
+}
+
+// Cells come off the shelf when a build is recorded (Daniel, 2026-09-01: "הורדה אוטומטית
+// בבנייה"). Counting them by hand after the work is the step that gets skipped, and a stock
+// figure nobody updates is worse than none — it reads as true.
+//
+// Matching is by CELL MODEL, not by row name: the inventory row can be called anything, and the
+// job knows which cell it used. A build whose cell is not on the shelf is left alone and
+// reported rather than silently deducted from something similar.
+function inventoryDeduct(cellModel, cells, note) {
+  if (!cellModel || !cells) return null;
+  const inv = getInventory();
+  const key = String(cellModel).toLowerCase();
+  const row = inv.find((i) => {
+    const n = String(i.name || '').toLowerCase();
+    // "EVE 50E" must match a row called "תאי EVE 21700 50E" — compare on the distinctive part.
+    const tail = key.split(/\s+/).pop();
+    return n.includes(key) || (tail && tail.length >= 3 && n.includes(tail));
+  });
+  if (!row) return { matched: false, cellModel, cells };
+  row.qty = Math.max(0, (Number(row.qty) || 0) - cells);
+  row.lastUsed = new Date().toISOString();
+  if (note) row.lastNote = String(note).slice(0, 60);
+  Store.set('inventory', inv);
+  return { matched: true, name: row.name, left: row.qty, cells };
+}
+
+// What to send the supplier. He named ordering as one of his three daily time sinks, so the
+// answer is a message ready to paste rather than a screen to read off.
+//
+// The suggested quantity is deliberately crude: enough to clear the shortage and put the same
+// amount again behind it. A reorder model needs a demand rate, and his own answer about build
+// volume was "משתנה מאוד" — so inventing one would be a number pretending to be a forecast.
+function orderList() {
+  const { out, low } = invShortages();
+  const need = out.concat(low);
+  if (!need.length) return null;
+  const lines = need.map((i) => {
+    const q = Number(i.qty) || 0;
+    const t = i.low != null ? Number(i.low) : INV_LOW_DEFAULT;
+    const want = Math.max(t * 2 - q, t);
+    return { name: i.name, have: q, want: Math.ceil(want) };
+  });
+  return lines;
+}
+function orderListText() {
+  const lines = orderList();
+  if (!lines) return '';
+  return 'הזמנה:\n' + lines.map((l) => `• ${l.name} — ${l.want} יח׳ (נשארו ${l.have})`).join('\n');
+}
+function copyOrderList() {
+  const txt = orderListText();
+  if (!txt) { alert('אין מה להזמין — הכול מעל הסף.'); return; }
+  try { navigator.clipboard.writeText(txt); } catch (e) {}
+  // The clipboard is unreliable inside the WebView, so the text is shown too rather than
+  // assumed to have arrived somewhere.
+  openModal('🛒 רשימת הזמנה', `<textarea class="form-input-wide" style="width:100%;height:160px;font-size:12px;" readonly>${txt.replace(/</g, '&lt;')}</textarea>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">הועתק. אפשר להדביק בוואטסאפ לספק.</div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">סגור</button>`);
 }
 
 function renderInventory() {
