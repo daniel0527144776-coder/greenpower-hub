@@ -124,6 +124,35 @@ check('but the blank ח.פ IS filled in', /\d/.test(after.vat), after.vat || '(e
 check('and an existing customer is promoted to business', after.biz, String(after.biz));
 check('the books rows are tagged', after.books === payload.incomes.length, `${after.books}/${payload.incomes.length}`);
 
+// Six חשבון עסקה documents were invoiced and never receipted. They are imported as income at
+// his instruction, in a category of their own — and that category IS the safeguard. They
+// carry no תקבול, so if one of them was never actually paid the revenue is overstated by
+// exactly its amount, and a row that looks like every other income row is one nobody will
+// ever find again.
+const unrec = await page.evaluate(() => {
+  const inc = JSON.parse(localStorage.getItem('gp_incomes') || '[]');
+  const u = inc.filter((r) => r.unreceipted);
+  return { n: u.length, sum: Math.round(u.reduce((s, r) => s + r.amount, 0)), cats: [...new Set(u.map((r) => r.cat))] };
+});
+check('an unreceipted invoice keeps its own category', unrec.n === 0 || unrec.cats.every((c) => /ללא תקבול/.test(c)), unrec.cats.join(',') || 'none');
+// Actually removable, not just differently coloured. A receipt is locked because editing it
+// opens a gap against the books; one of these is in the ledger only because he says it was
+// paid, and locking it would make the correction impossible where the mistake shows up.
+const removable = await page.evaluate(() => {
+  const inc = JSON.parse(localStorage.getItem('gp_incomes') || '[]');
+  const u = inc.find((r) => r.unreceipted);
+  const paid = inc.find((r) => r.src === 'books' && !r.unreceipted);
+  if (!u || !paid) return { skip: true };
+  const d = new Date().toISOString();
+  u.date = d; paid.date = d;
+  localStorage.setItem('gp_incomes', JSON.stringify(inc));
+  renderFinances();
+  const html = document.getElementById('finMonthDetail').innerHTML;
+  return { unrecDeletable: html.includes("deleteIncome('" + u.id + "')"), paidDeletable: html.includes("deleteIncome('" + paid.id + "')") };
+});
+check('an unreceipted invoice CAN be deleted', removable.skip || removable.unrecDeletable, JSON.stringify(removable));
+check('but a real receipt still cannot', removable.skip || !removable.paidDeletable, JSON.stringify(removable));
+
 // ---- 4. importing twice must not double the money ----
 const twice = await page.evaluate((d) => {
   const before = JSON.parse(localStorage.getItem('gp_incomes') || '[]');

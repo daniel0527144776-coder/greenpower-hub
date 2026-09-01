@@ -2664,7 +2664,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v272';
+const HUB_BUILD = 'v273';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5236,9 +5236,19 @@ function renderFinanceOverview() {
 const EXPENSE_CATS = ['רכש תאים', 'BMS ורכיבים', 'ניקל וחומרי בנייה', 'שילוח ומכס', 'ציוד וכלים', 'שכר עובדים', 'שכירות', 'חשמל ומים', 'שיווק ופרסום', 'אחר'];
 const INCOME_CATS = ['תיקונים ומכירות', 'מכירת חלקים', 'שירות באתר הלקוח', 'אחר'];
 
-// A row that came from the accountant is not ours to edit — that would open a gap against the
-// books with nothing in either system able to detect it.
-const isLocked = (r) => !!(r && (r.locked || r.src === 'books'));
+// Two different questions, and one flag was answering both.
+//
+// isFromBooks decides what a re-import REPLACES. Every row the accountant produced, always,
+// or a second import doubles six years of turnover.
+//
+// isLocked decides whether a row can be deleted here, and it is NOT the same set. A receipt
+// is a record of money that arrived and editing it would open a gap against the books that
+// nothing could detect. But the six חשבון עסקה rows carry no תקבול: they are in the ledger
+// because Daniel says those were paid, and he is the only one who can find out that one of
+// them was not. Locking them would make the correction impossible in the place the mistake
+// shows up.
+const isFromBooks = (r) => !!(r && (r.locked || r.src === 'books'));
+const isLocked = (r) => isFromBooks(r) && !r.unreceipted;
 
 // Everything that counted as money in one month, from all four sources, in one shape.
 function monthRows(mk) {
@@ -5248,7 +5258,7 @@ function monthRows(mk) {
   for (const o of (Store.get('orders') || [])) if (monthKeyOf(o.date) === mk && saleIsIncome(o))
     inc.push({ kind: 'מכירה', cat: 'מכירות', name: o.customer || 'ללא שם', amount: Number(o.total) || 0, date: o.date, locked: true, ref: 'order' });
   for (const r of (Store.get('incomes') || [])) if (monthKeyOf(r.date) === mk)
-    inc.push({ kind: isLocked(r) ? 'הנה"ח' : 'ידני', cat: r.cat || 'אחר', name: r.customer || r.note || '', amount: Number(r.amount) || 0, date: r.date, locked: isLocked(r), id: r.id, ref: 'income' });
+    inc.push({ kind: isFromBooks(r) ? 'הנה"ח' : 'ידני', cat: r.cat || 'אחר', name: r.customer || r.note || '', amount: Number(r.amount) || 0, date: r.date, locked: isLocked(r), unreceipted: !!r.unreceipted, id: r.id, ref: 'income' });
   for (const r of (Store.get('expenses') || [])) if (monthKeyOf(r.date) === mk)
     exp.push({ kind: 'הוצאה', cat: r.cat || 'אחר', name: r.note || '', amount: Number(r.amount) || 0, date: r.date, locked: isLocked(r), id: r.id, ref: 'expense' });
   const wages = (Store.get('worktime') || []).filter((w) => monthKeyOf(w.date) === mk);
@@ -5300,7 +5310,8 @@ function monthDetailHtml(mk, inc, exp) {
     `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid ${colour};color:${colour};margin:0 0 4px 4px;white-space:nowrap;">${c} ${shek(v)}</span>`).join('');
   const line = (r, colour) => {
     const del = r.locked ? '' : ` <span onclick="${r.ref === 'income' ? 'deleteIncome' : 'deleteExpense'}('${r.id}')" style="color:var(--text-muted);cursor:pointer;" title="מחק">✕</span>`;
-    const lock = r.locked && r.kind === 'הנה"ח' ? ' <span title="מהנהלת החשבונות — לקריאה בלבד" style="opacity:.6;">🔒</span>' : '';
+    const lock = r.unreceipted ? ' <span title="חשבון עסקה שהופק ללא תקבול — ניתן להסרה" style="color:var(--warning);">⚠</span>'
+      : (r.locked && r.kind === 'הנה"ח' ? ' <span title="מהנהלת החשבונות — לקריאה בלבד" style="opacity:.6;">🔒</span>' : '');
     return `<div class="price-item"><div class="price-item-name">${r.kind} · ${r.cat}${r.name ? ` · <span style="color:var(--text-muted);">${String(r.name).slice(0, 40)}</span>` : ''}${lock}` +
       `<div style="font-size:10.5px;color:var(--text-light);">${new Date(r.date).toLocaleDateString('he-IL')}</div></div><div></div>` +
       `<div class="price-item-final" style="color:${colour};">${shek(r.amount)}${del}</div></div>`;
@@ -5428,13 +5439,13 @@ function importAccounting() {
   }
   Store.set('customers', customers);
 
-  const kept = (Store.get('incomes') || []).filter((r) => !isLocked(r));
+  const kept = (Store.get('incomes') || []).filter((r) => !isFromBooks(r));
   const books = inInc.map((r, i) => ({
     id: r.id || 'bk' + i, amount: Number(r.amount) || 0, cat: r.cat || 'תיקונים ומכירות',
     note: [r.customer, r.note].filter(Boolean).join(' · ').slice(0, 90),
     date: new Date(r.date).toISOString(), customer: r.customer || '', phone: r.phone || '',
     invoice: r.invoice || '', warrantyMonths: r.warrantyMonths || 12, warrantyEnd: r.warrantyEnd || '',
-    src: 'books', locked: true,
+    src: 'books', locked: true, unreceipted: !!r.unreceipted,
   })).filter((r) => r.amount && r.date);
   Store.set('incomes', kept.concat(books));
 
