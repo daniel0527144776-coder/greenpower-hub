@@ -2671,7 +2671,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v275';
+const HUB_BUILD = 'v276';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3244,6 +3244,17 @@ function saveJob() {
   Store.set('jobs', jobs);
   // Only a FULL BUILD consumes cells. A BMS swap or a balance does not, and deducting for
   // those would drain the shelf on paper while the cells are still in the drawer.
+  // A BMS is consumed by a full build, a BMS swap AND a BMS upgrade — the same three jobs the
+  // calculator charges one for (`bmsUsed` in recalc). Anything else leaves it alone.
+  if (['full', 'bms', 'bms_upgrade'].some((k) => (entry.jobs || []).includes(k)) && entry.bmsBrand && entry.bmsAmps) {
+    // The shelf labels a BMS by SERIES COUNT and amps — `BMS 20S 100A` — because that is what
+    // decides whether one fits. The brand is not on the label, so a name built from it
+    // ('BMS DALY 60A') matches nothing. seriesForV is the hub's own voltage->S table.
+    const bmsName = `BMS ${seriesForV(+entry.voltage)}S ${entry.bmsAmps}A`;
+    const hit = inventoryTake(bmsName, 1, entry.customerName || '');
+    if (hit && hit.matched) showNotice(`ירד מהמלאי: ${hit.name} · נשארו ${hit.left}`);
+    else if (hit) showNotice(`⚠ ${bmsName} לא נמצא במלאי — לא הופחת`);
+  }
   if ((entry.jobs || []).includes('full') && entry.voltage && entry.capacity && entry.cellType) {
     const S = seriesForV(+entry.voltage);
     const P = Math.max(1, Math.ceil(+entry.capacity / 5));
@@ -5159,7 +5170,34 @@ function nextSaleStatus(status) {
   const i = SALE_STATUS_SEQ.indexOf(status || 'הצעה');
   return SALE_STATUS_SEQ[(i + 1) % SALE_STATUS_SEQ.length];
 }
-function cycleOrderStatus(id) { const orders = Store.get('orders') || [], o = orders.find(x => x.id === id); if (!o) return; o.status = nextSaleStatus(o.status); Store.set('orders', orders); renderOrders(); }
+// Goods leave the shelf when the sale becomes real money, not when the quote is written — a
+// quote that is never paid must not move stock. `stockTaken` makes it happen exactly once:
+// the status cycles round (הצעה → שולם → נמסר → הצעה), so without the flag a second lap would
+// deduct the same charger twice.
+function takeOrderStock(o) {
+  // The income test lives HERE, not only in the caller. Relying on cycleOrderStatus to ask
+  // first means any future caller can mark a quote as stocked without taking anything — the
+  // flag would be set, the goods still on the shelf, and nothing would ever deduct them.
+  // saleIsIncome is the one definition of when a sale is money; this is the one definition of
+  // when it moves stock, and it defers to that.
+  if (!o || o.stockTaken || !saleIsIncome(o) || !Array.isArray(o.items)) return;
+  const took = [], missed = [];
+  for (const it of o.items) {
+    if (it.custom) continue;                     // a one-off line has no shelf row by definition
+    const hit = inventoryTake(it.name, Number(it.qty) || 1, o.customer || '');
+    if (hit && hit.matched) took.push(`${hit.name} (${hit.left})`);
+  }
+  o.stockTaken = true;
+  if (took.length) showNotice('ירד מהמלאי: ' + took.join(' · '));
+}
+function cycleOrderStatus(id) {
+  const orders = Store.get('orders') || [], o = orders.find(x => x.id === id);
+  if (!o) return;
+  o.status = nextSaleStatus(o.status);
+  if (saleIsIncome(o)) takeOrderStock(o);
+  Store.set('orders', orders);
+  renderOrders();
+}
 function deleteOrder(id) {
   const o = (Store.get('orders') || []).find(x => x.id === id);
   if (!o) return;
@@ -7111,6 +7149,45 @@ function inventoryDeduct(cellModel, cells, note) {
   return { matched: true, name: row.name, left: row.qty, cells };
 }
 
+// A BMS and a charger come off the shelf too (Daniel, 2026-09-01). Cells were the only thing
+// being deducted, so the two most expensive PARTS in a build were counted by hand — which is
+// the step that gets skipped, leaving a stock figure that is wrong and still trusted.
+//
+// Matching is deliberately strict: EVERY distinctive word of the thing being taken must appear
+// on the shelf label. A looser rule is how "מטען 60V 5A" would quietly deduct a 72V charger,
+// and a wrong deduction is worse than none — it is silent and it compounds.
+const INV_STOP = new Set(['תא', 'תאים', 'של', 'עם', 'מקורי', 'חדש', 'יח', 'יחידה', 'battery', 'cell', 'cells', 'the', 'for', 'and']);
+function invTokens(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[״"'׳,()\[\]\/]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !INV_STOP.has(w));
+}
+function invFindRow(inv, name) {
+  const want = invTokens(name);
+  if (!want.length) return null;
+  for (const row of inv) {
+    const have = new Set(invTokens(row.name));
+    if (want.every((w) => have.has(w))) return row;
+  }
+  return null;
+}
+
+// Take `qty` of a named part. Returns what happened rather than throwing or guessing, so the
+// caller can say so out loud — an unmatched part means the shelf figure is now wrong and only
+// Daniel knows which row it should have hit.
+function inventoryTake(name, qty, note) {
+  if (!name || !qty) return null;
+  const inv = getInventory();
+  const row = invFindRow(inv, name);
+  if (!row) return { matched: false, name, qty };
+  row.qty = Math.max(0, (Number(row.qty) || 0) - qty);
+  row.lastUsed = new Date().toISOString();
+  if (note) row.lastNote = String(note).slice(0, 60);
+  Store.set('inventory', inv);
+  return { matched: true, name: row.name, left: row.qty, qty };
+}
+
 // What to send the supplier. He named ordering as one of his three daily time sinks, so the
 // answer is a message ready to paste rather than a screen to read off.
 //
@@ -7145,6 +7222,45 @@ function copyOrderList() {
     `<button class="btn btn-secondary" onclick="closeModal()">סגור</button>`);
 }
 
+// The shelf count Daniel gave on 2026-09-01: the 2026-07-22 import invoice, plus 500 more 50E,
+// 150 more 26V and 140 more 50PL bought since. The invoice unit costs match cost-model.mjs on
+// every line to within a rounding step (50E $1.78 -> ₪7.32 vs 7.34, 50PL $2.94 -> ₪12.09 vs
+// 12.15), which is the first independent confirmation the landed-cost factor has ever had.
+//
+// It MERGES rather than replaces: a seeded cell already on the shelf has its quantity set, and
+// every other row — nickel, shrink, connectors — is left alone. Replacing would throw away
+// stock he tracked by hand.
+//
+// It runs ONCE, guarded by a flag, because a seed that re-ran would silently undo every
+// deduction made since and put the count back to the day it was typed.
+// NOT called seedInventoryOnce: the hub already has one of those, seeding the BMS and charger
+// shelf (INV_SEED_2026 below). Two functions with one name is a silent overwrite — the later
+// definition wins and the earlier one never runs.
+const INV_SEED_KEY = 'gp_inv_seed_20260901';
+const INV_SEED = [
+  { name: 'תאי EVE 21700 50E', qty: 2500, low: 300, cat: 'תאים' },
+  { name: 'תאי Tenpower 21700 50SG', qty: 2000, low: 300, cat: 'תאים' },
+  { name: 'תאי EVE 21700 50PL', qty: 400, low: 120, cat: 'תאים' },
+  { name: 'תאי EVE 21700 40P', qty: 50, low: 20, cat: 'תאים' },
+  { name: 'תאי EVE 18650 35V', qty: 200, low: 50, cat: 'תאים' },
+  { name: 'תאי EVE 18650 26V', qty: 350, low: 50, cat: 'תאים' },
+  { name: 'תאי EVE 18650 25P', qty: 100, low: 30, cat: 'תאים' },
+];
+function seedCellStockOnce() {
+  try {
+    if (localStorage.getItem(INV_SEED_KEY)) return;
+    const inv = getInventory();
+    let added = 0, set = 0;
+    for (const s of INV_SEED) {
+      const row = invFindRow(inv, s.name);
+      if (row) { row.qty = s.qty; if (row.low == null) row.low = s.low; set++; }
+      else { inv.push({ id: 'i' + Date.now() + Math.random().toString(36).slice(2, 6), name: s.name, qty: s.qty, low: s.low, cat: s.cat }); added++; }
+    }
+    Store.set('inventory', inv);
+    localStorage.setItem(INV_SEED_KEY, new Date().toISOString());
+    if (added || set) showNotice(`מלאי התאים עודכן · ${added} חדשים, ${set} עודכנו. הסף ("מתי להזמין") הוא הצעה — אפשר לשנות בדף המלאי.`);
+  } catch (e) { /* a device with no localStorage is not a reason to fail boot */ }
+}
 function renderInventory() {
   // The cell-cost reference used to render here. It is a SUPPLIER cost, not stock on a
   // shelf, so it belongs on עלויות ספקים — where it now lives alongside every other
@@ -7716,6 +7832,7 @@ async function startApp() {
   const statusEl = document.getElementById('syncStatus');
   if (statusEl) statusEl.textContent = '☁️ סנכרון ענן פעיל · ' + (Sync.email || '');
   seedInventoryOnce();
+  seedCellStockOnce();
   init();
   Sync.flush().catch(() => {});
 }

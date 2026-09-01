@@ -111,6 +111,10 @@ jobs:
 
       # Each replaces a manual step, and a step that silently stops happening is worse
       # than one that was never automated.
+      # A wrong deduction is silent and it compounds, so this leans on what must NOT happen.
+      - name: Stock that moves by itself
+        run: node test/test-inventory.mjs
+
       - name: The daily-work shortcuts
         run: node test/test-daily-work.mjs
 
