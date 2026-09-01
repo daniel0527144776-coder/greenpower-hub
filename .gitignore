@@ -1,2 +1,5 @@
 # Local Netlify folder
 .netlify
+# The browser suites need playwright, which lives in the React project — it gets junctioned
+# in here to run them. A bare `git add -A` swept the whole junction into the index once.
+node_modules/

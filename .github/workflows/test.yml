@@ -98,6 +98,20 @@ jobs:
       - name: The presentation renders, and its numbers are the live ones
         run: node test/test-deck.mjs
 
+      # The import writes 144 customers and six years of income over data he typed himself.
+      # Both protections are invisible on screen and fail silently.
+      # Topic grouping, and the click-by-index invariant it could break silently.
+      - name: The price list groups, and the explanations hide
+        run: node test/test-catalog-ui.mjs
+
+      # Four rules that hold a WRONG answer back rather than producing a right one,
+      # and all four fail silently.
+      - name: The pack calculator rules
+        run: node test/test-pack-calc.mjs
+
+      - name: Finances and the accounting import
+        run: node test/test-finances.mjs
+
       - name: Sticker — saved layout is versioned
         run: node test/test-sticker-state.mjs
 

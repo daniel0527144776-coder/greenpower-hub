@@ -2,7 +2,7 @@
 //
 // It answers "will this pack go in that scooter", which is a question with a wrong answer
 // available: the previous version spaced cells at diameter + 1mm, i.e. 22mm for a 21700,
-// when every bracket in the Wellgo catalogue is 21.4-23mm. A 20-cell row therefore came out
+// when every bracket in the Wellgo catalogue is 21.5-23mm. A 20-cell row therefore came out
 // up to 12mm short — small enough to look right and big enough to not fit.
 //
 //   node test/test-pack-dims.mjs
@@ -54,11 +54,11 @@ const read = async (opts) => page.evaluate((o) => {
 const TRAY = [{ id: 1, model: 'מבחן-גדול', l: 400, w: 200, h: 120 }, { id: 2, model: 'מבחן-קטן', l: 150, w: 90, h: 80 }];
 const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 
-// 16S4P = 64 cells, 10 per row -> 7 rows, honeycomb 21.4mm pitch.
-//   L = 9*21.4 + 21 + 2*1.5 + 21.4/2 = 227
-//   W = 6*(21.4*0.866) + 21 + 3 = 135      H = 70 + 4 + 18 = 92
+// 16S4P = 64 cells, 10 per row -> 7 rows, honeycomb 21.5mm pitch.
+//   L = 9*21.5 + 21 + 2*1.5 + 21.5/2 = 227
+//   W = 6*(21.5*0.866) + 21 + 3 = 135      H = 70 + 4 + 22 = 96
 const honey = await read({ ...base, holder: 'honeycomb' });
-check('16S4P block, honeycomb: 217 x 135 x 92', honey.L === 217 && honey.W === 135 && honey.H === 92, `${honey.L} x ${honey.W} x ${honey.H}`);
+check('16S4P block, honeycomb: 217 x 135 x 96', honey.L === 217 && honey.W === 135 && honey.H === 96, `${honey.L} x ${honey.W} x ${honey.H}`);
 check('and it reports 64 cells / 1152 Wh', /64/.test(honey.text) && /1152/.test(honey.text), honey.text.slice(0, 80));
 
 // Square at the same pitch must be WIDER across the rows and shorter along them: the stagger
@@ -70,7 +70,7 @@ check('the saving is the sin60 one, ~13%', Math.abs((square.W - 24) * 0.866 - (h
 
 // The catalogue's four pitches must actually reach the arithmetic.
 const sqSp = await read({ ...base, holder: 'square-23' });
-check('the 23mm square bracket is wider than the 21.4 one', sqSp.L > square.L, `${sqSp.L} vs ${square.L}`);
+check('the 23mm square bracket is wider than the 21.5 one', sqSp.L > square.L, `${sqSp.L} vs ${square.L}`);
 const cell18 = await read({ ...base, cell: '18650-25p', holder: 'honeycomb' });
 check('18650 is a different pitch and a shorter cell', cell18.L < honey.L && cell18.H < honey.H, `${cell18.L}x${cell18.H} vs ${honey.L}x${honey.H}`);
 
@@ -89,14 +89,17 @@ check('does not claim the small tray', !/מבחן-קטן/.test(honey.text), hone
 const rotated = await read({ ...base, holder: 'honeycomb', models: [{ id: 3, model: 'מסובב', l: 100, w: 240, h: 150 }] });
 check('a turned tray still counts as a fit', /מסובב/.test(rotated.text), rotated.text.slice(-90));
 
-// The extra allowance is an input, not a constant baked at 18.
+// The allowance is derived from the VOLTAGE now — 14 / 18 / 22 / 26 — and is still an input
+// he can override. So this asserts the difference against what the page actually chose,
+// rather than against a literal that goes stale the next time the ladder moves.
 const noExtra = await read({ ...base, holder: 'honeycomb', extra: SELFTEST ? 18 : 0 });
-check('the case/BMS allowance is honoured', noExtra.H === honey.H - 18, `${noExtra.H} vs ${honey.H}`);
+const autoAllowance = honey.H - (70 + 4);
+check('the case/BMS allowance is honoured', noExtra.H === honey.H - autoAllowance, `${noExtra.H} vs ${honey.H} (allowance ${autoAllowance})`);
 
 // Daniel measured a 72V 30Ah pack he built — 20S6P, 120 cells, twenty to a row — at 390 x
 // 135mm. That is the only ground truth this page has, so it is a test: the diagonal spacing
 // he uses must reproduce it. Tolerance 8mm, which is the width of a shrink wrap.
-const real = await read({ ...base, v: 72, ah: 30, perRow: 6, holder: 'diag-224' });
+const real = await read({ ...base, v: 72, ah: 30, perRow: 6, holder: 'diag-a' });
 // Compared as a SET: a block is the same block whichever way round it is reported, and
 // pinning the order would be testing which axis I happened to call the length.
 const got = [real.L, real.W].sort((a, b) => a - b);
@@ -131,16 +134,16 @@ const ox = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   useVehiclePack('Inokim OX');
   const filled = document.getElementById('dimResult').textContent;
-  // The 21.4 nickel is the OX's tightest: 126 counted, against 136 on the 22.4 and 140 with
+  // The 21.5 nickel is the OX's tightest: 126 counted, against 136 on the 22.5 and 140 with
   // no diagonal holder at all. A 140-cell build is over on this one and fine on the square.
-  set('dimHolder', 'diag-214'); set('dimAh', 35); set('dimV', 72); calcPackDims();
+  set('dimHolder', 'diag-b'); set('dimAh', 35); set('dimV', 72); calcPackDims();
   const overDiag = document.getElementById('dimResult').textContent;
   set('dimHolder', 'square-23'); calcPackDims();
   const okSquare = document.getElementById('dimResult').textContent;
   return { filled, overDiag, okSquare };
 });
 check('the OX fills its own 20S7P build', /20S 7P/.test(ox.filled), ox.filled.slice(0, 60));
-check('140 cells is over the 126 counted on the diagonal holder', /⚠/.test(ox.overDiag) && /126/.test(ox.overDiag), ox.overDiag.slice(-70));
+check('140 cells is over the 126 counted on the diagonal holder', /⛔|⚠/.test(ox.overDiag) && /126/.test(ox.overDiag) && /חורג/.test(ox.overDiag), ox.overDiag.slice(-70));
 check('and not over the 140 counted on the square one', !/⚠/.test(ox.okSquare), ox.okSquare.slice(-70));
 
 // The drawing is the answer to "how do I lay it out", so it has to BE the layout: one circle
@@ -162,7 +165,7 @@ check('and names the parallel group so it reads as a weld', /6P/.test(draw.txt),
 const stag = await page.evaluate(() => {
   const xs = (h) => { document.getElementById('dimHolder').value = h; calcPackDims();
     return [...document.querySelectorAll('#dimDraw circle')].map(c => +c.getAttribute('cx')); };
-  const d = xs('diag-224'), s = xs('square-23');
+  const d = xs('diag-a'), s = xs('square-23');
   return { diagFirstTwoRows: d[0] !== d[20], squareFirstTwoRows: s[0] === s[20] };
 });
 check('diagonal rows are offset from each other', stag.diagFirstTwoRows, JSON.stringify(stag));
@@ -181,7 +184,7 @@ check('the OX tub seeds once', seeded.first === 1, JSON.stringify(seeded));
 check('and does not come back after deletion', seeded.second === 0, JSON.stringify(seeded));
 
 // Real datasheet dimensions, not the format name. The 50SG is 21.35mm across against the 50E
-// and 50PL at 21.15, and in a 21.4mm no-spacer bracket that is 0.05mm of clearance — it does
+// and 50PL at 21.15, and in a 21.5mm no-spacer bracket that is 0.05mm of clearance — it does
 // not go in. A staggered layout is the opposite case: 19.5mm between rows holds 21.15mm cells
 // because the nearest neighbour sits half a pitch sideways, and the first version of this
 // check condemned every honeycomb pack in the table.
@@ -190,9 +193,9 @@ const clear = await page.evaluate(() => {
   const run = (cell, holder) => { set('dimCell', cell); set('dimHolder', holder); set('dimV', 72); set('dimAh', 20); calcPackDims();
     return document.getElementById('dimResult').textContent; };
   return { sgTight: run('21700-50sg', 'square'), eOk: run('21700-50e', 'square'),
-           honey: run('21700-50e', 'diag-214') };
+           honey: run('21700-50e', 'diag-b') };
 });
-check('a 21.35mm 50SG is flagged in a 21.4mm bracket', /לא נכנס/.test(clear.sgTight), clear.sgTight.slice(-80));
+check('a 21.35mm 50SG is flagged in a 21.5mm bracket', /לא נכנס/.test(clear.sgTight), clear.sgTight.slice(-80));
 check('a 21.15mm 50E in the same bracket is not', !/לא נכנס/.test(clear.eOk), clear.eOk.slice(-80));
 check('and a honeycomb row pitch under the diameter is fine', !/לא נכנס/.test(clear.honey), clear.honey.slice(-80));
 
@@ -212,7 +215,7 @@ const nickels = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   const run = (h) => { set('dimHolder', h); set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
     const m = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/); return [+m[1], +m[2]]; };
-  return { a: run('diag-224'), b: run('diag-214'), sq: run('square-23') };
+  return { a: run('diag-a'), b: run('diag-b'), sq: run('square-23') };
 });
 check('the two diagonal nickels give different blocks', nickels.a[0] !== nickels.b[0] || nickels.a[1] !== nickels.b[1], JSON.stringify(nickels));
 check('and the 23mm square block is larger in area than either diagonal', nickels.sq[0]*nickels.sq[1] > nickels.a[0]*nickels.a[1] && nickels.sq[0]*nickels.sq[1] > nickels.b[0]*nickels.b[1], JSON.stringify(nickels));
@@ -236,7 +239,7 @@ check('and the corrected four are the ones that used to be', /10P|12P/.test(awai
 // the shape of the parallel group.
 const nick = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
-  set('dimCell', '21700-50e'); set('dimHolder', 'diag-224'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
+  set('dimCell', '21700-50e'); set('dimHolder', 'diag-a'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
   const six = document.getElementById('dimResult').textContent;
   set('dimAh', 15); calcPackDims();
   return { six, three: document.getElementById('dimResult').textContent };

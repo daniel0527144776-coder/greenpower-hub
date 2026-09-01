@@ -515,7 +515,7 @@ console.log('\n13. work that another job drags in is priced once, and only when 
     };
   });
   check('the page does not print its own name twice', !sales.titleVisible, sales.titleText + ' / ' + sales.activeTab);
-  check('and the tab strip still names it', /מכירות ותיקונים/.test(sales.activeTab), sales.activeTab);
+  check('and the tab strip still names it', /עבודות/.test(sales.activeTab), sales.activeTab);
   // Two buttons to one page is the duplicate you only notice on the phone, where they touch.
   check('one route to the calculator, not two', sales.calcRoutes === 1, String(sales.calcRoutes));
   // The pill says הצעה. The button used to say it again, and a third line said 'לא בהכנסות'.
@@ -525,6 +525,60 @@ console.log('\n13. work that another job drags in is priced once, and only when 
   check('and the month header carries the split', /🛒/.test(sales.monthHeads[0]) && /🔧/.test(sales.monthHeads[0]), sales.monthHeads[0] || 'none');
   // Counts came out of this app on purpose; the header is read after scrolling, not before.
   check('with no row count on it', !/^[^0-9]*\d+ ·/.test(sales.monthHeads[0].replace(/^[^ ]+ \d{4}/, '')), sales.monthHeads[0]);
+}
+// ---- 13. one customer, one timeline ----
+// Everything this person did used to be spread over three screens: repairs on the customer
+// card, purchases on the sales list, receipts nowhere at all. The card shows all four sources
+// in one strip now, and the total is DERIVED from those rows rather than read off the
+// accumulated `totalSpent` — which was wrong the moment an order existed, and which the
+// accounting import deliberately writes 0 into rather than inventing a figure.
+{
+  const led = await page.evaluate(() => {
+    const n = new Date();
+    const mk = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0');
+    const d = (day) => new Date(mk + '-' + day + 'T10:00:00').toISOString();
+    localStorage.setItem('gp_customers', JSON.stringify([
+      { id: 'lc', name: 'לקוח ציר', phone: '0509998888', isBusiness: false, totalSpent: 999999, firstVisit: d('01') },
+    ]));
+    localStorage.setItem('gp_jobs', JSON.stringify([
+      { id: 'lj', date: d('05'), customerName: 'לקוח ציר', customerPhone: '0509998888', price: 650, jobs: ['bms'],
+        warrantyEnd: new Date(Date.now() + 86400000 * 100).toISOString() },
+    ]));
+    localStorage.setItem('gp_orders', JSON.stringify([
+      { id: 'lo', date: d('06'), customer: 'לקוח ציר', phone: '0509998888', status: 'שולם', total: 2850, items: [{ name: 'סוללה', cat: 'סוללות אופניים' }] },
+      { id: 'lq', date: d('07'), customer: 'לקוח ציר', phone: '0509998888', status: 'הצעה', total: 900, items: [{ name: 'מטען', cat: 'מטענים' }] },
+    ]));
+    localStorage.setItem('gp_incomes', JSON.stringify([
+      { id: 'lb', date: '2022-04-10T07:00:00.000Z', amount: 1000, cat: 'תיקונים ומכירות', note: 'קבלה ישנה',
+        customer: 'לקוח ציר', phone: '0509998888', invoice: '700227', src: 'books', locked: true },
+    ]));
+    const c = (Store.get('customers') || [])[0];
+    const l = customerLedger(c);
+    return {
+      kinds: l.rows.map((r) => r.kind),
+      spent: l.spent,
+      visits: l.visits,
+      oldestFirstDate: l.rows.length ? l.rows[l.rows.length - 1].date.slice(0, 4) : '',
+      stored: c.totalSpent,
+    };
+  });
+  check('the timeline holds all four kinds of record', led.kinds.length === 4, led.kinds.join(','));
+  check('newest first, oldest last', led.oldestFirstDate === '2022', led.oldestFirstDate);
+  // 650 + 2850 + 1000. The ₪900 quote is money offered, not money taken.
+  check('the total excludes an open quote', led.spent === 4500, String(led.spent));
+  check('and it ignores the stored totalSpent entirely', led.stored === 999999 && led.spent !== led.stored, String(led.stored));
+
+  const shown = await page.evaluate(() => {
+    openCustomerDetails(0);
+    const m = document.querySelector('.modal-body') || document.body;
+    const txt = m.innerText || '';
+    const close = document.querySelector('.modal .btn-secondary');
+    if (close) close.click();
+    return txt;
+  });
+  check('the card shows the imported receipt with its invoice number', /700227/.test(shown), 'ok');
+  check('and tags what is still under warranty', /באחריות עוד/.test(shown), 'ok');
+  check('and marks the quote as a quote', /הצעה/.test(shown), 'ok');
 }
 check('no JS errors on the page', errors.length === 0, errors);
 check('and nothing asked through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
