@@ -121,6 +121,12 @@ jobs:
       - name: Finances and the accounting import
         run: node test/test-finances.mjs
 
+      # The import writes 144 names into `customers` and the sales editor had no way to pick
+      # one — so a repeat customer was retyped, which is the duplicate the import exists to
+      # avoid. A search capped like the idle list would hide them all while still looking fine.
+      - name: The customer picker, in sales and in repairs
+        run: node test/test-customer-picker.mjs
+
       - name: Sticker — saved layout is versioned
         run: node test/test-sticker-state.mjs
 

@@ -470,10 +470,9 @@ body { min-height: 100vh; }
     <h3 class="card-title">👤 פרטי לקוח</h3>
     <div class="form-row">
       <label>לקוח קיים</label>
-      <select class="form-select" id="customerSelect" onchange="loadCustomer()">
-        <option value="">-- חדש --</option>
-      </select>
+      <input type="search" class="form-input-wide" id="custSearch" placeholder="חפש שם או טלפון" style="width: 180px;" oninput="refreshCustomerSelect()">
     </div>
+    <div class="cust-pick" id="custPickList"></div>
     <div class="form-row">
       <label>שם מלא</label>
       <input type="text" class="form-input-wide" id="custName" placeholder="ישראל ישראלי" style="width: 180px;">
@@ -1560,6 +1559,18 @@ body { min-height: 100vh; }
   #gpDeck .gpd-slide figure { margin: 14px 0 6px; }
   #gpDeck .gpd-slide figure svg { width: 100%; height: auto; display: block; }
   #gpDeck .gpd-slide figcaption { font-size: 13px; margin-top: 10px; line-height: 1.5; }
+
+  /* The customer picker, shared by the calculator and the sales editor. */
+  .cust-pick { margin: -2px 0 8px; }
+  .cust-pick-head { font-size: 10.5px; color: var(--text-muted); margin: 0 2px 4px; }
+  .cust-pick-rows { max-height: 190px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+  .cust-pick-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 9px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .cust-pick-row:last-child { border-bottom: 0; }
+  .cust-pick-row:active { background: var(--card); }
+  .cust-pick-name { font-size: 12.5px; font-weight: 600; }
+  .cust-pick-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
+  .cust-pick-when { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+  .cust-pick-empty { font-size: 11.5px; color: var(--text-muted); padding: 8px 2px; }
 </style>
 <script>
 // The deck's own controller. Kept out of the hub's big inline block so the generator owns the
@@ -2671,7 +2682,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v276';
+const HUB_BUILD = 'v277';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3460,7 +3471,9 @@ function resetCalc() {
   document.getElementById('custName').value = '';
   document.getElementById('custPhone').value = '';
   document.getElementById('custNotes').value = '';
-  document.getElementById('customerSelect').value = '';
+  const _cs = document.getElementById('custSearch');
+  if (_cs) _cs.value = '';
+  refreshCustomerSelect();
   state.calcBiz = false;
   document.getElementById('calcBizToggle').classList.remove('checked');
   document.getElementById('calcBizNameRow').style.display = 'none';
@@ -3482,21 +3495,69 @@ function resetCalc() {
 // CUSTOMERS
 // ============================================================
 
-function refreshCustomerSelect() {
+// ---- ONE customer picker, used by both תיקונים and מכירות ----
+//
+// The accountant's six years put 144 names in here, most of them years old, and the sales
+// editor had no picker at all — a repeat customer was retyped, and a typo in the phone made
+// a second customer out of the same person. A native <select> of 200 rows is not a picker on
+// a phone either, which is what this replaces.
+//
+// Search covers name, business name, phone and city. With nothing typed it shows the 20 most
+// recent — sorted by last visit, because the imported rows are mostly 2019-2023 and would
+// otherwise bury the ten people who came in this month. The cap applies ONLY when there is no
+// query: capping a SEARCH is how 144 imported customers would become unreachable while the box
+// still looked like it worked, so test-customer-picker.mjs asserts that an old one is findable
+// by name, and its --selftest reinstates exactly that bug.
+const CUST_PICK_MAX = 20;
+function customerMatches(q) {
   const customers = Store.get('customers') || [];
-  const sel = document.getElementById('customerSelect');
-  sel.innerHTML = '<option value="">-- חדש --</option>';
-  customers.forEach((c, i) => {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = `${c.name} (${c.phone})`;
-    sel.appendChild(opt);
-  });
+  const s = String(q || '').trim().toLowerCase();
+  const digits = s.replace(/[^0-9]/g, '');
+  const rows = customers.map((c, i) => ({ c, i })).filter(({ c }) => !s
+    || (c.name || '').toLowerCase().includes(s)
+    || (c.businessName || '').toLowerCase().includes(s)
+    || (c.city || '').toLowerCase().includes(s)
+    || (digits && (c.phone || '').replace(/[^0-9]/g, '').includes(digits)));
+  rows.sort((a, b) => new Date(b.c.lastVisit || b.c.firstVisit || 0) - new Date(a.c.lastVisit || a.c.firstVisit || 0));
+  return { rows: s ? rows : rows.slice(0, CUST_PICK_MAX), total: customers.length, hits: rows.length, searching: !!s };
+}
+// 27 of the imported rows have no phone — the accountant never had one. An empty subtitle
+// reads as a broken record rather than as a customer who never gave a number, so say it.
+function custPickEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function customerPickHtml(q, pickFn) {
+  const { rows, total, hits, searching } = customerMatches(q);
+  if (!rows.length) {
+    return '<div class="cust-pick-empty">' + (total ? 'לא נמצא לקוח מתאים' : 'אין לקוחות שמורים עדיין') + '</div>';
+  }
+  const head = searching ? `${hits} מתוך ${total}` : `${rows.length} אחרונים · הקלד כדי לחפש בכל ${total}`;
+  return `<div class="cust-pick-head">${head}</div><div class="cust-pick-rows">` + rows.map(({ c, i }) => {
+    const nm = custPickEsc((c.isBusiness ? (c.businessName || c.name) : c.name) || '') || '(ללא שם)';
+    const when = c.lastVisit || c.firstVisit;
+    return `<div class="cust-pick-row" onclick="${pickFn}(${i})">
+      <div><div class="cust-pick-name">${c.isBusiness ? '🏢 ' : ''}${nm}</div>
+        <div class="cust-pick-sub">${c.phone ? '📱 ' + custPickEsc(c.phone) : 'ללא טלפון'}${c.city ? ' · ' + custPickEsc(c.city) : ''}</div></div>
+      <div class="cust-pick-when">${when ? new Date(when).toLocaleDateString('he-IL') : ''}</div>
+    </div>`;
+  }).join('') + '</div>';
 }
 
-function loadCustomer() {
-  const idx = document.getElementById('customerSelect').value;
-  if (idx === '') return;
+// The name is kept: three call sites already refresh this after a job saves, after a
+// customer's totals move, and at init — and the accounting import now calls it too. It did
+// not, so importing 144 customers left the calculator's own list stale until the app was
+// reloaded, which is indistinguishable from an import that did nothing.
+function refreshCustomerSelect() {
+  const box = document.getElementById('custPickList');
+  if (!box) return;
+  const q = (document.getElementById('custSearch') || {}).value || '';
+  const chosen = (document.getElementById('custName') || {}).value || '';
+  box.innerHTML = (!q.trim() && chosen.trim()) ? '' : customerPickHtml(q, 'loadCustomer');
+}
+
+function loadCustomer(idx) {
   const customers = Store.get('customers') || [];
   const c = customers[idx];
   if (!c) return;
@@ -3507,6 +3568,9 @@ function loadCustomer() {
   document.getElementById('calcBizToggle').classList.toggle('checked', state.calcBiz);
   document.getElementById('calcBizNameRow').style.display = state.calcBiz ? 'grid' : 'none';
   document.getElementById('calcBizName').value = c.businessName || '';
+  const s = document.getElementById('custSearch');
+  if (s) s.value = '';
+  refreshCustomerSelect();
 }
 
 function toggleCalcBiz() {
@@ -4808,7 +4872,7 @@ function openOrderEditor(id) {
   const orders = Store.get('orders') || [];
   const o = id ? orders.find(x => x.id === id) : null;
   if (o) {
-    orderDraft = { id: o.id, date: o.date, customer: o.customer, phone: o.phone, bms: o.bms || '', bmsBrand: o.bmsBrand || '', bmsAmps: o.bmsAmps || '', isBusiness: o.isBusiness, status: o.status,
+    orderDraft = { id: o.id, date: o.date, customer: o.customer, phone: o.phone, custQuery: '', bms: o.bms || '', bmsBrand: o.bmsBrand || '', bmsAmps: o.bmsAmps || '', isBusiness: o.isBusiness, status: o.status,
       items: o.items.map(it => {
         if (it.custom) return { custom: true, name: it.name, unit: it.unit, qty: it.qty };
         const ci = PRICING.findIndex(c => c.cat === it.cat && c.name === it.name);
@@ -4818,7 +4882,7 @@ function openOrderEditor(id) {
         return ci >= 0 ? { ci, qty: it.qty } : { custom: true, name: it.name, unit: Number(it.unit) || 0, qty: it.qty };
       }) };
   } else {
-    orderDraft = { id: null, date: new Date().toISOString(), customer: '', phone: '', bms: '', bmsBrand: '', bmsAmps: '', isBusiness: false, status: 'הצעה', items: [] };
+    orderDraft = { id: null, date: new Date().toISOString(), customer: '', phone: '', custQuery: '', bms: '', bmsBrand: '', bmsAmps: '', isBusiness: false, status: 'הצעה', items: [] };
   }
   renderOrderModal();
 }
@@ -4827,7 +4891,8 @@ function syncOrderFields() { const n = document.getElementById('ordName'); if (n
   orderDraft.bms = bmsLabel(orderDraft.bmsBrand, orderDraft.bmsAmps);
   // The date decides which month a sale counts as income in — editable for the same
   // reason the price is: a sale entered a week late was landing on the wrong month.
-  const dt = document.getElementById('ordDate'); if (dt && dt.value) orderDraft.date = mergeCalendarDate(dt.value, orderDraft.date); }
+  const dt = document.getElementById('ordDate'); if (dt && dt.value) orderDraft.date = mergeCalendarDate(dt.value, orderDraft.date);
+  const cq = document.getElementById('ordCustSearch'); if (cq) orderDraft.custQuery = cq.value; }
 // The BMS is picked from BMS_PRICES — the same brands and amp ratings the repair
 // calculator already prices — instead of being typed. Free text meant a quote could
 // promise a rating the lab does not stock, and it never reached the sale record.
@@ -4868,7 +4933,9 @@ function renderOrderModal() {
   }).join('');
   const total = orderDraft.items.reduce((s, it) => s + orderItemInfo(it, mode).unit * it.qty, 0);
   const body = `
-    <div class="form-row"><label>שם לקוח</label><input class="form-input-wide" id="ordName" value="${orderDraft.customer || ''}" style="width:170px;"></div>
+    <div class="form-row"><label>לקוח קיים</label><input type="search" class="form-input-wide" id="ordCustSearch" value="${custPickEsc(orderDraft.custQuery || '')}" placeholder="חפש שם או טלפון" style="width:170px;" oninput="onOrderCustSearch()"></div>
+    <div class="cust-pick" id="ordCustList"></div>
+    <div class="form-row"><label>שם לקוח</label><input class="form-input-wide" id="ordName" value="${custPickEsc(orderDraft.customer || '')}" style="width:170px;"></div>
     <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="ordPhone" value="${orderDraft.phone || ''}" style="width:170px;"></div>
     <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="ordDate" value="${dateInputValue(orderDraft.date)}" style="width:150px;"></div>
     <div class="form-row"><label>דגם BMS</label>
@@ -4876,6 +4943,7 @@ function renderOrderModal() {
       <select class="form-select" id="ordBmsAmps" style="width:75px;" onchange="syncOrderFields()">${bmsAmpsOpts(orderDraft.bmsBrand, orderDraft.bmsAmps)}</select>
     </div>
     <label class="check ${orderDraft.isBusiness ? 'checked' : ''}" onclick="toggleOrderBiz()"><div class="check-box"></div>לקוח עסקי (מחיר B2B)</label>
+    ${orderDraft.isBusiness && orderDraft.items.length ? '<div style="font-size:10.5px;color:var(--text-muted);margin:2px 2px 0;">כל השורות מחושבות במחיר סוחר</div>' : ''}
     <div class="divider"></div>
     <div class="form-row"><label>קטגוריה</label><select class="form-select" id="ordCat" style="width:200px;" onchange="onOrderCatChange()">${catOpts}</select></div>
     <div class="form-row"><label>מוצר</label><select class="form-select" id="ordProd" style="width:200px;">${prodOpts}</select></div>
@@ -4890,6 +4958,35 @@ function renderOrderModal() {
     <div style="text-align:left;font-weight:700;color:var(--primary);margin-top:8px;">סה"כ: ${shek(total)}</div>`;
   openModal(orderDraft.id ? 'עריכת הזמנה' : 'הזמנה חדשה', body,
     `<button class="btn btn-primary" onclick="saveOrder()">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+  onOrderCustSearch();
+}
+
+// Only this list is re-rendered, never the whole modal body: rebuilding the body while he
+// is typing pulls the focus out of the box he is typing in.
+function onOrderCustSearch() {
+  const box = document.getElementById('ordCustList');
+  if (!box) return;
+  orderDraft.custQuery = (document.getElementById('ordCustSearch') || {}).value || '';
+  const chosen = ((document.getElementById('ordName') || {}).value || orderDraft.customer || '').trim();
+  box.innerHTML = (!orderDraft.custQuery.trim() && chosen) ? '' : customerPickHtml(orderDraft.custQuery, 'pickOrderCustomer');
+}
+
+// Daniel, 2026-09-09: picking a business customer switches the order to B2B prices, and
+// every line already added is recomputed — orderItemInfo reads the mode at render time, so
+// there is nothing stamped to go stale.
+//
+// It only ever turns the flag ON. A dealer not yet in the customer list is marked by hand,
+// and clearing that on a later pick would raise every line with no visible cause. Of the two
+// directions to be silent in, the one that overcharges a trade buyer is the worse one.
+function pickOrderCustomer(i) {
+  const c = (Store.get('customers') || [])[i];
+  if (!c) return;
+  syncOrderFields();
+  orderDraft.customer = (c.isBusiness ? (c.businessName || c.name) : c.name) || '';
+  orderDraft.phone = c.phone || '';
+  orderDraft.custQuery = '';
+  if (c.isBusiness) orderDraft.isBusiness = true;
+  renderOrderModal();
 }
 function onOrderCatChange() { syncOrderFields(); orderDraft.cat = document.getElementById('ordCat').value; renderOrderModal(); }
 function toggleOrderBiz() { syncOrderFields(); orderDraft.isBusiness = !orderDraft.isBusiness; renderOrderModal(); }
@@ -5594,7 +5691,12 @@ function importAccounting() {
 
   closeModal();
   renderFinances();
-  alert(`✅ ${added} לקוחות חדשים · ${filled} הושלמו · ${flagged} סומנו כעסקיים\n${books.length} רשומות הכנסה מהנהלת החשבונות.`);
+  // Both lists that show customers, not only the ledger. Without this the 144 names landed
+  // in storage and appeared nowhere until the app was reloaded — an import that worked and
+  // looked exactly like one that had not.
+  refreshCustomerSelect();
+  if (document.getElementById('customersList')) renderCustomers();
+  alert(`✅ ${added} לקוחות חדשים · ${filled} הושלמו · ${flagged} סומנו כעסקיים\n${books.length} רשומות הכנסה מהנהלת החשבונות.\nכולם זמינים לבחירה במחשבון ובהזמנת מכירה.`);
 }
 function deleteIncome(id) {
   askConfirm('למחוק את רישום ההכנסה?', () => {
