@@ -296,6 +296,21 @@ body { min-height: 100vh; }
   .pills-grid-2 { grid-template-columns: repeat(2, 1fr); }
 }
 
+
+
+  /* The customer picker, shared by the calculator (תיקונים) and the sales editor (מכירות).
+     Lives HERE, in the hub's own stylesheet, and NOT in the deck block below: that block is
+     regenerated wholesale by tools/gen-deck.mjs, which silently deleted these rules once. */
+  .cust-pick { margin: -2px 0 8px; }
+  .cust-pick-head { font-size: 10.5px; color: var(--text-muted); margin: 0 2px 4px; }
+  .cust-pick-rows { max-height: 190px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+  .cust-pick-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 9px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .cust-pick-row:last-child { border-bottom: 0; }
+  .cust-pick-row:active { background: var(--card); }
+  .cust-pick-name { font-size: 12.5px; font-weight: 600; }
+  .cust-pick-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
+  .cust-pick-when { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+  .cust-pick-empty { font-size: 11.5px; color: var(--text-muted); padding: 8px 2px; }
 </style>
 </head>
 <body>
@@ -409,6 +424,12 @@ body { min-height: 100vh; }
         <span class="quick-card-icon">📐</span>
         <div class="quick-card-title">מחשבונים</div>
         <div class="quick-card-desc">טווח נסיעה · מידות סוללה</div>
+      </div>
+
+      <div class="quick-card" onclick="navigateTo('diag')">
+        <span class="quick-card-icon">🩺</span>
+        <div class="quick-card-title">אבחון תקלות</div>
+        <div class="quick-card-desc">תסמין → סדר בדיקות</div>
       </div>
 
       <div class="quick-card" onclick="navigateTo('inventory')">
@@ -1015,6 +1036,33 @@ body { min-height: 100vh; }
     <div id="dimDraw" style="margin-top:10px;overflow-x:auto;"></div>
     <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">מרווח = מרחק בין מרכזי תאים. באלכסוני השורות מקוננות, ולכן צפוף יותר.</p>
   </div>
+
+  <div class="card">
+    <h3 class="card-title">📏 מהסוללה הישנה — מה נכנס במקום?</h3>
+    <div class="info-banner">
+      <span>📐</span>
+      <div>מדוד את הסוללה הישנה שהלקוח הביא והזן את המידות. החישוב הוא ההפוך של האומדן שלמעלה —
+      אותם מרווחי תושבת, אותם תאים. מה שתשמור כאן נרשם כ<b>נמדד</b> מול דגם הכלי, ומחליף את ההערכות.</div>
+    </div>
+    <div class="form-row"><label>מידות הסוללה הישנה (מ"מ)</label>
+      <div style="display:flex;gap:6px;">
+        <input type="number" class="form-input" id="opL" placeholder="אורך" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;">
+        <input type="number" class="form-input" id="opW" placeholder="רוחב" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;">
+        <input type="number" class="form-input" id="opH" placeholder="גובה" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;">
+      </div>
+    </div>
+    <div class="form-row"><label>מתח היעד</label>
+      <select class="form-select" id="opV" onchange="calcFromOldPack()">
+        <option>36</option><option>48</option><option>52</option><option selected>60</option><option>72</option><option>84</option>
+      </select>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">סוג התא והתושבת נלקחים מהאומדן שלמעלה.</p>
+    <div class="info-banner" style="margin-top:8px;"><span>🔋</span><div id="opResult">הזן מידות כדי לראות מה נכנס.</div></div>
+    <div class="form-row" style="margin-top:10px;"><label>דגם הכלי</label>
+      <input class="form-input-wide" id="opModel" placeholder="Kaabo Wolf King / Sur-Ron..." style="width:170px;">
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="saveMeasuredPack()">💾 שמור מדידה מול הדגם</button>
+  </div>
   <div class="card">
     <h3 class="card-title">🏍️ מה נכנס לכל כלי</h3>
     <p style="font-size:11px;color:var(--warning,#f59e0b);margin:0 0 8px;">⚠ הנתונים כאן מ-AI, לא נמדדו. נקודת פתיחה בלבד — מדוד לפני שאתה בונה. לחיצה ממלאת את המחשבון.</p>
@@ -1504,8 +1552,13 @@ body { min-height: 100vh; }
   <div class="gpd-nav">
     <button class="btn btn-secondary btn-sm" onclick="gpDeckGo(-1)">▶ הקודם</button>
     <button class="btn btn-primary btn-sm" onclick="gpDeckGo(1)">הבא ◀</button>
+    <button class="btn btn-secondary btn-sm" id="gpdPlay" onclick="gpDeckTogglePlay()">▶️ הפעל</button>
+    <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text-muted);cursor:pointer;">
+      <input type="checkbox" id="gpdSpeak" checked onchange="gpDeckVoiceCheck()"> 🔊 הקראה
+    </label>
     <span class="gpd-count" id="gpDeckCount">1 / 16</span>
   </div>
+  <div id="gpdVoiceNote" style="display:none;font-size:11.5px;margin-top:8px;padding:7px 10px;border-radius:8px;background:var(--bg);color:var(--text-muted);"></div>
 </div>
 <style>
   /* GENERATED — tools/gen-deck.mjs. Namespaced under #gpDeck: the hub owns .card, .btn and a
@@ -1559,18 +1612,6 @@ body { min-height: 100vh; }
   #gpDeck .gpd-slide figure { margin: 14px 0 6px; }
   #gpDeck .gpd-slide figure svg { width: 100%; height: auto; display: block; }
   #gpDeck .gpd-slide figcaption { font-size: 13px; margin-top: 10px; line-height: 1.5; }
-
-  /* The customer picker, shared by the calculator and the sales editor. */
-  .cust-pick { margin: -2px 0 8px; }
-  .cust-pick-head { font-size: 10.5px; color: var(--text-muted); margin: 0 2px 4px; }
-  .cust-pick-rows { max-height: 190px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
-  .cust-pick-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 9px; cursor: pointer; border-bottom: 1px solid var(--border); }
-  .cust-pick-row:last-child { border-bottom: 0; }
-  .cust-pick-row:active { background: var(--card); }
-  .cust-pick-name { font-size: 12.5px; font-weight: 600; }
-  .cust-pick-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
-  .cust-pick-when { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
-  .cust-pick-empty { font-size: 11.5px; color: var(--text-muted); padding: 8px 2px; }
 </style>
 <script>
 // The deck's own controller. Kept out of the hub's big inline block so the generator owns the
@@ -1585,7 +1626,102 @@ function gpDeckGo(step) {
   if (c) c.textContent = (gpDeckI + 1) + ' / ' + s.length;
   var card = document.getElementById('gpDeckCard');
   if (card) card.scrollIntoView({ block: 'nearest' });
+  if (gpdPlaying) gpdArm();
 }
+
+// ---- auto-advance + Hebrew narration ------------------------------------------------
+// The narration text is READ OFF THE SLIDE, never written twice: editing a slide changes what
+// is spoken, and there is no second copy to drift. The eyebrow is skipped - it is a slide
+// number ("14 · כנות") and reads badly aloud.
+var gpdPlaying = false, gpdTimer = null, gpdTok = 0;
+var GPD_SECONDS = 9;   // fallback pace when there is no voice to pace it for us
+
+function gpdSpeakWanted() { var c = document.getElementById('gpdSpeak'); return !!(c && c.checked); }
+
+// getVoices() is EMPTY until the speech engine has finished loading them, and the event that
+// says so fires once. Asking once and concluding "no Hebrew voice" is the standard way to get
+// this wrong, and it is almost certainly why the previous attempt looked broken.
+function gpdHebrewVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  var v = window.speechSynthesis.getVoices() || [];
+  for (var i = 0; i < v.length; i++) if (/^(he|iw)/i.test(v[i].lang || '')) return v[i];
+  return null;
+}
+// Says what it found, in words, every time. One cause, one message.
+function gpDeckVoiceCheck() {
+  var note = document.getElementById('gpdVoiceNote');
+  if (!note) return;
+  if (!gpdSpeakWanted()) { note.style.display = 'none'; try { window.speechSynthesis.cancel(); } catch (e) {} return; }
+  note.style.display = 'block';
+  if (!('speechSynthesis' in window)) {
+    note.textContent = '🔇 אין מנוע הקראה במכשיר הזה. המצגת תתקדם לבד, בלי קול.';
+    return;
+  }
+  var say = function () {
+    var v = gpdHebrewVoice();
+    note.textContent = v
+      ? ('🔊 נמצא קול עברי: ' + (v.name || v.lang) + '. ההקראה תקבע את קצב המעבר.')
+      : '🔇 אין קול עברי מותקן במכשיר. המצגת תתקדם לבד כל ' + GPD_SECONDS + ' שניות, בלי הקראה.';
+  };
+  note.textContent = '⏳ בודק אם יש קול עברי…';
+  var v = window.speechSynthesis.getVoices();
+  if (!v || !v.length) {
+    window.speechSynthesis.onvoiceschanged = function () { say(); window.speechSynthesis.onvoiceschanged = null; };
+    setTimeout(say, 500);   // some engines never fire the event; do not wait forever
+  } else say();
+}
+function gpdSlideText() {
+  var s = document.querySelector('#gpDeck .gpd-slide.on');
+  if (!s) return '';
+  var parts = [], t = s.querySelector('.gpd-title');
+  if (t) parts.push(t.textContent);
+  [].slice.call(s.querySelectorAll('p, li, figcaption')).forEach(function (e) { parts.push(e.textContent); });
+  return parts.join('. ').replace(/s+/g, ' ').trim().slice(0, 900);
+}
+function gpDeckStop() {
+  gpdPlaying = false; gpdTok++;
+  if (gpdTimer) { clearTimeout(gpdTimer); gpdTimer = null; }
+  try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch (e) {}
+  var b = document.getElementById('gpdPlay');
+  if (b) b.textContent = '▶️ הפעל';
+}
+function gpDeckTogglePlay() {
+  if (gpdPlaying) return gpDeckStop();
+  gpdPlaying = true;
+  var b = document.getElementById('gpdPlay');
+  if (b) b.textContent = '⏸️ עצור';
+  gpDeckVoiceCheck();
+  gpdArm();
+}
+// Speaks (or times) the CURRENT slide, then moves on. A token makes a stale utterance's
+// onend harmless: pressing "next" by hand mid-sentence must not advance twice.
+function gpdArm() {
+  if (!gpdPlaying) return;
+  var help = document.getElementById('page-help');
+  if (help && !help.classList.contains('active')) return gpDeckStop();
+  var tok = ++gpdTok;
+  var advance = function () {
+    if (!gpdPlaying || tok !== gpdTok) return;
+    var slides = document.querySelectorAll('#gpDeck .gpd-slide');
+    if (gpDeckI >= slides.length - 1) return gpDeckStop();   // stop at the end, never loop
+    gpDeckGo(1);
+  };
+  var v = gpdSpeakWanted() ? gpdHebrewVoice() : null;
+  if (v) {
+    try {
+      var u = new SpeechSynthesisUtterance(gpdSlideText());
+      u.voice = v; u.lang = v.lang || 'he-IL';
+      u.onend = advance;
+      // A refused or broken utterance must not freeze the deck on one slide.
+      u.onerror = function () { gpdTimer = setTimeout(advance, GPD_SECONDS * 1000); };
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+      return;
+    } catch (e) { /* fall through to the timer */ }
+  }
+  gpdTimer = setTimeout(advance, GPD_SECONDS * 1000);
+}
+
 document.addEventListener('keydown', function (e) {
   // Only while the help page is the one on screen, and never while typing in a field.
   var help = document.getElementById('page-help');
@@ -1910,6 +2046,21 @@ document.addEventListener('keydown', function (e) {
 </section>
 
 <!-- ============ INVENTORY PAGE ============ -->
+<section id="page-diag" class="page">
+  <div class="page-header">
+    <div>
+      <h2 class="page-title">🩺 אבחון תקלות</h2>
+      <p class="page-subtitle">תסמין → סדר הבדיקות</p>
+    </div>
+  </div>
+  <div class="info-banner" id="diagDraftNote">
+    ⚠️ <b>טיוטה — עברו עליה ותקנו.</b> הבדיקות נכתבו לפי מה שכבר רשום במערכת ולפי מה שאמרת
+    (״הכי נפוץ זה תאים שנופלים״). כל תסמין פתוח לעריכה: אפשר להוסיף בדיקות משלך ולכתוב הערה,
+    והן נשמרות ומסתנכרנות. מה שאתה מוסיף לא נמחק בעדכון.
+  </div>
+  <div id="diagList"></div>
+</section>
+
 <section id="page-inventory" class="page">
   <div class="page-header">
     <h2 class="page-title">📦 ניהול מלאי</h2>
@@ -2165,7 +2316,7 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'supplier_costs', 'supplier_prices', 'biz_payments'];
+const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'supplier_costs', 'supplier_prices', 'biz_payments'];
 
 const Sync = {
   session: null,
@@ -2361,7 +2512,9 @@ function copyMessageBox() {
   box.select();
   let ok = false;
   try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-  if (!ok) { try { navigator.clipboard.writeText(box.value); ok = true; } catch (e) { ok = false; } }
+  // execCommand above is synchronous and its result is trustworthy; this fallback is not -
+  // writeText resolves later, so ok=true here is a guess. The box stays on screen regardless.
+  if (!ok) { try { const p = navigator.clipboard && navigator.clipboard.writeText(box.value); if (p && p.catch) p.catch(() => {}); ok = true; } catch (e) { ok = false; } }
   // toast() has never existed in this file. Both of its callers threw a ReferenceError
   // instead of saying anything — so copying a message reported neither success nor failure,
   // and on a WebView, where the alert it might have been is silent anyway, the two outcomes
@@ -2488,7 +2641,7 @@ function navigateTo(page) {
   // 'range' and 'dims' were separate pages until 2026-07-30; both are the same
   // calculators page now. Kept as aliases so saved links and habits still land.
   if (page === 'range' || page === 'dims') return navigateTo('calcs');
-  if (page === 'calcs') { calcRange(); calcPackDims(); renderDims(); }
+  if (page === 'calcs') { calcRange(); calcPackDims(); calcFromOldPack(); renderDims(); }
   if (page === 'catalog') renderCatalog();
   if (page === 'finances') renderFinances();
   if (page === 'worktime') renderWorktime();
@@ -2497,6 +2650,7 @@ function navigateTo(page) {
   if (page === 'bizdocs') renderBizDocs();
   if (page === 'stickers') openStickerEditor();
   if (page === 'stickerlog') renderStickerLog();
+  if (page === 'diag') renderDiag();
   if (page === 'inventory') renderInventory();
   if (page === 'supplier') renderSupplier();
 }
@@ -2682,7 +2836,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v277';
+const HUB_BUILD = 'v278';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3716,7 +3870,8 @@ function callCustomer(phone) {
   // Opens the chat with nothing written, so Daniel can just talk. The number still goes to
   // the clipboard — that is what this button did before, and it is the fallback if the
   // customer has no valid number stored.
-  try { navigator.clipboard.writeText(phone); } catch (e) {}
+  // Best-effort: writeText returns a promise, so a refusal has to be caught on the promise.
+  try { const p = navigator.clipboard && navigator.clipboard.writeText(phone); if (p && p.catch) p.catch(() => {}); } catch (e) {}
   sendWhatsApp(phone, '', 'הלקוח');
 }
 
@@ -4873,7 +5028,7 @@ function openOrderEditor(id) {
   const o = id ? orders.find(x => x.id === id) : null;
   if (o) {
     orderDraft = { id: o.id, date: o.date, customer: o.customer, phone: o.phone, custQuery: '', bms: o.bms || '', bmsBrand: o.bmsBrand || '', bmsAmps: o.bmsAmps || '', isBusiness: o.isBusiness, status: o.status,
-      items: o.items.map(it => {
+      items: (o.items || []).map(it => {
         if (it.custom) return { custom: true, name: it.name, unit: it.unit, qty: it.qty };
         const ci = PRICING.findIndex(c => c.cat === it.cat && c.name === it.name);
         // A catalog row that no longer exists (renamed category, regenerated catalog) was
@@ -5136,7 +5291,7 @@ function saleRow(o) {
     <div class="list-item">
       <div class="list-item-header">
         <div><div class="list-item-title">${salesBadge('sale')} ${o.customer || 'ללא שם'} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
-          <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')} · ${o.items.length === 1 ? 'פריט אחד' : o.items.length + ' פריטים'}${o.bms ? ' · BMS ' + o.bms : ''}</div>
+          <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')} · ${(o.items || []).length === 1 ? 'פריט אחד' : (o.items || []).length + ' פריטים'}${o.bms ? ' · BMS ' + o.bms : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${saleCats(o)}</div></div>
         <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div>${(() => { const pr = saleProfit(o); return pr ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(pr.profit)}</div>` : ''; })()}<div style="margin-top:3px;">${saleStatusPill(o.status)}${quoteAgePill(o)}</div></div>
       </div>
@@ -5346,7 +5501,7 @@ function buildQuoteText(o) {
   // decode, which is what a 3-item quote looked like.
   const groups = [];
   const seen = new Map();
-  o.items.forEach((it) => {
+  (o.items || []).forEach((it) => {
     const key = it.cat || 'אחר';
     if (!seen.has(key)) { seen.set(key, { cat: key, items: [] }); groups.push(seen.get(key)); }
     seen.get(key).items.push(it);
@@ -6746,6 +6901,265 @@ function useVehiclePack(model) {
   calcPackDims();
   document.getElementById('dimResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
+// ============================================================
+// DIAGNOSTIC HELPER  (2026-09-10)
+// ============================================================
+// Asked for on 2026-09-01: "Diagnostic helper, in the hub, for him. Symptoms in, ordered
+// checks out. Built on his own experience, not invented. The common failure is cells that
+// drop - in cheap factory packs and in old packs alike, not welds."
+//
+// DIAG is the DRAFT and lives in code, so improving it reaches every device. Daniel's own
+// additions live in the synced 'diag_notes' key, keyed by symptom id, and are never
+// overwritten by a new draft - the DEFAULT_REPLIES trap, avoided deliberately.
+//
+// 'services' are catalogue row NAMES. Never a price: diagPrice reads PRICING at render time,
+// so a reprice moves the answer. An unknown name renders as the name alone rather than a
+// blank - a service that was renamed must be visible, not silent.
+const DIAG = [
+  { id: 'range', icon: '📉', symptom: 'טווח קצר / נגמרת מהר',
+    usually: 'ברוב המקרים קבוצת תאים שנפלה — לא הריתוכים. קורה גם בסוללות מפעל זולות וגם בסוללות ותיקות.',
+    checks: [
+      'מדוד מתח מנוחה של כל החבילה אחרי שעה בלי עומס, והשווה למתח הצפוי לפי מספר הטורים (S).',
+      'פתח ומדוד מתח לכל קבוצת תאים (P) בנפרד. חפש קבוצה שנמוכה ב-0.15V ומעלה מהשאר.',
+      'כל הקבוצות שוות? הבעיה היא בלאי קיבולת כללי, לא תא בודד — לך לבדיקת קיבולת.',
+      'קבוצה אחת נמוכה? סמן אותה, טען לאיזון מלא, ומדוד שוב אחרי 24 שעות. קבוצה שצונחת שוב היא הפגומה.',
+      'החלט לפי כמות התאים: 2-4 תיקון נקודתי · 5-8 נקודתי מורחב · יותר מזה שורה שלמה.',
+    ],
+    services: ['בדיקת קיבולת אמיתית (פורק חשמלי)', 'תיקון נקודתי 2-4 תאים', 'תיקון נקודתי 5-8 תאים', 'החלפת שורה שלמה'] },
+
+  { id: 'dead', icon: '🔌', symptom: 'אין מתח בכלל / לא נדלקת',
+    usually: 'בדרך כלל BMS בהגנה, או פריקה עמוקה שנעלה את הסוללה. לא בהכרח התאים.',
+    checks: [
+      'מדוד מתח על החבילה עצמה (B+/B-) ובמקביל ביציאת ה-BMS. מתח על החבילה ואפס ביציאה = ה-BMS בהגנה.',
+      'מדוד את כל הקבוצות. קבוצה אחת מתחת ל-2.5V לתא נועלת את ה-BMS.',
+      'נסה לשחרר: חבר מטען לרגע. הרבה BMS משתחררים מהגנת פריקה רק בטעינה.',
+      'מתחת ל-2.5V לתא — הצלה בזרם נמוך בהשגחה, לא טעינה רגילה.',
+      'החבילה תקינה וה-BMS לא משחרר גם אחרי מטען? ה-BMS פגום.',
+    ],
+    services: ['הצלת סוללה מתה (Deep Discharge)', 'תיקון BMS (חוטי איזון/הלחמה)', 'החלפת BMS רגיל DALY (עד 48V)', 'החלפת BMS חכם JK (60V-84V)'] },
+
+  { id: 'cutout', icon: '⚡', symptom: 'נחתכת בהאצה / נכבית בעומס',
+    usually: 'קבוצה חלשה שצונחת במתח דווקא תחת זרם, או BMS שדירוג הזרם שלו נמוך מהבקר.',
+    checks: [
+      'שאל מתי בדיוק זה קורה — בהאצה, בעלייה, או בקור. חיתוך רק בעומס מצביע על קבוצה חלשה.',
+      'מדוד את מתח החבילה תחת עומס אמיתי. צניחה חדה = התנגדות פנימית גבוהה.',
+      'השווה את דירוג הזרם של ה-BMS לצריכת הבקר. BMS 30A מול בקר 60A ייחתך תמיד — וזה לא תקלה בתאים.',
+      'מדוד את כל הקבוצות מיד בסוף נסיעה. הקבוצה שנפלה הכי הרבה היא החשודה.',
+    ],
+    services: ['איזון תאים עמוק', 'תיקון נקודתי 2-4 תאים', 'החלפת BMS חכם JK (60V-84V)'] },
+
+  { id: 'charge', icon: '🔋', symptom: 'לא נטענת / המטען לא עובד',
+    usually: 'לרוב המטען, שקע הטעינה או צד הטעינה של ה-BMS — ולא התאים.',
+    checks: [
+      'מדוד את מוצא המטען בלי חיבור לסוללה. אין מתח = המטען, וזה נגמר כאן.',
+      'בדוק את שקע הטעינה פיזית. XLR / DC / GX-16 נשברים ומתחמצנים, וזו תקלה נפוצה יותר מתא.',
+      'מדוד מתח בכניסת הטעינה של ה-BMS. מגיע מתח ואין טעינה = צד הטעינה של ה-BMS.',
+      'בדוק הגנת מתח-יתר: קבוצה אחת שמגיעה מלאה לפני כולן עוצרת את הטעינה לכל החבילה.',
+    ],
+    services: ['החלפת שקע טעינה (XLR, DC, GX-16)', 'תיקון BMS (חוטי איזון/הלחמה)', 'איזון תאים עמוק'] },
+
+  { id: 'swollen', icon: '🛑', danger: true, symptom: 'תאים נפוחים',
+    usually: 'תא נפוח הוא סוף חיים ואינו חוזר. זו קודם כל בטיחות, לא תיקון.',
+    checks: [
+      'עצור. אל תטען ואל תנסה לפרוק תא נפוח.',
+      'הוצא מהמארז והפרד פיזית מהשאר, במקום לא דליק.',
+      'חם או מריח? הרחק מיד ואוורר.',
+      'תא נפוח אחד מחייב החלפה של כל הקבוצה שלו — לא תא בודד.',
+    ],
+    services: ['החלפת תאים נפוחים', 'החלפת שורה שלמה'] },
+
+  { id: 'heat', icon: '🔥', danger: true, symptom: 'מתחממת או מריחה',
+    usually: 'חיבור רופף או ריתוך גרוע, קצר, או תא בסוף חייו. מתחיל כמעט תמיד בחיבור ולא באמצע התא.',
+    checks: [
+      'עצור מיד. נתק מהכלי ומהמטען.',
+      'אל תשאיר בטעינה ללא השגחה ואל תאחסן בתוך הבית עד שנבדק.',
+      'אחרי שהתקררה — חפש נקודות חמות: ריתוך, פס ניקל, מחבר פריקה.',
+      'בדוק את מחבר הפריקה. XT60 / QS8 שרוף מתחמם הרבה לפני התאים.',
+    ],
+    services: ['תיקון ריתוך נקודתי (Spot Welding)', 'החלפת מחבר פריקה (XT60/90, QS8)', 'החלפת תאים נפוחים'] },
+
+  { id: 'water', icon: '💧', symptom: 'נרטבה / קורוזיה',
+    usually: 'מים וליתיום = קורוזיה שממשיכה גם אחרי שהכול נראה יבש.',
+    checks: [
+      'אל תטען. נתק הכול.',
+      'פתח ובדוק חלודה על פסי הניקל, על ה-BMS ועל המחברים.',
+      'קורוזיה ירוקה או לבנה על ה-BMS = החלפה, לא ניקוי.',
+      'ייבוש לבדו לא מספיק — הקורוזיה ממשיכה מתחת לשרינק.',
+    ],
+    services: ['טיפול בנזקי מים/קורוזיה', 'תיקון חיווט/הלחמות'] },
+
+  { id: 'gauge', icon: '🔢', symptom: 'מד הסוללה קופץ / לא מדויק',
+    usually: 'חוסר איזון בין הקבוצות, או מד שקורא מתח בלבד ולכן קופץ תחת עומס.',
+    checks: [
+      'בדוק אם המד קורא מתח בלבד. מד מתח יקפוץ תמיד בעומס, וזו לא תקלה.',
+      'טען לאיזון מלא והשאר על המטען שעתיים אחרי שהנורה התחלפה.',
+      'מדוד את כל הקבוצות בסוף טעינה. פער מעל 0.05V = חוסר איזון.',
+      'הפער חוזר אחרי איזון? יש קבוצה עם דליפה.',
+    ],
+    services: ['איזון תאים עמוק', 'התקנת מד מתח וקיבולת SOC', 'בדיקת קיבולת אמיתית (פורק חשמלי)'] },
+];
+
+function diagNotes() { return Store.get('diag_notes') || {}; }
+// A price is never written here - it is looked up when the row is drawn.
+function diagPrice(name) {
+  const row = (typeof PRICING !== 'undefined' ? PRICING : []).find((p) => p.name === name);
+  if (!row) return '';
+  const r = row.retail;
+  if (r === undefined || r === null || r === '') return '';
+  return typeof r === 'number' ? shek(r) : String(r);
+}
+function renderDiag() {
+  const notes = diagNotes();
+  const el = document.getElementById('diagList');
+  if (!el) return;
+  el.innerHTML = DIAG.map((d) => {
+    const mine = notes[d.id] || {};
+    const extra = Array.isArray(mine.checks) ? mine.checks : [];
+    const open = state.diagOpen === d.id;
+    const steps = d.checks.concat(extra.map((x) => x + '\u00A0★'));
+    return `
+    <div class="card" style="margin-bottom:10px;${d.danger ? 'border-right:3px solid var(--danger);' : ''}">
+      <div style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="toggleDiag('${d.id}')">
+        <span style="font-size:20px;">${d.icon}</span>
+        <div style="flex:1;">
+          <div class="list-item-title">${d.symptom}</div>
+          <div class="list-item-subtitle" style="font-size:10.5px;">${open ? 'הסתר' : 'הצג ' + steps.length + ' בדיקות'}</div>
+        </div>
+        <span style="color:var(--text-muted);">${open ? '▲' : '▼'}</span>
+      </div>
+      ${open ? `
+      <div style="margin-top:10px;">
+        <div style="font-size:11.5px;color:var(--text-muted);background:var(--bg);padding:8px 10px;border-radius:8px;margin-bottom:10px;">
+          ${d.danger ? '🛑 ' : '💡 '}${d.usually}
+        </div>
+        <ol style="margin:0 0 10px;padding-inline-start:20px;font-size:12.5px;line-height:1.75;">
+          ${steps.map((c) => '<li>' + c + '</li>').join('')}
+        </ol>
+        ${extra.length ? '<div style="font-size:10.5px;color:var(--text-muted);margin-bottom:8px;">★ בדיקות שהוספת בעצמך</div>' : ''}
+        ${mine.note ? `<div style="font-size:11.5px;background:var(--bg);padding:8px 10px;border-radius:8px;margin-bottom:10px;">📝 ${mine.note}</div>` : ''}
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">שירותים במחירון:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+          ${d.services.map((s) => { const p = diagPrice(s); return '<span style="font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:3px 9px;">' + s + (p ? ' · ' + p : '') + '</span>'; }).join('')}
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-sm btn-secondary" onclick="addDiagCheck('${d.id}')">➕ בדיקה משלי</button>
+          <button class="btn btn-sm btn-secondary" onclick="editDiagNote('${d.id}')">📝 הערה</button>
+          ${extra.length || mine.note ? `<button class="btn btn-sm btn-danger" onclick="clearDiagMine('${d.id}')">🗑️ נקה שלי</button>` : ''}
+        </div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+function toggleDiag(id) { state.diagOpen = state.diagOpen === id ? null : id; renderDiag(); }
+function addDiagCheck(id) {
+  openModal('הוספת בדיקה', `<div class="form-row"><label>הבדיקה</label><input class="form-input-wide" id="diagNewCheck" placeholder="מה אתה בודק בפועל" style="width:190px;"></div>`,
+    `<button class="btn btn-primary" onclick="saveDiagCheck('${id}')">💾 הוסף</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function saveDiagCheck(id) {
+  const v = (document.getElementById('diagNewCheck').value || '').trim();
+  if (!v) { alert('כתוב את הבדיקה'); return; }
+  const notes = diagNotes();
+  notes[id] = notes[id] || {};
+  notes[id].checks = (notes[id].checks || []).concat([v]);
+  Store.set('diag_notes', notes); closeModal(); renderDiag();
+}
+function editDiagNote(id) {
+  const cur = (diagNotes()[id] || {}).note || '';
+  openModal('הערה לתסמין', `<textarea class="form-input-wide" id="diagNoteBox" style="width:100%;height:110px;">${cur.replace(/</g, '&lt;')}</textarea>`,
+    `<button class="btn btn-primary" onclick="saveDiagNote('${id}')">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function saveDiagNote(id) {
+  const notes = diagNotes();
+  notes[id] = notes[id] || {};
+  notes[id].note = (document.getElementById('diagNoteBox').value || '').trim();
+  Store.set('diag_notes', notes); closeModal(); renderDiag();
+}
+function clearDiagMine(id) {
+  askConfirm('למחוק את הבדיקות וההערה שהוספת לתסמין הזה?', () => {
+    const notes = diagNotes(); delete notes[id];
+    Store.set('diag_notes', notes); renderDiag();
+  });
+}
+
+
+// ---- the pack estimator, run backwards from a measured pack -------------------------
+// Same constants, same holder pitches, same cell table as calcPackDims. Inverted, not
+// re-derived: a second copy of this geometry is exactly the shape of bug this repo keeps
+// finding (Math.round(V/3.7) in four files, packCost in four files).
+function oldPackFit() {
+  const num = (id) => { const el = document.getElementById(id); const v = el ? parseFloat(el.value) : NaN; return isNaN(v) ? 0 : v; };
+  const L = num('opL'), W = num('opW'), H = num('opH');
+  if (!L || !W || !H) return null;
+  const key = (document.getElementById('dimCell') || {}).value || '21700-50e';
+  const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
+  const fmt = key.startsWith('18650') ? 18650 : 21700;
+  const holder = (document.getElementById('dimHolder') || {}).value || 'diag';
+  const pair = holder === 'custom'
+    ? [parseFloat((document.getElementById('dimPitchAlong') || {}).value) || 19,
+       parseFloat((document.getElementById('dimPitchAcross') || {}).value) || 21.5]
+    : (DIM_PITCH[fmt] || {})[holder] || [c.dia + 1, c.dia + 1];
+  const pitch = pair[0], rowPitch = pair[1];
+  // The BMS/wiring/shrink allowance comes off the HEIGHT, the same way calcPackDims adds it.
+  const V = parseFloat((document.getElementById('opV') || {}).value) || 60;
+  const extra = Math.max(0, parseFloat((document.getElementById('dimExtra') || {}).value) || 0);
+  const usableH = H - extra;
+  // A tape measure on an outer case is good to a millimetre or two, and the wall/cap
+  // constants are nominal - so a strict compare answers "does not fit" to a pack that plainly
+  // does. Measured: the forward estimator rounds a 100.15mm block to 100, and feeding that
+  // straight back gave ZERO layers, i.e. "nothing fits" for the pack it had just designed.
+  const TOL = 2;
+  const cols   = Math.floor((L + TOL - c.dia - 2 * DIM_WALL) / pitch) + 1;
+  const rows   = Math.floor((W + TOL - c.dia - 2 * DIM_WALL) / rowPitch) + 1;
+  const layers = Math.floor((usableH + TOL) / (c.len + DIM_CAP));
+  if (cols < 1 || rows < 1 || layers < 1) return { fits: false, cols, rows, layers, V, c, extra };
+  const N = cols * rows * layers;
+  const S = seriesForV(V);
+  const P = Math.floor(N / S);
+  if (P < 1) return { fits: false, tooSmallForV: true, N, S, cols, rows, layers, V, c, extra };
+  const used = S * P;
+  return { fits: true, cols, rows, layers, N, S, P, used, spare: N - used,
+           ah: +(P * c.ah).toFixed(1), wh: Math.round(S * 3.6 * P * c.ah),
+           kg: +((used * c.g + 500) / 1000).toFixed(1), V, c, extra };
+}
+function calcFromOldPack() {
+  const out = document.getElementById('opResult');
+  if (!out) return;
+  const r = oldPackFit();
+  if (!r) { out.innerHTML = 'הזן מידות כדי לראות מה נכנס.'; return; }
+  if (!r.fits) {
+    out.innerHTML = r.tooSmallForV
+      ? `נכנסים <b>${r.N}</b> תאים בלבד — פחות מ-<b>${r.S}</b> שנדרשים לטור אחד ב-${r.V}V. בחר מתח נמוך יותר או תא קטן יותר.`
+      : 'המידות קטנות מדי לתא אחד עם התושבת הזו. בדוק את המידות ואת תוספת המארז.';
+    return;
+  }
+  out.innerHTML = `נכנסים <b>${r.cols}</b> לאורך × <b>${r.rows}</b> שורות${r.layers > 1 ? ' × <b>' + r.layers + '</b> שכבות' : ''} = <b>${r.N}</b> תאים.<br>
+    ב-${r.V}V (${r.S}S): <b>${r.S}S${r.P}P</b> · <b>${r.ah}Ah</b> · ${r.wh}Wh · ~${r.kg} ק"ג${r.spare ? ' · ' + r.spare + ' תאים עודפים' : ''}<br>
+    <span style="font-size:11px;color:var(--text-muted);">כולל ${r.extra}מ"מ למארז/BMS בגובה, ${r.c.label}</span>`;
+}
+// A measurement he took off a real pack, saved against the model. 'measured' is what tells it
+// apart from the 24 AI-estimated rows in the vehicle table - the whole point of saving it.
+function saveMeasuredPack() {
+  const model = ((document.getElementById('opModel') || {}).value || '').trim();
+  if (!model) { alert('כתוב את דגם הכלי כדי לשמור את המדידה'); return; }
+  const num = (id) => parseFloat((document.getElementById(id) || {}).value) || 0;
+  const l = num('opL'), w = num('opW'), h = num('opH');
+  if (!l || !w || !h) { alert('הזן את שלוש המידות'); return; }
+  const r = oldPackFit();
+  const dims = getDims();
+  const i = dims.findIndex((d) => String(d.model || '').trim().toLowerCase() === model.toLowerCase());
+  const note = 'נמדד מסוללה ישנה' + (r && r.fits ? ` · ${r.N} תאים · ${r.S}S${r.P}P ב-${r.V}V` : '');
+  if (i >= 0) {
+    // An AI estimate is REPLACED by a real measurement without asking - that is the point.
+    dims[i] = { ...dims[i], l, w, h, notes: note, measured: true };
+  } else {
+    dims.push({ id: 'd' + Date.now(), model, l, w, h, notes: note, measured: true });
+  }
+  Store.set('dims', dims);
+  renderDims();
+  showNotice(i >= 0 ? `המדידה של ${model} עודכנה — ההערכה הוחלפה במדידה שלך.` : `${model} נשמר עם המידות שמדדת.`);
+}
+
 function getDims() { return Store.get('dims') || []; }
 // The Inokim OX tub, seeded once from the measurement Daniel sent (2026-08-30). Guarded by
 // its own flag rather than by "is it already there": re-adding a model he deleted is the
@@ -6760,7 +7174,7 @@ function seedOxTub() {
     localStorage.setItem('gp_dims_seed_ox', '1');
     const dims = getDims();
     if (dims.some((d) => /Inokim OX\b/i.test(d.model || ''))) return;
-    dims.push({ id: Date.now(), model: 'Inokim OX', l: 425, w: 165, h: 0,
+    dims.push({ id: 'd' + Date.now(), model: 'Inokim OX', l: 425, w: 165, h: 0,
       notes: '⚠ מ-AI, לא נמדד. אמבטיה בשני חלקים: רחב 425×165 + צר 60×140 מ"מ, גובה לא ידוע. 140 / 136 / 126 תאים לפי סוג התושבת — כל המספרים האלה טעונים אימות עם סרט מדידה.' });
     Store.set('dims', dims);
   } catch (e) { /* private mode, or storage refused — the page still works without it */ }
@@ -6774,7 +7188,7 @@ function renderDims() {
   list.innerHTML = dims.slice().sort((a, b) => (a.model || '').localeCompare(b.model || '')).map(d => `
     <div class="list-item">
       <div class="list-item-header">
-        <div class="list-item-title">${d.model}</div>
+        <div class="list-item-title">${d.model} ${d.measured ? '<span style="font-size:10px;color:#34d399;font-weight:700;">✓ נמדד</span>' : '<span style="font-size:10px;color:var(--text-muted);">הערכה</span>'}</div>
         <div class="list-item-value">${d.l || '?'}×${d.w || '?'}×${d.h || '?'} מ"מ</div>
       </div>
       ${d.notes ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">📝 ${d.notes}</div>` : ''}
@@ -6786,7 +7200,7 @@ function renderDims() {
 }
 function openDimEditor(id) {
   const dims = getDims();
-  const d = id ? dims.find(x => x.id === id) : { model: '', l: '', w: '', h: '', notes: '' };
+  const d = (id ? dims.find(x => String(x.id) === String(id)) : null) || { model: '', l: '', w: '', h: '', notes: '' };
   const body = `
     <div class="form-row"><label>דגם קורקינט</label><input class="form-input-wide" id="dimModel" value="${d.model || ''}" placeholder="Kaabo / OXO / Dualtron..." style="width:170px;"></div>
     <div class="form-row"><label>אורך (מ"מ)</label><input type="number" class="form-input" id="dimL" value="${d.l || ''}"></div>
@@ -6801,11 +7215,11 @@ function saveDim(id) {
   if (!model) { alert('הזן שם דגם'); return; }
   const rec = { model, l: document.getElementById('dimL').value, w: document.getElementById('dimW').value, h: document.getElementById('dimH').value, notes: document.getElementById('dimNotes').value };
   const dims = getDims();
-  if (id) { const i = dims.findIndex(x => x.id === id); if (i >= 0) dims[i] = { ...dims[i], ...rec }; }
+  if (id) { const i = dims.findIndex(x => String(x.id) === String(id)); if (i >= 0) dims[i] = { ...dims[i], ...rec }; }
   else { dims.push({ id: 'd' + Date.now(), ...rec }); }
   Store.set('dims', dims); closeModal(); renderDims();
 }
-function deleteDim(id) { askConfirm('למחוק דגם?', () => { const dims = getDims().filter(d => d.id !== id); Store.set('dims', dims); renderDims(); }); }
+function deleteDim(id) { askConfirm('למחוק דגם?', () => { const dims = getDims().filter(d => String(d.id) !== String(id)); Store.set('dims', dims); renderDims(); }); }
 
 // ============================================================
 // BUSINESS REPAIR DOCUMENTATION
@@ -6861,7 +7275,14 @@ function jobSummaryText(jobId) {
 function copyJobSummary(jobId) {
   const txt = jobSummaryText(jobId);
   if (!txt) return;
-  navigator.clipboard.writeText(txt).then(() => alert('✅ הסיכום הועתק! הדבק בקבוצה של החנות.'));
+  const shown = () => openModal('📋 סיכום לשליחה', `<textarea class="form-input-wide" style="width:100%;height:190px;font-size:12px;" readonly>${txt.replace(/</g, '&lt;')}</textarea>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">סמן והעתק ידנית.</div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">סגור</button>`);
+  try {
+    const p = navigator.clipboard && navigator.clipboard.writeText(txt);
+    if (p && p.then) p.then(() => alert('✅ הסיכום הועתק! הדבק בקבוצה של החנות.')).catch(shown);
+    else shown();
+  } catch (e) { shown(); }
 }
 // ---- Edit / delete a saved repair -------------------------------------------------
 // A saved job is a business record in four places at once: income in finances, a row in
@@ -7316,7 +7737,7 @@ function orderListText() {
 function copyOrderList() {
   const txt = orderListText();
   if (!txt) { alert('אין מה להזמין — הכול מעל הסף.'); return; }
-  try { navigator.clipboard.writeText(txt); } catch (e) {}
+  try { const p = navigator.clipboard && navigator.clipboard.writeText(txt); if (p && p.catch) p.catch(() => {}); } catch (e) {}
   // The clipboard is unreliable inside the WebView, so the text is shown too rather than
   // assumed to have arrived somewhere.
   openModal('🛒 רשימת הזמנה', `<textarea class="form-input-wide" style="width:100%;height:160px;font-size:12px;" readonly>${txt.replace(/</g, '&lt;')}</textarea>

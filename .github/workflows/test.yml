@@ -127,6 +127,28 @@ jobs:
       - name: The customer picker, in sales and in repairs
         run: node test/test-customer-picker.mjs
 
+      # Four bugs found on 2026-09-10, every one of them silent: the saved-models editor
+      # threw on its own auto-seeded row and its delete removed nothing; the customer picker's
+      # CSS sat inside a GENERATED block that sync-prices rewrites; a refused clipboard copied
+      # nothing and said nothing; and one malformed sale blanked the whole sales page.
+      - name: The silent failures stay fixed
+        run: node test/test-silent-failures.mjs
+
+      # Symptom in, ordered checks out. The checks that matter are that no price is typed into
+      # the draft, and that Daniel's own corrections are never seeded over.
+      - name: Fault diagnosis — nothing typed, nothing overwritten
+        run: node test/test-diagnostics.mjs
+
+      # He asked for narration WITH a check that says immediately when there is no Hebrew
+      # voice. CI has no voices at all, which is exactly the case that must still speak up.
+      - name: The presentation plays itself, and says if it cannot talk
+        run: node test/test-deck-play.mjs
+
+      # The estimator run backwards from the old pack the customer brought in. The round trip
+      # against the forward estimator is what stops a second copy of the geometry appearing.
+      - name: Pack size from the old battery — round trip
+        run: node test/test-oldpack.mjs
+
       - name: Sticker — saved layout is versioned
         run: node test/test-sticker-state.mjs
 
