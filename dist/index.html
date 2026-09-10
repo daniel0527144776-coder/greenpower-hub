@@ -2871,7 +2871,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v280';
+const HUB_BUILD = 'v281';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5927,7 +5927,22 @@ function importAccounting() {
     invoice: r.invoice || '', warrantyMonths: r.warrantyMonths || 12, warrantyEnd: r.warrantyEnd || '',
     src: 'books', locked: true, unreceipted: !!r.unreceipted,
   })).filter((r) => r.amount && r.date);
-  const okInc = Store.set('incomes', kept.concat(books));
+  // The books are invoice-dated and the WhatsApp ledger is payment-dated, so the same sale
+  // appears in both with dates days apart. Match on AMOUNT within a window, not on the date.
+  // Measured against the two real files: ±14, ±21 and ±30 days all find exactly the same three
+  // rows and nothing more, so the window is not doing the deciding — the amounts are.
+  const DUP_DAYS = 21;
+  const dayOf = (d) => Math.floor(new Date(d).getTime() / 86400000);
+  const ledger = kept.map((r) => ({ d: dayOf(r.date), a: Math.round(Number(r.amount) || 0) }))
+                     .filter((r) => !isNaN(r.d));
+  const dupes = [];
+  const fresh = books.filter((r) => {
+    const d = dayOf(r.date), a = Math.round(r.amount);
+    const hit = ledger.some((k) => k.a === a && Math.abs(k.d - d) <= DUP_DAYS);
+    if (hit) dupes.push(r);
+    return !hit;
+  });
+  const okInc = Store.set('incomes', kept.concat(fresh));
 
   closeModal();
   renderFinances();
@@ -5945,7 +5960,13 @@ function importAccounting() {
       + '\nלחץ "פינוי מקום" בדף הבית (מוחק תמונות של תיקונים ישנים בלבד) והרץ את הייבוא שוב.');
     return;
   }
-  alert(`✅ ${added} לקוחות חדשים · ${filled} הושלמו · ${flagged} סומנו כעסקיים\n${books.length} רשומות הכנסה מהנהלת החשבונות.\nכולם זמינים לבחירה במחשבון ובהזמנת מכירה.`);
+  const dupNote = dupes.length
+    ? `\n\n⚠️ ${dupes.length} רשומות לא יובאו — הן כבר קיימות בספר ההכנסות (סכום זהה בטווח של ${DUP_DAYS} ימים), וייבוא שלהן היה סופר את אותו כסף פעמיים:\n`
+      + dupes.slice(0, 6).map((r) => '· ' + new Date(r.date).toLocaleDateString('he-IL') + ' ₪' + Math.round(r.amount).toLocaleString('he-IL') + (r.customer ? ' ' + r.customer : '')).join('\n')
+      + (dupes.length > 6 ? `\n· ועוד ${dupes.length - 6}` : '')
+      + `\nסה"כ ₪${dupes.reduce((s, r) => s + Math.round(r.amount), 0).toLocaleString('he-IL')} שלא נספרו פעמיים.`
+    : '';
+  alert(`✅ ${added} לקוחות חדשים · ${filled} הושלמו · ${flagged} סומנו כעסקיים\n${fresh.length} רשומות הכנסה מהנהלת החשבונות.${dupNote}\nכולם זמינים לבחירה במחשבון ובהזמנת מכירה.`);
 }
 // Says what has not reached the cloud, and offers the one action that fixes it. The names
 // are the storage keys, which are the words the rest of this file uses.

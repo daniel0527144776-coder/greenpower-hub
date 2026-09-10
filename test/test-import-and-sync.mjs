@@ -245,6 +245,56 @@ const retried = await page.evaluate(async (p) => {
 check('and then the import completes', retried.incomes === 153, retried);
 check('re-running it duplicates nobody', retried.dupes === 0, retried);
 
+// ---------------------------------------------------------------- 6. the same sale, twice
+// The accountant's books are INVOICE-dated; the WhatsApp ledger already in `incomes` is
+// PAYMENT-dated. Where the two periods meet they hold the same sales with dates days apart,
+// so importing the books wholesale counts that money twice. Measured on the two real files:
+// three sales overlap and only ONE shares a date — ₪5,250 is twelve days out, so a same-date
+// check would have caught one of three and silently doubled ₪13,750.
+const dedup = await page.evaluate(async () => {
+  // a payment-dated ledger, then books holding the same three sales on nearby invoice dates
+  const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString();
+  localStorage.setItem('gp_incomes', JSON.stringify([
+    { id: 'w1', amount: 5250, date: iso(2025, 2, 17), note: 'יובא מוואטסאפ' },
+    { id: 'w2', amount: 8500, date: iso(2025, 2, 13), note: 'יובא מוואטסאפ' },
+    { id: 'w3', amount: 850, date: iso(2025, 2, 23), note: 'יובא מוואטסאפ' },
+    { id: 'w4', amount: 1200, date: iso(2025, 3, 4), note: 'יובא מוואטסאפ' },
+  ]));
+  const payload = JSON.stringify({
+    customers: [],
+    incomes: [
+      { amount: 5250, date: iso(2025, 2, 5), customer: 'פנינת עוזיאל' },   // 12 days out
+      { amount: 8500, date: iso(2025, 2, 12), customer: 'אליהו איבגי' },   // 1 day out
+      { amount: 850, date: iso(2025, 2, 23), customer: 'רונית לזר' },      // same day
+      { amount: 4000, date: iso(2023, 6, 1), customer: 'היסטוריה' },       // no counterpart
+      { amount: 1200, date: iso(2021, 1, 1), customer: 'ישן' },            // same amount as w4,
+    ],                                                                      // but years away
+  });
+  openAccountingImport();
+  document.getElementById('acctJson').value = payload;
+  importAccounting();
+  await new Promise((r) => setTimeout(r, 500));
+  const inc = JSON.parse(localStorage.getItem('gp_incomes') || '[]');
+  const books = inc.filter((r) => r.src === 'books');
+  return {
+    total: inc.reduce((s, r) => s + (+r.amount || 0), 0),
+    books: books.length,
+    kept: books.map((r) => Math.round(r.amount)).sort((a, b) => a - b),
+    notice: ((document.getElementById('noticeBackdrop') || {}).innerText || '').replace(/\s+/g, ' '),
+  };
+});
+// 15,800 in the ledger + 4,000 + 1,200 of real history = 21,000. Counting the three twice
+// would read 35,600.
+check('a sale already in the ledger is not imported again', dedup.books === 2, dedup);
+check('and the total is not doubled', Math.round(dedup.total) === 21000, dedup.total);
+check('a match days apart is still caught, not only a same-day one',
+  !dedup.kept.includes(5250) && !dedup.kept.includes(8500), dedup.kept);
+// The window must not swallow genuine history that merely shares an amount.
+check('but the same amount YEARS away is kept', dedup.kept.includes(1200), dedup.kept);
+check('and history with no counterpart is kept', dedup.kept.includes(4000), dedup.kept);
+check('the skipped rows are named, never silently dropped',
+  /לא יובאו/.test(dedup.notice) && /פנינת עוזיאל/.test(dedup.notice), dedup.notice.slice(0, 160));
+
 if (SELFTEST) console.log('\n[selftest] the dirty queue was made memory-only again;\n[selftest] the checks about surviving a reload must have gone red.');
 check('no page errors', errs.length === 0, errs);
 check('no native dialogs (invisible in the WebView)', dialogs.length === 0, dialogs);
