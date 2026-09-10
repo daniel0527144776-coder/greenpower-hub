@@ -131,6 +131,13 @@ jobs:
       # threw on its own auto-seeded row and its delete removed nothing; the customer picker's
       # CSS sat inside a GENERATED block that sync-prices rewrites; a refused clipboard copied
       # nothing and said nothing; and one malformed sale blanked the whole sales page.
+      # 144 customers and six years of income "did not get in". The import was correct; a full
+      # localStorage silently dropped half of it while reporting success, and the sync retry
+      # queue did not survive a reload so the cloud never got it either. Falls back to a
+      # generated payload, because CI cannot see the tools root where the real file lives.
+      - name: The accountant import, and the trip to the cloud
+        run: node test/test-import-and-sync.mjs
+
       - name: The silent failures stay fixed
         run: node test/test-silent-failures.mjs
 

@@ -372,6 +372,16 @@ body { min-height: 100vh; }
     <div style="flex:1;" id="warrantyReminderText"></div>
     <span style="white-space:nowrap;font-weight:700;">הצג ←</span>
   </div>
+  <div id="storageWarn" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
+    <span style="font-size:18px;">💾</span>
+    <div style="flex:1;" id="storageWarnText"></div>
+    <button class="btn btn-sm btn-warning" style="white-space:nowrap;" onclick="freeUpSpace()">פינוי מקום</button>
+  </div>
+  <div id="syncPending" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
+    <span style="font-size:18px;">☁️</span>
+    <div style="flex:1;" id="syncPendingText"></div>
+    <button class="btn btn-sm btn-warning" style="white-space:nowrap;" onclick="forceSyncUp()">העלה עכשיו</button>
+  </div>
   <div id="backupReminder" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
     <span style="font-size:18px;">💾</span>
     <div style="flex:1;" id="backupReminderText">מומלץ לגבות את הנתונים.</div>
@@ -2322,7 +2332,15 @@ const Sync = {
   session: null,
   userId: null,
   email: null,
+  // The retry queue. It MUST outlive a reload: it is the only record that a key still owes
+  // the server, and pull() refuses to overwrite a key that is on it. While this lived in
+  // memory, a push that failed once was forgotten at the next open — the local data then sat
+  // unsynced for ever, and the first write from another device destroyed it.
   dirty: new Set(),
+  _loadDirty() { try { (JSON.parse(localStorage.getItem('gpsync_dirty') || '[]') || []).forEach((k) => this.dirty.add(k)); } catch (e) { /* storage refused */ } },
+  _saveDirty() { try { localStorage.setItem('gpsync_dirty', JSON.stringify([...this.dirty])); } catch (e) { /* storage refused */ } },
+  _dirtyAdd(k) { this.dirty.add(k); this._saveDirty(); },
+  _dirtyDel(k) { this.dirty.delete(k); this._saveDirty(); },
   _pushSeq: {},
   _pushChain: {},
 
@@ -2330,6 +2348,7 @@ const Sync = {
   loadSession() {
     try { this.session = JSON.parse(localStorage.getItem('gpsync_session') || 'null'); } catch { this.session = null; }
     if (this.session && this.session.access_token) { this.userId = this._sub(this.session.access_token); this.email = this.session.email || null; }
+    this._loadDirty();
     return this.session;
   },
   saveSession(d) {
@@ -2418,10 +2437,10 @@ const Sync = {
   // which pull() would then happily copy back down as "the latest version",
   // silently reverting a just-added record (e.g. worktime hours) on reopen.
   push(key, value) {
-    if (!this.isAuthed() || !this.userId) { this.dirty.add(key); this.touch(key); return Promise.resolve(); }
+    if (!this.isAuthed() || !this.userId) { this._dirtyAdd(key); this.touch(key); return Promise.resolve(); }
     const ts = this.touch(key);
     const seq = (this._pushSeq[key] = (this._pushSeq[key] || 0) + 1);
-    this.dirty.add(key);
+    this._dirtyAdd(key);
     const prior = this._pushChain[key] || Promise.resolve();
     const run = prior.then(async () => {
       if (this._pushSeq[key] !== seq) return; // a newer push for this key already supersedes this one
@@ -2433,9 +2452,9 @@ const Sync = {
           method: 'POST', headers: h,
           body: JSON.stringify({ user_id: this.userId, key, value, updated_at: new Date(ts).toISOString() })
         });
-        if (!r.ok) { this.dirty.add(key); }
-        else if (this._pushSeq[key] === seq) { this.dirty.delete(key); }
-      } catch (e) { this.dirty.add(key); }
+        if (!r.ok) { this._dirtyAdd(key); }
+        else if (this._pushSeq[key] === seq) { this._dirtyDel(key); }
+      } catch (e) { this._dirtyAdd(key); }
     });
     this._pushChain[key] = run;
     return run;
@@ -2444,7 +2463,18 @@ const Sync = {
     if (!this.isAuthed()) return;
     try { const h = await this._headers(); await fetch(SB_URL + '/rest/v1/hub_state?key=eq.' + encodeURIComponent(key), { method: 'DELETE', headers: h }); } catch {}
   },
-  async flush() { for (const key of Array.from(this.dirty)) { const raw = localStorage.getItem('gp_' + key); if (raw !== null) await this.push(key, JSON.parse(raw)); } }
+  // Retries everything still owed. Returns how many keys are STILL owed afterwards, so a
+  // caller can tell the user rather than assuming it worked.
+  async flush() {
+    for (const key of Array.from(this.dirty)) {
+      const raw = localStorage.getItem('gp_' + key);
+      if (raw !== null) { try { await this.push(key, JSON.parse(raw)); } catch (e) { /* stays queued */ } }
+      else this._dirtyDel(key);          // nothing local to send; stop owing it for ever
+    }
+    return this.dirty.size;
+  },
+  // What is waiting to go up, in words the user can act on.
+  pending() { return [...this.dirty]; }
 };
 
 // ---- Open external URL reliably (window.open is often blocked in a standalone PWA / WebView) ----
@@ -2836,7 +2866,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v278';
+const HUB_BUILD = 'v279';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2870,6 +2900,17 @@ async function forceUpdate() {
 async function runSelfTest() {
   const L = [];
   L.push('גרסה: ' + HUB_BUILD);
+  // The two facts that decide whether an import is even possible, and whether it left the
+  // device. Both were unanswerable from here until 2026-09-10.
+  try {
+    const s = storageInfo();
+    L.push('אחסון: ' + s.pct + '% (' + mb(s.used) + ', מהם ' + mb(s.photos) + ' תמונות)');
+    const cust = Store.get('customers') || [], inc = Store.get('incomes') || [];
+    L.push('לקוחות: ' + cust.length + ' (מהנהלת חשבונות: ' + cust.filter((c) => c.src === 'books').length + ')');
+    L.push('הכנסות: ' + inc.length + ' (מהנהלת חשבונות: ' + inc.filter((r) => r.src === 'books').length + ')');
+    const owed = (typeof Sync !== 'undefined' && Sync.pending) ? Sync.pending() : [];
+    L.push('לא הועלה לענן: ' + (owed.length ? owed.join(', ') : 'הכול מסונכרן'));
+  } catch (e) { L.push('אחסון: לא ניתן לקרוא'); }
   L.push('גשר הדפסה: ' + (window.GPPrint ? 'יש' : 'אין'));
   // What the bridge SEES, not just that it exists. "ההדפסה נכשלה: חסרה הרשאת בלוטות" was
   // answered with "but it is granted", and both were defensible — two causes shared one
@@ -4105,6 +4146,11 @@ function refreshHome() {
   if (bizDetails.owner) {
     document.getElementById('homeGreeting').textContent = `ברוך הבא, ${bizDetails.owner.split(' ')[0]}`;
   }
+
+  // Anything that has not reached the cloud. This was invisible, and invisible is how 144
+  // imported customers stayed on one machine for days while both screens looked normal.
+  renderSyncPending();
+  renderStorageWarning();
 
   // Weekly backup reminder
   const banner = document.getElementById('backupReminder');
@@ -5762,9 +5808,14 @@ function saveMoney(kind) {
 function openFinanceTools() {
   const inc = (Store.get('incomes') || []), exp = (Store.get('expenses') || []);
   const books = inc.filter(isLocked).length;
+  // Whether the accountant's customers are here is the question he actually asks, and until
+  // now nothing on any screen answered it.
+  const booksCust = (Store.get('customers') || []).filter((c) => c.src === 'books').length;
   openModal('⋯ נתונים וייבוא', `
     <div style="font-size:12px;color:var(--text-muted);line-height:1.8;margin-bottom:10px;">
-      ${inc.length} רישומי הכנסה (${books} מהנהלת החשבונות) · ${exp.length} הוצאות.
+      ${inc.length} רישומי הכנסה (${books} מהנהלת החשבונות) · ${exp.length} הוצאות.<br>
+      ${booksCust} לקוחות מהנהלת החשבונות.
+      ${books || booksCust ? '' : '<b style="color:var(--warning);">הייבוא עוד לא בוצע במכשיר הזה.</b>'}
     </div>
     <button class="btn btn-secondary btn-block" style="margin-bottom:6px;" onclick="openAccountingImport()">🧾 ייבוא מהנהלת חשבונות</button>
     <button class="btn btn-secondary btn-block" onclick="openFinanceImport()">📥 ייבוא כספים (JSON)</button>`,
@@ -5832,7 +5883,7 @@ function importAccounting() {
       if (touched) filled++;
     }
   }
-  Store.set('customers', customers);
+  const okCust = Store.set('customers', customers);
 
   const kept = (Store.get('incomes') || []).filter((r) => !isFromBooks(r));
   const books = inInc.map((r, i) => ({
@@ -5842,7 +5893,7 @@ function importAccounting() {
     invoice: r.invoice || '', warrantyMonths: r.warrantyMonths || 12, warrantyEnd: r.warrantyEnd || '',
     src: 'books', locked: true, unreceipted: !!r.unreceipted,
   })).filter((r) => r.amount && r.date);
-  Store.set('incomes', kept.concat(books));
+  const okInc = Store.set('incomes', kept.concat(books));
 
   closeModal();
   renderFinances();
@@ -5851,8 +5902,109 @@ function importAccounting() {
   // looked exactly like one that had not.
   refreshCustomerSelect();
   if (document.getElementById('customersList')) renderCustomers();
+  // Store.set returns false when storage refused the write. Reporting ✅ over a failed write
+  // is how 153 income records "imported" into nothing and nobody found out for days.
+  if (!okCust || !okInc) {
+    alert('⚠️ הייבוא לא הושלם — אין מקום באחסון המכשיר.\n'
+      + (okCust ? '' : 'הלקוחות לא נשמרו. ')
+      + (okInc ? '' : 'רשומות ההכנסה לא נשמרו. ')
+      + '\nלחץ "פינוי מקום" בדף הבית (מוחק תמונות של תיקונים ישנים בלבד) והרץ את הייבוא שוב.');
+    return;
+  }
   alert(`✅ ${added} לקוחות חדשים · ${filled} הושלמו · ${flagged} סומנו כעסקיים\n${books.length} רשומות הכנסה מהנהלת החשבונות.\nכולם זמינים לבחירה במחשבון ובהזמנת מכירה.`);
 }
+// Says what has not reached the cloud, and offers the one action that fixes it. The names
+// are the storage keys, which are the words the rest of this file uses.
+const SYNC_LABELS = {
+  customers: 'לקוחות', jobs: 'תיקונים', incomes: 'הכנסות', expenses: 'הוצאות', orders: 'מכירות',
+  worktime: 'שעות עבודה', workers: 'עובדים', inventory: 'מלאי', costs: 'עלויות', dims: 'מידות',
+  biz: 'פרטי העסק', settings: 'הגדרות', sticker_history: 'מדבקות', diag_notes: 'אבחון',
+  supplier_costs: 'עלויות ספקים', supplier_prices: 'מחירוני ספקים', biz_payments: 'תשלומים',
+};
+function renderSyncPending() {
+  const box = document.getElementById('syncPending');
+  if (!box || typeof Sync === 'undefined') return;
+  const keys = Sync.pending ? Sync.pending() : [];
+  if (!keys.length) { box.style.display = 'none'; return; }
+  box.style.display = 'flex';
+  const names = keys.map((k) => SYNC_LABELS[k] || k);
+  document.getElementById('syncPendingText').innerHTML =
+    '<b>יש נתונים שעדיין לא עלו לענן.</b>' +
+    '<div style="font-size:11px;opacity:.85;margin-top:2px;">' + names.join(' · ') +
+    ' — הם קיימים במכשיר הזה בלבד, ולא יופיעו בטלפון.</div>';
+}
+async function forceSyncUp() {
+  if (typeof Sync === 'undefined' || !Sync.isAuthed()) { showNotice('אין חיבור לענן — התחבר ונסה שוב.'); return; }
+  showNotice('מעלה…');
+  let left;
+  try { left = await Sync.flush(); } catch (e) { left = (Sync.pending() || []).length; }
+  renderSyncPending();
+  showNotice(left ? ('עדיין לא הועלו: ' + left + '. בדוק חיבור אינטרנט ונסה שוב.') : '✅ הכול עלה לענן.');
+}
+
+// ---- how much room is left, and what is eating it -----------------------------------
+// localStorage is about 5MB per origin. A job carries two downscaled photos, so EIGHTEEN
+// jobs fill it — measured. Past that every Store.set fails, and before this they failed
+// quietly enough that an import could report success over one.
+function storageInfo() {
+  let used = 0, photos = 0;
+  try {
+    for (const k in localStorage) {
+      if (!Object.prototype.hasOwnProperty.call(localStorage, k)) continue;
+      // Characters, not bytes: measured, the quota refused at 4.93M chars, so ~5M chars is
+      // the real ceiling. Counting UTF-16 bytes against a 5MB cap reported 198%.
+      used += (localStorage[k] || '').length + k.length;
+    }
+    for (const j of (Store.get('jobs') || [])) {
+      photos += (j.photoBefore || '').length + (j.photoAfter || '').length;
+    }
+  } catch (e) { /* storage refused entirely */ }
+  const cap = 5 * 1024 * 1024;
+  return { used, photos, cap, pct: Math.min(100, Math.round((used / cap) * 100)) };
+}
+const mb = (b) => (b / 1048576).toFixed(1) + 'MB';
+function renderStorageWarning() {
+  const box = document.getElementById('storageWarn');
+  if (!box) return;
+  const s = storageInfo();
+  if (s.pct < 80) { box.style.display = 'none'; return; }
+  box.style.display = 'flex';
+  document.getElementById('storageWarnText').innerHTML =
+    '<b>האחסון כמעט מלא (' + s.pct + '%).</b>' +
+    '<div style="font-size:11px;opacity:.85;margin-top:2px;">' + mb(s.used) + ' מתוך ' + mb(s.cap) +
+    ', מהם ' + mb(s.photos) + ' תמונות של תיקונים. כשאין מקום, שמירות וייבוא נכשלים.</div>';
+}
+// Drops the PHOTOS off the oldest jobs. Never the jobs themselves, never a customer, never a
+// price — those are the record. He is told exactly what will go and how many, and asked.
+function freeUpSpace() {
+  const jobs = Store.get('jobs') || [];
+  const withPhotos = jobs.filter((j) => j.photoBefore || j.photoAfter);
+  if (!withPhotos.length) { showNotice('אין תמונות למחיקה. האחסון מלא מנתונים אחרים.'); return; }
+  const byDate = withPhotos.slice().sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+  const drop = byDate.slice(0, Math.max(1, Math.ceil(byDate.length / 2)));
+  const bytes = drop.reduce((s, j) => s + (j.photoBefore || '').length + (j.photoAfter || '').length, 0);
+  const ids = new Set(drop.map((j) => j.id));
+  askConfirm('למחוק את התמונות מ-' + drop.length + ' התיקונים הישנים ביותר?\n'
+    + 'יתפנו כ-' + mb(bytes) + '. התיקונים עצמם, הלקוחות והמחירים לא נמחקים.', () => {
+    const strip = (j) => ({ ...j, photoBefore: '', photoAfter: '', photosDropped: true });
+    if (Store.set('jobs', jobs.map((j) => (ids.has(j.id) ? strip(j) : j)))) {
+      renderStorageWarning();
+      showNotice('שוחררו ' + mb(bytes) + '. אפשר להריץ את הייבוא שוב.');
+      return;
+    }
+    // Still refused: there was not even room to write the smaller array. Take every photo —
+    // the alternative is a device that can no longer save anything at all. Jobs, prices and
+    // customers are untouched either way.
+    const all = withPhotos.reduce((s, j) => s + (j.photoBefore || '').length + (j.photoAfter || '').length, 0);
+    if (Store.set('jobs', jobs.map(strip))) {
+      renderStorageWarning();
+      showNotice('שוחררו ' + mb(all) + ' (כל התמונות). אפשר להריץ את הייבוא שוב.');
+    } else {
+      showNotice('גם המחיקה נכשלה. פנה מקום מהדפדפן/האפליקציה.');
+    }
+  });
+}
+
 function deleteIncome(id) {
   askConfirm('למחוק את רישום ההכנסה?', () => {
     Store.set('incomes', (Store.get('incomes') || []).filter(e => e.id !== id));
