@@ -243,6 +243,11 @@ body { min-height: 100vh; }
    click, so nothing got deeper. */
 .price-series { display: flex; justify-content: space-between; align-items: center; margin: 18px 0 2px; padding: 7px 12px; border-radius: var(--radius-sm); font-weight: 800; font-size: 13px; letter-spacing: .04em; color: #fff; }
 .price-series:first-child { margin-top: 0; }
+/* The voltage sub-heading: subordinate to the topic banner above it and clearly not a
+   category row, so the three levels read as three levels on a 390px screen. */
+.price-volt { display: flex; align-items: center; gap: 8px; margin: 14px 0 2px; font-weight: 800; font-size: 13.5px; color: var(--text); letter-spacing: .04em; }
+.price-volt::before { content: ""; width: 10px; height: 2px; background: var(--primary); border-radius: 2px; flex: none; }
+.price-volt::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .price-series .ps-count { font-weight: 600; font-size: 11.5px; opacity: .85; letter-spacing: 0; }
 .price-series.t-CLASSIC  { background: linear-gradient(90deg, #64748b, #94a3b8); }
 .price-series.t-ADVANCED { background: linear-gradient(90deg, #0891b2, #22d3ee); }
@@ -2866,7 +2871,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v279';
+const HUB_BUILD = 'v280';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4947,17 +4952,46 @@ function renderCatalog() {
   Object.keys(groups).forEach((c) => byTopic.get(topicOf(c)).push(c));
   const tierRank = (c) => { const m = String(c).match(TIER_RX); return m ? ["CLASSIC", "ADVANCED", "PRO"].indexOf(m[1]) : 9; };
   const voltOf = (c) => { const m = String(c).match(/(\d+)\s*V/i); return m ? +m[1] : Infinity; };
-  byTopic.forEach((list) => list.sort((a, b) =>
-    tierRank(a) - tierRank(b) || voltOf(a) - voltOf(b) || a.localeCompare(b, 'he', { numeric: true })));
-  // catCatKeys must end up in EXACTLY the render order — toggleCatCat addresses a category by
-  // index, so reordering one without the other opens a different category than the one clicked.
-  catCatKeys = [...byTopic.values()].flat();
-  const forceOpen = !!q || !!cat;
-  let html = '', ci = -1;
+  // ONE ordered plan, and both the keys and the markup come off it. catCatKeys must be in
+  // exactly the render order because toggleCatCat addresses a category by INDEX — building
+  // the two separately is what the warning here used to be about, so they are not separate
+  // any more. A plan entry is a topic heading, a voltage heading, or a category.
+  const plan = [];
   for (const [label, cats] of byTopic) {
     if (!cats.length) continue;
-    html += `<div class="price-series"><span>${label}</span></div>`;
-    cats.forEach(c => {
+    plan.push({ head: label });
+    const volts = [...new Set(cats.map(voltOf))].filter((v) => v !== Infinity);
+    // Group by voltage only where grouping actually collapses something. The transport
+    // batteries are 41 categories over 7 voltages, so the heading earns its line; the power
+    // tools are 3 categories over 3 voltages, where a "21V" heading above
+    // "סוללות כלי עבודה - 21V" is the same words twice. Every non-battery category carries
+    // no voltage at all, so this never fires on chargers, motors or lab services.
+    const useVolt = volts.length > 0 && cats.length > volts.length
+      && cats.every((c) => voltOf(c) !== Infinity);
+    if (useVolt) {
+      // Highest voltage first, which is the order the preview he approved showed.
+      const sorted = cats.slice().sort((a, b) =>
+        voltOf(b) - voltOf(a) || tierRank(a) - tierRank(b) || a.localeCompare(b, 'he', { numeric: true }));
+      let cur = null;
+      for (const c of sorted) {
+        const v = voltOf(c);
+        if (v !== cur) { cur = v; plan.push({ volt: v }); }
+        plan.push({ cat: c });
+      }
+    } else {
+      const sorted = cats.slice().sort((a, b) =>
+        tierRank(a) - tierRank(b) || voltOf(a) - voltOf(b) || a.localeCompare(b, 'he', { numeric: true }));
+      for (const c of sorted) plan.push({ cat: c });
+    }
+  }
+  catCatKeys = plan.filter((p) => p.cat).map((p) => p.cat);
+  const forceOpen = !!q || !!cat;
+  let html = '', ci = -1;
+  for (const p of plan) {
+    if (p.head) { html += `<div class="price-series"><span>${p.head}</span></div>`; continue; }
+    if (p.volt !== undefined) { html += `<div class="price-volt"><span>${p.volt}V</span></div>`; continue; }
+    {
+    const c = p.cat;
     ci++;
     const open = forceOpen || catOpenCats.has(c);
     // The tier STAYS in the row now. It used to be stripped because a PRO banner sat above
@@ -4973,7 +5007,7 @@ function renderCatalog() {
     const thumb = th ? `<img src="${th}" alt="" loading="lazy" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex:none;background:var(--border);">` : '';
     html += `<div class="price-cat" onclick="toggleCatCat(${ci})" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;">
       <span style="display:flex;align-items:center;gap:8px;">${thumb}<span>${open ? '▾' : '▸'} ${shown}</span></span></div>`;
-    if (!open) return;
+    if (!open) continue;
     groups[c].forEach(it => {
       const price = it[priceMode];
       const priceStr = typeof price === 'number' ? shek(price) : price;
@@ -4996,7 +5030,7 @@ function renderCatalog() {
         <div class="price-item-final">${priceStr}</div>
       </div>`;
     });
-    });
+    }
   }
   document.getElementById('catalogList').innerHTML = html || '<div class="empty-state"><div class="empty-state-text">לא נמצאו מוצרים</div></div>';
 }

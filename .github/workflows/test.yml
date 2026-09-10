@@ -135,6 +135,12 @@ jobs:
       # localStorage silently dropped half of it while reporting success, and the sync retry
       # queue did not survive a reload so the cloud never got it either. Falls back to a
       # generated payload, because CI cannot see the tools root where the real file lives.
+      # The price list is topic -> VOLTAGE -> category for the batteries. toggleCatCat
+      # addresses a category by INDEX, so inserting headings into the render without inserting
+      # them into catCatKeys opens a different category than the one touched — silently.
+      - name: The price list groups by voltage, and still opens what you press
+        run: node test/test-catalog-voltage.mjs
+
       - name: The accountant import, and the trip to the cloud
         run: node test/test-import-and-sync.mjs
 
