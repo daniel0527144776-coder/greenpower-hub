@@ -2871,7 +2871,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v281';
+const HUB_BUILD = 'v282';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3793,6 +3793,7 @@ function renderCustomers() {
     list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div><div class="empty-state-text">אין לקוחות שמורים עדיין.<br>שמור תיקון עם פרטי לקוח כדי להתחיל.</div></div>';
     return;
   }
+  const spendOf = customerSpendIndex();
   list.innerHTML = filtered.map((c, idx) => `
     <div class="list-item" onclick="openCustomerDetails(${customers.indexOf(c)})">
       <div class="list-item-header">
@@ -3801,8 +3802,8 @@ function renderCustomers() {
           <div class="list-item-subtitle">📱 ${c.phone}</div>
         </div>
         <div style="text-align: left;">
-          <div class="list-item-value">₪${(c.totalSpent || 0).toLocaleString('he-IL')}</div>
-          <div class="list-item-subtitle">${c.visitCount || 0} ביקורים</div>
+          <div class="list-item-value">₪${Math.round(spendOf(c).spent).toLocaleString('he-IL')}</div>
+          <div class="list-item-subtitle">${spendOf(c).visits} ביקורים</div>
         </div>
       </div>
       ${c.notes ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">📝 ${c.notes}</div>` : ''}
@@ -3818,6 +3819,52 @@ function renderCustomers() {
 // the accounting import writes 0 into it on purpose rather than inventing a total. The figure
 // shown is derived from the rows instead. A number you can point at the lines of is worth
 // more than one that is merely stored.
+// Everything a customer has actually paid for, from all three places it is recorded, keyed
+// once so a list of 150 costs one pass instead of 150. The matching rules are customerLedger's,
+// deliberately: jobs and sales match on PHONE, and an imported receipt matches on phone when it
+// has one and on NAME when it does not — 27 of the accountant's customers have no phone.
+//
+// A quote is not money (saleIsIncome), which is the same rule the finances page uses.
+// Which customer record owns receipts filed under a bare name. Keyed by phone+name rather
+// than by object identity, because Store.get re-parses and hands back fresh objects every call.
+const custKey = (c) => (c.phone || '') + '|' + String(c.name || '').trim().toLowerCase();
+function phonelessOwners(customers) {
+  const owner = new Map();
+  for (const c of customers) {
+    const nm = String(c.name || '').trim().toLowerCase();
+    if (!nm) continue;
+    // First record claims the name; a record with NO phone takes it over.
+    if (!owner.has(nm) || (!c.phone && owner.get(nm).hasPhone)) owner.set(nm, { key: custKey(c), hasPhone: !!c.phone });
+  }
+  return owner;
+}
+function customerSpendIndex() {
+  const byPhone = new Map(), byName = new Map();
+  const add = (map, key, amount) => {
+    if (!key) return;
+    const e = map.get(key) || { spent: 0, visits: 0 };
+    e.spent += amount; e.visits++; map.set(key, e);
+  };
+  for (const j of (Store.get('jobs') || [])) add(byPhone, j.customerPhone, Number(j.price) || 0);
+  for (const o of (Store.get('orders') || [])) { if (saleIsIncome(o)) add(byPhone, o.phone, Number(o.total) || 0); }
+  for (const r of (Store.get('incomes') || [])) {
+    if (!isLocked(r)) continue;
+    if (r.phone) add(byPhone, r.phone, Number(r.amount) || 0);
+    else add(byName, String(r.customer || '').trim().toLowerCase(), Number(r.amount) || 0);
+  }
+  // A customer can hit both maps: their phoned rows plus receipts filed under their bare name.
+  // customerLedger adds both, so this does too — but only for the ONE record that owns the name,
+  // or six people in this list are paid twice.
+  const owners = phonelessOwners(Store.get('customers') || []);
+  return (c) => {
+    const nm = String(c.name || '').trim().toLowerCase();
+    const own = owners.get(nm);
+    const a = (c.phone && byPhone.get(c.phone)) || null;
+    const b = (own && own.key === custKey(c)) ? byName.get(nm) : null;
+    return { spent: (a ? a.spent : 0) + (b ? b.spent : 0), visits: (a ? a.visits : 0) + (b ? b.visits : 0) };
+  };
+}
+
 function customerLedger(c) {
   const phone = c.phone || '';
   const nm = (c.name || '').trim().toLowerCase();
@@ -3839,11 +3886,18 @@ function customerLedger(c) {
       status: o.status, income: saleIsIncome(o),
       warrantyEnd: saleIsIncome(o) ? end.toISOString() : null });
   }
-  // Imported receipts have no phone for 27 of the customers, so they also match on name.
+  // Imported receipts have no phone for 27 of the customers, so they also match on name —
+  // but only on the ONE record that owns that name. Six names in the accountant's list are held
+  // by two records (once with a phone, once without), and matching on the name alone put the
+  // same ₪4,275 on both of their cards.
+  const ownsName = (() => {
+    const own = phonelessOwners(Store.get('customers') || []).get(nm);
+    return !!own && own.key === custKey(c);
+  })();
   for (const r of (Store.get('incomes') || [])) {
     if (!isLocked(r)) continue;
     const rp = r.phone || '', rn = (r.customer || '').trim().toLowerCase();
-    if (!(rp && rp === phone) && !(!rp && nm && rn === nm)) continue;
+    if (!(rp && rp === phone) && !(ownsName && !rp && nm && rn === nm)) continue;
     rows.push({ kind: 'books', id: r.id, date: r.date, amount: Number(r.amount) || 0,
       title: r.note || 'קבלה', sub: r.invoice ? 'חשבונית ' + r.invoice : '',
       warrantyEnd: r.warrantyEnd });
@@ -4105,7 +4159,10 @@ function renderStats() {
     `).join('');
 
   // Top customers
-  const topCust = [...customers].sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0)).slice(0, 5);
+  // Ranked on the same derived figure as the list. Ranking on totalSpent put the customers
+  // who happened to come through the calculator above everyone who bought or was imported.
+  const statSpend = customerSpendIndex();
+  const topCust = [...customers].sort((a, b) => statSpend(b).spent - statSpend(a).spent).slice(0, 5);
   const tc = document.getElementById('topCustomers');
   tc.innerHTML = topCust.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין נתונים</div></div>' :
     topCust.map((c, i) => `
@@ -4114,7 +4171,7 @@ function renderStats() {
           <div style="font-weight: 500; font-size: 13px;">${['🥇','🥈','🥉','4.','5.'][i]} ${c.name}</div>
           <div style="font-size: 11px; color: var(--text-muted);">${c.visitCount || 0} ביקורים</div>
         </div>
-        <div style="font-weight: 600; color: var(--primary);">₪${(c.totalSpent || 0).toLocaleString('he-IL')}</div>
+        <div style="font-weight: 600; color: var(--primary);">₪${Math.round(statSpend(c).spent).toLocaleString('he-IL')}</div>
       </div>
     `).join('');
 }

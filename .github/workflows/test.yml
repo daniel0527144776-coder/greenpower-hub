@@ -141,6 +141,12 @@ jobs:
       - name: The price list groups by voltage, and still opens what you press
         run: node test/test-catalog-voltage.mjs
 
+      # totalSpent only ever counted calculator repairs, so the customers list read ₪0 for
+      # everyone imported or sold to, and the familiar repair prices for the rest. The customer
+      # CARD had derived it correctly for months — the list and the statistics page had not.
+      - name: What a customer spent, on all three screens
+        run: node test/test-customer-spend.mjs
+
       - name: The accountant import, and the trip to the cloud
         run: node test/test-import-and-sync.mjs
 
