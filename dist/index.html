@@ -862,6 +862,11 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">👥 לקוחות</h2>
   </div>
+  <div id="dupeBanner" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
+    <span style="font-size:18px;">👥</span>
+    <div style="flex:1;" id="dupeBannerText"></div>
+    <button class="btn btn-sm btn-warning" style="white-space:nowrap;" onclick="openDupeMerge()">מזג</button>
+  </div>
   <div class="card">
     <input type="text" class="form-input-wide" id="customerSearch" placeholder="🔍 חיפוש לפי שם או טלפון..." style="width: 100%; margin-bottom: 12px;" oninput="renderCustomers()">
     <div id="customersList"></div>
@@ -2871,7 +2876,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v282';
+const HUB_BUILD = 'v283';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3793,6 +3798,7 @@ function renderCustomers() {
     list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div><div class="empty-state-text">אין לקוחות שמורים עדיין.<br>שמור תיקון עם פרטי לקוח כדי להתחיל.</div></div>';
     return;
   }
+  renderDupeBanner();
   const spendOf = customerSpendIndex();
   list.innerHTML = filtered.map((c, idx) => `
     <div class="list-item" onclick="openCustomerDetails(${customers.indexOf(c)})">
@@ -3828,6 +3834,16 @@ function renderCustomers() {
 // Which customer record owns receipts filed under a bare name. Keyed by phone+name rather
 // than by object identity, because Store.get re-parses and hands back fresh objects every call.
 const custKey = (c) => (c.phone || '') + '|' + String(c.name || '').trim().toLowerCase();
+// Every number this customer answers to. A merged record keeps the numbers of the records it
+// absorbed, because jobs, sales and receipts are all filed BY PHONE — drop one and that
+// history stops belonging to anybody at all.
+function custPhones(c) {
+  const out = [];
+  const add = (p) => { const s = String(p || '').trim(); if (s && !out.includes(s)) out.push(s); };
+  add(c && c.phone);
+  (c && Array.isArray(c.altPhones) ? c.altPhones : []).forEach(add);
+  return out;
+}
 function phonelessOwners(customers) {
   const owner = new Map();
   for (const c of customers) {
@@ -3838,6 +3854,125 @@ function phonelessOwners(customers) {
   }
   return owner;
 }
+// Customers holding the same name. The evidence is reported per group rather than acted on:
+// a shared ח.פ proves a company is itself, but two towns and two phone numbers under one
+// common first name is more likely two people, and only he knows which.
+function findCustomerDupes() {
+  const customers = Store.get('customers') || [];
+  const groups = new Map();
+  for (const c of customers) {
+    const k = String(c.name || '').trim().toLowerCase();
+    if (!k) continue;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(c);
+  }
+  const out = [];
+  for (const [key, recs] of groups) {
+    if (recs.length < 2) continue;
+    const phones = [...new Set(recs.flatMap(custPhones))];
+    const withVat = recs.filter((c) => String(c.vatId || '').trim());
+    const vats = [...new Set(withVat.map((c) => String(c.vatId).trim()))];
+    const cities = [...new Set(recs.map((c) => String(c.city || '').trim()).filter(Boolean))];
+    const sameVat = vats.length === 1 && withVat.length > 1;
+    let why = 'רשומה כפולה — אחת בלי טלפון';
+    let safe = true;
+    if (sameVat) { why = 'אותו ח.פ ' + vats[0]; }
+    else if (phones.length > 1) { why = 'שני מספרי טלפון שונים: ' + phones.join(' · '); safe = false; }
+    else if (cities.length > 1) { why = 'שתי ערים שונות: ' + cities.join(' · '); safe = false; }
+    out.push({ key, recs, phones, cities, sameVat, safe, why });
+  }
+  return out;
+}
+
+// Folds a group into one record. Nothing is thrown away: blank fields are filled from the
+// records being absorbed, every phone is kept, and the earliest/latest visits survive.
+function mergeDupeGroup(key) {
+  const customers = Store.get('customers') || [];
+  const group = customers.filter((c) => String(c.name || '').trim().toLowerCase() === key);
+  if (group.length < 2) return null;
+  // The record that keeps its identity is the one carrying the most, a phone counting most —
+  // it is the one the jobs and sales already point at.
+  const score = (c) => (c.phone ? 8 : 0) + (c.vatId ? 4 : 0) + (c.address ? 2 : 0) + (c.city ? 1 : 0) + (c.email ? 1 : 0);
+  const primary = group.slice().sort((a, b) => score(b) - score(a))[0];
+  const others = group.filter((c) => c !== primary);
+  const FILL = ['name', 'phone', 'businessName', 'vatId', 'email', 'city', 'address', 'contact', 'acctNo'];
+  for (const o of others) {
+    for (const f of FILL) if (!primary[f] && o[f]) primary[f] = o[f];
+    if (o.isBusiness) primary.isBusiness = true;
+    for (const p of custPhones(o)) {
+      if (p !== primary.phone) primary.altPhones = [...new Set([...(primary.altPhones || []), p])];
+    }
+    if (o.notes && !String(primary.notes || '').includes(o.notes)) {
+      primary.notes = [primary.notes, o.notes].filter(Boolean).join(' · ');
+    }
+    // These are accumulated counters, so they add. Nothing displays them any more, but
+    // adjustCustomerTotals still maintains them and must not be left describing one half.
+    primary.totalSpent = (primary.totalSpent || 0) + (o.totalSpent || 0);
+    primary.visitCount = (primary.visitCount || 0) + (o.visitCount || 0);
+    if (o.firstVisit && (!primary.firstVisit || new Date(o.firstVisit) < new Date(primary.firstVisit))) primary.firstVisit = o.firstVisit;
+    if (o.lastVisit && (!primary.lastVisit || new Date(o.lastVisit) > new Date(primary.lastVisit))) primary.lastVisit = o.lastVisit;
+  }
+  Store.set('customers', customers.filter((c) => !others.includes(c)));
+  return { name: primary.name, removed: others.length, phones: custPhones(primary) };
+}
+
+function renderDupeBanner() {
+  const box = document.getElementById('dupeBanner');
+  if (!box) return;
+  const d = findCustomerDupes();
+  if (!d.length) { box.style.display = 'none'; return; }
+  box.style.display = 'flex';
+  document.getElementById('dupeBannerText').innerHTML =
+    '<b>' + d.length + ' שמות מופיעים פעמיים ברשימת הלקוחות.</b>'
+    + '<div style="font-size:11px;opacity:.85;margin-top:2px;">קבלה בלי טלפון מתויקת לפי שם, ולכן היא נופלת על שתי הכרטיסיות.</div>';
+}
+
+function openDupeMerge() {
+  const d = findCustomerDupes();
+  if (!d.length) { showNotice('אין כפילויות.'); return; }
+  const spend = customerSpendIndex();
+  const body = d.map((g, i) => {
+    const rows = g.recs.map((c) => {
+      const s = spend(c);
+      return '<div style="font-size:11px;color:var(--text-muted);padding:2px 0;">· '
+        + (c.phone ? c.phone : 'ללא טלפון')
+        + (c.city ? ' · ' + c.city : '') + (c.vatId ? ' · ח.פ ' + c.vatId : '')
+        + ' · ₪' + Math.round(s.spent).toLocaleString('he-IL') + '</div>';
+    }).join('');
+    return '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;'
+      + (g.safe ? '' : 'border-color:var(--warning);') + '">'
+      + '<label class="check" onclick="this.querySelector(\'input\').checked=!this.querySelector(\'input\').checked" style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
+      + '<input type="checkbox" id="dupe_' + i + '" data-key="' + g.key.replace(/"/g, '&quot;') + '"' + (g.safe ? ' checked' : '') + '>'
+      + '<b style="font-size:13px;">' + (g.recs[0].name || '') + '</b></label>'
+      + rows
+      + '<div style="font-size:11px;margin-top:4px;color:' + (g.safe ? 'var(--text-muted)' : 'var(--warning)') + ';">'
+      + (g.safe ? '✓ ' : '⚠ ') + g.why + '</div>'
+      + '</div>';
+  }).join('');
+  openModal('מיזוג לקוחות כפולים',
+    '<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">המסומנים ימוזגו לרשומה אחת. '
+    + 'כל מספרי הטלפון נשמרים, ושום תיקון, מכירה או קבלה לא מאבד את הלקוח שלו. '
+    + '<b>אין ביטול.</b></div>' + body,
+    '<button class="btn btn-primary" onclick="mergeSelectedDupes()">מזג מסומנים</button>'
+    + '<button class="btn btn-secondary" onclick="closeModal()">ביטול</button>');
+}
+
+function mergeSelectedDupes() {
+  const keys = [...document.querySelectorAll('#modalBody input[type=checkbox]')]
+    .filter((x) => x.checked).map((x) => x.getAttribute('data-key'));
+  if (!keys.length) { showNotice('לא סומן כלום.'); return; }
+  closeModal();
+  askConfirm('למזג ' + keys.length + ' לקוחות כפולים? אין ביטול.', () => {
+    const done = [];
+    for (const k of keys) { const r = mergeDupeGroup(k); if (r) done.push(r); }
+    renderCustomers();
+    renderDupeBanner();
+    showNotice(done.length
+      ? '✅ מוזגו ' + done.length + ': ' + done.map((r) => r.name).join(' · ')
+      : 'לא בוצע מיזוג.');
+  });
+}
+
 function customerSpendIndex() {
   const byPhone = new Map(), byName = new Map();
   const add = (map, key, amount) => {
@@ -3859,25 +3994,30 @@ function customerSpendIndex() {
   return (c) => {
     const nm = String(c.name || '').trim().toLowerCase();
     const own = owners.get(nm);
-    const a = (c.phone && byPhone.get(c.phone)) || null;
+    let spent = 0, visits = 0;
+    for (const p of custPhones(c)) {
+      const a = byPhone.get(p);
+      if (a) { spent += a.spent; visits += a.visits; }
+    }
     const b = (own && own.key === custKey(c)) ? byName.get(nm) : null;
-    return { spent: (a ? a.spent : 0) + (b ? b.spent : 0), visits: (a ? a.visits : 0) + (b ? b.visits : 0) };
+    return { spent: spent + (b ? b.spent : 0), visits: visits + (b ? b.visits : 0) };
   };
 }
 
 function customerLedger(c) {
+  const phones = new Set(custPhones(c));
   const phone = c.phone || '';
   const nm = (c.name || '').trim().toLowerCase();
   const rows = [];
   for (const j of (Store.get('jobs') || [])) {
-    if (!phone || j.customerPhone !== phone) continue;
+    if (!phones.size || !phones.has(j.customerPhone)) continue;
     rows.push({ kind: 'repair', id: j.id, date: j.date, amount: Number(j.price) || 0,
       title: (j.voltage && j.capacity) ? `${j.voltage}V ${j.capacity}Ah` : 'תיקון',
       sub: [jobTypeLabel(j), VEHICLE_LABELS[j.vehicle]].filter(Boolean).join(' · '),
       warrantyEnd: j.warrantyEnd });
   }
   for (const o of (Store.get('orders') || [])) {
-    if (!phone || o.phone !== phone) continue;
+    if (!phones.size || !phones.has(o.phone)) continue;
     const months = Math.max(...(o.items || []).map((it) => warrantyForItem(it)).concat([12]));
     const end = new Date(o.date); end.setMonth(end.getMonth() + months);
     rows.push({ kind: 'sale', id: o.id, date: o.date, amount: Number(o.total) || 0,
@@ -3897,7 +4037,7 @@ function customerLedger(c) {
   for (const r of (Store.get('incomes') || [])) {
     if (!isLocked(r)) continue;
     const rp = r.phone || '', rn = (r.customer || '').trim().toLowerCase();
-    if (!(rp && rp === phone) && !(ownsName && !rp && nm && rn === nm)) continue;
+    if (!(rp && phones.has(rp)) && !(ownsName && !rp && nm && rn === nm)) continue;
     rows.push({ kind: 'books', id: r.id, date: r.date, amount: Number(r.amount) || 0,
       title: r.note || 'קבלה', sub: r.invoice ? 'חשבונית ' + r.invoice : '',
       warrantyEnd: r.warrantyEnd });

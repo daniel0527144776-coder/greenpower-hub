@@ -141,6 +141,52 @@ const excluded = await page.evaluate(() => {
 check('unreceipted money, quotes and un-owned ledger rows stay off the cards',
   Math.round(excluded) === 12600, excluded);
 
+// ---------------------------------------------------------------- merging duplicates
+// The evidence is reported per group and only the provable ones are ticked: a shared ח.פ says
+// a company is itself, but two towns or two phone numbers under one common name is more likely
+// two people, and merging those moves one customer's history onto another with no undo.
+const dupes = await page.evaluate(() => {
+  const g = findCustomerDupes();
+  return g.map((x) => ({ name: x.recs[0].name, safe: x.safe, why: x.why, n: x.recs.length }));
+});
+check('the duplicate name is found', dupes.length === 1 && dupes[0].name === 'כפול', dupes);
+check('and it is offered as safe (one record is just a phone-less copy)', dupes[0] && dupes[0].safe === true, dupes);
+
+const conflict = await page.evaluate(() => {
+  const cs = Store.get('customers') || [];
+  cs.push({ name: 'שם משותף', phone: '0507777777', city: 'אלעד', totalSpent: 0, visitCount: 0, lastVisit: new Date().toISOString() });
+  cs.push({ name: 'שם משותף', phone: '0508888888', city: 'חיפה', totalSpent: 0, visitCount: 0, lastVisit: new Date().toISOString() });
+  Store.set('customers', cs);
+  const g = findCustomerDupes().find((x) => x.recs[0].name === 'שם משותף');
+  return { safe: g && g.safe, why: g && g.why };
+});
+check('two different phone numbers are NOT offered as a safe merge', conflict.safe === false, conflict);
+check('and the reason is stated', /טלפון/.test(conflict.why || ''), conflict.why);
+
+// The one that would lose money silently: merge records holding different numbers and every
+// job, sale and receipt filed under the other number stops belonging to anybody.
+const merged = await page.evaluate(() => {
+  const idx0 = customerSpendIndex();
+  const before = (Store.get('customers') || []).reduce((s, c) => s + idx0(c).spent, 0);
+  const beforeN = (Store.get('customers') || []).length;
+  for (const g of findCustomerDupes()) mergeDupeGroup(g.key);
+  const idx = customerSpendIndex();
+  const cs = Store.get('customers') || [];
+  let disagree = 0;
+  for (const c of cs) if (Math.round(idx(c).spent) !== Math.round(customerLedger(c).spent)) disagree++;
+  const kept = cs.find((c) => c.name === 'שם משותף');
+  return {
+    before, after: cs.reduce((s, c) => s + idx(c).spent, 0),
+    beforeN, afterN: cs.length, left: findCustomerDupes().length, disagree,
+    altPhones: kept ? custPhones(kept) : [],
+  };
+});
+check('merging removes the extra records', merged.afterN === merged.beforeN - 2, merged);
+check('and leaves no duplicates behind', merged.left === 0, merged.left);
+check('NOT ONE SHEKEL moves when records are merged', Math.round(merged.before) === Math.round(merged.after), merged);
+check('the merged record keeps both phone numbers', merged.altPhones.length === 2, merged.altPhones);
+check('the list and the card still agree afterwards', merged.disagree === 0, merged.disagree);
+
 if (SELFTEST) console.log('\n[selftest] the list was pointed back at the stored totalSpent;\n[selftest] the books/sale/agreement checks must have gone red.');
 check('no page errors', errs.length === 0, errs);
 check('no native dialogs (invisible in the WebView)', dialogs.length === 0, dialogs);
