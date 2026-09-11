@@ -178,6 +178,13 @@ jobs:
       - name: Sticker — printed current never exceeds the BMS
         run: node test/test-sticker-specs.mjs
 
+      # A whole working day, in order: import the books, merge the duplicates they create,
+      # look a price up, quote a repair, sell something, and check the money that comes out is
+      # the money that went in. The unit suites each prove one thing; this proves they join up.
+      # --local so CI tests THIS checkout rather than whatever is deployed.
+      - name: End to end — a full day through the hub
+        run: node test/e2e-full-day.mjs --local
+
       # The badge the user reads must be the build they are running.
       - name: The shown version is the deployed version
         run: node tools/check-build-tag.mjs
