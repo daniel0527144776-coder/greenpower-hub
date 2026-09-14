@@ -2879,7 +2879,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v284';
+const HUB_BUILD = 'v285';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6675,6 +6675,21 @@ function wageDebt() {
   // every other month list in this app reads.
   return [...byMonth.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
 }
+// The same unpaid rows totalled the other way: per worker, across every month. "How much do I
+// owe יוסי" was three months of mental arithmetic off the per-month breakdown.
+function wageDebtByWorker() {
+  const per = new Map();
+  for (const e of (Store.get('worktime') || [])) {
+    if (e.paid || !((Number(e.hours) || 0) > 0)) continue;
+    const w = e.workerName || 'ללא שם';
+    const cur = per.get(w) || { name: w, hours: 0, wage: 0, months: new Set() };
+    cur.hours += Number(e.hours) || 0;
+    cur.wage += (Number(e.hours) || 0) * (Number(e.rate) || 0);
+    const k = monthKeyOf(e.date); if (k) cur.months.add(k);
+    per.set(w, cur);
+  }
+  return [...per.values()].sort((a, b) => b.wage - a.wage);
+}
 function renderWageDebt() {
   const card = document.getElementById('wageDebtCard');
   const list = document.getElementById('wageDebtList');
@@ -6684,10 +6699,23 @@ function renderWageDebt() {
   card.style.display = 'block';
   const total = debt.reduce((s, d) => s + d.total, 0);
   const now = monthKeyOf(new Date().toISOString());
+  const perWorker = wageDebtByWorker();
   list.innerHTML =
-    `<div class="price-item" style="border-bottom:1px solid var(--border);">
+    `<div class="price-item">
        <div class="price-item-name" style="font-weight:700;">סה"כ חוב</div><div></div>
        <div class="price-item-final" style="color:var(--danger);font-weight:700;">${shek(total)}</div></div>`
+    // Per worker, across every month. The per-month list below answers "which month";
+    // this answers "how much do I owe him".
+    + perWorker.map((w) => `
+      <div class="price-item" style="padding-top:2px;padding-bottom:2px;">
+        <div class="price-item-name" style="font-size:12px;">
+          ${w.name}
+          <span style="font-size:10.5px;color:var(--text-muted);">· ${w.hours} שע' · ${w.months.size} ${w.months.size === 1 ? 'חודש' : 'חודשים'}</span>
+        </div><div></div>
+        <div class="price-item-final" style="color:var(--danger);font-size:13px;">${shek(w.wage)}</div>
+      </div>`).join('')
+    + `<div style="border-bottom:1px solid var(--border);margin:6px 0 2px;"></div>
+       <div style="font-size:10.5px;color:var(--text-muted);margin:0 2px 4px;">לפי חודש:</div>`
     + debt.map((d) => `
       <div class="price-item" style="align-items:flex-start;">
         <div class="price-item-name">

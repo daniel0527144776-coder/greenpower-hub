@@ -93,6 +93,27 @@ const owed = await page.evaluate(() => (Store.get('worktime') || [])
 check('the total owed is shown, and it is the sum of the unpaid rows',
   debt.text.replace(/\s/g, '').includes(owed.toLocaleString('he-IL')), `expected ${owed}: ${debt.text.slice(0, 40)}`);
 
+// "How much do I owe יוסי" was three months of mental arithmetic off the per-month breakdown.
+const per = await page.evaluate(() => {
+  const w = (typeof wageDebtByWorker === 'function') ? wageDebtByWorker() : [];
+  // the same rows totalled independently, so the check is not the code repeating itself
+  const want = {};
+  for (const e of (Store.get('worktime') || [])) {
+    if (e.paid) continue;
+    want[e.workerName] = (want[e.workerName] || 0) + e.hours * e.rate;
+  }
+  return { shown: w.map((x) => ({ name: x.name, wage: Math.round(x.wage), hours: x.hours, months: x.months.size })), want };
+});
+check('every worker owed money is listed on his own',
+  per.shown.length === Object.keys(per.want).length && per.shown.length > 1, per.shown);
+check('and his total is the sum of his unpaid hours across all months',
+  per.shown.every((x) => Math.round(per.want[x.name]) === x.wage), { shown: per.shown, want: per.want });
+check('with the hours and how many months they span',
+  per.shown.every((x) => x.hours > 0 && x.months >= 1), per.shown);
+// יוסי is owed for March and July; a per-month figure alone would never show the 28 hours.
+check('a worker owed across several months is totalled across them',
+  per.shown.some((x) => x.months >= 2), per.shown);
+
 const paid = await page.evaluate(async () => {
   if (typeof payWageMonth !== 'function') return { skipped: true };
   payWageMonth('2026-03');
