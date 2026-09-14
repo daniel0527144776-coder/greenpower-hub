@@ -147,6 +147,13 @@ jobs:
       - name: What a customer spent, on all three screens
         run: node test/test-customer-spend.mjs
 
+      # Wages: the page said money was owed but only as ONE TOTAL, so finding which month
+      # meant stepping back through the picker one month at a time. And after importing the
+      # accountant's books the page showed five years of income against zero recorded cost
+      # as if it were profit.
+      - name: Wages owed by month, and months with no expense data
+        run: node test/test-money-honesty.mjs
+
       - name: The accountant import, and the trip to the cloud
         run: node test/test-import-and-sync.mjs
 

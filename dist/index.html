@@ -1963,7 +1963,10 @@ document.addEventListener('keydown', function (e) {
     <h2 class="page-title">⏱️ שעון עובדים</h2>
     <input type="month" id="wtMonth" class="form-input" style="width:auto;direction:ltr;" onchange="renderWorktime()">
   </div>
-  <div id="worktimeUnpaidBanner" style="display:none;background:var(--danger-light);color:var(--danger);border:1px solid var(--danger);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:600;"></div>
+  <div class="card" id="wageDebtCard" style="display:none;border-color:var(--danger);">
+    <h3 class="card-title">💸 חוב פתוח לעובדים</h3>
+    <div id="wageDebtList"></div>
+  </div>
   <!-- Dispatches from /clock/. Nothing here is wages until it is approved. -->
   <div class="card" id="punchCard" style="display:none;border-color:var(--warning);">
     <h3 class="card-title">📥 דיווחי עובדים ממתינים</h3>
@@ -2876,7 +2879,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v283';
+const HUB_BUILD = 'v284';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5880,7 +5883,13 @@ function renderFinanceOverview() {
   if (!keys.length) { el.innerHTML = '<div class="empty-state"><div class="empty-state-text">אין עדיין נתונים.</div></div>'; return; }
   let ti = 0, te = 0;
   keys.forEach((k) => { ti += m[k].inc; te += m[k].exp; });
-  const net = ti - te;
+  // A month with income and NO expense row is not a month that made pure profit — it is a
+  // month whose costs were never recorded. Counting it flattered the total by five years:
+  // after the accountant's import this read "רווח מצטבר ₪284,895" against zero cost.
+  const noCost = keys.filter((k) => m[k].inc > 0 && m[k].exp === 0);
+  const noCostIls = noCost.reduce((s, k) => s + m[k].inc, 0);
+  const priced = keys.filter((k) => !(m[k].inc > 0 && m[k].exp === 0));
+  const net = priced.reduce((s, k) => s + m[k].inc - m[k].exp, 0);
   const best = keys.slice().sort((a, b) => (m[b].inc - m[b].exp) - (m[a].inc - m[a].exp))[0];
   el.innerHTML =
     `<div class="stats-grid" style="margin-bottom:10px;">
@@ -5889,15 +5898,21 @@ function renderFinanceOverview() {
        <div class="stat-box"><div class="stat-label">רווח מצטבר</div><div class="stat-value" style="color:${net < 0 ? 'var(--danger)' : 'var(--accent)'};font-size:19px;">${shek(net)}</div></div>
      </div>
      <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-bottom:10px;">
-       ${keys.length} חודשי פעילות · ממוצע ${shek(Math.round(net / keys.length))} לחודש · הטוב ביותר: ${monthLabelHe(best)} (${shek(m[best].inc - m[best].exp)})
+       ${keys.length} חודשי פעילות · ממוצע ${shek(Math.round(net / Math.max(1, priced.length)))} לחודש · הטוב ביותר: ${monthLabelHe(best)} (${shek(m[best].inc - m[best].exp)})
      </div>` +
+    (noCost.length ? `<div class="info-banner" style="margin-bottom:10px;"><span>ℹ️</span><div>
+       <b>${noCost.length} חודשים עם הכנסות בלבד — ${shek(noCostIls)}.</b>
+       להם לא נרשמו הוצאות כלל, ולכן הם <b>לא נספרים ברווח המצטבר</b>. הרווח שלמעלה הוא רק מהחודשים שיש להם שני הצדדים.
+     </div></div>` : '') +
     keys.map((k) => {
       const r = m[k], profit = r.inc - r.exp, open = finOpenMonth === k;
       const rows = open ? monthRows(k) : null;
       return `<div class="list-item" style="cursor:pointer;padding:9px 12px;" onclick="toggleFinMonth('${k}')">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
             <strong style="font-size:13px;">${open ? '▾' : '▸'} ${monthLabelHe(k)}</strong>
-            <span style="font-size:12px;"><span style="color:var(--accent);">${shek(r.inc)}</span> − <span style="color:var(--danger);">${shek(r.exp)}</span> = <b style="color:${profit < 0 ? 'var(--danger)' : 'var(--text)'};">${shek(profit)}</b></span>
+            <span style="font-size:12px;">${r.inc > 0 && r.exp === 0
+              ? `<span style="color:var(--accent);">${shek(r.inc)}</span> <span style="color:var(--text-muted);font-size:11px;">· הכנסות בלבד, הוצאות לא נרשמו</span>`
+              : `<span style="color:var(--accent);">${shek(r.inc)}</span> − <span style="color:var(--danger);">${shek(r.exp)}</span> = <b style="color:${profit < 0 ? 'var(--danger)' : 'var(--text)'};">${shek(profit)}</b>`}</span>
           </div>` +
         (open ? `<div onclick="event.stopPropagation()">${monthDetailHtml(k, rows.inc, rows.exp)}</div>` : '') +
         `</div>`;
@@ -5984,7 +5999,12 @@ function monthDetailHtml(mk, inc, exp) {
     const del = r.locked ? '' : ` <span onclick="${r.ref === 'income' ? 'deleteIncome' : 'deleteExpense'}('${r.id}')" style="color:var(--text-muted);cursor:pointer;" title="מחק">✕</span>`;
     const lock = r.unreceipted ? ' <span title="חשבון עסקה שהופק ללא תקבול — ניתן להסרה" style="color:var(--warning);">⚠</span>'
       : (r.locked && r.kind === 'הנה"ח' ? ' <span title="מהנהלת החשבונות — לקריאה בלבד" style="opacity:.6;">🔒</span>' : '');
-    return `<div class="price-item"><div class="price-item-name">${r.kind} · ${r.cat}${r.name ? ` · <span style="color:var(--text-muted);">${String(r.name).slice(0, 40)}</span>` : ''}${lock}` +
+    // A books row with a negative amount is a CREDIT NOTE — it carries its own invoice number
+    // from the outgoing series and cancels a positive row of the same amount to the same
+    // customer days earlier. Nine of them are in the accountant's file; unlabelled they read as
+    // "negative income", which is not a thing.
+    const credit = r.amount < 0 && r.locked ? ' <span style="font-size:10px;color:var(--warning);font-weight:700;">זיכוי</span>' : '';
+    return `<div class="price-item"><div class="price-item-name">${r.kind} · ${r.cat}${credit}${r.name ? ` · <span style="color:var(--text-muted);">${String(r.name).slice(0, 40)}</span>` : ''}${lock}` +
       `<div style="font-size:10.5px;color:var(--text-light);">${new Date(r.date).toLocaleDateString('he-IL')}</div></div><div></div>` +
       `<div class="price-item-final" style="color:${colour};">${shek(r.amount)}${del}</div></div>`;
   };
@@ -6615,21 +6635,9 @@ function renderWorktime() {
   const workers = getWorkers(), sel = document.getElementById('wtWorker');
   sel.innerHTML = workers.length ? workers.map(w => `<option value="${w.id}">${w.name} (₪${w.rate}/שעה)</option>`).join('') : '<option value="">הוסף עובד תחילה</option>';
   const allEntries = Store.get('worktime') || [];
+  renderWageDebt();
   const entries = allEntries.filter(e => monthKeyOf(e.date) === mk);
 
-  // Unpaid carryover from earlier months — switching to a new (empty) month
-  // must never silently hide money still owed from before.
-  const unpaidPast = allEntries.filter(e => !e.paid && monthKeyOf(e.date) < mk);
-  const banner = document.getElementById('worktimeUnpaidBanner');
-  if (banner) {
-    if (unpaidPast.length) {
-      const owed = unpaidPast.reduce((s, e) => s + e.hours * e.rate, 0);
-      banner.style.display = 'block';
-      banner.textContent = `⚠️ ${unpaidPast.length} רישומים לא שולמו מחודשים קודמים — סה"כ ${shek(owed)}`;
-    } else {
-      banner.style.display = 'none';
-    }
-  }
 
   const byWorker = {};
   entries.forEach(e => {
@@ -6646,6 +6654,75 @@ function renderWorktime() {
   document.getElementById('worktimeList').innerHTML = sorted.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין רישומים</div></div>' :
     sorted.map(e => `<div class="price-item"><div class="price-item-name">${e.workerName} · ${e.hours} שע'${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final">${shek(e.hours * e.rate)} <span onclick="toggleWorktimePaid('${e.id}')" style="cursor:pointer;font-size:11.5px;color:${e.paid ? 'var(--success)' : 'var(--danger)'};" title="לחץ לשינוי סטטוס תשלום">${e.paid ? '✓ שולם' : '⚠ לא שולם'}</span> <span onclick="deleteWorktime('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
 }
+// Where the money is owed, not just that it is. A single carried-over total said a debt
+// existed and left him stepping back through the month picker to find it.
+function wageDebt() {
+  const rows = (Store.get('worktime') || []).filter((e) => !e.paid && (Number(e.hours) || 0) > 0);
+  const byMonth = new Map();
+  for (const e of rows) {
+    const k = monthKeyOf(e.date);
+    if (!k) continue;
+    if (!byMonth.has(k)) byMonth.set(k, { key: k, total: 0, hours: 0, workers: new Map(), ids: [] });
+    const b = byMonth.get(k);
+    const wage = (Number(e.hours) || 0) * (Number(e.rate) || 0);
+    b.total += wage; b.hours += Number(e.hours) || 0; b.ids.push(e.id);
+    const w = e.workerName || 'ללא שם';
+    const cur = b.workers.get(w) || { hours: 0, wage: 0 };
+    cur.hours += Number(e.hours) || 0; cur.wage += wage;
+    b.workers.set(w, cur);
+  }
+  // Newest first: the oldest debt is the one he most needs to see, but the list reads the way
+  // every other month list in this app reads.
+  return [...byMonth.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
+}
+function renderWageDebt() {
+  const card = document.getElementById('wageDebtCard');
+  const list = document.getElementById('wageDebtList');
+  if (!card || !list) return;
+  const debt = wageDebt();
+  if (!debt.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const total = debt.reduce((s, d) => s + d.total, 0);
+  const now = monthKeyOf(new Date().toISOString());
+  list.innerHTML =
+    `<div class="price-item" style="border-bottom:1px solid var(--border);">
+       <div class="price-item-name" style="font-weight:700;">סה"כ חוב</div><div></div>
+       <div class="price-item-final" style="color:var(--danger);font-weight:700;">${shek(total)}</div></div>`
+    + debt.map((d) => `
+      <div class="price-item" style="align-items:flex-start;">
+        <div class="price-item-name">
+          <b>${monthLabelHe(d.key)}</b>${d.key === now ? ' <span style="font-size:10px;color:var(--text-muted);">(החודש)</span>' : ''}
+          <div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;">
+            ${[...d.workers.entries()].map(([w, v]) => w + ' · ' + v.hours + " שע' · " + shek(v.wage)).join('<br>')}
+          </div>
+          <div class="btn-group" style="margin-top:6px;">
+            <button class="btn btn-sm btn-secondary" onclick="openWageMonth('${d.key}')">פתח חודש</button>
+            <button class="btn btn-sm btn-primary" onclick="payWageMonth('${d.key}')">סמן כשולם</button>
+          </div>
+        </div>
+        <div></div>
+        <div class="price-item-final" style="color:var(--danger);">${shek(d.total)}</div>
+      </div>`).join('');
+}
+function openWageMonth(k) {
+  const el = document.getElementById('wtMonth');
+  if (el) { el.value = k; renderWorktime(); }
+}
+// Marks every unpaid record in that month paid. It names the month and the amount first —
+// the whole point of this card is that he could not see which month he was acting on.
+function payWageMonth(k) {
+  const d = wageDebt().find((x) => x.key === k);
+  if (!d) return;
+  askConfirm(`לסמן את כל השעות של ${monthLabelHe(k)} כשולמו?\n${d.hours} שעות · ${shek(d.total)}`, () => {
+    const wt = Store.get('worktime') || [];
+    const ids = new Set(d.ids);
+    wt.forEach((e) => { if (ids.has(e.id)) e.paid = true; });
+    Store.set('worktime', wt);
+    renderWorktime();
+    showNotice(`${monthLabelHe(k)} סומן כשולם — ${shek(d.total)}.`);
+  });
+}
+
 function toggleWorktimePaid(id) {
   const wt = Store.get('worktime') || [];
   const e = wt.find(x => x.id === id);
