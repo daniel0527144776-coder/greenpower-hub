@@ -1376,7 +1376,7 @@ body { min-height: 100vh; }
       <tr><td>תא CLASSIC · EVE 50E</td><td class="gpd-n">₪7.34 ליחידה</td></tr>
       <tr><td>תא ADVANCED · Tenpower 50SG</td><td class="gpd-n">₪8.86</td></tr>
       <tr><td>תא PRO · EVE 50PL</td><td class="gpd-n">₪12.15</td></tr>
-      <tr><td>BMS לפי מתח</td><td class="gpd-n">₪150 / ₪200 / ₪260</td></tr>
+      <tr><td>BMS לפי מתח</td><td class="gpd-n">₪105 / ₪200 / ₪260</td></tr>
       <tr><td>ניקל · חבילה של 120 תאים</td><td class="gpd-n">₪11</td></tr>
       <tr><td>חומרים</td><td class="gpd-n">₪60</td></tr>
       <tr><td>עבודה</td><td class="gpd-n">(תאים×0.0061 + 1.68) שעות × ₪60</td></tr>
@@ -2879,7 +2879,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v285';
+const HUB_BUILD = 'v286';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5004,7 +5004,12 @@ function estimateBatteryCost(it) {
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
   const cells = S * P;
   const cellsCost = cells * cellPrice;
-  const bms = powerTool ? 0 : (V >= 72 ? 260 : V >= 60 ? 200 : 150);
+  // DALY 60A = ₪105 off his own BMS_PRICES table — what he fits on most packs (asked
+  // directly, 2026-09-16). This used to charge ₪150 for every pack under 60V regardless of
+  // size, which is the ₪45 that made a 48V 20Ah read ₪716 instead of ₪671. The 60V and 72V
+  // bands are still unsourced; see bmsFor in cost-model.mjs. sync-prices compares this
+  // function against packCost on every catalogue row, so the two cannot drift.
+  const bms = powerTool ? 0 : (V >= 72 ? 260 : V >= 60 ? 200 : 105);
   // Nickel off his own plate prices (2026-08-31): every shape on the shelf works out at
   // ~$0.0109 per hole and a pack needs two contacts per cell. Folding does not double it —
   // he folds the same piece to shorten it, not to add a second. This is the TRUE cost; the
@@ -5017,6 +5022,34 @@ function estimateBatteryCost(it) {
   // 3 min/cell claimed 39 hours for a 200Ah pack. Must match packCost in the generator.
   const labor = (cells * 0.0061 + (powerTool ? 0.75 : 1.68)) * 60;
   return Math.round(cellsCost + bms + nickel + materials + labor);
+}
+// The same figures, itemised. A single number invited "that is not right" with no way to see
+// WHICH part was not right — and both parts he named were invisible: the BMS band and the fact
+// that his own hours were in there at all.
+function batteryCostParts(it) {
+  const m = it.name.match(/(\d+)V\s*(\d+(?:\.\d+)?)Ah/);
+  if (!m) return null;
+  const V = +m[1], Ah = +m[2];
+  const powerTool = /כלי עבודה/.test(it.cat);
+  const cellPrice = powerTool ? 1.25 * 3.00 * 1.371
+    : /PRO/.test(it.cat) ? 12.15 : /ADVANCED/.test(it.cat) ? 8.86 : 7.34;
+  const cellAh = powerTool ? 2.5 : 5;
+  const S = seriesForV(V);
+  const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
+  const cells = S * P;
+  const bms = powerTool ? 0 : (V >= 72 ? 260 : V >= 60 ? 200 : 105);
+  const nickel = cells * 2 * 0.0109 * 3 * 1.371;
+  const materials = powerTool ? 30 : 60;
+  const hours = cells * 0.0061 + (powerTool ? 0.75 : 1.68);
+  const labour = hours * 60;
+  const parts = [
+    { k: cells + ' תאים', v: cells * cellPrice },
+    { k: 'BMS', v: bms },
+    { k: 'ניקל', v: nickel },
+    { k: 'שרינק, חיווט ומחברים', v: materials },
+  ].filter((x) => x.v > 0);
+  const materialsTotal = parts.reduce((s, x) => s + x.v, 0);
+  return { parts, materialsTotal, hours, labour, total: materialsTotal + labour, S, P, cells };
 }
 function productCost(it) {
   const costs = getCosts();
@@ -5248,6 +5281,25 @@ function catExpandAll(open) {
   renderCatalog();
 }
 
+// What the estimate is made of, itemised, with his own hours kept OUT of the materials
+// subtotal and shown on their own line — that separation is the second thing he asked about.
+function costBreakdownHtml(it) {
+  const b = typeof batteryCostParts === 'function' ? batteryCostParts(it) : null;
+  if (!b) return '';
+  const row = (k, v, muted) =>
+    '<div style="display:flex;justify-content:space-between;font-size:11.5px;' + (muted ? 'color:var(--text-muted);' : '') + 'padding:1px 0;">'
+    + '<span>' + k + '</span><span>' + shek(Math.round(v)) + '</span></div>';
+  return '<div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;">'
+    + '<div style="font-size:10.5px;color:var(--text-muted);margin-bottom:4px;">ממה מורכב האומדן (' + b.S + 'S' + b.P + 'P)</div>'
+    + b.parts.map((p) => row(p.k, p.v, true)).join('')
+    + '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;">'
+    + '<span>סה\"כ חומרים</span><span>' + shek(Math.round(b.materialsTotal)) + '</span></div>'
+    + row('עבודה — ' + b.hours.toFixed(1) + " שע' × ₪60 (הזמן שלך)", b.labour, true)
+    + '<div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;">'
+    + '<span>סה"כ</span><span>' + shek(Math.round(b.total)) + '</span></div>'
+    + '</div>';
+}
+
 function openCostEditor(i) {
   const it = PRICING[i], costs = getCosts(), k = catKey(it);
   const cur = costs[k] != null ? costs[k] : (productCost(it) || '');
@@ -5256,6 +5308,7 @@ function openCostEditor(i) {
      <div class="form-row"><label>עלות לי ₪</label><input type="number" class="form-input" id="costInput" value="${cur}" min="0" step="10" oninput="updateCostProfit(${i})"></div>
      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">פרטי: ${typeof it.retail === 'number' ? shek(it.retail) : it.retail} · עסקי: ${typeof it.b2b === 'number' ? shek(it.b2b) : it.b2b}</div>
      <div id="costProfit" style="margin-top:8px;"></div>
+     ${costBreakdownHtml(it)}
      <div style="font-size:11px;color:var(--text-light);margin-top:4px;">לסוללות מוצג אומדן מהתאים עד שמזינים עלות ספק מדויקת.</div>`,
     `<button class="btn btn-primary" onclick="saveCost(${i})">💾 שמור</button>
      <button class="btn btn-secondary btn-sm" onclick="clearCost(${i})">איפוס</button>
