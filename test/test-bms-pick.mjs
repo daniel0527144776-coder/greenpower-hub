@@ -57,6 +57,9 @@ await page.evaluate(() => {
     { who: 'ספק', cat: 'BMS DALY', name: 'DALY 20S 72V 100A', usd: 40, kg: 0.6 },
     { who: 'ספק', cat: 'BMS ANT', name: 'ANT 420A 24S', usd: 53, frUsd: 14 },
     { who: 'ספק', cat: 'BMS DALY', name: 'חיישן טמפרטורה ל-DALY', usd: 1 },
+    // A model code with a letter A INSIDE it, before the real rating. Nine of his thirty-four
+    // rows are this shape, and a first-match read presents this 200A board as an 18A peak.
+    { who: 'ספק', cat: 'BMS חכם JK', name: 'JK BD6A24S20P 200A', usd: 50.5 },
   ]));
 });
 await page.reload({ waitUntil: 'load' });
@@ -68,8 +71,8 @@ if (SELFTEST) {
   await page.evaluate(() => { window.pickedBms = () => null; });
 }
 
-const list = await page.evaluate(() => bmsChoices().map((r) => ({ name: r.name, ils: r.ils, basis: r.freightBasis })));
-check('the boards come from the supplier list', list.length === 3, list);
+const list = await page.evaluate(() => bmsChoices().map((r) => ({ name: r.name, ils: r.ils, basis: r.freightBasis, amps: r.amps })));
+check('the boards come from the supplier list', list.length === 4, list);
 check('a temperature sensor is not offered as a board', !list.some((r) => /חיישן/.test(r.name)), list.map((r) => r.name));
 // Most exact first: a quoted shipping price, then a weight, then the category share.
 check('a row with a quoted shipping price says so', (list.find((r) => /ANT/.test(r.name)) || {}).basis === 'quoted', list);
@@ -78,6 +81,23 @@ check('a row with a weight says so', (list.find((r) => /100A/.test(r.name)) || {
 // freight" there was wrong, and the caveat is that the share was measured on nickel and copper.
 check('a bare row reports the borrowed category rate, not "no freight"',
   (list.find((r) => /48V 60A/.test(r.name)) || {}).basis === 'category', list);
+
+// ---------------------------------------------------------------- the peak (2026-09-17)
+// Daniel: "וגם לא לשכוח לכתוב את הפיק של BMS" / "זה פי 3 לכל סוג". Not a rule invented here —
+// the sticker has always printed "BMS: DALY 30A/90A", which is the same x3.
+check('a board knows its continuous rating', (list.find((r) => /48V 60A/.test(r.name)) || {}).amps === 60, list);
+// THE ONE THAT MATTERS: read the LAST rating in the name, not the first.
+check('a model code containing its own "A" still reads the real rating',
+  (list.find((r) => /BD6A/.test(r.name)) || {}).amps === 200, list);
+check('a temperature sensor has no rating rather than a made-up one',
+  !list.some((r) => /חיישן/.test(r.name)), list);
+const opts = await page.evaluate(() => {
+  const i = PRICING.findIndex((x) => /^48V 20Ah$/.test(x.name) && /אופניים.*CLASSIC/.test(x.cat));
+  const d = document.createElement('div'); d.innerHTML = bmsPickerHtml(i);
+  return [...d.querySelectorAll('option')].map((o) => o.textContent);
+});
+check('the picker prints the peak beside the price', opts.some((o) => /שיא 180A/.test(o)), opts);
+check('and x3 on the big board too', opts.some((o) => /שיא 600A/.test(o)), opts);
 
 const effect = await page.evaluate(() => {
   const i = PRICING.findIndex((x) => /^48V 20Ah$/.test(x.name) && /אופניים.*CLASSIC/.test(x.cat));

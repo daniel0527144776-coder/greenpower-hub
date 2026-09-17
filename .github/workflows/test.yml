@@ -160,6 +160,12 @@ jobs:
       - name: Choosing the BMS, and keeping supplier prices out of a public file
         run: node test/test-bms-pick.mjs
 
+      # He asked why an e-bike cost the same as every other category at the same voltage and
+      # capacity. It did: the model had one flat materials figure and the family was not an
+      # input to the price at all. The e-bike buys a Silver Fish case; the Sur-Ron an OEM one.
+      - name: The enclosure, and why two families cost more than the rest
+        run: node test/test-enclosure.mjs
+
       - name: The accountant import, and the trip to the cloud
         run: node test/test-import-and-sync.mjs
 
