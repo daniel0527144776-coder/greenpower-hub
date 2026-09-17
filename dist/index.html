@@ -2879,7 +2879,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v289';
+const HUB_BUILD = 'v290';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5076,7 +5076,13 @@ function bmsChoices() {
     }))
     .sort((a, b) => a.ils - b.ils);
 }
+// THE PICKER IS PART OF THE APP. sync-prices lifts estimateBatteryCost out of this file and
+// evaluates it in Node, where none of this exists; a pick is also a per-product override that
+// the generator knows nothing about, so "no pick" is the correct answer out there rather than a
+// degraded one. Guarding here and not inside each helper keeps it one fact in one place — the
+// first attempt guarded Store, and the next run died on catKey.
 function pickedBms(it) {
+  if (typeof Store === 'undefined' || typeof catKey !== 'function') return null;
   const want = getBmsPicks()[catKey(it)];
   if (!want) return null;
   return bmsChoices().find((r) => r.name === want) || null;
