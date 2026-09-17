@@ -2339,7 +2339,7 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'supplier_costs', 'supplier_prices', 'biz_payments'];
+const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'bms_pick', 'supplier_costs', 'supplier_prices', 'biz_payments'];
 
 const Sync = {
   session: null,
@@ -2879,7 +2879,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v288';
+const HUB_BUILD = 'v289';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5009,7 +5009,8 @@ function estimateBatteryCost(it, b2b = false) {
   // size, which is the ₪45 that made a 48V 20Ah read ₪716 instead of ₪671. The 60V and 72V
   // bands are still unsourced; see bmsFor in cost-model.mjs. sync-prices compares this
   // function against packCost on every catalogue row, so the two cannot drift.
-  const bms = powerTool ? 0 : (V >= 72 && !b2b ? 180 : 105);
+  const picked = typeof pickedBms === 'function' ? pickedBms(it) : null;
+  const bms = powerTool ? 0 : (picked ? picked.ils : (V >= 72 && !b2b ? 180 : 105));
   // Nickel off his own plate prices (2026-08-31): every shape on the shelf works out at
   // ~$0.0109 per hole and a pack needs two contacts per cell. Folding does not double it —
   // he folds the same piece to shorten it, not to add a second. This is the TRUE cost; the
@@ -5040,20 +5041,55 @@ function batteryCostParts(it, b2b = false) {
   const cells = S * P;
   // His own answers, 2026-09-16/17: 60A on most packs (₪105), 100A at 72V retail (₪180), but
   // 60A at 72V for a DEALER — a dealer pack is a different build, not a discount.
-  const bms = powerTool ? 0 : (V >= 72 && !b2b ? 180 : 105);
+  // A chosen board beats the voltage band every time — the band is a guess, the pick is a
+  // row from the supplier list.
+  const picked = typeof pickedBms === 'function' ? pickedBms(it) : null;
+  const bms = powerTool ? 0 : (picked ? picked.ils : (V >= 72 && !b2b ? 180 : 105));
   const nickel = cells * 2 * 0.0109 * 3 * 1.371;
   const materials = powerTool ? 30 : 60;
   const hours = cells * 0.0061 + (powerTool ? 0.75 : 1.68);
   const labour = hours * 45;
   const parts = [
     { k: cells + ' תאים', v: cells * cellPrice },
-    { k: 'BMS', v: bms },
+    { k: picked ? 'BMS · ' + picked.name : 'BMS', v: bms, picked: !!picked, freightBasis: picked && picked.freightBasis },
     { k: 'ניקל', v: nickel },
     { k: 'שרינק, חיווט ומחברים', v: materials },
   ].filter((x) => x.v > 0);
   const materialsTotal = parts.reduce((s, x) => s + x.v, 0);
   return { parts, materialsTotal, hours, labour, total: materialsTotal + labour, S, P, cells };
 }
+// ---- choosing the BMS per product -------------------------------------------------
+// The board was guessed from the VOLTAGE alone, which is how a 48V 20Ah pack came to be
+// costed with a ₪150 board it never had. These are the real rows he buys, by model.
+function getBmsPicks() { return Store.get('bms_pick') || {}; }
+function bmsChoices() {
+  return supplierRows()
+    .filter((r) => /^BMS/i.test(r.cat || '') && Number(r.usd) > 0 && !/חיישן|כבל|מאריך/.test(r.name || ''))
+    .map((r) => ({
+      name: r.name, cat: r.cat, usd: Number(r.usd),
+      ils: Math.round(supplierIls(r, true, true)),
+      // How the freight inside that figure was arrived at. Saying "no freight" here was wrong:
+      // supplierIls falls back to a per-category SHARE OF VALUE. The caveat worth showing is
+      // that the fallback is 39%, measured on nickel, copper and shrink — heavy cheap material,
+      // nothing like a BMS.
+      freightBasis: r.frUsd != null ? 'quoted' : (r.kg != null ? 'weight' : 'category'),
+    }))
+    .sort((a, b) => a.ils - b.ils);
+}
+function pickedBms(it) {
+  const want = getBmsPicks()[catKey(it)];
+  if (!want) return null;
+  return bmsChoices().find((r) => r.name === want) || null;
+}
+function setBmsPick(i, name) {
+  const it = PRICING[i], picks = getBmsPicks();
+  if (name) picks[catKey(it)] = name; else delete picks[catKey(it)];
+  Store.set('bms_pick', picks);
+  updateCostProfit(i);
+  const box = document.getElementById('costBreakdown');
+  if (box) box.innerHTML = costBreakdownHtml(it);
+}
+
 function productCost(it, b2b = false) {
   const costs = getCosts();
   const k = catKey(it);
@@ -5305,6 +5341,30 @@ function costBreakdownHtml(it) {
     + '</div>';
 }
 
+// A select rather than a search box: 34 rows is a list you scan, and the price is the thing
+// being chosen so it belongs in the option text.
+function bmsPickerHtml(i) {
+  const it = PRICING[i];
+  if (!/סוללות/.test(it.cat) || /כלי עבודה/.test(it.cat)) return '';
+  let rows;
+  try { rows = bmsChoices(); } catch (e) { rows = []; }
+  if (!rows.length) {
+    return '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">אין רשימת ספקים מיובאת — אפשר לייבא בדף עלויות ספקים.</div>';
+  }
+  const cur = (getBmsPicks()[catKey(it)]) || '';
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const opts = rows.map((r) =>
+    '<option value="' + esc(r.name) + '"' + (r.name === cur ? ' selected' : '') + '>'
+    + esc(r.name) + ' — ' + shek(r.ils) + (r.freightBasis === 'category' ? ' ⚠' : '') + '</option>').join('');
+  const picked = rows.find((r) => r.name === cur);
+  return '<div class="form-row" style="margin-top:8px;"><label>BMS</label>'
+    + '<select class="form-select" onchange="setBmsPick(' + i + ', this.value)" style="width:190px;">'
+    + '<option value="">לפי מתח (ברירת מחדל)</option>' + opts + '</select></div>'
+    + (picked && picked.freightBasis === 'category'
+      ? '<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ המשלוח בשורה הזו מחושב כאחוז מהערך — שיעור שנמדד על ניקל, נחושת ושרינק ולא על BMS. הוסף משקל או מחיר משלוח בעלויות ספקים כדי לדייק.</div>'
+      : '');
+}
+
 function openCostEditor(i) {
   const it = PRICING[i], costs = getCosts(), k = catKey(it);
   const cur = costs[k] != null ? costs[k] : (productCost(it) || '');
@@ -5313,7 +5373,8 @@ function openCostEditor(i) {
      <div class="form-row"><label>עלות לי ₪</label><input type="number" class="form-input" id="costInput" value="${cur}" min="0" step="10" oninput="updateCostProfit(${i})"></div>
      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">פרטי: ${typeof it.retail === 'number' ? shek(it.retail) : it.retail} · עסקי: ${typeof it.b2b === 'number' ? shek(it.b2b) : it.b2b}</div>
      <div id="costProfit" style="margin-top:8px;"></div>
-     ${costBreakdownHtml(it)}
+     ${bmsPickerHtml(i)}
+     <div id="costBreakdown">${costBreakdownHtml(it)}</div>
      <div style="font-size:11px;color:var(--text-light);margin-top:4px;">לסוללות מוצג אומדן מהתאים עד שמזינים עלות ספק מדויקת.</div>`,
     `<button class="btn btn-primary" onclick="saveCost(${i})">💾 שמור</button>
      <button class="btn btn-secondary btn-sm" onclick="clearCost(${i})">איפוס</button>

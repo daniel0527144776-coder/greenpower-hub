@@ -154,6 +154,12 @@ jobs:
       - name: Wages owed by month, and months with no expense data
         run: node test/test-money-honesty.mjs
 
+      # The board was guessed from the VOLTAGE alone, which is how a 48V pack was costed with
+      # a ₪150 BMS it never had. The picker reads the real rows from the SYNCED supplier key —
+      # index.html is public, so those prices must never be baked into it.
+      - name: Choosing the BMS, and keeping supplier prices out of a public file
+        run: node test/test-bms-pick.mjs
+
       - name: The accountant import, and the trip to the cloud
         run: node test/test-import-and-sync.mjs
 
