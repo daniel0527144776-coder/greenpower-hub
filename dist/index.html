@@ -2879,7 +2879,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v291';
+const HUB_BUILD = 'v292';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5010,7 +5010,12 @@ function estimateBatteryCost(it, b2b = false) {
   // bands are still unsourced; see bmsFor in cost-model.mjs. sync-prices compares this
   // function against packCost on every catalogue row, so the two cannot drift.
   const picked = typeof pickedBms === 'function' ? pickedBms(it) : null;
-  const bms = powerTool ? 0 : (picked ? picked.ils : (V >= 72 && !b2b ? 180 : 105));
+  // DALY STOPS AT 20S (Daniel, 2026-09-17: "רק חכמים כי Daly מוגבל ל-20s"). 72V is exactly 20S,
+  // the last voltage it can do; 84V is 23S and 88V is 24S, so both must have a smart board —
+  // the 100A rung of his JK list, $41.88 landed = ₪172 against the DALY 100A's ₪180. A physical
+  // limit, not a preference. Mirrors BMS_LADDER in cost-model.mjs; sync-prices checks every row.
+  const bmsBand = seriesForV(V) > 20 ? 172 : (V >= 72 && !b2b ? 180 : 105);
+  const bms = powerTool ? 0 : (picked ? picked.ils : bmsBand);
   // Nickel off his own plate prices (2026-08-31): every shape on the shelf works out at
   // ~$0.0109 per hole and a pack needs two contacts per cell. Folding does not double it —
   // he folds the same piece to shorten it, not to add a second. This is the TRUE cost; the
@@ -5051,7 +5056,12 @@ function batteryCostParts(it, b2b = false) {
   // A chosen board beats the voltage band every time — the band is a guess, the pick is a
   // row from the supplier list.
   const picked = typeof pickedBms === 'function' ? pickedBms(it) : null;
-  const bms = powerTool ? 0 : (picked ? picked.ils : (V >= 72 && !b2b ? 180 : 105));
+  // DALY STOPS AT 20S (Daniel, 2026-09-17: "רק חכמים כי Daly מוגבל ל-20s"). 72V is exactly 20S,
+  // the last voltage it can do; 84V is 23S and 88V is 24S, so both must have a smart board —
+  // the 100A rung of his JK list, $41.88 landed = ₪172 against the DALY 100A's ₪180. A physical
+  // limit, not a preference. Mirrors BMS_LADDER in cost-model.mjs; sync-prices checks every row.
+  const bmsBand = seriesForV(V) > 20 ? 172 : (V >= 72 && !b2b ? 180 : 105);
+  const bms = powerTool ? 0 : (picked ? picked.ils : bmsBand);
   const nickel = cells * 2 * 0.0109 * 3 * 1.371;
   const materials = powerTool ? 30 : 60;
   // The enclosure. Two families buy one and the rest are shrink-wrapped, which is why a 48V
@@ -5090,6 +5100,26 @@ function bmsAmpsFromName(name) {
 // printed: "BMS: DALY 30A/90A" is 30 continuous and 90 peak.
 const BMS_PEAK_MULT = 3;
 
+// How many cells in series each brand can be wired to. His figures, 2026-09-17:
+// "Daly מוגבל ל-20s", "ANT זה 17S-24S וה JK מ 10S-24S". Mirrors BMS_S_RANGE in cost-model.mjs.
+// Read off the supplier CATEGORY, not the model name — the categories are exactly
+// "BMS DALY" / "BMS חכם JK" / "BMS ANT", while the names vary far too much to parse.
+const BMS_S_RANGE = { DALY: [3, 20], JK: [10, 24], ANT: [17, 24] };
+// Can this brand be wired to a pack of packS cells in series? A top-level FUNCTION on purpose:
+// a selftest has to be able to replace it, and a top-level  is not reachable as a window
+// property — the same const-vs-window trap that once left Sync.push never firing.
+function bmsFitsPack(brand, packS) {
+  if (packS == null || !brand || !BMS_S_RANGE[brand]) return true;
+  return packS >= BMS_S_RANGE[brand][0] && packS <= BMS_S_RANGE[brand][1];
+}
+function bmsBrandKey(cat) {
+  const c = String(cat || '');
+  if (/DALY/i.test(c)) return 'DALY';
+  if (/JK/i.test(c)) return 'JK';
+  if (/ANT/i.test(c)) return 'ANT';
+  return null;                       // JBD and "מותגים אחרים": no range known, so no claim
+}
+
 function getBmsPicks() { return Store.get('bms_pick') || {}; }
 function bmsChoices() {
   return supplierRows()
@@ -5098,6 +5128,7 @@ function bmsChoices() {
       name: r.name, cat: r.cat, usd: Number(r.usd),
       ils: Math.round(supplierIls(r, true, true)),
       amps: bmsAmpsFromName(r.name),
+      brand: bmsBrandKey(r.cat),
       // How the freight inside that figure was arrived at. Saying "no freight" here was wrong:
       // supplierIls falls back to a per-category SHARE OF VALUE. The caveat worth showing is
       // that the fallback is 39%, measured on nickel, copper and shrink — heavy cheap material,
@@ -5388,11 +5419,18 @@ function bmsPickerHtml(i) {
     return '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">אין רשימת ספקים מיובאת — אפשר לייבא בדף עלויות ספקים.</div>';
   }
   const cur = (getBmsPicks()[catKey(it)]) || '';
+  // The pack's own series count, so a board that physically cannot be wired to it is marked.
+  // MARKED, not hidden: the ranges are his and so is the list, and a board he knows works
+  // should not disappear because a table here disagrees.
+  const vm = String(it.name).match(/(\d+)V/);
+  const packS = vm ? seriesForV(+vm[1]) : null;
+  const fits = (r) => bmsFitsPack(r.brand, packS);
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const opts = rows.map((r) =>
     '<option value="' + esc(r.name) + '"' + (r.name === cur ? ' selected' : '') + '>'
     + esc(r.name) + (r.amps ? ' · שיא ' + (r.amps * BMS_PEAK_MULT) + 'A' : '')
-    + ' — ' + shek(r.ils) + (r.freightBasis === 'category' ? ' ⚠' : '') + '</option>').join('');
+    + ' — ' + shek(r.ils) + (r.freightBasis === 'category' ? ' ⚠' : '')
+    + (fits(r) ? '' : ' ⛔ לא מתאים ל-' + packS + 'S') + '</option>').join('');
   const picked = rows.find((r) => r.name === cur);
   return '<div class="form-row" style="margin-top:8px;"><label>BMS</label>'
     + '<select class="form-select" onchange="setBmsPick(' + i + ', this.value)" style="width:190px;">'

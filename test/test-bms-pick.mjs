@@ -68,7 +68,12 @@ await page.evaluate(() => { const o = document.getElementById('loginOverlay'); i
 
 if (SELFTEST) {
   // Put the old behaviour back: the board is whatever the voltage says, whatever he picked.
-  await page.evaluate(() => { window.pickedBms = () => null; });
+  await page.evaluate(() => {
+    window.pickedBms = () => null;
+    // ...and make every board fit every pack, which is what the picker did before the brand
+    // S-ranges went in: a DALY 13S was selectable for an 88V pack.
+    window.bmsFitsPack = () => true;
+  });
 }
 
 const list = await page.evaluate(() => bmsChoices().map((r) => ({ name: r.name, ils: r.ils, basis: r.freightBasis, amps: r.amps })));
@@ -98,6 +103,27 @@ const opts = await page.evaluate(() => {
 });
 check('the picker prints the peak beside the price', opts.some((o) => /שיא 180A/.test(o)), opts);
 check('and x3 on the big board too', opts.some((o) => /שיא 600A/.test(o)), opts);
+
+// ---------------------------------------------------------------- the brand S-ranges
+// His figures, 2026-09-17: DALY stops at 20S, JK is 10S-24S, ANT is 17S-24S. 84V is 23S and
+// 88V is 24S, so DALY physically cannot be wired to either — the picker offered it anyway.
+const byPack = await page.evaluate(() => {
+  const opts = (re) => {
+    const i = PRICING.findIndex((x) => re.test(x.name) && /אינדורו/.test(x.cat) && /PRO/.test(x.cat));
+    if (i < 0) return null;
+    const d = document.createElement('div'); d.innerHTML = bmsPickerHtml(i);
+    return [...d.querySelectorAll('option')].map((o) => o.textContent);
+  };
+  return { big: opts(/^88V /), small: opts(/^48V /) };
+});
+const marked = (list, re) => (list || []).filter((o) => re.test(o) && /⛔/.test(o)).length;
+check('on an 88V (24S) pack a DALY board is marked as not fitting',
+  marked(byPack.big, /DALY 13S/) === 1, byPack.big);
+check('but the JK and the ANT are not — both go to 24S',
+  marked(byPack.big, /JK BD6A|ANT 420A/) === 0, byPack.big);
+check('on a 48V (13S) pack the ANT is marked instead — it starts at 17S',
+  marked(byPack.small, /ANT 420A/) === 1, byPack.small);
+check('and the DALY is fine there', marked(byPack.small, /DALY 13S/) === 0, byPack.small);
 
 const effect = await page.evaluate(() => {
   const i = PRICING.findIndex((x) => /^48V 20Ah$/.test(x.name) && /אופניים.*CLASSIC/.test(x.cat));
