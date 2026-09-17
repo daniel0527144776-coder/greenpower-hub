@@ -1376,10 +1376,10 @@ body { min-height: 100vh; }
       <tr><td>תא CLASSIC · EVE 50E</td><td class="gpd-n">₪7.34 ליחידה</td></tr>
       <tr><td>תא ADVANCED · Tenpower 50SG</td><td class="gpd-n">₪8.86</td></tr>
       <tr><td>תא PRO · EVE 50PL</td><td class="gpd-n">₪12.15</td></tr>
-      <tr><td>BMS לפי מתח</td><td class="gpd-n">₪105 / ₪200 / ₪260</td></tr>
+      <tr><td>BMS לפי מתח</td><td class="gpd-n">₪105 / ₪105 / ₪180</td></tr>
       <tr><td>ניקל · חבילה של 120 תאים</td><td class="gpd-n">₪11</td></tr>
       <tr><td>חומרים</td><td class="gpd-n">₪60</td></tr>
-      <tr><td>עבודה</td><td class="gpd-n">(תאים×0.0061 + 1.68) שעות × ₪60</td></tr>
+      <tr><td>עבודה</td><td class="gpd-n">(תאים×0.0061 + 1.68) שעות × ₪45</td></tr>
     </table></div>
     <p>את הסכום מחלקים ב־(1 − רווחיות) ומעגלים ל־₪50. הרווחיות עולה עם הקיבולת:
     CLASSIC 43%→58%,
@@ -2879,7 +2879,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v286';
+const HUB_BUILD = 'v287';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4985,7 +4985,7 @@ function catKey(it) { return it.cat + '|' + it.name; }
 function getCosts() { return Store.get('costs') || {}; }
 
 // Estimate build cost of a battery from its V/Ah + tier (PRO/CLASSIC)
-function estimateBatteryCost(it) {
+function estimateBatteryCost(it, b2b = false) {
   // Ah must accept a decimal: the power-tool ladder is 5/7.5/10 since 2026-07-17, and
   // (\d+)Ah silently failed to match "7.5Ah" — returning null, i.e. no cost estimate at all.
   const m = it.name.match(/(\d+)V\s*(\d+(?:\.\d+)?)Ah/);
@@ -5009,7 +5009,7 @@ function estimateBatteryCost(it) {
   // size, which is the ₪45 that made a 48V 20Ah read ₪716 instead of ₪671. The 60V and 72V
   // bands are still unsourced; see bmsFor in cost-model.mjs. sync-prices compares this
   // function against packCost on every catalogue row, so the two cannot drift.
-  const bms = powerTool ? 0 : (V >= 72 ? 260 : V >= 60 ? 200 : 105);
+  const bms = powerTool ? 0 : (V >= 72 && !b2b ? 180 : 105);
   // Nickel off his own plate prices (2026-08-31): every shape on the shelf works out at
   // ~$0.0109 per hole and a pack needs two contacts per cell. Folding does not double it —
   // he folds the same piece to shorten it, not to add a second. This is the TRUE cost; the
@@ -5020,13 +5020,14 @@ function estimateBatteryCost(it) {
   // rebuild, which skips BMS/wiring/shrink), at ₪60/hr — Daniel does everything but the
   // welding, so this is a skilled tech's replacement cost, not the ₪180 shop rate. The old
   // 3 min/cell claimed 39 hours for a 200Ah pack. Must match packCost in the generator.
-  const labor = (cells * 0.0061 + (powerTool ? 0.75 : 1.68)) * 60;
+  // ₪45/hr — his instruction 2026-09-17, cost only; the published prices are unchanged.
+  const labor = (cells * 0.0061 + (powerTool ? 0.75 : 1.68)) * 45;
   return Math.round(cellsCost + bms + nickel + materials + labor);
 }
 // The same figures, itemised. A single number invited "that is not right" with no way to see
 // WHICH part was not right — and both parts he named were invisible: the BMS band and the fact
 // that his own hours were in there at all.
-function batteryCostParts(it) {
+function batteryCostParts(it, b2b = false) {
   const m = it.name.match(/(\d+)V\s*(\d+(?:\.\d+)?)Ah/);
   if (!m) return null;
   const V = +m[1], Ah = +m[2];
@@ -5037,11 +5038,13 @@ function batteryCostParts(it) {
   const S = seriesForV(V);
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
   const cells = S * P;
-  const bms = powerTool ? 0 : (V >= 72 ? 260 : V >= 60 ? 200 : 105);
+  // His own answers, 2026-09-16/17: 60A on most packs (₪105), 100A at 72V retail (₪180), but
+  // 60A at 72V for a DEALER — a dealer pack is a different build, not a discount.
+  const bms = powerTool ? 0 : (V >= 72 && !b2b ? 180 : 105);
   const nickel = cells * 2 * 0.0109 * 3 * 1.371;
   const materials = powerTool ? 30 : 60;
   const hours = cells * 0.0061 + (powerTool ? 0.75 : 1.68);
-  const labour = hours * 60;
+  const labour = hours * 45;
   const parts = [
     { k: cells + ' תאים', v: cells * cellPrice },
     { k: 'BMS', v: bms },
@@ -5051,11 +5054,11 @@ function batteryCostParts(it) {
   const materialsTotal = parts.reduce((s, x) => s + x.v, 0);
   return { parts, materialsTotal, hours, labour, total: materialsTotal + labour, S, P, cells };
 }
-function productCost(it) {
+function productCost(it, b2b = false) {
   const costs = getCosts();
   const k = catKey(it);
   if (costs[k] != null) return costs[k];                 // manual override (exact)
-  if (/סוללות/.test(it.cat)) return estimateBatteryCost(it); // batteries: estimate from cells
+  if (/סוללות/.test(it.cat)) return estimateBatteryCost(it, b2b); // batteries: estimate from cells
   if (/^תאי ליתיום/.test(it.cat)) {                          // single cells: known to the agora
     const c = CELL_UNIT_COST[String(it.name).split(/\s+—\s+/)[0]];
     if (c != null) return c;
@@ -5246,7 +5249,9 @@ function renderCatalog() {
       const priceStr = typeof price === 'number' ? shek(price) : price;
       let extra = '';
       if (showCost) {
-        const cost = productCost(it);
+        // In עסקי mode a 72V pack is the dealer build (60A board), so the margin column is
+        // measured against what that pack actually costs to make.
+        const cost = productCost(it, priceMode === 'b2b');
         if (typeof price === 'number' && cost != null) {
           const profit = price - cost, marg = price > 0 ? Math.round(profit / price * 100) : 0;
           extra = `<div style="font-size:10.5px;color:var(--text-muted);">עלות ~${shek(cost)} · רווח ${shek(profit)} (${marg}%)</div>`;
@@ -5284,7 +5289,7 @@ function catExpandAll(open) {
 // What the estimate is made of, itemised, with his own hours kept OUT of the materials
 // subtotal and shown on their own line — that separation is the second thing he asked about.
 function costBreakdownHtml(it) {
-  const b = typeof batteryCostParts === 'function' ? batteryCostParts(it) : null;
+  const b = typeof batteryCostParts === 'function' ? batteryCostParts(it, priceMode === 'b2b') : null;
   if (!b) return '';
   const row = (k, v, muted) =>
     '<div style="display:flex;justify-content:space-between;font-size:11.5px;' + (muted ? 'color:var(--text-muted);' : '') + 'padding:1px 0;">'
@@ -5294,7 +5299,7 @@ function costBreakdownHtml(it) {
     + b.parts.map((p) => row(p.k, p.v, true)).join('')
     + '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;">'
     + '<span>סה\"כ חומרים</span><span>' + shek(Math.round(b.materialsTotal)) + '</span></div>'
-    + row('עבודה — ' + b.hours.toFixed(1) + " שע' × ₪60 (הזמן שלך)", b.labour, true)
+    + row('עבודה — ' + b.hours.toFixed(1) + " שע' × ₪45 (הזמן שלך)", b.labour, true)
     + '<div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;">'
     + '<span>סה"כ</span><span>' + shek(Math.round(b.total)) + '</span></div>'
     + '</div>';
