@@ -1213,6 +1213,11 @@ body { min-height: 100vh; }
       <label>אימייל</label>
       <input type="email" class="form-input-wide" id="bizEmail" placeholder="greenpower.service.israel@gmail.com" style="width: 180px;">
     </div>
+    <div class="form-row">
+      <label>קישור ביקורת גוגל</label>
+      <input type="url" class="form-input-wide" id="bizReview" placeholder="https://g.page/r/.../review" style="width: 180px;">
+    </div>
+    <div class="info-banner" style="margin-bottom:8px;"><span>⭐</span><div style="font-size:11px;">מ-Google Business Profile: <b>בקשת ביקורות</b> ← העתק קישור. אחרי שתדביק כאן, יופיע כפתור "בקש ביקורת" על כל תיקון שנמסר. הקישור חייב להיות שלך — קישור של עסק אחר ישלח את הלקוחות לדרג מישהו אחר.</div></div>
 
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">💳 פרטי תשלום להצעת מחיר</div>
@@ -2879,7 +2884,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v295';
+const HUB_BUILD = 'v296';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5817,6 +5822,7 @@ function repairRow(j) {
       <div class="btn-group" style="margin-top:8px;">
         ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="callCustomer('${j.customerPhone}')">💬 הודעה</button>` : ''}
         <button class="btn btn-sm btn-secondary" onclick="navigateTo('warranties')">🛡️ אחריות</button>
+        <button class="btn btn-sm btn-secondary" onclick="askForReview('${j.id}')">⭐ בקש ביקורת</button>
         <button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','orders')">✏️ ערוך</button>
             <button class="btn btn-sm btn-secondary" onclick="openStickerFor('job','${j.id}')">🏷️ מדבקה</button>
         <button class="btn btn-sm btn-danger" onclick="deleteJob('${j.id}','orders')">🗑️</button>
@@ -7996,6 +8002,37 @@ function jobSummaryText(jobId) {
     : `💳 *יתרת זכות:* ${Math.round(-acc.balance).toLocaleString('he-IL')}₪`);
   return L.join('\n');
 }
+/*
+ * The review request, as TEXT to copy — the shape every outgoing message here takes since
+ * 2026-08-23 ("שיהיה רק טקסט ואני יעתיק לבד ללקוח"). Not a wa.me link: on his phone a link is a
+ * request for a browser that does not exist. Not automatic either — see the note on this patch:
+ * every Facebook-free way to SEND one risks the number the business runs on.
+ *
+ * It names the battery, because "how was the repair" three days later is a question the
+ * customer has to reconstruct, and it thanks before it asks.
+ */
+function askForReview(jobId) {
+  const j = (jobs || []).find((x) => String(x.id) === String(jobId));
+  if (!j) return;
+  if (!bizDetails.review) {
+    // Say what is missing and where it comes from, rather than composing a message with a
+    // dead link in it.
+    alert('לא הוגדר קישור ביקורת.\n\nהגדרות ← פרטי העסק ← קישור ביקורת גוגל.\nאת הקישור לוקחים מ-Google Business Profile: בקשת ביקורות ← העתק קישור.');
+    return;
+  }
+  const spec = [j.voltage ? j.voltage + 'V' : '', j.capacity ? j.capacity + 'Ah' : ''].filter(Boolean).join(' ');
+  const who = (j.customerName || '').split(' ')[0];
+  showMessageToCopy(
+    'שלום' + (who ? ' ' + who : '') + ' 👋\n\n'
+    + 'תודה שבחרת בנו' + (spec ? ' לסוללת ה-' + spec : '') + '.\n'
+    + 'אשמח לדעת שהכול עובד כמו שצריך.\n\n'
+    + 'אם היית מרוצה — חוות דעת קצרה בגוגל עוזרת לנו מאוד:\n'
+    + bizDetails.review + '\n\n'
+    + (bizDetails.name || 'Green Power')
+    + (bizDetails.phone ? '\n' + bizDetails.phone : '')
+  );
+}
+
 function copyJobSummary(jobId) {
   const txt = jobSummaryText(jobId);
   if (!txt) return;
@@ -8788,6 +8825,9 @@ function saveBizDetails() {
     address: document.getElementById('bizAddress').value,
     id: document.getElementById('bizId').value,
     email: document.getElementById('bizEmail').value,
+    // The Google review link. A setting and not a constant: nobody but Daniel has his Place ID,
+    // and a wrong link sends his customers to review another business.
+    review: document.getElementById('bizReview').value,
     // Payment details live here — in the synced `biz` key behind the login — and never
     // in the HTML. hub.energylabgreen.com serves this file to anyone who asks (the gate
     // is JS-side only), so a hardcoded account number would be published.
@@ -9033,6 +9073,7 @@ function init() {
   document.getElementById('bizAddress').value = bizDetails.address || '';
   document.getElementById('bizId').value = bizDetails.id || '';
   document.getElementById('bizEmail').value = bizDetails.email || '';
+  document.getElementById('bizReview').value = bizDetails.review || '';
   document.getElementById('bizBit').value = bizDetails.bit || '';
   document.getElementById('bizBankHolder').value = bizDetails.bankHolder || '';
   document.getElementById('bizBankName').value = bizDetails.bankName || '';

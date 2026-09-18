@@ -166,6 +166,12 @@ jobs:
       - name: The enclosure, and why two families cost more than the rest
         run: node test/test-enclosure.mjs
 
+      # Asking for a Google review. Deliberately not automatic and not a link: every
+      # Facebook-free way to SEND one risks the number the business runs on, and that phone
+      # has no browser. The check that matters is that no message goes out with a dead link.
+      - name: The Google review request
+        run: node test/test-review-request.mjs
+
       - name: The accountant import, and the trip to the cloud
         run: node test/test-import-and-sync.mjs
 
