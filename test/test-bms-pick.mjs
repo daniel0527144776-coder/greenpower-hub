@@ -84,8 +84,15 @@ check('a row with a quoted shipping price says so', (list.find((r) => /ANT/.test
 check('a row with a weight says so', (list.find((r) => /100A/.test(r.name)) || {}).basis === 'weight', list);
 // The honest one: freight IS counted on a bare row, via a share of value — claiming "no
 // freight" there was wrong, and the caveat is that the share was measured on nickel and copper.
-check('a bare row reports the borrowed category rate, not "no freight"',
-  (list.find((r) => /48V 60A/.test(r.name)) || {}).basis === 'category', list);
+// A bare row used to fall all the way to a share of VALUE — 39%, measured on nickel, copper and
+// shrink. Freight is charged by mass, so a share of value scales with the wrong quantity
+// entirely: it made the expensive boards look the most expensive to ship when they are the same
+// 200g as the cheap ones. Daniel gave the weight on 2026-09-18 ("לוח שוקל ~150-250 גרם") and a
+// bare row is now costed at 0.2kg.
+check('a bare row is costed by the typical weight, not a share of its value',
+  (list.find((r) => /48V 60A/.test(r.name)) || {}).basis === 'typical', list);
+check('and NO board falls back to the borrowed nickel-and-copper rate any more',
+  !list.some((r) => r.freightBasis === 'category' || r.basis === 'category'), list);
 
 // ---------------------------------------------------------------- the peak (2026-09-17)
 // Daniel: "וגם לא לשכוח לכתוב את הפיק של BMS" / "זה פי 3 לכל סוג". Not a rule invented here —
