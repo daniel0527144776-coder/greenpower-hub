@@ -109,7 +109,9 @@ const opts = await page.evaluate(() => {
   return [...d.querySelectorAll('option')].map((o) => o.textContent);
 });
 check('the picker prints the peak beside the price', opts.some((o) => /שיא 180A/.test(o)), opts);
-check('and x3 on the big board too', opts.some((o) => /שיא 600A/.test(o)), opts);
+// The multiplier is PER BRAND — Daniel, 2026-09-20: "רק DALY פי 3". A JK 200A peaks at
+// 400A, not 600A, and asserting 600 here is what let a wrong figure ship for three days.
+check('a JK doubles rather than trebles', opts.some((o) => /JK BD6A.*שיא 400A/.test(o)), opts);
 
 // ---------------------------------------------------------------- the brand S-ranges
 // His figures, 2026-09-17: DALY stops at 20S, JK is 10S-24S, ANT is 17S-24S. 84V is 23S and

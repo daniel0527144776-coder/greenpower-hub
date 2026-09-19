@@ -2884,7 +2884,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v299';
+const HUB_BUILD = 'v300';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5213,7 +5213,18 @@ function bmsAmpsFromName(name) {
 }
 // Peak is x3 on every type (his answer, 2026-09-17) — the rule the sticker has always
 // printed: "BMS: DALY 30A/90A" is 30 continuous and 90 peak.
-const BMS_PEAK_MULT = 3;
+// Peak over continuous, PER BRAND. Daniel, 2026-09-20: "רק DALY פי 3" — correcting a "פי 3
+// לכל סוג" I had applied to every board, which showed a JK 200A as a 600A peak.
+//
+// These ratios are taken from the sticker's own BMS list, which has had them right all along
+// and is what a customer can hold against anything the hub prints.
+const BMS_PEAK_MULT = { DALY: 3, JK: 2, ANT: 2.5 };
+const BMS_PEAK_DEFAULT = 2;     // an unknown brand gets the most conservative of the three
+function bmsPeak(brand, amps) {
+  if (!amps) return null;
+  const m = BMS_PEAK_MULT[brand] || BMS_PEAK_DEFAULT;
+  return Math.round(amps * m);
+}
 
 // How many cells in series each brand can be wired to. His figures, 2026-09-17:
 // "Daly מוגבל ל-20s", "ANT זה 17S-24S וה JK מ 10S-24S". Mirrors BMS_S_RANGE in cost-model.mjs.
@@ -5546,7 +5557,7 @@ function bmsPickerHtml(i) {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const opts = rows.map((r) =>
     '<option value="' + esc(r.name) + '"' + (r.name === cur ? ' selected' : '') + '>'
-    + esc(r.name) + (r.amps ? ' · שיא ' + (r.amps * BMS_PEAK_MULT) + 'A' : '')
+    + esc(r.name) + (bmsPeak(r.brand, r.amps) ? ' · שיא ' + bmsPeak(r.brand, r.amps) + 'A' : '')
     + ' — ' + shek(r.ils) + (r.freightBasis === 'category' ? ' ⚠' : '')
     + (fits(r) ? '' : ' ⛔ לא מתאים ל-' + packS + 'S') + '</option>').join('');
   const picked = rows.find((r) => r.name === cur);
