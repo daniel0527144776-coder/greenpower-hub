@@ -172,6 +172,12 @@ jobs:
       - name: The Google review request
         run: node test/test-review-request.mjs
 
+      # A sold battery consumes cells and a board in the workshop. The sales path looked for
+      # a shelf row named "72V 30Ah", found nothing, and set stockTaken anyway — so the pack
+      # never came off the books at all. The repair path had always done it correctly.
+      - name: A sold battery leaves the shelf like a built one
+        run: node test/test-sale-stock.mjs
+
       - name: The accountant import, and the trip to the cloud
         run: node test/test-import-and-sync.mjs
 

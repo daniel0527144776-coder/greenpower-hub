@@ -2884,7 +2884,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v296';
+const HUB_BUILD = 'v297';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5923,6 +5923,35 @@ function nextSaleStatus(status) {
   const i = SALE_STATUS_SEQ.indexOf(status || 'הצעה');
   return SALE_STATUS_SEQ[(i + 1) % SALE_STATUS_SEQ.length];
 }
+/*
+ * What a catalogue battery row consumes off the shelf: its cells and its board.
+ *
+ * The repair path has always known this — saveJob deducts S x P cells and one BMS on a full
+ * build. A SALE of the same pack knew nothing about it and looked for a shelf row named
+ * "72V 30Ah", which does not exist in a lab that stocks cells.
+ *
+ * Returns null for anything that is not a battery, so a charger or a controller falls through
+ * to the name match that already works for it.
+ */
+function batteryStockParts(it) {
+  const m = String(it.name || '').match(/(\d+)V\s*(\d+(?:\.\d+)?)Ah/);
+  if (!m || !/סוללות/.test(String(it.cat || ''))) return null;
+  const V = +m[1], Ah = +m[2];
+  const powerTool = /כלי עבודה/.test(it.cat);
+  // Power tools are EVE 25P 18650s at 2.5Ah and reuse the tool's own board — no BMS line,
+  // exactly as the cost model has it.
+  const cellModel = powerTool ? 'EVE 25P'
+    : /PRO/.test(it.cat) ? 'EVE 50PL' : /ADVANCED/.test(it.cat) ? 'Tenpower 50SG' : 'EVE 50E';
+  const cellAh = powerTool ? 2.5 : 5;
+  const S = seriesForV(V);
+  const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
+  // The shelf labels a board by SERIES COUNT and amps ("BMS 20S 100A") because that is what
+  // decides whether one fits — the same name saveJob builds. Amps step with voltage the way
+  // bmsAmpsFor does in cost-model.mjs: 100A from 72V up, 60A below.
+  const bmsName = powerTool ? null : 'BMS ' + S + 'S ' + (V >= 72 ? 100 : 60) + 'A';
+  return { cellModel, cells: S * P, bmsName };
+}
+
 // Goods leave the shelf when the sale becomes real money, not when the quote is written — a
 // quote that is never paid must not move stock. `stockTaken` makes it happen exactly once:
 // the status cycles round (הצעה → שולם → נמסר → הצעה), so without the flag a second lap would
@@ -5937,11 +5966,30 @@ function takeOrderStock(o) {
   const took = [], missed = [];
   for (const it of o.items) {
     if (it.custom) continue;                     // a one-off line has no shelf row by definition
-    const hit = inventoryTake(it.name, Number(it.qty) || 1, o.customer || '');
-    if (hit && hit.matched) took.push(`${hit.name} (${hit.left})`);
+    const qty = Number(it.qty) || 1;
+    // By name first: a charger, a controller, a display — anything stocked as a unit — and a
+    // finished pack too, if one is ever on the shelf.
+    const hit = inventoryTake(it.name, qty, o.customer || '');
+    if (hit && hit.matched) { took.push(`${hit.name} (${hit.left})`); continue; }
+    // Not there under its own name. If it is a battery then it was BUILT, and what left the
+    // shelf is cells and a board — the same decomposition the repair path has always done.
+    const parts = batteryStockParts(it);
+    if (!parts) { missed.push(it.name); continue; }
+    const c = inventoryDeduct(parts.cellModel, parts.cells * qty, o.customer || '');
+    if (c && c.matched) took.push(`${c.name} ×${parts.cells * qty} (${c.left})`);
+    else missed.push(parts.cellModel);
+    if (parts.bmsName) {
+      const b = inventoryTake(parts.bmsName, qty, o.customer || '');
+      if (b && b.matched) took.push(`${b.name} (${b.left})`);
+      else missed.push(parts.bmsName);
+    }
   }
   o.stockTaken = true;
   if (took.length) showNotice('ירד מהמלאי: ' + took.join(' · '));
+  // `missed` was collected and never shown, so a sale that matched nothing said nothing — and
+  // the stock figure was wrong with no sign of it. Only he can say which shelf row it should
+  // have hit, so it has to be said out loud.
+  if (missed.length) showNotice('⚠ לא נמצא במלאי ולא הופחת: ' + missed.join(' · '));
 }
 function cycleOrderStatus(id) {
   const orders = Store.get('orders') || [], o = orders.find(x => x.id === id);
