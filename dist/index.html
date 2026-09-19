@@ -2884,7 +2884,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v301';
+const HUB_BUILD = 'v302';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5570,22 +5570,42 @@ function bmsPickerHtml(i) {
   const packS = vm ? seriesForV(+vm[1]) : null;
   const fits = (r) => bmsFitsPack(r.brand, packS, r.name);
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-  // Sorted by price, the CHEAPEST boards came first — and the cheapest are the small ones,
-  // which is how a 12V board ended up at the top of the list for a 72V pack. Fit decides the
-  // order now; price only sorts within each group.
   const one = (r) =>
     '<option value="' + esc(r.name) + '"' + (r.name === cur ? ' selected' : '') + '>'
     + esc(r.name) + (bmsPeak(r.brand, r.amps) ? ' · שיא ' + bmsPeak(r.brand, r.amps) + 'A' : '')
     + ' — ' + shek(r.ils) + (r.freightBasis === 'category' ? ' ⚠' : '') + '</option>';
-  const good = rows.filter(fits), bad = rows.filter((r) => !fits(r));
-  // Never hidden, only moved and labelled: the list is his, and a board he knows works should
-  // not disappear because a rule here says otherwise.
-  const opts = (good.length ? '<optgroup label="מתאימים ל-' + packS + 'S">' + good.map(one).join('') + '</optgroup>' : '')
-    + (bad.length ? '<optgroup label="לא מתאימים ל-' + packS + 'S">' + bad.map(one).join('') + '</optgroup>' : '');
+
+  // A board with the wrong series count cannot be wired to this pack, so it is not an option —
+  // it is REMOVED, not demoted. Grouping it under "does not fit" still left 23 wrong answers in
+  // a menu of 33.
+  let show = rows.filter(fits);
+  // ...unless nothing on his list fits, in which case an empty picker would leave him no way to
+  // record the board he actually used. Then everything is shown, under a group that says why.
+  const noneFit = !show.length;
+  if (noneFit) show = rows;
+
+  // Grouped by manufacturer, which is how he buys. The key comes from the supplier CATEGORY —
+  // "BMS DALY", "BMS חכם JK", "BMS ANT" — and a row whose brand is not one of those keeps the
+  // first word of its own name rather than being lumped into "other".
+  const label = (r) => r.brand || (String(r.name || '').trim().split(/\s+/)[0] || 'אחר');
+  const byBrand = new Map();
+  for (const r of show) {
+    const k = label(r);
+    if (!byBrand.has(k)) byBrand.set(k, []);
+    byBrand.get(k).push(r);
+  }
+  // Most boards first, so the manufacturer he actually has a choice within is at the top.
+  const groups = [...byBrand.entries()].sort((a, b) => b[1].length - a[1].length);
+  const head = noneFit ? ' — אף לוח לא מתאים ל-' + packS + 'S' : '';
+  const opts = groups.map(([brand, list]) =>
+    '<optgroup label="' + esc(brand) + head + '">' + list.map(one).join('') + '</optgroup>').join('');
   const picked = rows.find((r) => r.name === cur);
   return '<div class="form-row" style="margin-top:8px;"><label>BMS</label>'
     + '<select class="form-select" onchange="setBmsPick(' + i + ', this.value)" style="width:190px;">'
     + '<option value="">לפי מתח (ברירת מחדל)</option>' + opts + '</select></div>'
+    + (noneFit
+      ? '<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ אף לוח ברשימת הספקים אינו ' + packS + 'S. כל הלוחות מוצגים — ודא התאמה לפני בחירה.</div>'
+      : '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + show.length + ' לוחות מתאימים ל-' + packS + 'S, לפי יצרן.</div>')
     + (picked && picked.freightBasis === 'category'
       ? '<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ המשלוח בשורה הזו מחושב כאחוז מהערך — שיעור שנמדד על ניקל, נחושת ושרינק ולא על BMS. הוסף משקל או מחיר משלוח בעלויות ספקים כדי לדייק.</div>'
       : picked && picked.freightBasis === 'typical'

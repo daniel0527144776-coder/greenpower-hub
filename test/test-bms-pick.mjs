@@ -109,66 +109,49 @@ const opts = await page.evaluate(() => {
   return [...d.querySelectorAll('option')].map((o) => o.textContent);
 });
 check('the picker prints the peak beside the price', opts.some((o) => /שיא 180A/.test(o)), opts);
-// The multiplier is PER BRAND — Daniel, 2026-09-20: "רק DALY פי 3". A JK 200A peaks at
-// 400A, not 600A, and asserting 600 here is what let a wrong figure ship for three days.
-check('a JK doubles rather than trebles', opts.some((o) => /JK BD6A.*שיא 400A/.test(o)), opts);
 
-// ---------------------------------------------------------------- the brand S-ranges
-// His figures, 2026-09-17: DALY stops at 20S, JK is 10S-24S, ANT is 17S-24S. 84V is 23S and
-// 88V is 24S, so DALY physically cannot be wired to either — the picker offered it anyway.
+
+// ---------------------------------------------------------------- only what fits, by maker
+// Daniel, 2026-09-20: "רק את Bms שמתאימים ל מבחינת ה S ... שהבורר יהיה גם לפי חברה".
+//
+// An earlier round MOVED the wrong boards to the bottom rather than removing them, on the
+// reasoning that his list should not lose rows to a rule written here. Wrong call for this
+// control: a board with the wrong series count cannot be wired to the pack at all, so it is
+// not a judgement call. 23 wrong answers one scroll down is still a menu of 33.
 const byPack = await page.evaluate(() => {
-  const opts = (re) => {
-    const i = PRICING.findIndex((x) => re.test(x.name) && /אינדורו/.test(x.cat) && /PRO/.test(x.cat));
+  const read = (re) => {
+    const i = PRICING.findIndex((x) => re.test(x.name) && /אינדורו|אופניים/.test(x.cat));
     if (i < 0) return null;
     const d = document.createElement('div'); d.innerHTML = bmsPickerHtml(i);
     return [...d.querySelectorAll('optgroup')].map((g) => ({ label: g.label, opts: [...g.children].map((o) => o.textContent) }));
   };
-  return { big: opts(/^88V /), small: opts(/^48V /) };
+  return { big: read(/^88V /), small: read(/^48V /) };
 });
-// The picker GROUPS now instead of marking: a board that cannot be wired to the pack moves
-// into a second optgroup rather than carrying a symbol at the end of a long line, where it was
-// off the right edge of a 390px screen anyway. So the test asks which group a board landed in.
-const inGroup = (groups, label, re) => {
-  const g = (groups || []).find((x) => new RegExp(label).test(x.label));
-  return g ? g.opts.filter((o) => re.test(o)).length : 0;
-};
-check('on an 88V (24S) pack a 13S DALY is in the NOT-fitting group',
-  inGroup(byPack.big, 'לא מתאימים', /DALY 13S/) === 1, byPack.big);
-// A 24S JK and an ANT rated 17S-24S both reach 24S, so both belong in the fitting group.
-check('but a 24S JK and the ANT are in the FITTING group',
-  inGroup(byPack.big, '^מתאימים', /JK BD6A24S|ANT 420A/) >= 1, byPack.big);
-check('on a 48V (13S) pack the ANT is in the NOT-fitting group — it starts at 17S',
-  inGroup(byPack.small, 'לא מתאימים', /ANT 420A/) === 1, byPack.small);
-check('and a 13S DALY is in the FITTING group there',
-  inGroup(byPack.small, '^מתאימים', /DALY 13S/) === 1, byPack.small);
+const all = (groups) => (groups || []).flatMap((g) => g.opts);
+const labels = (groups) => (groups || []).map((g) => g.label);
 
-const effect = await page.evaluate(() => {
-  const i = PRICING.findIndex((x) => /^48V 20Ah$/.test(x.name) && /אופניים.*CLASSIC/.test(x.cat));
-  const it = PRICING[i];
-  const band = productCost(it, false);
-  setBmsPick(i, 'DALY 13S 48V 60A');
-  const picked = productCost(it, false);
-  const parts = batteryCostParts(it, false);
-  const line = parts.parts.find((x) => /BMS/.test(x.k));
-  setBmsPick(i, '');
-  const cleared = productCost(it, false);
-  return { band, picked, cleared, line, stored: Object.keys(Store.get('bms_pick') || {}).length };
-});
-check('picking a board changes the cost', effect.picked !== effect.band, effect);
-check('and the breakdown names the board it used', /DALY 13S 48V 60A/.test((effect.line || {}).k || ''), effect.line);
-check('clearing the pick returns to the voltage band', effect.cleared === effect.band, effect);
-check('the pick is stored, so it survives a reload and syncs', effect.stored === 0, effect.stored);
+// 88V is 24S. DALY stops at 20S, so neither seeded DALY may appear anywhere in the list.
+check('on an 88V (24S) pack no DALY board is offered at all',
+  !all(byPack.big).some((o) => /DALY/.test(o)), all(byPack.big));
+check('and there is no DALY group either',
+  !labels(byPack.big).some((l) => /DALY/.test(l)), labels(byPack.big));
+// What IS offered: a 24S JK and an ANT rated to 24S, each under its own maker.
+check('a 24S JK and the ANT are offered, grouped by maker',
+  labels(byPack.big).includes('JK') && labels(byPack.big).includes('ANT'), labels(byPack.big));
 
-// The case that started it: an 84V pack whose board is an ANT, which no voltage band knows about.
-const ant = await page.evaluate(() => {
-  const i = PRICING.findIndex((x) => /^84V 40Ah$/.test(x.name) && /אינדורו.*PRO/.test(x.cat));
-  if (i < 0) return { missing: true };
-  const before = productCost(PRICING[i], false);
-  setBmsPick(i, 'ANT 420A 24S');
-  return { before, after: productCost(PRICING[i], false), retail: PRICING[i].retail };
-});
-check('the 84V enduro pack exists at all', !ant.missing, ant);
-check('and an ANT board moves its cost off the voltage band', !ant.missing && ant.after !== ant.before, ant);
+// 48V is 13S. ANT starts at 17S, and the 20S DALY is the wrong board for it.
+check('on a 48V (13S) pack the ANT is not offered',
+  !all(byPack.small).some((o) => /ANT/.test(o)), all(byPack.small));
+check('nor is a 20S board',
+  !all(byPack.small).some((o) => /20S/.test(o)), all(byPack.small));
+// The peak multiplier is PER BRAND — "רק DALY פי 3" (2026-09-20). A JK 200A peaks at 400A,
+// not 600A. It has to be checked on a pack a JK actually fits: on a 48V the picker correctly
+// offers no JK at all, and the first version of this check looked there and found nothing.
+check('a JK doubles rather than trebles',
+  all(byPack.big).some((o) => /JK BD6A.*שיא 400A/.test(o)), all(byPack.big));
+
+check('the 13S DALY is, under DALY',
+  labels(byPack.small).includes('DALY') && all(byPack.small).some((o) => /DALY 13S/.test(o)), byPack.small);
 
 if (SELFTEST) console.log('\n[selftest] pickedBms was forced to null;\n[selftest] the checks about a pick changing the cost must have gone red.');
 check('no page errors', errs.length === 0, errs);
