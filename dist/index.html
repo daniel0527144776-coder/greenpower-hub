@@ -2884,7 +2884,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v300';
+const HUB_BUILD = 'v301';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5234,7 +5234,22 @@ const BMS_S_RANGE = { DALY: [3, 20], JK: [10, 24], ANT: [17, 24] };
 // Can this brand be wired to a pack of packS cells in series? A top-level FUNCTION on purpose:
 // a selftest has to be able to replace it, and a top-level  is not reachable as a window
 // property — the same const-vs-window trap that once left Sync.push never firing.
-function bmsFitsPack(brand, packS) {
+// The series count THIS board is built for, from its own name. Most state it exactly
+// Most state it exactly in the model code; a few state it
+// as a range. Returns null when the name says nothing, and then the brand range
+// is all there is to go on.
+function bmsSeriesFromName(name) {
+  const all = (String(name || '').match(/(\d+)\s*S(?![A-Za-z])/g) || [])
+    .map((x) => parseInt(x, 10)).filter((x) => x >= 3 && x <= 32);
+  if (!all.length) return null;
+  return { min: Math.min(...all), max: Math.max(...all) };
+}
+
+function bmsFitsPack(brand, packS, name) {
+  // The board's own rating decides. A DALY 3S is a DALY, and the brand goes to 20S, but that
+  // board will never be wired to a 20S pack — which is exactly what the brand-only test missed.
+  const own = bmsSeriesFromName(name);
+  if (own) return packS >= own.min && packS <= own.max;
   if (packS == null || !brand || !BMS_S_RANGE[brand]) return true;
   return packS >= BMS_S_RANGE[brand][0] && packS <= BMS_S_RANGE[brand][1];
 }
@@ -5553,13 +5568,20 @@ function bmsPickerHtml(i) {
   // should not disappear because a table here disagrees.
   const vm = String(it.name).match(/(\d+)V/);
   const packS = vm ? seriesForV(+vm[1]) : null;
-  const fits = (r) => bmsFitsPack(r.brand, packS);
+  const fits = (r) => bmsFitsPack(r.brand, packS, r.name);
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-  const opts = rows.map((r) =>
+  // Sorted by price, the CHEAPEST boards came first — and the cheapest are the small ones,
+  // which is how a 12V board ended up at the top of the list for a 72V pack. Fit decides the
+  // order now; price only sorts within each group.
+  const one = (r) =>
     '<option value="' + esc(r.name) + '"' + (r.name === cur ? ' selected' : '') + '>'
     + esc(r.name) + (bmsPeak(r.brand, r.amps) ? ' · שיא ' + bmsPeak(r.brand, r.amps) + 'A' : '')
-    + ' — ' + shek(r.ils) + (r.freightBasis === 'category' ? ' ⚠' : '')
-    + (fits(r) ? '' : ' ⛔ לא מתאים ל-' + packS + 'S') + '</option>').join('');
+    + ' — ' + shek(r.ils) + (r.freightBasis === 'category' ? ' ⚠' : '') + '</option>';
+  const good = rows.filter(fits), bad = rows.filter((r) => !fits(r));
+  // Never hidden, only moved and labelled: the list is his, and a board he knows works should
+  // not disappear because a rule here says otherwise.
+  const opts = (good.length ? '<optgroup label="מתאימים ל-' + packS + 'S">' + good.map(one).join('') + '</optgroup>' : '')
+    + (bad.length ? '<optgroup label="לא מתאימים ל-' + packS + 'S">' + bad.map(one).join('') + '</optgroup>' : '');
   const picked = rows.find((r) => r.name === cur);
   return '<div class="form-row" style="margin-top:8px;"><label>BMS</label>'
     + '<select class="form-select" onchange="setBmsPick(' + i + ', this.value)" style="width:190px;">'

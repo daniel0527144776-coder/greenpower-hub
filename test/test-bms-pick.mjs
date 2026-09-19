@@ -121,18 +121,26 @@ const byPack = await page.evaluate(() => {
     const i = PRICING.findIndex((x) => re.test(x.name) && /אינדורו/.test(x.cat) && /PRO/.test(x.cat));
     if (i < 0) return null;
     const d = document.createElement('div'); d.innerHTML = bmsPickerHtml(i);
-    return [...d.querySelectorAll('option')].map((o) => o.textContent);
+    return [...d.querySelectorAll('optgroup')].map((g) => ({ label: g.label, opts: [...g.children].map((o) => o.textContent) }));
   };
   return { big: opts(/^88V /), small: opts(/^48V /) };
 });
-const marked = (list, re) => (list || []).filter((o) => re.test(o) && /⛔/.test(o)).length;
-check('on an 88V (24S) pack a DALY board is marked as not fitting',
-  marked(byPack.big, /DALY 13S/) === 1, byPack.big);
-check('but the JK and the ANT are not — both go to 24S',
-  marked(byPack.big, /JK BD6A|ANT 420A/) === 0, byPack.big);
-check('on a 48V (13S) pack the ANT is marked instead — it starts at 17S',
-  marked(byPack.small, /ANT 420A/) === 1, byPack.small);
-check('and the DALY is fine there', marked(byPack.small, /DALY 13S/) === 0, byPack.small);
+// The picker GROUPS now instead of marking: a board that cannot be wired to the pack moves
+// into a second optgroup rather than carrying a symbol at the end of a long line, where it was
+// off the right edge of a 390px screen anyway. So the test asks which group a board landed in.
+const inGroup = (groups, label, re) => {
+  const g = (groups || []).find((x) => new RegExp(label).test(x.label));
+  return g ? g.opts.filter((o) => re.test(o)).length : 0;
+};
+check('on an 88V (24S) pack a 13S DALY is in the NOT-fitting group',
+  inGroup(byPack.big, 'לא מתאימים', /DALY 13S/) === 1, byPack.big);
+// A 24S JK and an ANT rated 17S-24S both reach 24S, so both belong in the fitting group.
+check('but a 24S JK and the ANT are in the FITTING group',
+  inGroup(byPack.big, '^מתאימים', /JK BD6A24S|ANT 420A/) >= 1, byPack.big);
+check('on a 48V (13S) pack the ANT is in the NOT-fitting group — it starts at 17S',
+  inGroup(byPack.small, 'לא מתאימים', /ANT 420A/) === 1, byPack.small);
+check('and a 13S DALY is in the FITTING group there',
+  inGroup(byPack.small, '^מתאימים', /DALY 13S/) === 1, byPack.small);
 
 const effect = await page.evaluate(() => {
   const i = PRICING.findIndex((x) => /^48V 20Ah$/.test(x.name) && /אופניים.*CLASSIC/.test(x.cat));
