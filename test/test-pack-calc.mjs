@@ -129,11 +129,16 @@ const side = await page.evaluate(() => {
   useVehiclePack('Sur-Ron');
   calcPackDims();
   const d = document.getElementById('dimDraw');
-  return { svgs: d.querySelectorAll('svg').length, hasSide: /מבט מהצד/.test(d.textContent), hasBms: /BMS/.test(d.textContent) };
+  return { svgs: d.querySelectorAll('svg').length, hasSide: /מבט מהצד/.test(d.textContent),
+    hasBms: /BMS/.test(d.textContent), hasSideFn: typeof window.sideElevation === 'function' };
 });
-check('the drawing shows a plan AND an elevation', side.svgs >= 2, String(side.svgs));
-check('the elevation names the height', side.hasSide, String(side.hasSide));
-check('and shows the case allowance as part of it', side.hasBms, String(side.hasBms));
+// The side elevation was REMOVED on 2026-09-22 (Daniel asked for it gone). These assert its
+// absence rather than being deleted: a half-removed drawing leaves a live call to a function
+// that no longer exists, which fails in the console and not on screen — the same reason the
+// quick-pricer test was rewritten to check the feature is gone instead of dropping its checks.
+check('the drawing still shows the plan view', side.svgs >= 1, String(side.svgs));
+check('the side elevation is gone', !side.hasSide, String(side.hasSide));
+check('and nothing calls the function that drew it', !side.hasSideFn, String(side.hasSideFn));
 
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));

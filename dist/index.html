@@ -7339,29 +7339,7 @@ function nickelFor(P) {
 // The same block seen from the SIDE. Height is the measurement this project has least of, and
 // the one that decides whether a second layer is possible at all — a plan view cannot show it,
 // and every "will it fit" argument ends up there.
-function sideElevation(o, scale) {
-  const layerH = o.len + DIM_CAP;
-  const totalH = o.layers * layerH + (o.extra || 0);
-  const wMM = (o.cols - 1) * o.pitch + o.dia + 2 * DIM_WALL;
-  const w = Math.round(wMM * scale);
-  const h = Math.round(totalH * scale);
-  const capH = Math.round((o.extra || 0) * scale);
-  const rect = (y, height, opacity) =>
-    `<rect x="0" y="${y}" width="${w}" height="${height}" fill="currentColor" fill-opacity="${opacity}" stroke="currentColor" stroke-width="1"/>`;
-  const text = (y, s) => `<text x="6" y="${y}" font-size="10" fill="currentColor" opacity=".85">${s}</text>`;
-  let g = '';
-  if (capH > 0) {
-    g += rect(0, capH, 0.22) + text(Math.max(10, capH / 2 + 4), 'BMS ומארז');
-  }
-  for (let i = 0; i < o.layers; i++) {
-    const y = capH + i * Math.round(layerH * scale);
-    const hh = Math.round(layerH * scale);
-    g += rect(y, hh, 0.10 + i * 0.07) + text(y + hh / 2 + 4, `שכבה ${i + 1} · ${Math.round(o.len)} מ"מ`);
-  }
-  return `<div style="margin-top:8px;">` +
-    `<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px;">מבט מהצד · גובה ${Math.round(totalH)} מ"מ</div>` +
-    `<svg width="${w + 2}" height="${h + 2}" viewBox="0 0 ${w + 2} ${h + 2}" style="max-width:100%;">${g}</svg></div>`;
-}
+
 
 function drawPackLayout(o) {
   const box = document.getElementById("dimDraw");
@@ -7397,11 +7375,7 @@ function drawPackLayout(o) {
     lab(W / 2, H - 8, `${Math.round(wMM)} מ"מ · ${cols} תאים בשורה`) +
     `<g transform="translate(12,${H / 2}) rotate(-90)">` + lab(0, 0, `${Math.round(hMM)} מ"מ · ${rows} שורות`) + "</g>" +
     "</svg>" +
-    `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">עיגול = תא · הצללה = קבוצת ${P}P${layers > 1 ? ` · שכבה מתוך ${layers}` : ""}</div>` +
-    // The plan view cannot show height, and height is the measurement we have least of and the
-    // one that decides whether a second layer is even possible. Every "will it fit" argument
-    // ends up there, so it gets its own elevation rather than a number in a sentence.
-    (o.len ? sideElevation(o, scale) : "");
+    `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">עיגול = תא · הצללה = קבוצת ${P}P${layers > 1 ? ` · שכבה מתוך ${layers}` : ""}</div>`;
 }
 
 // Set once he types his own case allowance; from then on the voltage stops overwriting it.
@@ -7578,10 +7552,12 @@ function calcPackDims() {
     const perLayerN = Math.ceil(N / layers);
     const opts = recommendHolder(fmt, perLayerN, TL, TW, c.dia);
     const win = opts.find((o) => o.fits);
-    const chip = (o) => `<span class="dim-holder" style="color:${o.fits ? '#34d399' : 'var(--text-muted)'};">${o.fits ? '✓' : '✗'} ${HOLDER_NAME[o.h]}: ${o.n}</span>`;
+    // One holder on screen (Daniel, 2026-09-22). The other two were shown as ✓/✗ chips beside
+    // it, which is three numbers to read where the page has already decided which to use.
+    // recommendHolder still walks all three — the choice needs them — only the row is gone.
     const head = win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]}</b> — נכנסים ${win.n}, נשאר מקום ל-${win.spare} תאים`
       : `<b style="color:var(--danger);">אף מחזיק לא מכיל ${perLayerN} תאים ב-${TL}×${TW}</b>`;
-    out.innerHTML += `<div class="dim-rec">${head}<br><span style="opacity:.85;">${opts.map(chip).join('')}</span></div>`;
+    out.innerHTML += `<div class="dim-rec">${head}</div>`;
   }
   drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra });
   if (dimVehicle) {
@@ -7591,7 +7567,20 @@ function calcPackDims() {
       // Loud, and NOT a block. Most of these ceilings are AI estimates; refusing to compute
       // a pack on the strength of a guess would stop a build that is genuinely possible.
       // His call: warn hard, let him through.
-      const src = dimVehicle.tub ? 'נספרו' : (dimVehicle.src === 'AI' ? 'הערכת AI — לא נמדד' : 'לפי היצרן');
+      // A tub is not automatically a measurement. Eight rows carry one derived from the
+      // manufacturer's PACK size, which is real but is the battery, not the tray — so the
+      // string says which it is and this reads it rather than assuming.
+      // Three kinds of tub and they must not be flattened. The first version tested for
+      // /נמדד/, which is TRUE inside the words "לא נמדד" — so every derived row would have
+      // announced itself as measured, the precise mislabel the provenance was added to stop.
+      // Test for the negation first.
+      const tubTxt = String(dimVehicle.tub || '');
+      const src = !dimVehicle.tub
+        ? (dimVehicle.src === 'AI' ? 'הערכת AI — לא נמדד' : 'לפי היצרן')
+        : /לא נמדד/.test(tubTxt) ? 'לפי מידות הסוללה — לא נמדד'
+        : /יצרן השלדה/.test(tubTxt) ? 'לפי יצרן השלדה'
+        : /נמדד/.test(tubTxt) ? 'נמדד'
+        : 'לפי היצרן';
       out.innerHTML += `<div class="dim-over">⛔ ${N} תאים — ${dimVehicle.m} מחזיק ${cap} (${how}, ${src})<div class="dim-over-sub">חורג ב-${N - cap} תאים. מדוד לפני שאתה בונה.</div></div>`;
     }
   }
@@ -7701,8 +7690,10 @@ const VEHICLE_PACKS = [
   // single layer, so it fits without stacking — which is what a 170mm-deep box would allow.
   { g: 'אופנועים וריקשות', m: 'אופנוע שליחויות 72V', src: 'AI', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 8, max: 168,
     tub: '485×170×170 מ"מ (נמדד ע"י הלקוח)' },
-  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 32Ah', oemSrc: 'zippycycles', pack: '380×170×140 (XXL)', packSrc: 'citylion (XXL אחרי-שוק)' },
-  { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', src: 'AI', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, oem: '60V 45Ah', oemSrc: 'talaria.cn.com', pack: '381×171×140', packSrc: 'talaria.cn.com' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 32Ah', oemSrc: 'zippycycles', pack: '380×170×140 (XXL)', packSrc: 'citylion (XXL אחרי-שוק)' ,
+    tub: '380×170×140 מ"מ — לפי מידות הסוללה המקורית (citylion), לא נמדד' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', src: 'AI', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, oem: '60V 45Ah', oemSrc: 'talaria.cn.com', pack: '381×171×140', packSrc: 'talaria.cn.com' ,
+    tub: '381×171×140 מ"מ — לפי מידות הסוללה המקורית (talaria.cn.com), לא נמדד' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Enduro', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120 },
   // ── Bomber / Stealth Bomber: a frame FAMILY, and the versions are not close to each other.
   // 84 cells in the 48V frame against 300 in the Plus is 3.5x, so 'a Bomber came in' is not
@@ -7717,10 +7708,12 @@ const VEHICLE_PACKS = [
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber רגיל 3-12kW', src: 'מחושב', p: 21.5, s60: 16, p60: 9, s72: 20, p72: 7, max: 144,
     tub: '355×120×185 מ"מ (14\" × 4.7\" × 7.3\")', packSrc: 'theebikemotorkit — טבלת מידות' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber 72V מלא', src: 'יצרן', p: 21.5, s60: 16, p60: 11, s72: 20, p72: 9, max: 180,
-    oem: '72V 45Ah', oemSrc: 'risunmotor — אופניים מוכנים', pack: '425×250×78 (לא מלבני)', packSrc: 'risunmotor' },
+    oem: '72V 45Ah', oemSrc: 'risunmotor — אופניים מוכנים', pack: '425×250×78 (לא מלבני)', packSrc: 'risunmotor' ,
+    tub: '425×250×78 מ"מ — לפי מידות הסוללה המקורית (risunmotor), לא נמדד' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber Plus 15kW', src: 'יצרן', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 15, max: 300,
     oem: '72V 75Ah', oemSrc: 'theebikemotorkit — שלדת Plus' },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' ,
+    tub: '420×155×65 מ"מ — לפי מידות הסוללה המקורית (boardstore), לא נמדד' },
   // The OX is NOT the OXO. Its tub is two rectangles — 425x165 wide plus 60x140 narrow —
   // and Daniel counted what each bracket actually takes in it: 140 with no diagonal holder,
   // 136 on the 20.2/25.5 one, 126 on the 21.6/24.6 one. `caps` therefore beats `max` when
@@ -7731,9 +7724,12 @@ const VEHICLE_PACKS = [
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', src: 'AI', p: 21.5, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
     tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 100, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, upg: '60V 28Ah', upgSrc: 'falconpev.com.sg', max: 100, oem: '60V 28Ah', oemSrc: 'maxblinker', pack: '320×155×70', packSrc: 'falconpev' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 100, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' ,
+    tub: '315×133×57 מ"מ — לפי מידות הסוללה המקורית (falconpev), לא נמדד' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' ,
+    tub: '360×210×70 מ"מ — לפי מידות הסוללה המקורית (zeroelectricscooter), לא נמדד' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, upg: '60V 28Ah', upgSrc: 'falconpev.com.sg', max: 100, oem: '60V 28Ah', oemSrc: 'maxblinker', pack: '320×155×70', packSrc: 'falconpev' ,
+    tub: '320×155×70 מ"מ — לפי מידות הסוללה המקורית (falconpev), לא נמדד' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 11+', src: 'AI', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, max: 160, oem: '60V 31.2Ah', oemSrc: 'vsettscooters' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', src: 'AI', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, upg: '72V 40Ah', upgSrc: 'fluidfreeride.com', max: 240, oem: '72V 40Ah', oemSrc: 'fluidfreeride' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', src: 'AI', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 8, max: 160, oem: '60V 40Ah', oemSrc: 'maxblinker' },
@@ -7741,7 +7737,8 @@ const VEHICLE_PACKS = [
     tub: '463×139×75 מ"מ פנימי (נמדד 22.9.2026) · שכבה אחת · 21×7 בניקל ב׳' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', src: 'AI', p: 22.5, s60: 16, p60: 13, s72: 20, p72: 10, upg: '60V 35Ah', upgSrc: 'fluidfreeride.com', max: 208, oem: '60V 35Ah', oemSrc: 'fluidfreeride' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Wolf King GTR', src: 'AI', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 12, max: 240, oem: '72V 40Ah', oemSrc: 'kaaboeu' },
-  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, upg: '60V 24Ah', upgSrc: 'kaabousa.com', max: 120, oem: '60V 24.5Ah', oemSrc: 'ebikescooter', pack: '467×124×57', packSrc: 'ebikescooter' },
+  { g: 'קורקינטים · ללא הגבהה', m: 'Mantis King', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, upg: '60V 24Ah', upgSrc: 'kaabousa.com', max: 120, oem: '60V 24.5Ah', oemSrc: 'ebikescooter', pack: '467×124×57', packSrc: 'ebikescooter' ,
+    tub: '467×124×57 מ"מ — לפי מידות הסוללה המקורית (ebikescooter), לא נמדד' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Thunder 2/3', src: 'AI', p: 22.5, s60: 16, p60: 9, s72: 20, p72: 8, upg: '72V 40Ah', upgSrc: 'minimotorsusa.com', max: 160, oem: '72V 40Ah', oemSrc: 'dualtronusa' },
   { g: 'קורקינטים · ללא הגבהה', m: 'DT Storm', src: 'AI', p: 22.5, s60: 0, p60: 0, s72: 20, p72: 8, upg: '72V 35Ah', upgSrc: 'minimotorsusa.com', max: 160 },
   { g: 'קורקינטים · ללא הגבהה', m: 'Achilleus', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 35Ah', oemSrc: 'dualtron-shop' },
