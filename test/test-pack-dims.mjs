@@ -199,8 +199,11 @@ check('a 21.35mm 50SG is flagged in a 21.5mm bracket', /לא נכנס/.test(clea
 check('a 21.15mm 50E in the same bracket is not', !/לא נכנס/.test(clear.eOk), clear.eOk.slice(-80));
 check('and a honeycomb row pitch under the diameter is fine', !/לא נכנס/.test(clear.honey), clear.honey.slice(-80));
 
-// One 21700 bracket is 10x15 holes. Anything bigger is two pieces butted together, which is a
-// thing to order and a seam in the build.
+// One 21700 bracket is 10x15 holes, and a bigger block is two pieces butted together. The page
+// USED to say so on screen; Daniel had that line removed on 2026-09-22. These assert it is gone
+// rather than being deleted — the same rule the quick pricer left behind. A half-removed
+// feature leaves a live call to something that no longer exists, and that fails in the console
+// instead of on screen. BRACKET_MAX itself is deliberately kept: it is the real sheet size.
 const pieces = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   set('dimCell', '21700-50e'); set('dimHolder', 'square'); set('dimV', 72); set('dimAh', 60); set('dimPerRow', 20); calcPackDims();
@@ -208,8 +211,9 @@ const pieces = await page.evaluate(() => {
   set('dimAh', 10); set('dimPerRow', 10); calcPackDims();
   return { big, small: document.getElementById('dimResult').textContent };
 });
-check('a 240-cell layout says it needs more than one bracket', /חלקי תושבת/.test(pieces.big), pieces.big.slice(-70));
-check('a small pack does not', !/חלקי תושבת/.test(pieces.small), pieces.small.slice(-70));
+check('the bracket-pieces line is gone on a 240-cell layout', !/חלקי תושבת/.test(pieces.big), pieces.big.slice(-70));
+check('and on a small pack too', !/חלקי תושבת/.test(pieces.small), pieces.small.slice(-70));
+check('but the layout itself still computes', /תצורה/.test(pieces.big), pieces.big.slice(0, 60));
 
 const nickels = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
