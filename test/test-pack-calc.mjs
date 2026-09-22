@@ -132,6 +132,21 @@ check('a deep enough tray is left alone', !/נמוכה מדי/.test(heights.deep
 check('a compound tub has no height read from it', !/נמוכה מדי/.test(heights.compound),
   heights.compound.replace(/<[^>]*>/g, '').slice(0, 90));
 
+// ---- 4c. the 18650 offer that comes with a shallow tray ----
+// An 18650 is 65mm against the 21700's 70.15, so it stands where the 21700 cannot — and where
+// neither stands, the smaller diameter still fits more across and more up.
+check('a shallow tray offers the 18650 builds', /אפשרויות 18650/.test(heights.shallow),
+  heights.shallow.replace(/<[^>]*>/g, '').slice(-140));
+check('and names both cells', /EVE 26V/.test(heights.shallow) && /EVE 25P/.test(heights.shallow),
+  heights.shallow.replace(/<[^>]*>/g, '').slice(-140));
+// The margin is read off the live price list. When that lookup fails the page says so instead
+// of inventing a number — which is honest, and was also the bug: the field is retail, not
+// price, so every reference row read undefined.
+check('and prices them from a real margin', /מחיר ₪/.test(heights.shallow) && !/אין שורת ייחוס/.test(heights.shallow),
+  heights.shallow.replace(/<[^>]*>/g, '').slice(-140));
+check('a deep tray is not offered 18650s', !/אפשרויות 18650/.test(heights.deep),
+  heights.deep.replace(/<[^>]*>/g, '').slice(-110));
+
 // ---- 5. over capacity warns, and does not block ----
 const over = await page.evaluate(() => {
   useVehiclePack('Zero 10X');

@@ -2884,7 +2884,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v308';
+const HUB_BUILD = 'v309';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5100,7 +5100,85 @@ function catKey(it) { return it.cat + '|' + it.name; }
 function getCosts() { return Store.get('costs') || {}; }
 
 // Estimate build cost of a battery from its V/Ah + tier (PRO/CLASSIC)
-function estimateBatteryCost(it, b2b = false) {
+// What to build when the tray is too shallow for a standing 21700.
+//
+// An 18650 is 65mm against 70.15, so it stands in a 70mm tray where the 21700 does not, and
+// on those vehicles that is worth more than any holder choice. Where even the 18650 cannot
+// stand it is laid down the same way, and the smaller diameter still wins — more fit across
+// and more fit up.
+//
+// Two cells, his: EVE 26V at the CLASSIC margin, EVE 25P at the ADVANCED one.
+const SHALLOW_CELLS = [
+  { key: '18650-26v', label: 'EVE 26V', price: 4.03, tier: 'CLASSIC', tierRe: /CLASSIC/ },
+  { key: '18650-25p', label: 'EVE 25P', price: 5.14, tier: 'ADVANCED', tierRe: /ADVANCED/ },
+];
+
+function shallowCellOptions(TL, TW, TH, V, S) {
+  if (typeof DIM_CELLS === "undefined" || typeof fitCount !== "function") return "";
+  const rows = [];
+  for (const sc of SHALLOW_CELLS) {
+    const cd = DIM_CELLS[sc.key];
+    if (!cd) continue;
+    const stands = TH >= cd.len + DIM_CAP;
+    const pair = (DIM_PITCH[18650] || {})["diag-b"] || [21.5, 18.62];
+    const p = pair[0], rp = pair[1];
+    let cells, how;
+    if (stands) {
+      cells = fitCount(TL, TW, p, rp, cd.dia);
+      how = "עומדים";
+    } else {
+      const along = Math.max(0, Math.floor((TL - 2 * DIM_WALL) / cd.len));
+      const across = Math.max(0, Math.floor((TW - cd.dia - 2 * DIM_WALL) / rp) + 1);
+      const layers = Math.max(0, Math.floor((TH - 2 * DIM_WALL) / cd.dia));
+      cells = along * across * layers;
+      how = "שוכבים";
+    }
+    const P = Math.floor(cells / S);
+    if (P < 1) continue;
+    const Ah = Math.round(P * cd.ah * 10) / 10;
+    // Cost the real pack, then borrow the margin the catalogue already earns on that tier.
+    const fake = { name: V + "V " + Ah + "Ah", cat: "סוללות · סדרת " + sc.tier };
+    const cost = estimateBatteryCost(fake, false, { price: sc.price, ah: cd.ah });
+    if (cost == null) continue;
+    const ref = livePricedRow(V, sc.tierRe);
+    const price = ref ? Math.round(cost / (1 - ref.margin) / 50) * 50 : null;
+    const tail = price
+      ? " · מחיר " + fmtIls(price) + " <span style=\"opacity:.7;\">(מרווח " + Math.round(ref.margin * 100) + "% כמו " + sc.tier + ")</span>"
+      : " · <span style=\"opacity:.7;\">אין שורת ייחוס במחירון לחישוב מרווח</span>";
+    rows.push("<div style=\"margin-top:4px;\"><b>" + sc.label + "</b> (" + how + ") — " +
+      (S * P) + " תאים · " + S + "S" + P + "P · <b>" + Ah + "Ah</b>" + tail + "</div>");
+  }
+  if (!rows.length) return "";
+  return "<div class=\"dim-rec\" style=\"margin-top:6px;\"><b>אפשרויות 18650 לאמבטיה הזו</b>" + rows.join("") + "</div>";
+}
+
+// The margin the price list is ACTUALLY earning on a tier at a voltage — derived, never typed,
+// so a reprice moves it on its own. Taken from the row nearest 30Ah so one odd entry at the
+// end of a ladder cannot set it.
+function livePricedRow(V, tierRe) {
+  if (typeof PRICING === "undefined") return null;
+  const want = new RegExp("^" + V + "V ");
+  let best = null;
+  for (const it of PRICING) {
+    if (!it || !it.cat || !tierRe.test(it.cat) || !/סוללות/.test(it.cat)) continue;
+    if (!want.test(it.name)) continue;
+    // The field is `retail`, not `price` — PRICING rows are {cat, name, retail, b2b}. The
+    // first version read it.price, got undefined on all 55 rows, and reported 'no reference
+    // row' rather than a wrong number, which is the right way to be wrong but still wrong.
+    const price = +it.retail;
+    if (!price) continue;
+    const cost = estimateBatteryCost(it);
+    if (cost == null || cost >= price) continue;
+    const m = it.name.match(/(\d+(?:\.\d+)?)Ah/);
+    const d = Math.abs((m ? +m[1] : 0) - 30);
+    if (!best || d < best.d) best = { d: d, margin: 1 - cost / price, price: price };
+  }
+  return best;
+}
+// `cell` is optional and everything keeps working without it. With it, the caller states the
+// landed price and the amp-hours of the cell being costed — which is how the 18650 builds for
+// shallow trays get a price without a second copy of the cost model living somewhere else.
+function estimateBatteryCost(it, b2b = false, cell = null) {
   // Ah must accept a decimal: the power-tool ladder is 5/7.5/10 since 2026-07-17, and
   // (\d+)Ah silently failed to match "7.5Ah" — returning null, i.e. no cost estimate at all.
   const m = it.name.match(/(\d+)V\s*(\d+(?:\.\d+)?)Ah/);
@@ -5112,9 +5190,9 @@ function estimateBatteryCost(it, b2b = false) {
   // Must stay identical to packCost() in generate-battery-products.mjs.
   const powerTool = /כלי עבודה/.test(it.cat);
   // 3-tier landed cell cost (2026-07): PRO=EVE 50PL, ADVANCED=Tenpower 50SG, CLASSIC=EVE 50E
-  const cellPrice = powerTool ? 1.25 * 3.00 * 1.371
-    : /PRO/.test(it.cat) ? 12.15 : /ADVANCED/.test(it.cat) ? 8.86 : 7.34;
-  const cellAh = powerTool ? 2.5 : 5;     // 18650 25P vs 21700 ~5.0Ah
+  const cellPrice = cell ? cell.price : (powerTool ? 1.25 * 3.00 * 1.371
+    : /PRO/.test(it.cat) ? 12.15 : /ADVANCED/.test(it.cat) ? 8.86 : 7.34);
+  const cellAh = cell ? cell.ah : (powerTool ? 2.5 : 5);     // 18650 25P vs 21700 ~5.0Ah
   const S = seriesForV(V);   // MUST match packCost() — sync-prices verifies it every run
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
   const cells = S * P;
@@ -7570,6 +7648,7 @@ function calcPackDims() {
       const lying = along * across * lyingLayers;
       const pFit = Math.floor(lying / S);
       out.innerHTML += `<div class="dim-rec"><b style="color:var(--danger);">האמבטיה נמוכה מדי לתא עומד</b> — ${TH} מ"מ מול ${Math.round(standH)} שצריך. התאים חייבים לשכב.<br><span style="opacity:.85;">שוכבים: ${along} × ${across} × ${lyingLayers} שכבות = ${lying} תאים · עד ${pFit}P (${(pFit * c.ah).toFixed(0)}Ah ב-${V}V)</span></div>`;
+      out.innerHTML += shallowCellOptions(TL, TW, TH, V, S);
     } else {
     const perLayerN = Math.ceil(N / layers);
     const opts = recommendHolder(fmt, perLayerN, TL, TW, c.dia);
