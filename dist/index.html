@@ -7535,11 +7535,9 @@ function calcPackDims() {
   if (c.dia > tight - 0.2) {
     out.innerHTML += `<br><span style="font-size:11px;color:var(--danger);">⚠ ${c.label} בקוטר ${c.dia} מ"מ לא נכנס — המרחק הקצר ביותר בין מרכזים הוא ${tight.toFixed(1)} מ"מ</span>`;
   }
-  const bm = BRACKET_MAX[fmt];
-  if (bm && (cols > bm.cols || rows > bm.rows)) {
-    const pieces = Math.ceil(cols / bm.cols) * Math.ceil(rows / bm.rows);
-    out.innerHTML += `<br><span style="font-size:11px;color:var(--text-muted);">📐 מעבר לתבנית אחת (${bm.cols}×${bm.rows}) — צריך ${pieces} חלקי תושבת</span>`;
-  }
+  // The "📐 מעבר לתבנית אחת" line was removed on his instruction, 2026-09-22. BRACKET_MAX is
+  // kept: it is the real sheet size and the next thing that needs it should read it rather
+  // than re-measure a bracket.
   // Two contacts per cell, priced off his own stock rather than a rule of thumb.
   const holes = N * 2;
   const nickelIls = holes * NICKEL_USD_PER_HOLE * 3 * 1.371;
@@ -7576,12 +7574,10 @@ function calcPackDims() {
     const perLayerN = Math.ceil(N / layers);
     const opts = recommendHolder(fmt, perLayerN, TL, TW, c.dia);
     const win = opts.find((o) => o.fits);
-    // One holder on screen (Daniel, 2026-09-22). The other two were shown as ✓/✗ chips beside
-    // it, which is three numbers to read where the page has already decided which to use.
-    // recommendHolder still walks all three — the choice needs them — only the row is gone.
+    const chip = (o) => `<span class="dim-holder" style="color:${o.fits ? '#34d399' : 'var(--text-muted)'};">${o.fits ? '✓' : '✗'} ${HOLDER_NAME[o.h]}: ${o.n}</span>`;
     const head = win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]}</b> — נכנסים ${win.n}, נשאר מקום ל-${win.spare} תאים`
       : `<b style="color:var(--danger);">אף מחזיק לא מכיל ${perLayerN} תאים ב-${TL}×${TW}</b>`;
-    out.innerHTML += `<div class="dim-rec">${head}</div>`;
+    out.innerHTML += `<div class="dim-rec">${head}<br><span style="opacity:.85;">${opts.map(chip).join('')}</span></div>`;
     }
   }
   drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra });
