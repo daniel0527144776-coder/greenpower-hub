@@ -110,6 +110,28 @@ check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), 
 check('and it only recommends one that fits', rec.opts.every((o) => typeof o.fits === 'boolean' && o.n >= 0),
   rec.opts.map((o) => `${o.h}:${o.n}${o.fits ? '✓' : '✗'}`).join(' '));
 
+// ---- 4b. the tray HEIGHT, which was stored and never read until 2026-09-22 ----
+// A 21700 is 70.15mm long. A tray shallower than that cannot take a standing cell, and the
+// page used to recommend a holder for it anyway.
+const heights = await page.evaluate(() => {
+  const read = (name) => {
+    useVehiclePack(name);
+    calcPackDims();
+    return document.getElementById('dimResult').innerHTML;
+  };
+  return { shallow: read('Zero 10X'), deep: read('Nami Klima'), compound: read('Inokim OX') };
+});
+check('a shallow tray refuses a standing cell', /נמוכה מדי לתא עומד/.test(heights.shallow),
+  heights.shallow.replace(/<[^>]*>/g, '').slice(0, 90));
+check('and prices the cells lying down instead', /שוכבים:/.test(heights.shallow),
+  heights.shallow.replace(/<[^>]*>/g, '').slice(0, 120));
+check('a deep enough tray is left alone', !/נמוכה מדי/.test(heights.deep) && /מומלץ|אף מחזיק/.test(heights.deep),
+  heights.deep.replace(/<[^>]*>/g, '').slice(0, 90));
+// '425×165 + 60×140' is two rectangles, not L×W×H. Reading a loose third number out of it
+// invented a 60mm ceiling and hid this row's recommendation — it shipped that way for one run.
+check('a compound tub has no height read from it', !/נמוכה מדי/.test(heights.compound),
+  heights.compound.replace(/<[^>]*>/g, '').slice(0, 90));
+
 // ---- 5. over capacity warns, and does not block ----
 const over = await page.evaluate(() => {
   useVehiclePack('Zero 10X');

@@ -7546,9 +7546,33 @@ function calcPackDims() {
   out.innerHTML += `<br><span style="font-size:11px;color:var(--text-muted);">ניקל: ${holes} מגעים ≈ ₪${nickelIls.toFixed(0)} · תבנית ${nickelFor(P)}</span>`;
   // Which holder to reach for. Only meaningful once a vehicle with a tub is chosen — without
   // one there is nothing for the pack to fit INTO and every holder trivially "fits".
+  // THE HEIGHT IS READ NOW. It was pulled out of the string and dropped for as long as the
+  // tub field has existed, so a 58mm scooter tray and a 170mm motorcycle box produced the
+  // same answer. Daniel's Zero 10X — 455×134×58 against a 70.15mm cell — surfaced it.
   const tubM = dimVehicle && dimVehicle.tub ? String(dimVehicle.tub).match(/(\d+)\D+(\d+)/) : null;
+  // The height is read from a STRICT A×B×C and nothing looser. Matching any third number in
+  // the string grabbed the 60 out of the Inokim OX tub — '425×165 + 60×140', an L-shaped tray
+  // written as two rectangles — and announced a 60mm ceiling that does not exist, hiding that
+  // row's recommendation behind a too-shallow warning. A tub written any other way has no
+  // declared height, and the gate below stays out of the way instead of inventing one.
+  const tubH = dimVehicle && dimVehicle.tub
+    ? (String(dimVehicle.tub).match(/(\d+)\s*[×x]\s*(\d+)\s*[×x]\s*(\d+)/) || [])[3]
+    : null;
   if (tubM) {
     const TL = Math.max(+tubM[1], +tubM[2]), TW = Math.min(+tubM[1], +tubM[2]);
+    const TH = tubH ? +tubH : 0;
+    // A standing cell needs its whole length plus a little for the plate and the sleeve.
+    const standH = c.len + DIM_CAP;
+    if (TH && TH < standH) {
+      // Lying down: the length runs along the tray, the diameter across it and again up.
+      // Counted conservatively — a full diameter per layer, no nesting.
+      const along = Math.max(0, Math.floor((TL - 2 * DIM_WALL) / c.len));
+      const across = Math.max(0, Math.floor((TW - c.dia - 2 * DIM_WALL) / rowPitch) + 1);
+      const lyingLayers = Math.max(0, Math.floor((TH - 2 * DIM_WALL) / c.dia));
+      const lying = along * across * lyingLayers;
+      const pFit = Math.floor(lying / S);
+      out.innerHTML += `<div class="dim-rec"><b style="color:var(--danger);">האמבטיה נמוכה מדי לתא עומד</b> — ${TH} מ"מ מול ${Math.round(standH)} שצריך. התאים חייבים לשכב.<br><span style="opacity:.85;">שוכבים: ${along} × ${across} × ${lyingLayers} שכבות = ${lying} תאים · עד ${pFit}P (${(pFit * c.ah).toFixed(0)}Ah ב-${V}V)</span></div>`;
+    } else {
     const perLayerN = Math.ceil(N / layers);
     const opts = recommendHolder(fmt, perLayerN, TL, TW, c.dia);
     const win = opts.find((o) => o.fits);
@@ -7558,6 +7582,7 @@ function calcPackDims() {
     const head = win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]}</b> — נכנסים ${win.n}, נשאר מקום ל-${win.spare} תאים`
       : `<b style="color:var(--danger);">אף מחזיק לא מכיל ${perLayerN} תאים ב-${TL}×${TW}</b>`;
     out.innerHTML += `<div class="dim-rec">${head}</div>`;
+    }
   }
   drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra });
   if (dimVehicle) {
@@ -7724,8 +7749,8 @@ const VEHICLE_PACKS = [
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', src: 'AI', p: 21.5, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
     tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 100, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' ,
-    tub: '315×133×57 מ"מ — לפי מידות הסוללה המקורית (falconpev), לא נמדד' },
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 21.5, s60: 16, p60: 4, s72: 20, p72: 3, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 72, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' ,
+    tub: '455×134×58 מ"מ פנימי (נמדד 22.9.2026) · רדוד — התאים שוכבים' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' ,
     tub: '360×210×70 מ"מ — לפי מידות הסוללה המקורית (zeroelectricscooter), לא נמדד' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, upg: '60V 28Ah', upgSrc: 'falconpev.com.sg', max: 100, oem: '60V 28Ah', oemSrc: 'maxblinker', pack: '320×155×70', packSrc: 'falconpev' ,
