@@ -2884,7 +2884,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v309';
+const HUB_BUILD = 'v310';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5119,20 +5119,12 @@ function shallowCellOptions(TL, TW, TH, V, S) {
   for (const sc of SHALLOW_CELLS) {
     const cd = DIM_CELLS[sc.key];
     if (!cd) continue;
-    const stands = TH >= cd.len + DIM_CAP;
+    // Standing only. A cell too long for the tray is not offered at all — there is no
+    // sideways arrangement to fall back on.
+    if (TH < cd.len + DIM_CAP) continue;
     const pair = (DIM_PITCH[18650] || {})["diag-b"] || [21.5, 18.62];
     const p = pair[0], rp = pair[1];
-    let cells, how;
-    if (stands) {
-      cells = fitCount(TL, TW, p, rp, cd.dia);
-      how = "עומדים";
-    } else {
-      const along = Math.max(0, Math.floor((TL - 2 * DIM_WALL) / cd.len));
-      const across = Math.max(0, Math.floor((TW - cd.dia - 2 * DIM_WALL) / rp) + 1);
-      const layers = Math.max(0, Math.floor((TH - 2 * DIM_WALL) / cd.dia));
-      cells = along * across * layers;
-      how = "שוכבים";
-    }
+    const cells = fitCount(TL, TW, p, rp, cd.dia);
     const P = Math.floor(cells / S);
     if (P < 1) continue;
     const Ah = Math.round(P * cd.ah * 10) / 10;
@@ -5145,10 +5137,12 @@ function shallowCellOptions(TL, TW, TH, V, S) {
     const tail = price
       ? " · מחיר " + fmtIls(price) + " <span style=\"opacity:.7;\">(מרווח " + Math.round(ref.margin * 100) + "% כמו " + sc.tier + ")</span>"
       : " · <span style=\"opacity:.7;\">אין שורת ייחוס במחירון לחישוב מרווח</span>";
-    rows.push("<div style=\"margin-top:4px;\"><b>" + sc.label + "</b> (" + how + ") — " +
+    rows.push("<div style=\"margin-top:4px;\"><b>" + sc.label + "</b> — " +
       (S * P) + " תאים · " + S + "S" + P + "P · <b>" + Ah + "Ah</b>" + tail + "</div>");
   }
-  if (!rows.length) return "";
+  if (!rows.length) {
+    return "<div class=\"dim-rec\" style=\"margin-top:6px;\"><b style=\"color:var(--danger);\">גם תא 18650 לא עומד באמבטיה הזו</b> — צריך לפחות 69 מ\"מ גובה פנוי. מדוד שוב, או שזה כלי שלא בונים לו כאן.</div>";
+  }
   return "<div class=\"dim-rec\" style=\"margin-top:6px;\"><b>אפשרויות 18650 לאמבטיה הזו</b>" + rows.join("") + "</div>";
 }
 
@@ -7640,14 +7634,10 @@ function calcPackDims() {
     // A standing cell needs its whole length plus a little for the plate and the sleeve.
     const standH = c.len + DIM_CAP;
     if (TH && TH < standH) {
-      // Lying down: the length runs along the tray, the diameter across it and again up.
-      // Counted conservatively — a full diameter per layer, no nesting.
-      const along = Math.max(0, Math.floor((TL - 2 * DIM_WALL) / c.len));
-      const across = Math.max(0, Math.floor((TW - c.dia - 2 * DIM_WALL) / rowPitch) + 1);
-      const lyingLayers = Math.max(0, Math.floor((TH - 2 * DIM_WALL) / c.dia));
-      const lying = along * across * lyingLayers;
-      const pFit = Math.floor(lying / S);
-      out.innerHTML += `<div class="dim-rec"><b style="color:var(--danger);">האמבטיה נמוכה מדי לתא עומד</b> — ${TH} מ"מ מול ${Math.round(standH)} שצריך. התאים חייבים לשכב.<br><span style="opacity:.85;">שוכבים: ${along} × ${across} × ${lyingLayers} שכבות = ${lying} תאים · עד ${pFit}P (${(pFit * c.ah).toFixed(0)}Ah ב-${V}V)</span></div>`;
+      // No lying arrangement is offered. He builds with the cells standing on a terminal
+      // (2026-09-23), so a tray shorter than the cell is simply a tray this cell cannot go
+      // in — and the only remedy is a shorter cell, which is what the block below offers.
+      out.innerHTML += `<div class="dim-rec"><b style="color:var(--danger);">${c.label} לא נכנס לאמבטיה הזו</b> — גובה פנוי ${TH} מ"מ, ותא עומד צריך ${Math.round(standH)}.</div>`;
       out.innerHTML += shallowCellOptions(TL, TW, TH, V, S);
     } else {
     const perLayerN = Math.ceil(N / layers);
@@ -7825,7 +7815,7 @@ const VEHICLE_PACKS = [
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', src: 'AI', p: 21.5, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
     tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 21.5, s60: 16, p60: 4, s72: 20, p72: 3, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 72, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' ,
-    tub: '455×134×58 מ"מ פנימי (נמדד 22.9.2026) · רדוד — התאים שוכבים' },
+    tub: '455×134×58 מ"מ פנימי (נמדד 22.9.2026) · רדוד — אף תא לא עומד בו' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' ,
     tub: '360×210×70 מ"מ — לפי מידות הסוללה המקורית (zeroelectricscooter), לא נמדד' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Vsett 10+', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, upg: '60V 28Ah', upgSrc: 'falconpev.com.sg', max: 100, oem: '60V 28Ah', oemSrc: 'maxblinker', pack: '320×155×70', packSrc: 'falconpev' ,

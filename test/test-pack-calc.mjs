@@ -119,30 +119,33 @@ const heights = await page.evaluate(() => {
     calcPackDims();
     return document.getElementById('dimResult').innerHTML;
   };
-  return { shallow: read('Zero 10X'), deep: read('Nami Klima'), compound: read('Inokim OX') };
+  return { shallow: read('Zero 10X'), mid: read('Zero 11X'), deep: read('Nami Klima'), compound: read('Inokim OX') };
 });
-check('a shallow tray refuses a standing cell', /נמוכה מדי לתא עומד/.test(heights.shallow),
+check('a shallow tray refuses the cell outright', /לא נכנס לאמבטיה/.test(heights.shallow),
   heights.shallow.replace(/<[^>]*>/g, '').slice(0, 90));
-check('and prices the cells lying down instead', /שוכבים:/.test(heights.shallow),
+// No lying arrangement exists any more — he builds with the cells standing on a terminal
+// (2026-09-23). A tray too short for the cell simply cannot take it.
+check('and never offers to lay them down', !/שוכב/.test(heights.shallow),
   heights.shallow.replace(/<[^>]*>/g, '').slice(0, 120));
-check('a deep enough tray is left alone', !/נמוכה מדי/.test(heights.deep) && /מומלץ|אף מחזיק/.test(heights.deep),
+check('a deep enough tray is left alone', !/לא נכנס לאמבטיה/.test(heights.deep) && /מומלץ|אף מחזיק/.test(heights.deep),
   heights.deep.replace(/<[^>]*>/g, '').slice(0, 90));
 // '425×165 + 60×140' is two rectangles, not L×W×H. Reading a loose third number out of it
 // invented a 60mm ceiling and hid this row's recommendation — it shipped that way for one run.
-check('a compound tub has no height read from it', !/נמוכה מדי/.test(heights.compound),
+check('a compound tub has no height read from it', !/לא נכנס לאמבטיה/.test(heights.compound),
   heights.compound.replace(/<[^>]*>/g, '').slice(0, 90));
 
 // ---- 4c. the 18650 offer that comes with a shallow tray ----
 // An 18650 is 65mm against the 21700's 70.15, so it stands where the 21700 cannot — and where
 // neither stands, the smaller diameter still fits more across and more up.
-check('a shallow tray offers the 18650 builds', /אפשרויות 18650/.test(heights.shallow),
+check('a 70mm tray offers the 18650 builds', /אפשרויות 18650/.test(heights.mid),
   heights.shallow.replace(/<[^>]*>/g, '').slice(-140));
-check('and names both cells', /EVE 26V/.test(heights.shallow) && /EVE 25P/.test(heights.shallow),
+check('and names both cells where one fits', /EVE 26V/.test(heights.mid) && /EVE 25P/.test(heights.mid),
   heights.shallow.replace(/<[^>]*>/g, '').slice(-140));
 // The margin is read off the live price list. When that lookup fails the page says so instead
 // of inventing a number — which is honest, and was also the bug: the field is retail, not
 // price, so every reference row read undefined.
-check('and prices them from a real margin', /מחיר ₪/.test(heights.shallow) && !/אין שורת ייחוס/.test(heights.shallow),
+// The Zero 10X is 58mm: nothing stands in it, so the block says that instead of pricing.
+check('and says so when no cell stands at all', /גם תא 18650 לא עומד/.test(heights.shallow),
   heights.shallow.replace(/<[^>]*>/g, '').slice(-140));
 check('a deep tray is not offered 18650s', !/אפשרויות 18650/.test(heights.deep),
   heights.deep.replace(/<[^>]*>/g, '').slice(-110));
