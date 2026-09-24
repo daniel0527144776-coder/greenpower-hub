@@ -233,6 +233,39 @@ check('each hour keeps the rate it was recorded at', mg.rates === '45,40', mg);
 check('one entry is left in the workers list, and the old spelling still finds him',
   mg.workers === 'שמואל אמירי' && mg.alias === 'שמואל' && mg.punchMatch === 'שמואל אמירי', mg);
 
+// ---- the same money counted twice: old "paid" flag + a payment for it (2026-09-24) ----
+if (SELFTEST) await page.evaluate(() => { window.wtAutoFixDups = () => {}; });
+const dp = await page.evaluate(async () => {
+  const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 9)).toISOString();
+  Store.set('workers', [{ id: 's', name: 'שמואל אמירי', rate: 45 }]);
+  Store.set('worktime', [
+    { id: 'L1', workerName: 'שמואל אמירי', rate: 45, hours: 40, date: iso(2026, 8, 3), paid: true },
+    { id: 'L2', workerName: 'שמואל אמירי', rate: 45, hours: 22.27, date: iso(2026, 8, 20), paid: true },
+    { id: 'L3', workerName: 'שמואל אמירי', rate: 45, hours: 3, date: iso(2026, 9, 1), paid: false },
+  ]);
+  const legacy = Math.round((40 + 22.27) * 45 * 100) / 100;
+  Store.set('wage_payments', [{ id: 'dupP', worker: 'שמואל אמירי', amount: legacy, date: iso(2026, 9, 23),
+    closes: { rows: ['L3'], pays: ['dupP'] } }]);
+  Store.set('worktime_trash', []);
+  navigateTo('worktime');
+  await new Promise((r) => setTimeout(r, 100));
+  closeNotice();
+  const L = workerLedger('שמואל אמירי');
+  const received = L.paidTotal + L.legacyPaid;
+  const stillClosed = L.balance === 0;
+  // he says "no, that payment was real" — bring it back; it must not be removed again
+  restoreFromTrash(0);
+  closeNotice();
+  navigateTo('worktime');
+  await new Promise((r) => setTimeout(r, 100));
+  closeNotice();
+  const back = workerLedger('שמואל אמירי');
+  return { legacy, received, stillClosed, backReceived: back.paidTotal + back.legacyPaid };
+});
+check('a payment that duplicates the old "paid" hours is removed on its own', Math.round(dp.received) === Math.round(dp.legacy), dp);
+check('and the account stays closed — nothing is suddenly owed', dp.stillClosed, dp);
+check('restored from the trash, it is his call and stays', Math.round(dp.backReceived) === Math.round(dp.legacy * 2), dp);
+
 // ---- an import's costs from a file: added, never duplicated ----
 const sh = await page.evaluate(async () => {
   Store.set('expenses', [{ id: 'x1', amount: 400, cat: 'אחר', note: 'ידני', date: new Date(2026, 8, 5).toISOString() }]);

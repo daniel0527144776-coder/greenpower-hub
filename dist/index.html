@@ -2955,7 +2955,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v324';
+const HUB_BUILD = 'v325';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7440,6 +7440,7 @@ function wtSinceHtml(L) {
 
 function renderWorktime() {
   ensureDateInput('wtDate');
+  wtAutoFixDups();
   renderShifts();
   startShiftTicker();
   fetchPunches();
@@ -7567,7 +7568,13 @@ function renderWorkerPage() {
     </div>`;
   }).join('');
 
+  const dup = wtDupPayment(L);
   body.innerHTML = `
+    ${dup ? `<div class="card" style="border-color:var(--warning);">
+      <div style="font-weight:700;margin-bottom:4px;">⚠️ נראה שאותו כסף נספר פעמיים</div>
+      <div class="wt-muted" style="margin-bottom:8px;">השעות שסומנו "שולם" לפני שהיו תשלומים שוות ${shek(L.legacyPaid)}, ויש גם תשלום של ${shek(dup.amount)} מ-${wtDay(dup.date)}. אם זה אותו כסף, "קיבל" מראה ${shek(L.paidTotal + L.legacyPaid)} במקום ${shek(L.legacyPaid)}.</div>
+      <button class="btn btn-primary btn-block btn-sm" onclick="fixDupPayment('${dup.id}')">מחק את התשלום הכפול</button>
+    </div>` : ''}
     <div class="card">
       <div style="font-size:20px;margin-bottom:6px;">${wtStatusHtml(L)}</div>
       <div class="wt-muted">${wtSinceHtml(L)}</div>
@@ -7742,6 +7749,50 @@ function saveWagePayment(close = false) {
 }
 // "אין חוב" without a new payment: everything open until now is settled — whatever the
 // difference. For the case where the money already went out (and was recorded, or was not).
+// A payment recorded for money the old per-row "paid" flag already accounts for. Seen on
+// 2026-09-24: שמואל אמירי had ₪2,802 of hours flagged paid AND a ₪2,802 payment for the same
+// money, so "קיבל" read ₪5,604. Only an EXACT match counts — close is not evidence.
+// A payment he brought back from the trash carries keep:true and is never matched again.
+function wtDupPayment(L) {
+  if (!(L.legacyPaid >= 1)) return null;
+  return L.payments.find((p) => !p.keep && (Number(p.amount) || 0) > 0 && Math.abs(Number(p.amount) - L.legacyPaid) < 1) || null;
+}
+// Removing it must not reopen the account: if that payment also closed it, the closing stays
+// as a closing with no money in it. The original goes to the trash, so it can come back.
+function applyDupFix(id) {
+  const pays = getWagePayments();
+  const p = pays.find((x) => x.id === id);
+  if (!p) return null;
+  if (!wtToTrash({ kind: 'payment', row: { ...p } })) return null;
+  const next = p.closes
+    ? pays.map((x) => (x.id === id ? { ...x, amount: 0, note: 'סגירת חשבון' } : x))
+    : pays.filter((x) => x.id !== id);
+  if (!Store.set('wage_payments', next)) return null;
+  return p;
+}
+function fixDupPayment(id) {
+  const p = getWagePayments().find((x) => x.id === id);
+  if (!p) return;
+  askConfirm(`למחוק את התשלום של ${shek(p.amount)} מ-${wtDay(p.date)}?\nהשעות שסומנו "שולם" נשארות משולמות. התשלום עובר לסל ואפשר להחזיר.`, () => {
+    if (!applyDupFix(id)) return;
+    renderWorktime();
+    const L = workerLedger(p.worker);
+    showNotice('✓ נמחק. ' + p.worker + ' קיבל ' + shek(L.paidTotal + L.legacyPaid) + ' בסך הכל.');
+  });
+}
+// Daniel: "תתקן לבד". Run when the clock page opens: every exact duplicate is removed and he is
+// told, by name and amount, what was done and where to undo it.
+function wtAutoFixDups() {
+  const done = [];
+  for (const name of wtAllNames()) {
+    const dup = wtDupPayment(workerLedger(name));
+    if (dup && applyDupFix(dup.id)) {
+      const L = workerLedger(name);
+      done.push(name + ': נמחק תשלום של ' + shek(dup.amount) + ' שנספר פעמיים — קיבל ' + shek(L.paidTotal + L.legacyPaid) + ' בסך הכל');
+    }
+  }
+  if (done.length) showNotice('✓ תוקן אוטומטית:\n' + done.join('\n') + '\n\nאם זה לא נכון — התשלום נמצא ב"נמחקו לאחרונה" ואפשר להחזיר אותו.');
+}
 function closeAccount(i) {
   const name = typeof i === 'string' ? i : WT_LEDGER_NAMES[i];
   if (!name) return;
@@ -7809,7 +7860,9 @@ function restoreFromTrash(i) {
   const t = trash[i]; if (!t) return;
   const key = t.kind === 'payment' ? 'wage_payments' : 'worktime';
   const list = Store.get(key) || [];
-  if (!list.some((x) => x.id === t.row.id)) list.push(t.row);
+  const row = t.kind === 'payment' ? { ...t.row, keep: true } : t.row;
+  const at = list.findIndex((x) => x.id === row.id);
+  if (at >= 0) list[at] = row; else list.push(row);
   if (!Store.set(key, list)) return;
   trash.splice(i, 1);
   Store.set('worktime_trash', trash);
