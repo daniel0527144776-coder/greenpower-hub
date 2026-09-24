@@ -349,6 +349,26 @@ body { min-height: 100vh; }
   .wt-tag { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
   .wt-tag.open { color: var(--danger); background: var(--danger-light); }
   .wt-tag.done { color: var(--success); background: var(--success-light); }
+  .fin-block { margin-top: 10px; }
+  .fin-block-h { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
+  .fin-cat { display: flex; justify-content: space-between; padding: 4px 2px; font-size: 13.5px; border-bottom: 1px solid var(--border); }
+  .fin-block.in .fin-cat b { color: var(--accent); }
+  .fin-block.out .fin-cat b { color: var(--danger); }
+  .fin-lines { margin-top: 12px; }
+  .fin-lines summary { cursor: pointer; font-size: 13px; color: var(--primary); padding: 6px 0; }
+  .fin-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .fin-sub { font-size: 11px; color: var(--text-muted); }
+  .fin-in { color: var(--accent); white-space: nowrap; }
+  .fin-out { color: var(--danger); white-space: nowrap; }
+  .fin-del { color: var(--text-muted); cursor: pointer; margin-inline-start: 4px; }
+  .fin-credit { font-size: 10px; color: var(--warning); font-weight: 700; }
+  .fin-empty { font-size: 12px; color: var(--text-muted); text-align: center; padding: 10px 0; }
+  .fin-note { font-size: 11.5px; color: var(--text-muted); margin: 0 2px 10px; }
+  .fin-year { border-top: 1px solid var(--border); }
+  .fin-year > summary { display: flex; justify-content: space-between; align-items: baseline; cursor: pointer; padding: 10px 2px; font-weight: 700; font-size: 15px; }
+  .fin-mrow { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 4px; font-size: 12.5px; padding: 8px 2px; border-bottom: 1px solid var(--border); cursor: pointer; align-items: baseline; }
+  .fin-mhead { cursor: default; font-size: 11px; color: var(--text-muted); padding-top: 0; }
+  .fin-open { padding: 0 6px 10px; background: var(--bg); border-radius: var(--radius-sm); }
   .inv-sub { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--primary); margin: 10px 2px 6px; padding-bottom: 3px; border-bottom: 1px dashed var(--border-strong); }
   .inv-sub span:last-child { font-weight: 400; font-size: 11px; color: var(--text-muted); }
   .wt-name-link { color: inherit; text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 3px; }
@@ -1339,20 +1359,16 @@ body { min-height: 100vh; }
 
   <!-- The month you are in, before anything else. Everything below is history. -->
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-      <h3 class="card-title" id="finMonthTitle" style="margin:0;"></h3>
-      <div style="display:flex;align-items:center;gap:4px;">
-          <button class="btn btn-sm" onclick="stepMonth('finMonth',-1)" aria-label="חודש קודם">‹</button>
-          <select id="finMonth" class="form-select" style="width:auto;" onchange="renderFinances()"></select>
-          <button class="btn btn-sm" onclick="stepMonth('finMonth',1)" aria-label="חודש הבא">›</button>
-        </div>
+    <div class="wt-monthbar">
+      <button class="btn btn-sm btn-secondary" onclick="stepMonth('finMonth',-1)" aria-label="חודש קודם">‹</button>
+      <select id="finMonth" class="form-select" onchange="renderFinances()"></select>
+      <button class="btn btn-sm btn-secondary" onclick="stepMonth('finMonth',1)" aria-label="חודש הבא">›</button>
     </div>
     <div class="stats-grid">
       <div class="stat-box"><div class="stat-label">הכנסות</div><div class="stat-value" style="color:var(--primary);" id="finIncome">₪0</div></div>
       <div class="stat-box"><div class="stat-label">הוצאות</div><div class="stat-value" style="color:var(--danger);" id="finExpense">₪0</div></div>
       <div class="stat-box"><div class="stat-label">רווח נטו</div><div class="stat-value" style="color:var(--accent);" id="finNet">₪0</div></div>
     </div>
-    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.7;" id="finBreak"></div>
     <div id="finMonthDetail" style="margin-top:10px;"></div>
   </div>
 
@@ -2509,7 +2525,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v332';
+const HUB_BUILD = 'v334';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6016,39 +6032,38 @@ function renderFinanceOverview() {
   if (!keys.length) { el.innerHTML = '<div class="empty-state"><div class="empty-state-text">אין עדיין נתונים.</div></div>'; return; }
   let ti = 0, te = 0;
   keys.forEach((k) => { ti += m[k].inc; te += m[k].exp; });
-  // A month with income and NO expense row is not a month that made pure profit — it is a
-  // month whose costs were never recorded. Counting it flattered the total by five years:
-  // after the accountant's import this read "רווח מצטבר ₪284,895" against zero cost.
-  const noCost = keys.filter((k) => m[k].inc > 0 && m[k].exp === 0);
+  // A month with income and NO expense row is not a month that made pure profit — its costs
+  // were never recorded. It stays out of the cumulative profit, and the page says so once.
+  const incomeOnly = (k) => m[k].inc > 0 && m[k].exp === 0;
+  const noCost = keys.filter(incomeOnly);
   const noCostIls = noCost.reduce((s, k) => s + m[k].inc, 0);
-  const priced = keys.filter((k) => !(m[k].inc > 0 && m[k].exp === 0));
-  const net = priced.reduce((s, k) => s + m[k].inc - m[k].exp, 0);
-  const best = keys.slice().sort((a, b) => (m[b].inc - m[b].exp) - (m[a].inc - m[a].exp))[0];
+  const net = keys.filter((k) => !incomeOnly(k)).reduce((s, k) => s + m[k].inc - m[k].exp, 0);
+  const years = [...new Set(keys.map((k) => k.slice(0, 4)))];
+  const thisYear = String(new Date().getFullYear());
+  const openYear = finOpenMonth ? finOpenMonth.slice(0, 4) : thisYear;
+  const monthName = (k) => monthLabelHe(k).split(' ')[0];
   el.innerHTML =
-    `<div class="stats-grid" style="margin-bottom:10px;">
-       <div class="stat-box"><div class="stat-label">סה"כ הכנסות</div><div class="stat-value" style="color:var(--primary);font-size:19px;">${shek(ti)}</div></div>
-       <div class="stat-box"><div class="stat-label">סה"כ הוצאות</div><div class="stat-value" style="color:var(--danger);font-size:19px;">${shek(te)}</div></div>
-       <div class="stat-box"><div class="stat-label">רווח מצטבר</div><div class="stat-value" style="color:${net < 0 ? 'var(--danger)' : 'var(--accent)'};font-size:19px;">${shek(net)}</div></div>
-     </div>
-     <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-bottom:10px;">
-       ${keys.length} חודשי פעילות · ממוצע ${shek(Math.round(net / Math.max(1, priced.length)))} לחודש · הטוב ביותר: ${monthLabelHe(best)} (${shek(m[best].inc - m[best].exp)})
-     </div>` +
-    (noCost.length ? `<div class="info-banner" style="margin-bottom:10px;"><span>ℹ️</span><div>
-       <b>${noCost.length} חודשים עם הכנסות בלבד — ${shek(noCostIls)}.</b>
-       להם לא נרשמו הוצאות כלל, ולכן הם <b>לא נספרים ברווח המצטבר</b>. הרווח שלמעלה הוא רק מהחודשים שיש להם שני הצדדים.
-     </div></div>` : '') +
-    keys.map((k) => {
-      const r = m[k], profit = r.inc - r.exp, open = finOpenMonth === k;
-      const rows = open ? monthRows(k) : null;
-      return `<div class="list-item" style="cursor:pointer;padding:9px 12px;" onclick="toggleFinMonth('${k}')">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
-            <strong style="font-size:13px;">${open ? '▾' : '▸'} ${monthLabelHe(k)}</strong>
-            <span style="font-size:12px;">${r.inc > 0 && r.exp === 0
-              ? `<span style="color:var(--accent);">${shek(r.inc)}</span> <span style="color:var(--text-muted);font-size:11px;">· הכנסות בלבד, הוצאות לא נרשמו</span>`
-              : `<span style="color:var(--accent);">${shek(r.inc)}</span> − <span style="color:var(--danger);">${shek(r.exp)}</span> = <b style="color:${profit < 0 ? 'var(--danger)' : 'var(--text)'};">${shek(profit)}</b>`}</span>
-          </div>` +
-        (open ? `<div onclick="event.stopPropagation()">${monthDetailHtml(k, rows.inc, rows.exp)}</div>` : '') +
-        `</div>`;
+    `<div class="stats-grid" style="margin-bottom:8px;">
+       <div class="stat-box"><div class="stat-label">סה"כ הכנסות</div><div class="stat-value" style="color:var(--primary);font-size:17px;">${shek(ti)}</div></div>
+       <div class="stat-box"><div class="stat-label">סה"כ הוצאות</div><div class="stat-value" style="color:var(--danger);font-size:17px;">${shek(te)}</div></div>
+       <div class="stat-box"><div class="stat-label">רווח מצטבר</div><div class="stat-value" style="color:${net < 0 ? 'var(--danger)' : 'var(--accent)'};font-size:17px;">${shek(net)}</div></div>
+     </div>`
+    + (noCost.length ? `<div class="fin-note">${noCost.length} חודשים עם הכנסות בלבד (${shek(noCostIls)}) — בלי הוצאות רשומות, ולכן לא נכנסים לרווח המצטבר.</div>` : '')
+    + years.map((y) => {
+      const ks = keys.filter((k) => k.startsWith(y));
+      const yi = ks.reduce((s, k) => s + m[k].inc, 0), ye = ks.reduce((s, k) => s + m[k].exp, 0);
+      return `<details class="fin-year"${y === openYear ? ' open' : ''}><summary><span>${y}</span><span class="fin-sub">${shek(yi)} הכנסות${ye ? ' · ' + shek(ye) + ' הוצאות' : ''}</span></summary>
+        <div class="fin-mrow fin-mhead"><span>חודש</span><span>הכנסות</span><span>הוצאות</span><span>רווח</span></div>`
+        + ks.map((k) => {
+          const r = m[k], open = finOpenMonth === k, only = incomeOnly(k);
+          const row = `<div class="fin-mrow${only ? ' income-only' : ''}" onclick="toggleFinMonth('${k}')">
+            <span>${open ? '▾' : '◂'} ${monthName(k)}</span><span class="fin-in">${shek(r.inc)}</span>
+            <span class="fin-out">${r.exp ? shek(r.exp) : '—'}</span>
+            <span>${only ? '<span class="fin-sub">—</span>' : `<b style="color:${r.inc - r.exp < 0 ? 'var(--danger)' : 'var(--text)'};">${shek(r.inc - r.exp)}</b>`}</span></div>`;
+          if (!open) return row;
+          const rows = monthRows(k);
+          return row + `<div class="fin-open" onclick="event.stopPropagation()">${monthDetailHtml(k, rows.inc, rows.exp, true)}</div>`;
+        }).join('') + '</details>';
     }).join('');
 }
 // Categories chosen for what this lab actually buys. Old records keep whatever string they
@@ -6094,16 +6109,11 @@ function renderFinances() {
   const { inc, exp } = monthRows(mk);
   const income = inc.reduce((s2, r) => s2 + r.amount, 0);
   const spend = exp.reduce((s2, r) => s2 + r.amount, 0);
-  document.getElementById('finMonthTitle').textContent = monthLabelHe(mk);
   document.getElementById('finIncome').textContent = shek(income);
   document.getElementById('finExpense').textContent = shek(spend);
   const netEl = document.getElementById('finNet');
   netEl.textContent = shek(income - spend);
   netEl.style.color = income - spend < 0 ? 'var(--danger)' : 'var(--accent)';
-  const by = (rows, k) => rows.filter((r) => r.ref === k).reduce((s2, r) => s2 + r.amount, 0);
-  document.getElementById('finBreak').innerHTML =
-    `הכנסה: תיקונים ${shek(by(inc, 'job'))} · מכירות ${shek(by(inc, 'order'))} · רישומים ${shek(by(inc, 'income'))}<br>` +
-    `הוצאה: רישומים ${shek(by(exp, 'expense'))} · שכר עובדים ${shek(by(exp, 'wages'))}`;
   document.getElementById('finMonthDetail').innerHTML = monthDetailHtml(mk, inc, exp);
 
   const pending = (Store.get('orders') || []).filter((o) => monthKeyOf(o.date) === mk && !saleIsIncome(o));
@@ -6118,36 +6128,37 @@ function renderFinances() {
   renderFinanceOverview();
 }
 
-// Both, because he asked for both: where the money went, and then every line in order.
-function monthDetailHtml(mk, inc, exp) {
-  if (!inc.length && !exp.length) return `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:10px 0;">אין תנועות ב${monthLabelHe(mk)}.</div>`;
+// Rebuilt 2026-09-25 (Daniel: "המון מלל מיותר וגם מסודר בצורה גרועה"). Where the money came
+// from and went, one line per category, and then every line of the month — folded on the
+// month card, open when a month is opened from the history. The same figures appeared three
+// times before (a text line, coloured chips, the list); now once each.
+function monthDetailHtml(mk, inc, exp, linesOpen = false) {
+  if (!inc.length && !exp.length) return `<div class="fin-empty">אין תנועות ב${monthLabelHe(mk)}.</div>`;
   const group = (rows) => {
     const m = {};
     for (const r of rows) m[r.cat] = (m[r.cat] || 0) + r.amount;
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   };
-  const chips = (rows, colour) => group(rows).map(([c, v]) =>
-    `<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid ${colour};color:${colour};margin:0 0 4px 4px;white-space:nowrap;">${c} ${shek(v)}</span>`).join('');
-  const line = (r, colour) => {
-    const del = r.locked ? '' : ` <span onclick="${r.ref === 'income' ? 'deleteIncome' : 'deleteExpense'}('${r.id}')" style="color:var(--text-muted);cursor:pointer;" title="מחק">✕</span>`;
+  const block = (title, rows, cls) => rows.length ? `<div class="fin-block ${cls}"><div class="fin-block-h">${title}</div>`
+    + group(rows).map(([c, v]) => `<div class="fin-cat"><span>${c}</span><b>${shek(v)}</b></div>`).join('') + '</div>' : '';
+  const line = (r, cls) => {
+    const del = r.locked ? '' : ` <span onclick="${r.ref === 'income' ? 'deleteIncome' : 'deleteExpense'}('${r.id}')" class="fin-del" title="מחק">✕</span>`;
     const lock = r.unreceipted ? ' <span title="חשבון עסקה שהופק ללא תקבול — ניתן להסרה" style="color:var(--warning);">⚠</span>'
       : (r.locked && r.kind === 'הנה"ח' ? ' <span title="מהנהלת החשבונות — לקריאה בלבד" style="opacity:.6;">🔒</span>' : '');
-    // A books row with a negative amount is a CREDIT NOTE — it carries its own invoice number
-    // from the outgoing series and cancels a positive row of the same amount to the same
-    // customer days earlier. Nine of them are in the accountant's file; unlabelled they read as
-    // "negative income", which is not a thing.
-    const credit = r.amount < 0 && r.locked ? ' <span style="font-size:10px;color:var(--warning);font-weight:700;">זיכוי</span>' : '';
-    return `<div class="price-item"><div class="price-item-name">${r.kind} · ${r.cat}${credit}${r.name ? ` · <span style="color:var(--text-muted);">${String(r.name).slice(0, 40)}</span>` : ''}${lock}` +
-      `<div style="font-size:10.5px;color:var(--text-light);">${new Date(r.date).toLocaleDateString('he-IL')}</div></div><div></div>` +
-      `<div class="price-item-final" style="color:${colour};">${shek(r.amount)}${del}</div></div>`;
+    // A books row with a negative amount is a CREDIT NOTE — it cancels a positive row of the
+    // same amount to the same customer days earlier; unlabelled it reads as "negative income".
+    const credit = r.amount < 0 && r.locked ? ' <span class="fin-credit">זיכוי</span>' : '';
+    const what = r.name ? String(r.name).slice(0, 40) : r.cat;
+    const day = new Date(r.date).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+    return `<div class="fin-line"><div><div>${what}${credit}${lock}</div><div class="fin-sub">${day} · ${r.cat}</div></div>`
+      + `<div class="${cls}">${shek(r.amount)}${del}</div></div>`;
   };
   const byDate = (a, b) => new Date(b.date) - new Date(a.date);
-  return `<div style="border-top:1px solid var(--border);padding-top:8px;">` +
-    (inc.length ? `<div style="margin-bottom:6px;">${chips(inc, '#10b981')}</div>` : '') +
-    (exp.length ? `<div style="margin-bottom:8px;">${chips(exp, 'var(--danger)')}</div>` : '') +
-    inc.slice().sort(byDate).map((r) => line(r, 'var(--accent)')).join('') +
-    exp.slice().sort(byDate).map((r) => line(r, 'var(--danger)')).join('') +
-    `</div>`;
+  const lines = inc.slice().sort(byDate).map((r) => line(r, 'fin-in')).join('')
+    + exp.slice().sort(byDate).map((r) => line(r, 'fin-out')).join('');
+  return block('הכנסות', inc, 'in') + block('הוצאות', exp, 'out')
+    + (linesOpen ? `<div class="fin-lines">${lines}</div>`
+      : `<details class="fin-lines"><summary>כל התנועות בחודש</summary>${lines}</details>`);
 }
 // One builder for both sides. The fields are identical and the only real differences are the
 // colour and which list it lands in — writing it twice is how the two drift.
@@ -8890,6 +8901,24 @@ const INV_SEED = [
 // to count it. The id is fixed per model, so two devices doing this at once make one row, not
 // two. It runs once per account (a synced flag) — a model removed on purpose afterwards stays
 // removed.
+// A cell row saved from the editor while it still opened 'תאים' rows with BMS selected was
+// moved into BMS (fixed in the editor 2026-09-25). A BMS row whose name is a cell — a cell
+// format or "תאי", and no S count — goes back to the cells. Runs on every start; idempotent.
+function refileCellsFromBms() {
+  try {
+    const inv = getInventory();
+    let moved = 0;
+    for (const r of inv) {
+      const n = String(r.name || '');
+      if (invCatOf(r) !== 'BMS') continue;
+      if (!/(^|\s)תאי?(\s|$)|\b(18650|21700|26650|32700)\b/.test(n)) continue;
+      if (/\d+\s*S(?![A-Za-z\u0590-\u05FF])/i.test(n)) continue;
+      r.cat = 'תא';
+      moved++;
+    }
+    if (moved) Store.set('inventory', inv);
+  } catch (e) { /* never block boot on this */ }
+}
 function restoreMissingCellModels() {
   try {
     const settings = Store.get('settings') || {};
@@ -8986,10 +9015,7 @@ function renderInventory() {
     // One more level inside the categories that have a natural axis (Daniel, 2026-09-25):
     // chargers by voltage, cells by format, BMS by series count. Read off the name, the same
     // way the sort above reads it; an item whose name carries no such number goes under אחר.
-    const axis = c === 'BMS' ? (x) => { const n = unit(x, 'S'); return isFinite(n) ? n + 'S' : null; }
-      : c === 'מטען' ? (x) => { const n = unit(x, 'V'); return isFinite(n) ? n + 'V' : null; }
-      : c === 'תא' ? (x) => { const m = String(x.name || '').match(/\b(18650|21700|26650|32700|4680)\b/); return m ? m[1] : null; }
-      : null;
+    const axis = INV_SUB[c] ? (x) => x.sub || invSubFromName(c, x.name) || null : null;
     let body;
     if (axis) {
       const byKey = new Map();
@@ -9078,16 +9104,49 @@ function adjustInventory(id, d) {
   it.qty = Math.max(0, (Number(it.qty) || 0) + d);
   Store.set('inventory', inv); renderInventory();
 }
+// The sub-category a new item is filed under (Daniel, 2026-09-25: adding an item gave no way to
+// choose one). Stored as .sub; the stock page groups by it first and falls back to reading the
+// number off the name.
+const INV_SUB = {
+  'BMS': ['3S', '4S', '5S', '7S', '10S', '13S', '14S', '16S', '17S', '20S', '23S', '24S'],
+  'מטען': ['12V', '24V', '36V', '48V', '52V', '60V', '72V', '84V', '88V'],
+  'תא': ['18650', '21700', '26650', '32700'],
+};
+function invSubFromName(cat, name) {
+  const n = String(name || '');
+  if (cat === 'BMS') { const m = n.match(/(\d+)\s*S(?![A-Za-z\u0590-\u05FF])/i); return m ? m[1] + 'S' : ''; }
+  if (cat === 'מטען') { const m = n.match(/(\d+(?:\.\d+)?)\s*V(?![A-Za-z\u0590-\u05FF])/i); return m ? m[1] + 'V' : ''; }
+  if (cat === 'תא') { const m = n.match(/\b(18650|21700|26650|32700|4680)\b/); return m ? m[1] : ''; }
+  return '';
+}
+function invSubRowHtml(cat, cur) {
+  const opts = INV_SUB[cat];
+  if (!opts) return '';
+  const label = cat === 'BMS' ? 'מספר S' : cat === 'מטען' ? 'מתח' : 'סוג תא';
+  return `<label>${label}</label><select class="form-select" id="invSub"><option value="">—</option>`
+    + opts.map((o) => `<option value="${o}"${o === cur ? ' selected' : ''}>${o}</option>`).join('') + '</select>';
+}
+function invCatChanged() {
+  const cat = document.getElementById('invCat').value;
+  const row = document.getElementById('invSubRow');
+  if (!row) return;
+  row.innerHTML = invSubRowHtml(cat, invSubFromName(cat, document.getElementById('invName').value));
+  row.style.display = INV_SUB[cat] ? '' : 'none';
+}
 function openInventoryEditor(id) {
   const inv = getInventory();
   const it = id ? inv.find(x => x.id === id) : { name: '', qty: 0, low: '', note: '' };
-  const curCat = it.cat || (it.name ? invCatOf(it) : 'BMS');
+  // invCatOf folds the old spellings ('תאים' → 'תא'); reading .cat raw left a cell saved as
+  // 'תאים' opening with BMS selected, and saving it moved the cell into BMS.
+  const curCat = it.name ? invCatOf(it) : 'BMS';
+  const curSub = it.sub || invSubFromName(curCat, it.name);
   const catOpts = ['BMS', 'מטען', 'תא', 'ניקל', 'אחר'].map(c => `<option value="${c}"${c === curCat ? ' selected' : ''}>${c}</option>`).join('');
   openModal(id ? 'עריכת פריט' : 'פריט מלאי חדש', `
-    <div class="form-row"><label>קטגוריה</label><select class="form-select" id="invCat">${catOpts}</select></div>
+    <div class="form-row"><label>קטגוריה</label><select class="form-select" id="invCat" onchange="invCatChanged()">${catOpts}</select></div>
+    <div class="form-row" id="invSubRow" style="${INV_SUB[curCat] ? '' : 'display:none;'}">${invSubRowHtml(curCat, curSub)}</div>
     <div class="form-row"><label>שם הפריט</label><input class="form-input-wide" id="invName" value="${it.name || ''}" placeholder="20S 100A / DALY 60A / 72V 5A" style="width:170px;"></div>
     <div class="form-row"><label>כמות במלאי</label><input type="number" class="form-input" id="invQty" value="${it.qty || 0}" min="0"></div>
-    <div class="form-row"><label>סף התראה</label><input type="number" class="form-input" id="invLow" value="${it.low != null ? it.low : ''}" placeholder="לדוגמה 20"></div>
+    <div class="form-row"><label>מתי להזמין (כמות)</label><input type="number" class="form-input" id="invLow" value="${it.low != null ? it.low : ''}" placeholder="לדוגמה 20"></div>
     <div class="form-row"><label>הערה</label><input class="form-input-wide" id="invNote" value="${it.note || ''}" placeholder="ספק / מק\"ט" style="width:170px;"></div>`,
     `<button class="btn btn-primary" onclick="saveInventory('${id || ''}')">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
 }
@@ -9095,7 +9154,9 @@ function saveInventory(id) {
   const name = document.getElementById('invName').value.trim();
   if (!name) { alert('הזן שם פריט'); return; }
   const lowVal = document.getElementById('invLow').value;
-  const rec = { name, cat: document.getElementById('invCat').value, qty: Math.max(0, parseInt(document.getElementById('invQty').value) || 0), low: lowVal === '' ? null : (parseInt(lowVal) || 0), note: document.getElementById('invNote').value };
+  const subEl = document.getElementById('invSub');
+  const cat = document.getElementById('invCat').value;
+  const rec = { name, cat, sub: (INV_SUB[cat] && subEl && subEl.value) || '', qty: Math.max(0, parseInt(document.getElementById('invQty').value) || 0), low: lowVal === '' ? null : (parseInt(lowVal) || 0), note: document.getElementById('invNote').value };
   const inv = getInventory();
   if (id) { const i = inv.findIndex(x => x.id === id); if (i >= 0) inv[i] = { ...inv[i], ...rec }; }
   else { inv.push({ id: 'inv' + Date.now(), ...rec }); }
@@ -9543,6 +9604,7 @@ async function startApp() {
   seedInventoryOnce();
   seedCellStockOnce();
   restoreMissingCellModels();
+  refileCellsFromBms();
   init();
   Sync.flush().catch(() => {});
 }

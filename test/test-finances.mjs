@@ -64,7 +64,8 @@ await page.waitForTimeout(300);
 
 // ---- 1. the month you are in, first ----
 const top = await page.evaluate(() => ({
-  title: (document.getElementById('finMonthTitle') || {}).textContent || '',
+  // the month is named by its picker since 2026-09-25 (the heading repeated it)
+  title: (document.getElementById('finMonth') || {}).value || '',
   income: (document.getElementById('finIncome') || {}).textContent || '',
   expense: (document.getElementById('finExpense') || {}).textContent || '',
   net: (document.getElementById('finNet') || {}).textContent || '',

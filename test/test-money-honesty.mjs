@@ -270,7 +270,8 @@ const fin = await page.evaluate(() => {
     income: m ? Number(m[1].replace(/,/g, '')) : null,
     profit: m ? Number(m[3].replace(/,/g, '')) : null,
     note: (t.match(/\d+ חודשים עם הכנסות בלבד[^\n]*/) || [''])[0],
-    incomeOnly: (t.match(/הכנסות בלבד, הוצאות לא נרשמו/g) || []).length,
+    // one row per income-only month, marked, its profit shown as — rather than a number
+    incomeOnly: document.querySelectorAll('#finOverview .fin-mrow.income-only').length,
   };
 });
 // 2021-05 has 10,000 - 2,500 = 7,500 income and NO expenses; 2026-04 has 8,000 - 3,000.

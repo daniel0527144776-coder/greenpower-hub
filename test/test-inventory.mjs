@@ -203,6 +203,28 @@ const grouped = await page.evaluate(() => {
 });
 check('BMS by series, chargers by voltage, cells by format', grouped === '13S,24S,60V,72V,18650,21700', grouped);
 
+// ---- 10. adding an item: a sub-category can be chosen, and editing keeps the category ----
+const sub = await page.evaluate(() => {
+  Store.set('inventory', [{ id: 'k1', name: 'תאי EVE 21700 50E', qty: 10, cat: 'תאים' }]);
+  // a new BMS whose name carries no S count — filed by the chosen sub-category
+  openInventoryEditor('');
+  document.getElementById('invCat').value = 'BMS'; invCatChanged();
+  document.getElementById('invName').value = 'DALY חדש';
+  document.getElementById('invQty').value = '4';
+  document.getElementById('invSub').value = '16S';
+  saveInventory('');
+  // editing the old cell row must not move it into BMS
+  openInventoryEditor('k1');
+  const catShown = document.getElementById('invCat').value;
+  saveInventory('k1');
+  navigateTo('inventory');
+  ['תא', 'BMS'].forEach((c) => { if (!INV_OPEN.has(c)) toggleInvCat(encodeURIComponent(c)); });
+  return { catShown, cellCat: invCatOf(getInventory().find((x) => x.id === 'k1')),
+    heads: [...document.querySelectorAll('.inv-sub span:first-child')].map((x) => x.textContent.trim()).join(',') };
+});
+check('a new item can be filed under a sub-category its name does not show', /16S/.test(sub.heads), sub);
+check('editing a cell saved as "תאים" keeps it a cell', sub.catShown === 'תא' && sub.cellCat === 'תא', sub);
+
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');
