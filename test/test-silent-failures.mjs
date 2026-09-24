@@ -44,7 +44,8 @@ await new Promise((r) => srv.listen(4344, r));
 // ---------------------------------------------------------------- 2. a file check, no browser
 const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
 const regions = [...html.matchAll(/<!-- ([a-z-]+): generated[\s\S]*?<!-- \/\1 -->/g)].map((m) => m[0]);
-check('the generated regions are still delimited', regions.length >= 2, regions.length);
+// One generated region since the presentation went with the help page (2026-09-24).
+check('the generated regions are still delimited', regions.length >= 1, regions.length);
 const pickerRules = ['.cust-pick {', '.cust-pick-rows', '.cust-pick-row {', '.cust-pick-name', '.cust-pick-empty'];
 check('the customer picker still has its CSS', pickerRules.every((r) => html.includes(r)), pickerRules.filter((r) => !html.includes(r)));
 // The point: hand-written CSS must live where a generator cannot reach it.

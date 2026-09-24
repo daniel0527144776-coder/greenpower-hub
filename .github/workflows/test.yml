@@ -93,10 +93,6 @@ jobs:
       - name: Catalogue thumbnails decode, and nothing is fetched
         run: node test/test-hub-thumbs.mjs
 
-      # The presentation on the help page is generated from cost-model and product-specs. A slide
-      # quoting a cell cost is a price restated in prose, and those rot silently here.
-      - name: The presentation renders, and its numbers are the live ones
-        run: node test/test-deck.mjs
 
       # The import writes 144 customers and six years of income over data he typed himself.
       # Both protections are invisible on screen and fail silently.
@@ -189,10 +185,6 @@ jobs:
       - name: Fault diagnosis — nothing typed, nothing overwritten
         run: node test/test-diagnostics.mjs
 
-      # He asked for narration WITH a check that says immediately when there is no Hebrew
-      # voice. CI has no voices at all, which is exactly the case that must still speak up.
-      - name: The presentation plays itself, and says if it cannot talk
-        run: node test/test-deck-play.mjs
 
       # The estimator run backwards from the old pack the customer brought in. The round trip
       # against the forward estimator is what stops a second copy of the geometry appearing.

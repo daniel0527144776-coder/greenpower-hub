@@ -233,17 +233,11 @@ const rest = await page.evaluate(async () => {
   ['opL', 'opW', 'opH'].forEach((id, i) => { document.getElementById(id).value = [390, 135, 100][i]; });
   document.getElementById('opV').value = '72';
   const fit = oldPackFit();
-  navigateTo('help');
-  gpDeckVoiceCheck();
-  await new Promise((r) => setTimeout(r, 800));
-  const voice = (document.getElementById('gpdVoiceNote') || {}).textContent || '';
-  return { diag, cells: fit && fit.fits ? fit.N : 0, cfg: fit && fit.fits ? fit.S + 'S' + fit.P + 'P' : '', voice };
+  return { diag, cells: fit && fit.fits ? fit.N : 0, cfg: fit && fit.fits ? fit.S + 'S' + fit.P + 'P' : '' };
 });
 check('fault diagnosis lists ordered checks', rest.diag >= 4, rest.diag);
 // His own measured pack: 390x135 on the 19/21.4 bracket is 20S6P, 120 cells.
 check('the old-pack calculator reproduces his measured 72V pack', rest.cells === 120 && rest.cfg === '20S6P', rest);
-check('the presentation says in words whether it has a Hebrew voice',
-  /קול עברי|מנוע הקראה/.test(rest.voice) && !/בודק/.test(rest.voice), rest.voice);
 
 const sticker = await page.evaluate(async () => {
   navigateTo('stickers');

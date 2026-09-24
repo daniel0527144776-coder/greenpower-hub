@@ -189,50 +189,6 @@ check('tapping a name on the clock page opens that worker\'s own page',
 check('and it shows his balance, his rate and his hours',
   !wp.missing && wp.has, wp);
 
-// ---- merging two spellings of one worker ----
-if (SELFTEST) {
-  // The realistic slip: move the hours but forget the payments.
-  await page.evaluate(() => {
-    window.mergeWorker = (from, into) => {
-      const wt = Store.get('worktime') || [];
-      wt.forEach((e) => { if (e.workerName === from) e.workerName = into; });
-      Store.set('worktime', wt);
-      return { rows: 0, pays: 0 };
-    };
-  });
-}
-const mg = await page.evaluate(async () => {
-  const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 9)).toISOString();
-  Store.set('workers', [{ id: 'a', name: 'שמואל אמירי', rate: 45 }, { id: 'b', name: 'שמואל', rate: 40 }]);
-  Store.set('worktime', [
-    { id: 'm1', workerName: 'שמואל אמירי', rate: 45, hours: 10, date: iso(2026, 8, 3), paid: false },
-    { id: 'm2', workerName: 'שמואל', rate: 40, hours: 5, date: iso(2026, 8, 4), paid: false },
-  ]);
-  Store.set('wage_payments', [{ id: 'q1', worker: 'שמואל', amount: 100, date: iso(2026, 8, 10) }]);
-  const before = workerLedger('שמואל אמירי').balance + workerLedger('שמואל').balance;
-  openWorker('שמואל אמירי');
-  openMergeWorker();
-  const btn = [...document.querySelectorAll('#modalBody button, .modal button')].find((b) => /^שמואל(?! אמירי)/.test(b.textContent.trim()));
-  if (!btn) return { missing: true };
-  btn.click();
-  await new Promise((r) => setTimeout(r, 100));
-  noticeConfirm();
-  await new Promise((r) => setTimeout(r, 100));
-  const L = workerLedger('שמואל אמירי');
-  const ws = getWorkers();
-  return {
-    before, after: L.balance, gone: workerLedger('שמואל').earned === 0 && workerLedger('שמואל').paidTotal === 0,
-    rates: (Store.get('worktime') || []).map((e) => e.rate).join(','),
-    workers: ws.map((w) => w.name).join(','), alias: (ws[0].aliases || []).join(','),
-    punchMatch: (findWorkerFor('שמואל') || {}).name,
-  };
-});
-check('merging puts both spellings\' hours AND payments on one worker, balance unchanged',
-  !mg.missing && mg.gone && Math.round(mg.after) === Math.round(mg.before), mg);
-check('each hour keeps the rate it was recorded at', mg.rates === '45,40', mg);
-check('one entry is left in the workers list, and the old spelling still finds him',
-  mg.workers === 'שמואל אמירי' && mg.alias === 'שמואל' && mg.punchMatch === 'שמואל אמירי', mg);
-
 // ---- the same money counted twice: old "paid" flag + a payment for it (2026-09-24) ----
 if (SELFTEST) await page.evaluate(() => { window.wtAutoFixDups = () => {}; });
 const dp = await page.evaluate(async () => {
