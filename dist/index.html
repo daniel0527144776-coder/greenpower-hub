@@ -627,9 +627,9 @@ body { min-height: 100vh; }
       <select class="form-select" id="cellType" onchange="syncCellMah(); recalc()">
         <option value="18650-6">18650 רגיל — ₪6</option>
         <option value="18650-25p">18650 EVE 25P (כלי עבודה) — ₪4.51</option>
-        <option value="21700-50e">21700 EVE 50E (CLASSIC) — ₪6.42</option>
-        <option value="21700-50sg">21700 Tenpower 50SG (ADVANCED) — ₪7.76</option>
-        <option value="21700-50pl" selected>21700 EVE 50PL (PRO · Tabless) — ₪10.65</option>
+        <option value="21700-50e">21700 EVE 50E (CLASSIC) — ₪6.43</option>
+        <option value="21700-50sg">21700 Tenpower 50SG (ADVANCED) — ₪7.77</option>
+        <option value="21700-50pl" selected>21700 EVE 50PL (PRO · Tabless) — ₪10.66</option>
       </select>
     </div>
     <div class="form-row adv">
@@ -1416,9 +1416,9 @@ body { min-height: 100vh; }
   <h2 class="gpd-title">איך נבנה מחיר של חבילה</h2>
   <div class="gpd-wrap"><table>
       <tr><th>רכיב</th><th>כמה</th></tr>
-      <tr><td>תא CLASSIC · EVE 50E</td><td class="gpd-n">₪6.42 ליחידה</td></tr>
-      <tr><td>תא ADVANCED · Tenpower 50SG</td><td class="gpd-n">₪7.76</td></tr>
-      <tr><td>תא PRO · EVE 50PL</td><td class="gpd-n">₪10.65</td></tr>
+      <tr><td>תא CLASSIC · EVE 50E</td><td class="gpd-n">₪6.43 ליחידה</td></tr>
+      <tr><td>תא ADVANCED · Tenpower 50SG</td><td class="gpd-n">₪7.77</td></tr>
+      <tr><td>תא PRO · EVE 50PL</td><td class="gpd-n">₪10.66</td></tr>
       <tr><td>BMS לפי מתח</td><td class="gpd-n">₪105 / ₪105 / ₪180</td></tr>
       <tr><td>ניקל · חבילה של 120 תאים</td><td class="gpd-n">₪9</td></tr>
       <tr><td>חומרים</td><td class="gpd-n">₪60</td></tr>
@@ -2211,7 +2211,7 @@ document.addEventListener('keydown', function (e) {
 // record resolves a price rather than undefined.
 const CELL_PRICES = {
   '18650-6': 6, '18650-7': 7, '18650-25p': 4.51, '21700-12': 12, '21700-13': 13,
-  '21700-50e': 6.42, '21700-50sg': 7.76, '21700-50pl': 10.65,
+  '21700-50e': 6.43, '21700-50sg': 7.77, '21700-50pl': 10.66,
 };
 // What a repair QUOTE charges for our own cells: the landed cost they were priced on before the
 // June 2026 import cut it (March factor 1.371). Daniel, 2026-09-24: update the cost, not the
@@ -2223,9 +2223,9 @@ const CELL_PRICES_QUOTED = { '18650-25p': 5.14, '21700-50e': 7.34, '21700-50sg':
 // of retail" fallback takes over, and on a quantity ladder it lies in both directions:
 // it reads EVE 50E's ₪22 bulk tier as a ₪13 cost (real: ₪7.34) and its ₪50 single as ₪30.
 const CELL_UNIT_COST = {
-  'EVE 50E': 6.42, 'Tenpower 50SG': 7.76, 'EVE 50PL (Tabless)': 10.65,
-  'EVE 40P': 7.4, 'EVE 35V': 5.59, 'EVE 25P': 4.51, 'EVE 26V': 3.54,
-  'Ampace JP30P1 (Tabless)': 11.55,
+  'EVE 50E': 6.43, 'Tenpower 50SG': 7.77, 'EVE 50PL (Tabless)': 10.66,
+  'EVE 40P': 7.4, 'EVE 35V': 5.6, 'EVE 25P': 4.51, 'EVE 26V': 3.43,
+  'Ampace JP30P1 (Tabless)': 11.56,
 };
 // A cell's capacity is a property of the cell, not a separate choice. The two dropdowns
 // were independent and their defaults contradicted each other: "סוג תא" said EVE 50PL —
@@ -2960,7 +2960,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v321';
+const HUB_BUILD = 'v322';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5259,13 +5259,13 @@ function estimateBatteryCost(it, b2b = false, cell = null) {
   const V = +m[1], Ah = +m[2];
   // כלי עבודה are a rebuild on EVE 25P 18650s (2,500mAh), NOT one of the 21700 tiers:
   // 18V 5Ah is 5S2P = 10 real cells. The customer's own protection board is reused, so
-  // there is no BMS line. Cells are landed cost: USD × 3.00 × 1.203, the June 2026 sea import
+  // there is no BMS line. Cells are landed cost: USD × 3.00 × 1.204, the June 2026 sea import
   // (was 1.371 until 2026-09-24). Mirrors CELL_COST in cost-model.mjs, rounded to the agora.
   // Must stay identical to packCost() in generate-battery-products.mjs.
   const powerTool = /כלי עבודה/.test(it.cat);
   // 3-tier landed cell cost (2026-07): PRO=EVE 50PL, ADVANCED=Tenpower 50SG, CLASSIC=EVE 50E
   const cellPrice = cell ? cell.price : (powerTool ? 4.51
-    : /PRO/.test(it.cat) ? 10.65 : /ADVANCED/.test(it.cat) ? 7.76 : 6.42);
+    : /PRO/.test(it.cat) ? 10.66 : /ADVANCED/.test(it.cat) ? 7.77 : 6.43);
   const cellAh = cell ? cell.ah : (powerTool ? 2.5 : 5);     // 18650 25P vs 21700 ~5.0Ah
   const S = seriesForV(V);   // MUST match packCost() — sync-prices verifies it every run
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
@@ -5287,7 +5287,7 @@ function estimateBatteryCost(it, b2b = false, cell = null) {
   // ~$0.0109 per hole and a pack needs two contacts per cell. Folding does not double it —
   // he folds the same piece to shorten it, not to add a second. This is the TRUE cost; the
   // published prices were built on ₪3/S and that anchor lives in cost-model.mjs.
-  const nickel = cells * 2 * 0.0109 * 3 * 1.203;
+  const nickel = cells * 2 * 0.0109 * 3 * 1.204;
   const materials = powerTool ? 30 : 60;
   // The enclosure. Two families buy one and the rest are shrink-wrapped, which is why a 48V
   // 20Ah e-bike pack and a 48V 20Ah scooter pack are NOT the same cost — Daniel, 2026-09-17:
@@ -5318,7 +5318,7 @@ function batteryCostParts(it, b2b = false) {
   const V = +m[1], Ah = +m[2];
   const powerTool = /כלי עבודה/.test(it.cat);
   const cellPrice = powerTool ? 4.51
-    : /PRO/.test(it.cat) ? 10.65 : /ADVANCED/.test(it.cat) ? 7.76 : 6.42;
+    : /PRO/.test(it.cat) ? 10.66 : /ADVANCED/.test(it.cat) ? 7.77 : 6.43;
   const cellAh = powerTool ? 2.5 : 5;
   const S = seriesForV(V);
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
@@ -5334,7 +5334,7 @@ function batteryCostParts(it, b2b = false) {
   // limit, not a preference. Mirrors BMS_LADDER in cost-model.mjs; sync-prices checks every row.
   const bmsBand = seriesForV(V) > 20 ? 172 : (V >= 72 && !b2b ? 180 : 105);
   const bms = powerTool ? 0 : (picked ? picked.ils : bmsBand);
-  const nickel = cells * 2 * 0.0109 * 3 * 1.203;
+  const nickel = cells * 2 * 0.0109 * 3 * 1.204;
   const materials = powerTool ? 30 : 60;
   // The enclosure. Two families buy one and the rest are shrink-wrapped, which is why a 48V
   // 20Ah e-bike pack and a 48V 20Ah scooter pack are NOT the same cost — Daniel, 2026-09-17:
@@ -6747,8 +6747,63 @@ function openFinanceTools() {
       ${books || booksCust ? '' : '<b style="color:var(--warning);">הייבוא עוד לא בוצע במכשיר הזה.</b>'}
     </div>
     <button class="btn btn-secondary btn-block" style="margin-bottom:6px;" onclick="openAccountingImport()">🧾 ייבוא מהנהלת חשבונות</button>
+    <button class="btn btn-secondary btn-block" style="margin-bottom:6px;" onclick="openShipmentImport()">📦 הוצאות משלוח מקובץ</button>
     <button class="btn btn-secondary btn-block" onclick="openFinanceImport()">📥 ייבוא כספים (JSON)</button>`,
     `<button class="btn btn-secondary" onclick="closeModal()">סגור</button>`);
+}
+
+// ---- an import's costs, from a file (2026-09-24) ----
+// One shipment is five or six expense lines — the supplier, the freight bill, the chamber,
+// the port, the VAT — and typing them one by one is where one gets skipped. The file is
+// written in כלים-קלוד (it names the supplier, which must never be baked into this public
+// page). Rows are ADDED, never replacing anything, and keyed by the file's id so loading it
+// twice adds nothing. An existing expense of the same amount in the same month is shown
+// before saving, because it may be the same bill typed in by hand.
+function openShipmentImport() {
+  openModal('📦 הוצאות משלוח מקובץ', `
+    <div style="font-size:12px;color:var(--text-muted);line-height:1.8;margin-bottom:8px;">
+      בחר קובץ משלוח (למשל <b>shipment-2026-06.json</b> מתיקיית כלים-קלוד).<br>
+      ההוצאות <b>יתווספו</b> — שום דבר קיים לא יימחק, וטעינה חוזרת של אותו קובץ לא תכפיל.
+    </div>
+    <input type="file" id="shipFile" accept=".json,application/json" class="form-input-wide" style="width:100%;margin-bottom:8px;" onchange="shipFilePicked()">
+    <textarea id="shipJson" class="form-input-wide" style="width:100%;height:90px;font-size:11px;" placeholder='{"id":"...","expenses":[{"amount":0,"cat":"רכש תאים","note":"","date":"2026-09-24"}]}'></textarea>`,
+    `<button class="btn btn-primary" onclick="importShipment()">📦 הוסף</button>
+     <button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function shipFilePicked() {
+  const f = document.getElementById('shipFile');
+  if (!f || !f.files || !f.files[0]) return;
+  const rd = new FileReader();
+  rd.onload = () => { document.getElementById('shipJson').value = rd.result; };
+  rd.readAsText(f.files[0], 'utf-8');
+}
+function importShipment() {
+  let d;
+  try { d = JSON.parse(document.getElementById('shipJson').value); } catch (e) { showNotice('❌ הקובץ לא נקרא: ' + e.message); return; }
+  if (!d || !d.id || !Array.isArray(d.expenses) || !d.expenses.length) { showNotice('❌ זה לא קובץ משלוח — חסרים id או expenses.'); return; }
+  const cur = Store.get('expenses') || [];
+  const have = new Set(cur.map((x) => String(x.id)));
+  const add = [];
+  d.expenses.forEach((x, i) => {
+    const amount = Number(x.amount);
+    if (!(amount > 0)) return;
+    const id = d.id + '-' + i;
+    if (have.has(id)) return;
+    add.push({ id, amount, cat: String(x.cat || 'אחר'), note: String(x.note || ''), date: new Date((x.date || todayLocalISO()) + 'T12:00:00').toISOString(), src: 'shipment:' + d.id });
+  });
+  closeModal();
+  if (!add.length) { showNotice('לא נוסף כלום — ההוצאות מהקובץ הזה כבר רשומות.'); return; }
+  const dupes = add.filter((a) => cur.some((c) => Math.round(Number(c.amount)) === Math.round(a.amount) && monthKeyOf(c.date) === monthKeyOf(a.date)));
+  const total = add.reduce((s, a) => s + a.amount, 0);
+  askConfirm(`להוסיף ${add.length} הוצאות · ${shek(total)} ל${monthLabelHe(monthKeyOf(add[0].date))}?\n\n`
+    + add.map((a) => `${shek(a.amount)} · ${a.cat}${a.note ? ' · ' + a.note : ''}`).join('\n')
+    + (dupes.length ? `\n\n⚠️ כבר יש הוצאה באותו סכום ובאותו חודש עבור: ${dupes.map((a) => shek(a.amount)).join(', ')} — אולי הוקלדה ידנית.` : ''), () => {
+    if (!Store.set('expenses', add.concat(cur))) return;
+    const el = document.getElementById('finMonth');
+    if (el) el.value = monthKeyOf(add[0].date);
+    renderFinances();
+    showNotice(`✅ נוספו ${add.length} הוצאות · ${shek(total)}`);
+  });
 }
 
 // ---- the books ----
@@ -7622,6 +7677,10 @@ function renderWorkerPage() {
     <div class="card">
       <h3 class="card-title">📝 כל השעות</h3>
       ${rowHtml || '<div class="wt-muted">אין שעות.</div>'}
+    </div>
+
+    <div class="card">
+      <button class="btn btn-secondary btn-block btn-sm" onclick="openMergeWorker()">🔗 איחוד עם שם אחר של אותו עובד</button>
     </div>`;
 }
 
@@ -7634,6 +7693,73 @@ function addHoursFor(name) {
   toggleWtAdd(true);
   const card = document.getElementById('wtAddBody');
   if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ---- merging two names that are one worker (2026-09-24) ----
+// Daniel: "שמואל" and "שמואל אמירי" are the same man. Hours, payments, trashed rows and phone
+// reports are all filed by NAME, so a second spelling splits one person's account in two and
+// neither half is right. Merging renames every record of the other name to this one. Each row
+// keeps the rate stamped on it — the money already worked out is not repriced (his call). The
+// absorbed spelling becomes an alias, so a phone report still signed "שמואל" is recognised.
+// No worker names are baked in here: index.html is public, and this is a button he presses.
+function openMergeWorker() {
+  const into = WT_WORKER;
+  if (!into) return;
+  const others = wtAllNames().filter((n) => n !== into);
+  if (!others.length) { showNotice('אין עובד אחר לאחד איתו.'); return; }
+  openModal('🔗 איחוד עם ' + escPunch(into), `
+    <div class="wt-muted" style="margin-bottom:8px;">בחר את השם השני של אותו עובד. כל השעות והתשלומים שלו יעברו ל<b>${escPunch(into)}</b>, כל שעה בתעריף שבו נרשמה.</div>
+    ${others.map((n) => {
+      const L = workerLedger(n);
+      return `<button class="btn btn-secondary btn-block" style="margin-bottom:6px;text-align:start;" onclick="mergeWorkerRef(${wtRef(n)})">${escPunch(n)} <span class="wt-muted">· ${wtHrs(L.hours)} שעות · ${L.payments.length} תשלומים</span></button>`;
+    }).join('')}`,
+    `<button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function mergeWorkerRef(i) {
+  const from = WT_NAMES[i], into = WT_WORKER;
+  if (!from || !into || from === into) return;
+  const Lf = workerLedger(from);
+  closeModal();
+  askConfirm(`לאחד את "${from}" לתוך "${into}"?\n${wtHrs(Lf.hours)} שעות · ${shek(Lf.earned)} · ${Lf.payments.length} תשלומים יעברו אליו.\nאי אפשר לבטל את האיחוד.`, () => {
+    const res = mergeWorker(from, into);
+    if (!res) return;
+    renderWorktime();
+    showNotice(`אוחד: ${res.rows} רישומי שעות ו-${res.pays} תשלומים עברו ל${into}.`);
+  });
+}
+function mergeWorker(from, into) {
+  const wt = Store.get('worktime') || [];
+  let rows = 0;
+  wt.forEach((e) => { if (wtName(e) === from) { e.workerName = into; rows++; } });
+  const pays = getWagePayments();
+  let n = 0;
+  pays.forEach((p) => { if (p.worker === from) { p.worker = into; n++; } });
+  const trash = Store.get('worktime_trash') || [];
+  trash.forEach((t) => {
+    if (!t.row) return;
+    if (t.row.workerName === from) t.row.workerName = into;
+    if (t.row.worker === from) t.row.worker = into;
+  });
+  // The workers list: keep ONE entry. If only the absorbed name is on it, it is renamed; if
+  // both are, the absorbed one is removed and its name kept as an alias. An open shift moves.
+  const workers = getWorkers();
+  const wf = workers.find((w) => w.name === from), wi = workers.find((w) => w.name === into);
+  let list = workers;
+  if (wf && !wi) wf.name = into;
+  else if (wf && wi) {
+    wi.aliases = [...new Set([...(wi.aliases || []), from, ...(wf.aliases || [])])];
+    if (wf.shiftStart && !wi.shiftStart) wi.shiftStart = wf.shiftStart;
+    list = workers.filter((w) => w !== wf);
+  } else if (wi) {
+    wi.aliases = [...new Set([...(wi.aliases || []), from])];
+  }
+  // Every write is checked: a merge that half-lands leaves one person under two names again.
+  if (!Store.set('worktime', wt) || !Store.set('wage_payments', pays)
+    || !Store.set('worktime_trash', trash) || !Store.set('workers', list)) {
+    showNotice('❌ השמירה נכשלה — האחסון מלא. שום דבר לא אמור להיחשב כמאוחד; נסה שוב אחרי פינוי מקום.');
+    return null;
+  }
+  return { rows, pays: n };
 }
 
 // Record a payment. The amount is prefilled with what is owed (or the month's remainder when
@@ -8162,7 +8288,7 @@ function calcPackDims() {
   // than re-measure a bracket.
   // Two contacts per cell, priced off his own stock rather than a rule of thumb.
   const holes = N * 2;
-  const nickelIls = holes * NICKEL_USD_PER_HOLE * 3 * 1.203;
+  const nickelIls = holes * NICKEL_USD_PER_HOLE * 3 * 1.204;
   out.innerHTML += `<br><span style="font-size:11px;color:var(--text-muted);">ניקל: ${holes} מגעים ≈ ₪${nickelIls.toFixed(0)} · תבנית ${nickelFor(P)}</span>`;
   // Which holder to reach for. Only meaningful once a vehicle with a tub is chosen — without
   // one there is nothing for the pack to fit INTO and every holder trivially "fits".
