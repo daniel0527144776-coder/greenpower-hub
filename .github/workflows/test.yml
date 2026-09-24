@@ -205,6 +205,10 @@ jobs:
       - name: Sticker — every sticker is recorded
         run: node test/test-sticker-history.mjs
 
+      # A printed label must survive the next cloud sync; a deleted one must stay deleted.
+      - name: Sticker — history survives sync
+        run: node test/test-sticker-sync.mjs
+
       # A printed spec that overstates the pack is a warranty problem, not a cosmetic one.
       - name: Sticker — printed current never exceeds the BMS
         run: node test/test-sticker-specs.mjs

@@ -1010,6 +1010,7 @@
                     const txt = (id) => { const el = document.getElementById(id); return el ? el.innerText.trim() : ''; };
                     const isRepair = !document.getElementById('repaired-battery-specs-on-sticker').classList.contains('hidden');
                     const rec = {
+                        id: 'stk' + Date.now(),
                         type: isRepair ? 'repair' : 'new',
                         date: new Date().toISOString(),
                         client: clientNameInput ? clientNameInput.value.trim() : '',
@@ -1020,6 +1021,12 @@
                         capacity: txt('capacity-value'),
                         cells: txt('cells-value'),
                     };
+                    // Inside the hub, save THROUGH the hub (2026-09-24). Writing localStorage
+                    // directly never told the cloud sync, so the next pull replaced the list
+                    // with the server's older copy and the label just printed disappeared.
+                    let hub = null;
+                    try { if (window.parent !== window && typeof window.parent.hubAddSticker === 'function') hub = window.parent; } catch (e) { hub = null; }
+                    if (hub) { hub.hubAddSticker(rec); return; }
                     const arr = JSON.parse(localStorage.getItem('gp_sticker_history') || '[]');
                     arr.unshift(rec);
                     // Same 500-row ceiling the hub uses for jobs; a runaway history would

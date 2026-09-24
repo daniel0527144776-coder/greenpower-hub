@@ -122,13 +122,7 @@ const agree = await page.evaluate(() => {
 });
 check('the list and the customer card agree on every customer', agree.length === 0, agree);
 
-const stats = await page.evaluate(() => {
-  navigateTo('stats');
-  const t = document.getElementById('page-stats').innerText;
-  // the biggest spender here is רק מהספרים at 5,000 — invisible while ranking used totalSpent
-  return { top: /רק מהספרים/.test(t), text: t.slice(0, 200).replace(/\s+/g, ' ') };
-});
-check('the statistics page ranks by what was really spent', stats.top, stats.text);
+// (The statistics page that also ranked customers was removed on 2026-09-24, Daniel's call.)
 
 // ---------------------------------------------------------------- what must NOT be counted
 const excluded = await page.evaluate(() => {

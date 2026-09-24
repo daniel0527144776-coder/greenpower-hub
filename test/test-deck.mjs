@@ -99,7 +99,8 @@ check('the counter agrees with the deck', /\/\s*16$/.test(base.counter.trim()), 
 check('the figures are drawn, not fetched', base.imgs === 0 && base.svgs >= 4, `img=${base.imgs} svg=${base.svgs}`);
 // The deck brings its own stylesheet into a page that already owns .card, .btn and figure.
 // If it leaked, the rest of the help page is what breaks, so count it.
-check('the rest of the help page survived it', base.helpCards >= 8, String(base.helpCards));
+// Three stale help cards were removed on 2026-09-24, so seven remain; a leak breaks them all.
+check('the rest of the help page survived it', base.helpCards >= 6, String(base.helpCards));
 
 // ---- 2. the controller moves ----
 const nav = await page.evaluate(() => {
