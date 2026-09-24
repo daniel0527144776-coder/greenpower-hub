@@ -121,6 +121,36 @@ check('a 2-day quote is not', quote.fresh && quote.fresh.stale === false, JSON.s
 check('and a paid sale has no age at all', quote.paid === null, String(quote.paid));
 check('the row says so', /פג/.test(quote.pill), quote.pill);
 
+
+// ---- the month control, which could not be opened on his phone until 2026-09-24 ----
+// <input type="month"> renders without a usable picker in the Askan WebView (Android API 31,
+// off his own בדיקת מערכת), so the clock's month could not be changed at all. It never threw
+// and never said anything — the same silence as window.open, downloads and alert on that
+// device. THIS is the check that would have caught it: the rule, not the behaviour, because
+// the behaviour passes everywhere except the one place it matters.
+const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
+const nativeMonth = (html.match(/<input[^>]*type="month"/g) || []).length;
+check('no native month picker survives anywhere', nativeMonth === 0, String(nativeMonth));
+
+const month = await page.evaluate(() => {
+  Store.set('worktime', [{ id: 'mw1', date: '2026-06-15', workerName: 'בדיקה', rate: 50, hours: 5 }]);
+  navigateTo('worktime');
+  const el = document.getElementById('wtMonth');
+  if (!el) return { tag: null };
+  const before = el.value;
+  stepMonth('wtMonth', -1);
+  return {
+    tag: el.tagName,
+    opts: el.options.length,
+    hasDataMonth: Array.prototype.some.call(el.options, (o) => o.value === '2026-06'),
+    before,
+    after: document.getElementById('wtMonth').value,
+  };
+});
+check('the month is a select, which a WebView can open', month.tag === 'SELECT', String(month.tag));
+check('and it lists a month that has data in it', month.hasDataMonth === true, 'opts=' + month.opts);
+check('the arrow steps a month back', month.after && month.after !== month.before, month.before + ' -> ' + month.after);
+
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');
