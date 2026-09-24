@@ -197,6 +197,10 @@ jobs:
       - name: Sticker — every sticker is recorded
         run: node test/test-sticker-history.mjs
 
+      # Stock, hours and wage payments merge row by row: an old device cannot wipe rows.
+      - name: Two devices cannot overwrite each other's rows
+        run: node test/test-row-merge.mjs
+
       # A printed label must survive the next cloud sync; a deleted one must stay deleted.
       - name: Sticker — history survives sync
         run: node test/test-sticker-sync.mjs

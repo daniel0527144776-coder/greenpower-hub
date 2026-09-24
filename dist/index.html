@@ -1733,10 +1733,67 @@ let state = {
 let bizDetails = {};
 
 // ---- Storage layer (localStorage + cloud sync) ----
+// ---- per-row merge for the lists two devices both edit (2026-09-25) ----
+// Every write of these keys used to push the WHOLE list, and a pull adopted the whole list.
+// So a device holding an old copy — the phone left open since before the 1.9 stock seed — made
+// one small change, pushed its old list, and the cloud and then every other device lost the
+// rows it did not have: four of seven cell models vanished that way, and very likely the hours
+// that "were deleted by mistake". Now each row carries _u (when it last changed here), a row
+// removed on purpose leaves a tombstone in tomb_<key>, and pull() merges row by row: a row
+// either side has is kept, the newer version of a row wins, and a tombstone newer than the
+// row keeps it deleted. A merge that differs from the cloud is pushed back, so opening the hub
+// on any device that still holds the rows puts them back everywhere.
+const MERGE_KEYS = ['inventory', 'worktime', 'wage_payments'];
+const TOMB_DAYS = 180;
+const mRowId = (r) => (r && r.id != null ? String(r.id) : null);
+function stampRows(key, next) {
+  let prev = [];
+  try { prev = JSON.parse(localStorage.getItem('gp_' + key) || '[]') || []; } catch (e) { prev = []; }
+  if (!Array.isArray(prev) || !Array.isArray(next)) return;
+  const now = Date.now();
+  const strip = (r) => { const c = { ...r }; delete c._u; return JSON.stringify(c); };
+  const pm = new Map(prev.filter(mRowId).map((r) => [mRowId(r), r]));
+  for (const r of next) {
+    const id = mRowId(r);
+    if (!id || !r || typeof r !== 'object') continue;
+    const p = pm.get(id);
+    if (!p || strip(p) !== strip(r)) r._u = now;
+    else if (p._u != null && r._u == null) r._u = p._u;
+    pm.delete(id);
+  }
+  if (pm.size) {
+    const tk = 'tomb_' + key;
+    let tomb = {};
+    try { tomb = JSON.parse(localStorage.getItem('gp_' + tk) || '{}') || {}; } catch (e) { tomb = {}; }
+    for (const id of pm.keys()) tomb[id] = now;
+    const cut = now - TOMB_DAYS * 864e5;
+    for (const id of Object.keys(tomb)) if (tomb[id] < cut) delete tomb[id];
+    Store.set(tk, tomb);
+  }
+}
+function mergeRows(key, local, server, tomb) {
+  const out = new Map(), noId = [];
+  for (const r of [...(Array.isArray(server) ? server : []), ...(Array.isArray(local) ? local : [])]) {
+    const id = mRowId(r);
+    if (!id) { noId.push(r); continue; }
+    const cur = out.get(id);
+    if (!cur || (Number(r._u) || 0) > (Number(cur._u) || 0)) out.set(id, r);
+  }
+  const t = tomb || {};
+  const rows = [...out.values()].filter((r) => !(t[mRowId(r)] != null && t[mRowId(r)] >= (Number(r._u) || 0)));
+  const seen = new Set();
+  return rows.concat(noId.filter((r) => { const k = JSON.stringify(r); if (seen.has(k)) return false; seen.add(k); return true; }));
+}
+function mergeTombs(a, b) {
+  const u = { ...(b || {}) };
+  for (const [id, ts] of Object.entries(a || {})) if (!(u[id] >= ts)) u[id] = ts;
+  return u;
+}
 const Store = {
   get(key) { try { const v = localStorage.getItem('gp_' + key); return v ? JSON.parse(v) : null; } catch { return null; } },
   set(key, val) {
     try {
+      if (MERGE_KEYS.includes(key) && Array.isArray(val)) stampRows(key, val);
       localStorage.setItem('gp_' + key, JSON.stringify(val));
       if (typeof Sync !== 'undefined' && SYNC_KEYS.includes(key)) Sync.push(key, val);
       return true;
@@ -1770,7 +1827,7 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'bms_pick', 'supplier_costs', 'supplier_prices', 'biz_payments', 'wage_payments', 'worktime_trash'];
+const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'bms_pick', 'supplier_costs', 'supplier_prices', 'biz_payments', 'wage_payments', 'worktime_trash', 'tomb_inventory', 'tomb_worktime', 'tomb_wage_payments'];
 
 const Sync = {
   session: null,
@@ -1851,8 +1908,35 @@ const Sync = {
     const serverKeys = new Set();
     const mergedPush = [];
     let changed = false;
+    // tombstones first — the row merge below needs both sides' deletions
+    const byKey = new Map(rows.map((r) => [r.key, r]));
+    const rowPush = [];
+    for (const k of MERGE_KEYS) {
+      const tk = 'tomb_' + k, row = byKey.get(tk);
+      let loc = {};
+      try { loc = JSON.parse(localStorage.getItem('gp_' + tk) || '{}') || {}; } catch (e) { loc = {}; }
+      const u = mergeTombs(loc, row ? row.value : {});
+      localStorage.setItem('gp_' + tk, JSON.stringify(u));
+      if (row) { meta[tk] = new Date(row.updated_at).getTime(); serverKeys.add(tk); }
+      if (row && JSON.stringify(u) !== JSON.stringify(row.value || {})) rowPush.push([tk, u]);
+    }
     rows.forEach(row => {
       serverKeys.add(row.key);
+      if (/^tomb_/.test(row.key)) return;
+      if (MERGE_KEYS.includes(row.key)) {
+        // merged even when this device has an unsent change: the union contains it, and the
+        // merge is what goes up
+        let local = [];
+        try { local = JSON.parse(localStorage.getItem('gp_' + row.key) || '[]') || []; } catch (e) { local = []; }
+        let tomb = {};
+        try { tomb = JSON.parse(localStorage.getItem('gp_tomb_' + row.key) || '{}') || {}; } catch (e) { tomb = {}; }
+        const merged = mergeRows(row.key, local, row.value, tomb);
+        localStorage.setItem('gp_' + row.key, JSON.stringify(merged));
+        meta[row.key] = new Date(row.updated_at).getTime();
+        changed = true;
+        if (JSON.stringify(merged) !== JSON.stringify(row.value || [])) rowPush.push([row.key, merged]);
+        return;
+      }
       // A key with an unconfirmed local push in flight (or queued while
       // offline) must never be clobbered by a pull -- the local edit hasn't
       // reached the server yet, so the server row is stale by definition,
@@ -1878,6 +1962,7 @@ const Sync = {
     this._setMeta(meta);
     // anything the merge added that the server does not have yet goes back up
     for (const v of mergedPush) { try { await this.push('sticker_history', v); } catch {} }
+    for (const [k, v] of rowPush) { try { await this.push(k, v); } catch {} }
     // push local keys that server is missing (first sync / new data)
     for (const key of SYNC_KEYS) {
       const raw = localStorage.getItem('gp_' + key);
@@ -1903,6 +1988,27 @@ const Sync = {
       try {
         const h = await this._headers();
         if (this._pushSeq[key] !== seq) return; // superseded while awaiting auth headers
+        // Read-merge-write for the row-merged lists: whatever the cloud holds now is merged in
+        // before this device's copy goes up, so a device with an old list cannot overwrite rows
+        // it never had. If the read fails the push goes ahead as before — the next pull merges.
+        const base = key.replace(/^tomb_/, '');
+        if (MERGE_KEYS.includes(base)) {
+          try {
+            const g = await fetch(SB_URL + '/rest/v1/hub_state?select=key,value&key=in.(' + base + ',tomb_' + base + ')', { headers: h });
+            if (g.ok) {
+              const got = await g.json();
+              const sv = (k) => { const r = got.find((x) => x.key === k); return r ? r.value : null; };
+              let tomb = {};
+              try { tomb = JSON.parse(localStorage.getItem('gp_tomb_' + base) || '{}') || {}; } catch (e) { tomb = {}; }
+              tomb = mergeTombs(tomb, sv('tomb_' + base) || {});
+              if (key !== base) value = tomb;
+              else if (sv(base)) value = mergeRows(base, value, sv(base), tomb);
+              localStorage.setItem('gp_' + key, JSON.stringify(value));
+              if (key !== base) localStorage.setItem('gp_tomb_' + base, JSON.stringify(tomb));
+            }
+          } catch (e) { /* offline or refused: push as-is, the next pull merges */ }
+          if (this._pushSeq[key] !== seq) return;
+        }
         h['Prefer'] = 'resolution=merge-duplicates';
         const r = await fetch(SB_URL + '/rest/v1/hub_state?on_conflict=user_id,key', {
           method: 'POST', headers: h,
@@ -2316,7 +2422,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v329';
+const HUB_BUILD = 'v330';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
