@@ -2955,7 +2955,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v323';
+const HUB_BUILD = 'v324';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7609,7 +7609,6 @@ function renderWorkerPage() {
           <button class="wt-del" onclick="deleteWagePayment('${p.id}')" aria-label="מחק" title="מחק (עובר לסל)">🗑</button>
         </div>`;
       }).join('') : '<div class="wt-muted">עוד לא נרשם תשלום.</div>'}
-      ${L.legacyPaid >= 0.5 ? `<div class="wt-muted" style="margin-top:6px;">בנוסף ${shek(L.legacyPaid)} סומנו "שולם" לפני שנרשמו תשלומים (בלי תאריך).</div>` : ''}
     </div>
 
     <div class="card">
