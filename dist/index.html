@@ -1303,6 +1303,8 @@ body { min-height: 100vh; }
     <button class="btn btn-secondary btn-block" style="margin-bottom: 6px;" onclick="exportData()">📥 ייצוא גיבוי (JSON)</button>
     <button class="btn btn-secondary btn-block" style="margin-bottom: 6px;" onclick="document.getElementById('importFile').click()">📤 יבוא גיבוי</button>
     <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importData(this)">
+    <button class="btn btn-secondary" onclick="document.getElementById('restoreHoursFile').click()">⏱️ שחזור שעות מגיבוי</button>
+    <input type="file" id="restoreHoursFile" accept=".json" style="display: none;" onchange="restoreHoursFromBackup(this)">
     <button class="btn btn-danger btn-block" onclick="clearAllData()">🗑️ מחק את כל הנתונים</button>
   </div>
 
@@ -2892,7 +2894,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v315';
+const HUB_BUILD = 'v316';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9202,6 +9204,72 @@ function exportData() {
   Store.set('lastBackup', Date.now());
   const banner = document.getElementById('backupReminder');
   if (banner) banner.style.display = 'none';
+}
+
+// Restore ONLY the hours, and only the ones that are missing.
+//
+// The whole-backup import next to this replaces every key in the file, which against an old
+// backup means restoring the hours and losing everything recorded since. This touches the
+// 'worktime' key and nothing else, and it never overwrites — it adds what is absent.
+//
+// Two ways an entry counts as already there: the same id, or the same day + worker + hours.
+// The second matters because re-typing a lost hour by hand gives it a new id, and without
+// that test a merge would pay the same hour twice.
+function restoreHoursFromBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let data;
+    try { data = JSON.parse(e.target.result); }
+    catch (err) { showNotice('❌ הקובץ לא נקרא: ' + err.message); input.value = ''; return; }
+    const from = Array.isArray(data.worktime) ? data.worktime : null;
+    if (!from) {
+      showNotice('❌ אין שעות בקובץ הזה. בחר קובץ גיבוי של לוח הבקרה.');
+      input.value = '';
+      return;
+    }
+    const now = Store.get('worktime') || [];
+    const sig = (x) => [String(x.date || "").slice(0, 10), x.workerName || x.workerId || "", Number(x.hours) || 0].join("|");
+    const haveId = new Set(now.map((x) => String(x.id)));
+    const haveSig = new Set(now.map(sig));
+    const add = [];
+    let sameId = 0, sameShift = 0;
+    for (const x of from) {
+      if (haveId.has(String(x.id))) { sameId++; continue; }
+      if (haveSig.has(sig(x))) { sameShift++; continue; }
+      add.push(x);
+      haveSig.add(sig(x));
+    }
+    if (!add.length) {
+      showNotice('לא נוסף כלום — כל ' + from.length + ' השורות בקובץ כבר קיימות אצלך.');
+      input.value = '';
+      return;
+    }
+    const hours = add.reduce((s, x) => s + (Number(x.hours) || 0), 0);
+    const wage = add.reduce((s, x) => s + (Number(x.hours) || 0) * (Number(x.rate) || 0), 0);
+    const lines = add.slice(0, 12).map((x) =>
+      (String(x.date || '').slice(0, 10)) + ' · ' + (x.workerName || '?') + ' · ' + (Number(x.hours) || 0) + ' שעות');
+    askConfirm(
+      'להוסיף ' + add.length + ' רשומות שעות שחסרות אצלך?\n' +
+      hours.toFixed(1) + ' שעות · ' + shek(Math.round(wage)) + '\n\n' + lines.join('\n') +
+      (add.length > 12 ? '\n…ועוד ' + (add.length - 12) : '') +
+      (sameId + sameShift ? '\n\n(' + (sameId + sameShift) + ' שורות בקובץ כבר קיימות ולא ייגעו)' : ''),
+      () => {
+        const merged = now.concat(add);
+        // Store.set returns false when localStorage is full, and an import that announced
+        // success over a failed write is exactly how the accountant data went missing.
+        const ok = Store.set('worktime', merged);
+        if (!ok) {
+          showNotice('❌ לא הצלחתי לשמור — האחסון מלא. פנה מקום ונסה שוב.');
+          return;
+        }
+        showNotice('✅ הוחזרו ' + add.length + ' רשומות · ' + hours.toFixed(1) + ' שעות · ' + shek(Math.round(wage)),
+          '<button class="btn btn-primary" onclick="location.reload()">אישור</button>');
+      });
+    input.value = '';
+  };
+  reader.readAsText(file);
 }
 
 function importData(input) {
