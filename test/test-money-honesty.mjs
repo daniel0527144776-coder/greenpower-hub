@@ -212,6 +212,26 @@ const pr = await page.evaluate(async () => {
 check('a missing approved report comes back, once, at the rate in the workers list',
   pr.rows.length === 1 && pr.rows[0][0] === 'u-2' && pr.rows[0][3] === 40, pr);
 
+// ---- v321: tapping a worker's name opens his own page with everything on it ----
+if (SELFTEST) {
+  // Break it the way it would really break: the page renders the FIRST worker, not the one tapped.
+  await page.evaluate(() => { window.openWorker = () => { WT_WORKER = getWorkers()[0].name; navigateTo('worker'); }; });
+}
+const wp = await page.evaluate(async () => {
+  navigateTo('worktime');
+  const link = [...document.querySelectorAll('#wageDebtList .wt-name-link')].find((a) => a.textContent === 'אבי');
+  if (!link) return { missing: true };
+  link.click();
+  await new Promise((r) => setTimeout(r, 100));
+  const active = (document.querySelector('.page.active') || {}).id;
+  const text = document.getElementById('page-worker').innerText;
+  return { active, title: document.getElementById('wkTitle').textContent, owes: workerLedger('אבי').balance, text: text.slice(0, 200), has: [Math.round(workerLedger('אבי').balance).toLocaleString('he-IL'), 'תעריף עכשיו', 'כל השעות'].every((s) => text.includes(s)) };
+});
+check('tapping a name on the clock page opens that worker\'s own page',
+  !wp.missing && wp.active === 'page-worker' && /אבי/.test(wp.title || ''), wp);
+check('and it shows his balance, his rate and his hours',
+  !wp.missing && wp.has, wp);
+
 // A clock note "שעון: 09:02–15:32" read backwards in RTL until the span was isolated.
 const note = await page.evaluate(() => (typeof wtNoteHtml === 'function') ? wtNoteHtml('שעון: 09:02–15:32') : '');
 check('a shift\'s times are isolated left-to-right so they do not flip',
