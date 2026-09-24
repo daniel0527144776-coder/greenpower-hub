@@ -349,6 +349,8 @@ body { min-height: 100vh; }
   .wt-tag { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
   .wt-tag.open { color: var(--danger); background: var(--danger-light); }
   .wt-tag.done { color: var(--success); background: var(--success-light); }
+  .inv-sub { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--primary); margin: 10px 2px 6px; padding-bottom: 3px; border-bottom: 1px dashed var(--border-strong); }
+  .inv-sub span:last-child { font-weight: 400; font-size: 11px; color: var(--text-muted); }
   .wt-name-link { color: inherit; text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 3px; }
   .wt-month-head { font-size: 12px; font-weight: 700; color: var(--primary); padding: 10px 2px 2px; }
   .wt-acct { padding: 8px 0; border-bottom: 1px solid var(--border); }
@@ -2507,7 +2509,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v331';
+const HUB_BUILD = 'v332';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -8981,12 +8983,33 @@ function renderInventory() {
     // folding never hides a shortage.
     const open = INV_OPEN.has(c);
     const warn = items.some((x) => (Number(x.qty) || 0) <= 0);
+    // One more level inside the categories that have a natural axis (Daniel, 2026-09-25):
+    // chargers by voltage, cells by format, BMS by series count. Read off the name, the same
+    // way the sort above reads it; an item whose name carries no such number goes under אחר.
+    const axis = c === 'BMS' ? (x) => { const n = unit(x, 'S'); return isFinite(n) ? n + 'S' : null; }
+      : c === 'מטען' ? (x) => { const n = unit(x, 'V'); return isFinite(n) ? n + 'V' : null; }
+      : c === 'תא' ? (x) => { const m = String(x.name || '').match(/\b(18650|21700|26650|32700|4680)\b/); return m ? m[1] : null; }
+      : null;
+    let body;
+    if (axis) {
+      const byKey = new Map();
+      for (const x of items) { const k = axis(x) || 'אחר'; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(x); }
+      const keys = [...byKey.keys()].sort((a, b) => (a === 'אחר') - (b === 'אחר') || parseFloat(a) - parseFloat(b));
+      body = keys.map((k) => {
+        const l = byKey.get(k);
+        const n = l.reduce((s, x) => s + (Number(x.qty) || 0), 0);
+        return `<div class="inv-sub"><span>${k}</span><span>${n} יח'</span></div>`
+          + l.filter((x) => !isUsed(x)).concat(l.filter(isUsed)).map((i) => renderInvItem(i, c)).join('');
+      }).join('');
+    } else {
+      body = used.length ? sub('חדש', fresh) + sub('♻️ יד 2', used) : fresh.map((i) => renderInvItem(i, c)).join('');
+    }
     return `<div style="margin-bottom:10px;">
       <div onclick="toggleInvCat('${encodeURIComponent(c)}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;cursor:pointer;border-bottom:2px solid var(--primary);">
         <span style="font-weight:700;font-size:15px;">${open ? '▾' : '◂'} ${CAT_ICON[c] || '📦'} ${c}${warn ? ' <span style="color:var(--danger);">⚠️</span>' : ''}</span>
         <span style="font-size:11px;color:var(--text-muted);">${totalQty} יח'</span>
       </div>
-      ${!open ? '' : `<div style="margin-top:6px;">${used.length ? sub('חדש', fresh) : fresh.map((i) => renderInvItem(i, c)).join('')}${sub('♻️ יד 2', used)}</div>`}
+      ${!open ? '' : `<div style="margin-top:6px;">${body}</div>`}
     </div>`;
   }).join('');
 }

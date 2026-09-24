@@ -190,6 +190,19 @@ check('and it happens once — a second run adds nothing', auto.twice === 7, aut
 check('"out of stock" is still announced', /אזל/.test(auto.alert), auto.alert);
 check('"low stock" is not', !/מלאי נמוך/.test(auto.alert), auto.alert);
 
+// ---- 9. inside a category: chargers by voltage, cells by format, BMS by series ----
+const grouped = await page.evaluate(() => {
+  Store.set('inventory', [
+    { id: 'g1', name: 'תאי EVE 21700 50E', qty: 10, cat: 'תאים' }, { id: 'g2', name: 'תאי EVE 18650 25P', qty: 5, cat: 'תאים' },
+    { id: 'g3', name: 'BMS DALY 13S 60A', qty: 2, cat: 'BMS' }, { id: 'g4', name: 'BMS JK B2A24S20P 200A', qty: 1, cat: 'BMS' },
+    { id: 'g5', name: 'מטען 60V 5A', qty: 3, cat: 'מטען' }, { id: 'g6', name: 'מטען 72V 5A', qty: 1, cat: 'מטען' },
+  ]);
+  navigateTo('inventory');
+  ['תא', 'BMS', 'מטען'].forEach((c) => { if (!INV_OPEN.has(c)) toggleInvCat(encodeURIComponent(c)); });
+  return [...document.querySelectorAll('.inv-sub span:first-child')].map((x) => x.textContent.trim()).join(',');
+});
+check('BMS by series, chargers by voltage, cells by format', grouped === '13S,24S,60V,72V,18650,21700', grouped);
+
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');
