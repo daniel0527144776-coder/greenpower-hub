@@ -316,6 +316,36 @@ body { min-height: 100vh; }
   .cust-pick-sub { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
   .cust-pick-when { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
   .cust-pick-empty { font-size: 11.5px; color: var(--text-muted); padding: 8px 2px; }
+  /* שעון עובדים (2026-09-24) */
+  .wt-monthbar { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; }
+  .wt-monthbar select { width: auto; min-width: 150px; font-weight: 700; text-align: center; }
+  .wt-worker { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 10px; }
+  .wt-worker-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+  .wt-worker-name { font-size: 16px; font-weight: 700; }
+  .wt-muted { font-size: 12px; color: var(--text-muted); }
+  .wt-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; text-align: center; }
+  .wt-num { background: var(--card); border-radius: var(--radius-sm); padding: 8px 4px; }
+  .wt-num span { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
+  .wt-num b { font-size: 16px; }
+  .wt-owed b { color: var(--danger); }
+  .wt-done { text-align: center; color: var(--success); font-size: 13px; font-weight: 600; padding: 4px 0; }
+  .wt-total { display: flex; justify-content: space-between; gap: 8px; padding: 8px 2px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  .wt-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
+  .wt-row:last-child { border-bottom: none; }
+  .wt-row-main { flex: 1; min-width: 0; }
+  .wt-row-title { font-size: 14px; font-weight: 600; }
+  .wt-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .wt-row-side b { font-size: 15px; }
+  .wt-pill { border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  .wt-pill.paid { background: var(--success-light); color: var(--success); border: 1px solid var(--success); }
+  .wt-pill.unpaid { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger); }
+  .wt-del { background: none; border: none; color: var(--text-light); font-size: 16px; cursor: pointer; padding: 6px; }
+  .wt-debt-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 2px; font-size: 14px; }
+  .wt-debt-total { font-size: 17px; font-weight: 700; }
+  .wt-debt-total b { color: var(--danger); }
+  .wt-month-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .wt-month-chip { background: var(--bg); border: 1px solid var(--border-strong); color: var(--text); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+  .wt-month-chip b { color: var(--danger); }
 </style>
 </head>
 <body>
@@ -1972,46 +2002,50 @@ document.addEventListener('keydown', function (e) {
 <section id="page-worktime" class="page">
   <div class="page-header">
     <h2 class="page-title">⏱️ שעון עובדים</h2>
-    <div style="display:flex;align-items:center;gap:4px;">
-          <button class="btn btn-sm" onclick="stepMonth('wtMonth',-1)" aria-label="חודש קודם">‹</button>
-          <select id="wtMonth" class="form-select" style="width:auto;" onchange="renderWorktime()"></select>
-          <button class="btn btn-sm" onclick="stepMonth('wtMonth',1)" aria-label="חודש הבא">›</button>
-        </div>
   </div>
-  <div class="card" id="wageDebtCard" style="display:none;border-color:var(--danger);">
-    <h3 class="card-title">💸 חוב פתוח לעובדים</h3>
-    <div id="wageDebtList"></div>
-  </div>
-  <!-- Dispatches from /clock/. Nothing here is wages until it is approved. -->
-  <div class="card" id="punchCard" style="display:none;border-color:var(--warning);">
-    <h3 class="card-title">📥 דיווחי עובדים ממתינים</h3>
-    <div id="punchList"></div>
-  </div>
+  <!-- Order, 2026-09-24 (Daniel: "not organised, confusing"): what is done every day first —
+       who is in right now — then what is owed, then the chosen month, then the raw rows.
+       The same sums used to appear three times over; each card now answers one question. -->
   <!-- The clock Daniel runs himself, for a worker standing in front of him. Distinct from
        /clock/, which is the worker reporting from their own phone into an approval queue —
        here the person pressing IS the approver, so a punch becomes hours directly. -->
   <div class="card" id="shiftCard">
-    <h3 class="card-title">⏱️ שעון — כניסה ויציאה</h3>
+    <h3 class="card-title">👷 מי בעבודה עכשיו</h3>
     <div id="shiftList"></div>
   </div>
-  <div class="card">
-    <h3 class="card-title">➕ רישום שעות</h3>
-    <div class="form-row"><label>עובד</label>
-      <select class="form-select" id="wtWorker"></select>
-    </div>
-    <div class="form-row"><label>שעות</label><input type="number" class="form-input" id="wtHours" placeholder="0" min="0" step="0.5"></div>
-    <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="wtDate" style="width:auto;direction:ltr;"></div>
-    <div class="form-row"><label>הערה</label><input type="text" class="form-input-wide" id="wtNote" placeholder="מה בוצע" style="width:180px;"></div>
-    <button class="btn btn-primary btn-block" style="margin-top:8px;" onclick="addWorktime()">💾 רשום שעות</button>
-    <button class="btn btn-secondary btn-block btn-sm" style="margin-top:6px;" onclick="manageWorkers()">👷 ניהול עובדים ותעריפים</button>
+  <!-- Dispatches from /clock/. Nothing here is wages until it is approved. -->
+  <div class="card" id="punchCard" style="display:none;border-color:var(--warning);">
+    <h3 class="card-title">📥 דיווחים מהטלפון של העובדים — מחכים לאישור שלך</h3>
+    <div id="punchList"></div>
   </div>
-  <div class="card">
-    <h3 class="card-title">📊 סיכום החודש</h3>
+  <div class="card" id="wageDebtCard" style="display:none;border-color:var(--danger);">
+    <h3 class="card-title">💸 כמה אני חייב לעובדים</h3>
+    <div id="wageDebtList"></div>
+  </div>
+  <div class="card" id="wtMonthCard">
+    <div class="wt-monthbar">
+      <button class="btn btn-sm btn-secondary" onclick="stepMonth('wtMonth',-1)" aria-label="חודש קודם">‹</button>
+      <select id="wtMonth" class="form-select" onchange="renderWorktime()"></select>
+      <button class="btn btn-sm btn-secondary" onclick="stepMonth('wtMonth',1)" aria-label="חודש הבא">›</button>
+    </div>
     <div id="worktimeSummary"></div>
   </div>
   <div class="card">
-    <h3 class="card-title">📝 רישומים</h3>
+    <h3 class="card-title">📝 השעות שנרשמו בחודש</h3>
     <div id="worktimeList"></div>
+  </div>
+  <div class="card">
+    <button class="btn btn-secondary btn-block" id="wtAddToggle" onclick="toggleWtAdd()">➕ הוספת שעות ידנית</button>
+    <div id="wtAddBody" hidden style="margin-top:10px;">
+      <div class="form-row"><label>עובד</label>
+        <select class="form-select" id="wtWorker"></select>
+      </div>
+      <div class="form-row"><label>כמה שעות</label><input type="number" class="form-input" id="wtHours" placeholder="0" min="0" step="0.5"></div>
+      <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="wtDate" style="width:auto;direction:ltr;"></div>
+      <div class="form-row"><label>מה עשה</label><input type="text" class="form-input" id="wtNote" placeholder="לא חובה"></div>
+      <button class="btn btn-primary btn-block" style="margin-top:8px;" onclick="addWorktime()">💾 שמור שעות</button>
+    </div>
+    <button class="btn btn-secondary btn-block btn-sm" style="margin-top:8px;" onclick="manageWorkers()">⚙️ עובדים ותעריף לשעה</button>
   </div>
 </section>
 
@@ -2894,7 +2928,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v316';
+const HUB_BUILD = 'v317';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5397,7 +5431,15 @@ function productCost(it, b2b = false) {
   const costs = getCosts();
   const k = catKey(it);
   if (costs[k] != null) return costs[k];                 // manual override (exact)
-  if (/סוללות/.test(it.cat)) return estimateBatteryCost(it, b2b); // batteries: estimate from cells
+  if (/סוללות/.test(it.cat)) {
+    const est = estimateBatteryCost(it, b2b);             // batteries: estimate from cells
+    if (est != null) return est;
+    // The hand-kept RC / 36V drill packs carry a price RANGE and no cell recipe the model
+    // knows, so the cell estimate is null and the margin column sat blank. Daniel, 2026-09-24:
+    // estimate them — the range's midpoint at the cost-% setting, like any resold item.
+    const mid = retailMid(it.retail);
+    return mid != null && COST_PCT > 0 ? Math.round(mid * COST_PCT / 100) : null;
+  }
   if (/^תאי ליתיום/.test(it.cat)) {                          // single cells: known to the agora
     const c = CELL_UNIT_COST[String(it.name).split(/\s+—\s+/)[0]];
     if (c != null) return c;
@@ -5409,6 +5451,13 @@ function productCost(it, b2b = false) {
   // resold items with no quote on file: estimate as % of retail
   if (typeof it.retail === 'number' && COST_PCT > 0) return Math.round(it.retail * COST_PCT / 100);
   return null;
+}
+// '₪180-280' -> 230. A number passes through; anything without a figure ('לפי הצעה') is null.
+function retailMid(v) {
+  if (typeof v === 'number') return v;
+  const n = String(v || '').replace(/,/g, '').match(/\d+(?:\.\d+)?/g);
+  if (!n) return null;
+  return n.length >= 2 ? (Number(n[0]) + Number(n[1])) / 2 : Number(n[0]);
 }
 
 let priceMode = 'retail';
@@ -5594,6 +5643,11 @@ function renderCatalog() {
         if (typeof price === 'number' && cost != null) {
           const profit = price - cost, marg = price > 0 ? Math.round(profit / price * 100) : 0;
           extra = `<div style="font-size:10.5px;color:var(--text-muted);">עלות ~${shek(cost)} · רווח ${shek(profit)} (${marg}%)</div>`;
+        } else if (cost != null) {
+          // A range price: say the margin is measured at the middle of it, not pretend it is exact.
+          const mid = retailMid(price);
+          extra = `<div style="font-size:10.5px;color:var(--text-muted);">עלות ~${shek(cost)}`
+            + (mid ? ` · רווח ~${Math.round((mid - cost) / mid * 100)}% באמצע הטווח` : '') + ' (הערכה)</div>';
         } else { extra = `<div style="font-size:10.5px;color:var(--text-light);">לחץ להזנת עלות</div>`; }
       }
       // The technical line sits under the name, above the cost note. It is escaped because
@@ -6963,9 +7017,9 @@ function renderShifts() {
     const since = on ? new Date(w.shiftStart).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '';
     return `<div class="price-item">
       <div class="price-item-name">${escPunch(w.name)}
-        <div style="font-size:10.5px;color:var(--text-light);">₪${w.rate}/שעה${on
-          ? ' · נכנס ב-' + since + ' · <b style="color:var(--success);">' + fmtElapsed(el) + '</b>'
-          : ''}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${on
+          ? '<span style="color:var(--success);">● בעבודה מ-' + since + '</span> · <b style="color:var(--success);"><bdi dir="ltr">' + fmtElapsed(el) + '</bdi></b> שעות'
+          : 'לא בעבודה'}</div>
       </div><div></div>
       <div class="price-item-final">${on ? outBtn(w.id) : inBtn(w.id)}
       </div></div>`;
@@ -6998,7 +7052,8 @@ function shiftOut(id) {
     Store.set('workers', workers);
     renderShifts();
     showNotice('המשמרת נשארה פתוחה ' + Math.round(hours) + ' שעות — כנראה נשכחה.\n'
-      + 'השעון אופס ולא נרשמו שעות. רשום אותן ידנית ב"רישום שעות" למטה.');
+      + 'השעון אופס ולא נרשמו שעות. רשום אותן ב"הוספת שעות ידנית" למטה.');
+    toggleWtAdd(true);
     return;
   }
   // Two decimals, because he asked for exactly how long — not a rounded quarter hour.
@@ -7214,6 +7269,10 @@ function rejectPunch(id) {
   });
 }
 
+// The page was rebuilt 2026-09-24 (Daniel: "not organised, confusing"). Each card answers ONE
+// question and no sum appears twice: the debt card = what is owed across all months; the month
+// card = each worker's month, with the button that pays it; the list = the raw rows.
+let WT_MONTH_WORKERS = [];
 function renderWorktime() {
   const mk = ensureMonthInput('wtMonth'); ensureDateInput('wtDate');
   renderShifts();
@@ -7221,26 +7280,89 @@ function renderWorktime() {
   fetchPunches();
   renderPunches();
   const workers = getWorkers(), sel = document.getElementById('wtWorker');
-  sel.innerHTML = workers.length ? workers.map(w => `<option value="${w.id}">${w.name} (₪${w.rate}/שעה)</option>`).join('') : '<option value="">הוסף עובד תחילה</option>';
+  sel.innerHTML = workers.length ? workers.map(w => `<option value="${w.id}">${escPunch(w.name)} (₪${w.rate} לשעה)</option>`).join('') : '<option value="">הוסף עובד תחילה</option>';
   const allEntries = Store.get('worktime') || [];
   renderWageDebt();
   const entries = allEntries.filter(e => monthKeyOf(e.date) === mk);
 
-
-  const byWorker = {};
+  const byWorker = new Map();
   entries.forEach(e => {
-    (byWorker[e.workerName] = byWorker[e.workerName] || { hours: 0, wage: 0, unpaidWage: 0 });
-    byWorker[e.workerName].hours += e.hours;
-    byWorker[e.workerName].wage += e.hours * e.rate;
-    if (!e.paid) byWorker[e.workerName].unpaidWage += e.hours * e.rate;
+    const name = e.workerName || 'ללא שם';
+    const b = byWorker.get(name) || { name, hours: 0, wage: 0, owed: 0 };
+    const h = Number(e.hours) || 0, wage = h * (Number(e.rate) || 0);
+    b.hours += h; b.wage += wage;
+    if (!e.paid) b.owed += wage;
+    byWorker.set(name, b);
   });
-  const keys = Object.keys(byWorker);
-  document.getElementById('worktimeSummary').innerHTML = keys.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין רישומים החודש</div></div>' :
-    keys.map(k => `<div class="price-item"><div class="price-item-name">${k} <span style="font-size:11px;color:${byWorker[k].unpaidWage > 0 ? 'var(--danger)' : 'var(--success)'};">${byWorker[k].unpaidWage > 0 ? `⚠️ ${shek(byWorker[k].unpaidWage)} לא שולם` : '✓ שולם'}</span></div><div class="price-item-cost">${byWorker[k].hours} שע'</div><div class="price-item-final">${shek(byWorker[k].wage)}</div></div>`).join('') +
-    `<div class="price-item" style="border-top:1px solid var(--border);"><div class="price-item-name" style="font-weight:700;">סה"כ שכר</div><div></div><div class="price-item-final" style="color:var(--danger);">${shek(keys.reduce((s, k) => s + byWorker[k].wage, 0))}</div></div>`;
+  WT_MONTH_WORKERS = [...byWorker.values()].sort((a, b) => b.wage - a.wage);
+  const hrs = (h) => (Math.round(h * 100) / 100).toLocaleString('he-IL');
+  const sum = (f) => WT_MONTH_WORKERS.reduce((s, w) => s + w[f], 0);
+  document.getElementById('worktimeSummary').innerHTML = !WT_MONTH_WORKERS.length
+    ? `<div class="empty-state"><div class="empty-state-text">לא נרשמו שעות ב${monthLabelHe(mk)}</div></div>`
+    : WT_MONTH_WORKERS.map((w, i) => `
+      <div class="wt-worker">
+        <div class="wt-worker-head">
+          <span class="wt-worker-name">${escPunch(w.name)}</span>
+          <span class="wt-muted">${hrs(w.hours)} שעות בחודש</span>
+        </div>
+        <div class="wt-nums">
+          <div class="wt-num"><span>שכר החודש</span><b>${shek(w.wage)}</b></div>
+          <div class="wt-num"><span>שולם</span><b>${shek(w.wage - w.owed)}</b></div>
+          <div class="wt-num${w.owed > 0.5 ? ' wt-owed' : ''}"><span>נשאר לשלם</span><b>${shek(w.owed)}</b></div>
+        </div>
+        ${w.owed > 0.5
+          ? `<button class="btn btn-primary btn-block btn-sm" onclick="payWorkerMonth(${i})">✓ שילמתי ל${escPunch(w.name)} ${shek(w.owed)}</button>`
+          : '<div class="wt-done">✓ שולם הכל לחודש הזה</div>'}
+      </div>`).join('')
+      + `<div class="wt-total"><span>סה"כ ${monthLabelHe(mk)}: <b>${hrs(sum('hours'))} שעות · ${shek(sum('wage'))}</b></span>`
+      + (sum('owed') > 0.5 ? `<span style="color:var(--danger);">נשאר ${shek(sum('owed'))}</span>` : '<span style="color:var(--success);">הכל שולם</span>') + '</div>';
+
   const sorted = entries.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
-  document.getElementById('worktimeList').innerHTML = sorted.length === 0 ? '<div class="empty-state"><div class="empty-state-text">אין רישומים</div></div>' :
-    sorted.map(e => `<div class="price-item"><div class="price-item-name">${e.workerName} · ${e.hours} שע'${e.note ? ` · <span style="color:var(--text-muted);">${e.note}</span>` : ''}<div style="font-size:10.5px;color:var(--text-light);">${new Date(e.date).toLocaleDateString('he-IL')}</div></div><div></div><div class="price-item-final">${shek(e.hours * e.rate)} <span onclick="toggleWorktimePaid('${e.id}')" style="cursor:pointer;font-size:11.5px;color:${e.paid ? 'var(--success)' : 'var(--danger)'};" title="לחץ לשינוי סטטוס תשלום">${e.paid ? '✓ שולם' : '⚠ לא שולם'}</span> <span onclick="deleteWorktime('${e.id}')" style="color:var(--text-muted);cursor:pointer;">✕</span></div></div>`).join('');
+  document.getElementById('worktimeList').innerHTML = !sorted.length
+    ? '<div class="empty-state"><div class="empty-state-text">אין רישומים בחודש הזה</div></div>'
+    : sorted.map(e => {
+      const day = new Date(e.date).toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' });
+      const note = wtNoteHtml(e.note);
+      return `<div class="wt-row">
+        <div class="wt-row-main">
+          <div class="wt-row-title">${escPunch(e.workerName)} · ${hrs(Number(e.hours) || 0)} שעות</div>
+          <div class="wt-muted">${day}${note ? ' · ' + note : ''}</div>
+        </div>
+        <div class="wt-row-side">
+          <b>${shek((Number(e.hours) || 0) * (Number(e.rate) || 0))}</b>
+          <button class="wt-pill ${e.paid ? 'paid' : 'unpaid'}" onclick="toggleWorktimePaid('${e.id}')">${e.paid ? '✓ שולם' : 'לא שולם'}</button>
+        </div>
+        <button class="wt-del" onclick="deleteWorktime('${e.id}')" aria-label="מחק רישום" title="מחק רישום">🗑</button>
+      </div>`;
+    }).join('');
+}
+// A clock row's note is "שעון: 09:02–15:32". In a right-to-left line the times are neutral
+// runs and flipped to "15:32–09:02", so a shift read backwards. The span is isolated LTR.
+function wtNoteHtml(note) {
+  const s = escPunch(note || '').trim();
+  if (!s) return '';
+  return s.replace(/^שעון:\s*/, '⏱ ')
+    .replace(/(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})/g, '<bdi dir="ltr">$1–$2</bdi>');
+}
+function toggleWtAdd(open) {
+  const body = document.getElementById('wtAddBody');
+  if (!body) return;
+  body.hidden = open === undefined ? !body.hidden : !open;
+  if (!body.hidden) { const h = document.getElementById('wtHours'); if (h) h.focus(); }
+}
+// Pays one worker's month: every unpaid row of his in the month on screen. Names the worker,
+// the month and the amount before doing anything.
+function payWorkerMonth(i) {
+  const w = WT_MONTH_WORKERS[i];
+  const mk = document.getElementById('wtMonth').value;
+  if (!w || !(w.owed > 0.5)) return;
+  askConfirm(`לסמן ששילמת ל${w.name} על ${monthLabelHe(mk)}?\n${shek(w.owed)}`, () => {
+    const wt = Store.get('worktime') || [];
+    wt.forEach((e) => { if (!e.paid && (e.workerName || 'ללא שם') === w.name && monthKeyOf(e.date) === mk) e.paid = true; });
+    if (!Store.set('worktime', wt)) return;
+    renderWorktime();
+    showNotice(`${w.name} — ${monthLabelHe(mk)} סומן כשולם (${shek(w.owed)}).`);
+  });
 }
 // Where the money is owed, not just that it is. A single carried-over total said a debt
 // existed and left him stepping back through the month picker to find it.
@@ -7288,44 +7410,32 @@ function renderWageDebt() {
   const total = debt.reduce((s, d) => s + d.total, 0);
   const now = monthKeyOf(new Date().toISOString());
   const perWorker = wageDebtByWorker();
+  const hrs = (h) => (Math.round(h * 100) / 100).toLocaleString('he-IL');
+  // Total, then per worker ("how much do I owe him"), then one chip per month that opens it —
+  // paying happens inside the month, per worker, so the amounts are not repeated here twice.
   list.innerHTML =
-    `<div class="price-item">
-       <div class="price-item-name" style="font-weight:700;">סה"כ חוב</div><div></div>
-       <div class="price-item-final" style="color:var(--danger);font-weight:700;">${shek(total)}</div></div>`
-    // Per worker, across every month. The per-month list below answers "which month";
-    // this answers "how much do I owe him".
+    `<div class="wt-debt-line wt-debt-total"><span>סה"כ לתשלום</span><b>${shek(total)}</b></div>`
     + perWorker.map((w) => `
-      <div class="price-item" style="padding-top:2px;padding-bottom:2px;">
-        <div class="price-item-name" style="font-size:12px;">
-          ${w.name}
-          <span style="font-size:10.5px;color:var(--text-muted);">· ${w.hours} שע' · ${w.months.size} ${w.months.size === 1 ? 'חודש' : 'חודשים'}</span>
-        </div><div></div>
-        <div class="price-item-final" style="color:var(--danger);font-size:13px;">${shek(w.wage)}</div>
+      <div class="wt-debt-line">
+        <span>${escPunch(w.name)} <span class="wt-muted">· ${hrs(w.hours)} שעות${w.months.size > 1 ? ` · ${w.months.size} חודשים` : ''}</span></span>
+        <b style="color:var(--danger);">${shek(w.wage)}</b>
       </div>`).join('')
-    + `<div style="border-bottom:1px solid var(--border);margin:6px 0 2px;"></div>
-       <div style="font-size:10.5px;color:var(--text-muted);margin:0 2px 4px;">לפי חודש:</div>`
-    + debt.map((d) => `
-      <div class="price-item" style="align-items:flex-start;">
-        <div class="price-item-name">
-          <b>${monthLabelHe(d.key)}</b>${d.key === now ? ' <span style="font-size:10px;color:var(--text-muted);">(החודש)</span>' : ''}
-          <div style="font-size:10.5px;color:var(--text-muted);margin-top:2px;">
-            ${[...d.workers.entries()].map(([w, v]) => w + ' · ' + v.hours + " שע' · " + shek(v.wage)).join('<br>')}
-          </div>
-          <div class="btn-group" style="margin-top:6px;">
-            <button class="btn btn-sm btn-secondary" onclick="openWageMonth('${d.key}')">פתח חודש</button>
-            <button class="btn btn-sm btn-primary" onclick="payWageMonth('${d.key}')">סמן כשולם</button>
-          </div>
-        </div>
-        <div></div>
-        <div class="price-item-final" style="color:var(--danger);">${shek(d.total)}</div>
-      </div>`).join('');
+    + `<div class="wt-muted" style="margin-top:6px;">מאיזה חודש — לחץ כדי לפתוח ולשלם:</div>
+       <div class="wt-month-chips">`
+    + debt.map((d) => `<button class="wt-month-chip" onclick="openWageMonth('${d.key}')">${monthLabelHe(d.key)}${d.key === now ? ' (החודש)' : ''} · <b>${shek(d.total)}</b></button>`).join('')
+    + '</div>';
 }
 function openWageMonth(k) {
   const el = document.getElementById('wtMonth');
-  if (el) { el.value = k; renderWorktime(); }
+  if (!el) return;
+  el.value = k;
+  renderWorktime();
+  const card = document.getElementById('wtMonthCard');
+  if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-// Marks every unpaid record in that month paid. It names the month and the amount first —
-// the whole point of this card is that he could not see which month he was acting on.
+// Marks every unpaid record in a month paid, all workers at once. It names the month and the
+// amount first. No button calls it since the 2026-09-24 rebuild (paying is per worker now,
+// payWorkerMonth); kept because it is the tested month-level rule.
 function payWageMonth(k) {
   const d = wageDebt().find((x) => x.key === k);
   if (!d) return;

@@ -125,6 +125,44 @@ const paid = await page.evaluate(async () => {
 check('marking a month paid clears exactly that month',
   !paid.skipped && paid.left.join(',') === '2026-07' && paid.stillUnpaid === 1, paid);
 
+// ---- the 2026-09-24 rebuild: paying is per worker, per month ----
+if (SELFTEST) {
+  // Break the button, not the expectation: pay every row of that worker, in every month.
+  await page.evaluate(() => {
+    window.payWorkerMonth = (i) => {
+      const w = WT_MONTH_WORKERS[i];
+      const wt = Store.get('worktime') || [];
+      wt.forEach((e) => { if (e.workerName === w.name) e.paid = true; });
+      Store.set('worktime', wt); renderWorktime();
+    };
+  });
+}
+const perPay = await page.evaluate(async () => {
+  const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 9)).toISOString();
+  Store.set('worktime', [
+    { id: 'p1', workerName: 'יוסי', rate: 45, hours: 4, date: iso(2026, 5, 3), paid: false },
+    { id: 'p2', workerName: 'אבי', rate: 40, hours: 5, date: iso(2026, 5, 4), paid: false },
+    { id: 'p3', workerName: 'יוסי', rate: 45, hours: 6, date: iso(2026, 4, 9), paid: false },
+  ]);
+  openWageMonth('2026-05');
+  const i = WT_MONTH_WORKERS.findIndex((w) => w.name === 'יוסי');
+  if (i < 0 || typeof payWorkerMonth !== 'function') return { missing: true };
+  payWorkerMonth(i);
+  await new Promise((r) => setTimeout(r, 150));
+  if (typeof noticeConfirm === 'function') noticeConfirm();
+  await new Promise((r) => setTimeout(r, 300));
+  const wt = Store.get('worktime');
+  return { paid: wt.filter((e) => e.paid).map((e) => e.id).join(','), text: document.getElementById('worktimeSummary').innerText };
+});
+check('"שילמתי ל…" pays that worker in that month only — not the other worker, not another month',
+  !perPay.missing && perPay.paid === 'p1', perPay);
+check('and his card then says it is all paid', /שולם הכל/.test(perPay.text || ''), (perPay.text || '').slice(0, 80));
+
+// A clock note "שעון: 09:02–15:32" read backwards in RTL until the span was isolated.
+const note = await page.evaluate(() => (typeof wtNoteHtml === 'function') ? wtNoteHtml('שעון: 09:02–15:32') : '');
+check('a shift\'s times are isolated left-to-right so they do not flip',
+  /<bdi dir="ltr">09:02–15:32<\/bdi>/.test(note), note);
+
 // ---------------------------------------------------------------- 2. months with no expenses
 const fin = await page.evaluate(() => {
   const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString();

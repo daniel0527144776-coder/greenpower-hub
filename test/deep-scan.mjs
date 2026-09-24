@@ -157,7 +157,9 @@ const holes = await page.evaluate(() => {
   const bad = [];
   for (const it of PRICING) {
     if (!/סוללות/.test(it.cat)) continue;
-    const c = estimateBatteryCost(it, false);
+    // productCost, not estimateBatteryCost: the question is what the catalogue SHOWS. The four
+    // hand-kept RC/drill packs have no cell recipe and are costed off their price range.
+    const c = productCost(it, false);
     if (c == null || !isFinite(c) || c <= 0) bad.push({ row: it.cat + ' / ' + it.name, cost: c });
   }
   return bad.slice(0, 8);
