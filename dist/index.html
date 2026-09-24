@@ -624,10 +624,10 @@ body { min-height: 100vh; }
       <label>סוג תא</label>
       <select class="form-select" id="cellType" onchange="syncCellMah(); recalc()">
         <option value="18650-6">18650 רגיל — ₪6</option>
-        <option value="18650-25p">18650 EVE 25P (כלי עבודה) — ₪5.14</option>
-        <option value="21700-50e">21700 EVE 50E (CLASSIC) — ₪7.34</option>
-        <option value="21700-50sg">21700 Tenpower 50SG (ADVANCED) — ₪8.86</option>
-        <option value="21700-50pl" selected>21700 EVE 50PL (PRO · Tabless) — ₪12.15</option>
+        <option value="18650-25p">18650 EVE 25P (כלי עבודה) — ₪4.51</option>
+        <option value="21700-50e">21700 EVE 50E (CLASSIC) — ₪6.42</option>
+        <option value="21700-50sg">21700 Tenpower 50SG (ADVANCED) — ₪7.76</option>
+        <option value="21700-50pl" selected>21700 EVE 50PL (PRO · Tabless) — ₪10.65</option>
       </select>
     </div>
     <div class="form-row adv">
@@ -1414,11 +1414,11 @@ body { min-height: 100vh; }
   <h2 class="gpd-title">איך נבנה מחיר של חבילה</h2>
   <div class="gpd-wrap"><table>
       <tr><th>רכיב</th><th>כמה</th></tr>
-      <tr><td>תא CLASSIC · EVE 50E</td><td class="gpd-n">₪7.34 ליחידה</td></tr>
-      <tr><td>תא ADVANCED · Tenpower 50SG</td><td class="gpd-n">₪8.86</td></tr>
-      <tr><td>תא PRO · EVE 50PL</td><td class="gpd-n">₪12.15</td></tr>
+      <tr><td>תא CLASSIC · EVE 50E</td><td class="gpd-n">₪6.42 ליחידה</td></tr>
+      <tr><td>תא ADVANCED · Tenpower 50SG</td><td class="gpd-n">₪7.76</td></tr>
+      <tr><td>תא PRO · EVE 50PL</td><td class="gpd-n">₪10.65</td></tr>
       <tr><td>BMS לפי מתח</td><td class="gpd-n">₪105 / ₪105 / ₪180</td></tr>
-      <tr><td>ניקל · חבילה של 120 תאים</td><td class="gpd-n">₪11</td></tr>
+      <tr><td>ניקל · חבילה של 120 תאים</td><td class="gpd-n">₪9</td></tr>
       <tr><td>חומרים</td><td class="gpd-n">₪60</td></tr>
       <tr><td>עבודה</td><td class="gpd-n">(תאים×0.0061 + 1.68) שעות × ₪45</td></tr>
     </table></div>
@@ -1461,7 +1461,7 @@ body { min-height: 100vh; }
   <h2 class="gpd-title">הניקל עלה פי חמישה במודל ממה שהוא עולה במציאות.</h2>
   <div class="gpd-cols">
       <div class="gpd-card"><h3>המודל חייב</h3><p class="gpd-fig gpd-moved">₪60</p><p>לחבילה, כאומדן.</p></div>
-      <div class="gpd-card"><h3>הקבלה אומרת</h3><p class="gpd-fig gpd-good">₪11</p><p>לחבילה של 120 תאים, לפי מחיר הלוחות שקנית בפועל.</p></div>
+      <div class="gpd-card"><h3>הקבלה אומרת</h3><p class="gpd-fig gpd-good">₪9</p><p>לחבילה של 120 תאים, לפי מחיר הלוחות שקנית בפועל.</p></div>
     </div>
     <p>אותה תבנית כמו ספירת הסדרה: מודל העלות אומר את האמת, ועוגן נפרד מחזיק את המדף. עלות אמיתית לא הופכת אוטומטית להורדת מחיר — היא הופכת לרווחיות שידועה נכון.</p>
 </section>
@@ -2198,17 +2198,22 @@ document.addEventListener('keydown', function (e) {
 // saved before the restructure still carry those strings, so a lookup on an old
 // record resolves a price rather than undefined.
 const CELL_PRICES = {
-  '18650-6': 6, '18650-7': 7, '18650-25p': 5.14, '21700-12': 12, '21700-13': 13,
-  '21700-50e': 7.34, '21700-50sg': 8.86, '21700-50pl': 12.15,
+  '18650-6': 6, '18650-7': 7, '18650-25p': 4.51, '21700-12': 12, '21700-13': 13,
+  '21700-50e': 6.42, '21700-50sg': 7.76, '21700-50pl': 10.65,
 };
+// What a repair QUOTE charges for our own cells: the landed cost they were priced on before the
+// June 2026 import cut it (March factor 1.371). Daniel, 2026-09-24: update the cost, not the
+// prices — so recalc() marks up these, while "עלות לי" uses the real CELL_PRICES above.
+// Mirrors CELL_COST_PRICED in cost-model.mjs.
+const CELL_PRICES_QUOTED = { '18650-25p': 5.14, '21700-50e': 7.34, '21700-50sg': 8.86, '21700-50pl': 12.15 };
 // Landed cost of ONE cell sold on its own (the "תאי ליתיום בודדים" catalog rows).
 // Must match CELL_UNIT_COST in audit-pricing.mjs. Without this the generic "cost = 60%
 // of retail" fallback takes over, and on a quantity ladder it lies in both directions:
 // it reads EVE 50E's ₪22 bulk tier as a ₪13 cost (real: ₪7.34) and its ₪50 single as ₪30.
 const CELL_UNIT_COST = {
-  'EVE 50E': 7.34, 'Tenpower 50SG': 8.86, 'EVE 50PL (Tabless)': 12.15,
-  'EVE 40P': 8.43, 'EVE 35V': 6.38, 'EVE 25P': 5.14, 'EVE 26V': 4.03,
-  'Ampace JP30P1 (Tabless)': 13.16,
+  'EVE 50E': 6.42, 'Tenpower 50SG': 7.76, 'EVE 50PL (Tabless)': 10.65,
+  'EVE 40P': 7.4, 'EVE 35V': 5.59, 'EVE 25P': 4.51, 'EVE 26V': 3.54,
+  'Ampace JP30P1 (Tabless)': 11.55,
 };
 // A cell's capacity is a property of the cell, not a separate choice. The two dropdowns
 // were independent and their defaults contradicted each other: "סוג תא" said EVE 50PL —
@@ -2942,7 +2947,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v318';
+const HUB_BUILD = 'v320';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3385,7 +3390,10 @@ function recalc() {
   // battery generator uses (a skilled tech's replacement cost, not the ₪45 worker wage).
   const totalNet = partsNet + hours * LABOUR_COST;
 
-  const partsMarg = partsNet * (1 + MARGIN);
+  // The quote marks up the cells at the price-anchored cost, the "עלות לי" line above uses the
+  // real one — the June import lowered what a cell costs him, not what a customer pays.
+  const cellsQuoted = cellsNeeded * (CELL_PRICES_QUOTED[cellKey] ?? cellPrice);
+  const partsMarg = (partsNet - cellsCost + cellsQuoted) * (1 + MARGIN);
   const travel = parseFloat(document.getElementById('travel').value) || 0;
   let sub = partsMarg + laborCost + travel;
 
@@ -5238,12 +5246,13 @@ function estimateBatteryCost(it, b2b = false, cell = null) {
   const V = +m[1], Ah = +m[2];
   // כלי עבודה are a rebuild on EVE 25P 18650s (2,500mAh), NOT one of the 21700 tiers:
   // 18V 5Ah is 5S2P = 10 real cells. The customer's own protection board is reused, so
-  // there is no BMS line. 25P landed = $1.25 × 3.00 × 1.371 (real sea-import factor).
+  // there is no BMS line. Cells are landed cost: USD × 3.00 × 1.203, the June 2026 sea import
+  // (was 1.371 until 2026-09-24). Mirrors CELL_COST in cost-model.mjs, rounded to the agora.
   // Must stay identical to packCost() in generate-battery-products.mjs.
   const powerTool = /כלי עבודה/.test(it.cat);
   // 3-tier landed cell cost (2026-07): PRO=EVE 50PL, ADVANCED=Tenpower 50SG, CLASSIC=EVE 50E
-  const cellPrice = cell ? cell.price : (powerTool ? 1.25 * 3.00 * 1.371
-    : /PRO/.test(it.cat) ? 12.15 : /ADVANCED/.test(it.cat) ? 8.86 : 7.34);
+  const cellPrice = cell ? cell.price : (powerTool ? 4.51
+    : /PRO/.test(it.cat) ? 10.65 : /ADVANCED/.test(it.cat) ? 7.76 : 6.42);
   const cellAh = cell ? cell.ah : (powerTool ? 2.5 : 5);     // 18650 25P vs 21700 ~5.0Ah
   const S = seriesForV(V);   // MUST match packCost() — sync-prices verifies it every run
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
@@ -5265,7 +5274,7 @@ function estimateBatteryCost(it, b2b = false, cell = null) {
   // ~$0.0109 per hole and a pack needs two contacts per cell. Folding does not double it —
   // he folds the same piece to shorten it, not to add a second. This is the TRUE cost; the
   // published prices were built on ₪3/S and that anchor lives in cost-model.mjs.
-  const nickel = cells * 2 * 0.0109 * 3 * 1.371;
+  const nickel = cells * 2 * 0.0109 * 3 * 1.203;
   const materials = powerTool ? 30 : 60;
   // The enclosure. Two families buy one and the rest are shrink-wrapped, which is why a 48V
   // 20Ah e-bike pack and a 48V 20Ah scooter pack are NOT the same cost — Daniel, 2026-09-17:
@@ -5295,8 +5304,8 @@ function batteryCostParts(it, b2b = false) {
   if (!m) return null;
   const V = +m[1], Ah = +m[2];
   const powerTool = /כלי עבודה/.test(it.cat);
-  const cellPrice = powerTool ? 1.25 * 3.00 * 1.371
-    : /PRO/.test(it.cat) ? 12.15 : /ADVANCED/.test(it.cat) ? 8.86 : 7.34;
+  const cellPrice = powerTool ? 4.51
+    : /PRO/.test(it.cat) ? 10.65 : /ADVANCED/.test(it.cat) ? 7.76 : 6.42;
   const cellAh = powerTool ? 2.5 : 5;
   const S = seriesForV(V);
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
@@ -5312,7 +5321,7 @@ function batteryCostParts(it, b2b = false) {
   // limit, not a preference. Mirrors BMS_LADDER in cost-model.mjs; sync-prices checks every row.
   const bmsBand = seriesForV(V) > 20 ? 172 : (V >= 72 && !b2b ? 180 : 105);
   const bms = powerTool ? 0 : (picked ? picked.ils : bmsBand);
-  const nickel = cells * 2 * 0.0109 * 3 * 1.371;
+  const nickel = cells * 2 * 0.0109 * 3 * 1.203;
   const materials = powerTool ? 30 : 60;
   // The enclosure. Two families buy one and the rest are shrink-wrapped, which is why a 48V
   // 20Ah e-bike pack and a 48V 20Ah scooter pack are NOT the same cost — Daniel, 2026-09-17:
@@ -8037,7 +8046,7 @@ function calcPackDims() {
   // than re-measure a bracket.
   // Two contacts per cell, priced off his own stock rather than a rule of thumb.
   const holes = N * 2;
-  const nickelIls = holes * NICKEL_USD_PER_HOLE * 3 * 1.371;
+  const nickelIls = holes * NICKEL_USD_PER_HOLE * 3 * 1.203;
   out.innerHTML += `<br><span style="font-size:11px;color:var(--text-muted);">ניקל: ${holes} מגעים ≈ ₪${nickelIls.toFixed(0)} · תבנית ${nickelFor(P)}</span>`;
   // Which holder to reach for. Only meaningful once a vehicle with a tub is chosen — without
   // one there is nothing for the pack to fit INTO and every holder trivially "fits".
