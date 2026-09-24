@@ -167,6 +167,29 @@ check('running it again adds nothing', r2.length === 7, JSON.stringify(r2));
 const cats = await page.evaluate(() => [...new Set((Store.get('inventory') || []).map(invCatOf))]);
 check('"תאים" and "תא" are one category, not two', cats.length === 1 && cats[0] === 'תא', JSON.stringify(cats));
 
+// ---- 8. the missing cell models come back on their own; only "out of stock" is an alert ----
+const auto = await page.evaluate(() => {
+  const s = Store.get('settings') || {}; delete s.cellModelsRestored20260925; Store.set('settings', s);
+  Store.set('inventory', [
+    { id: 'x1', name: 'EVE 50E', qty: 900, low: 300, cat: 'תא' },           // named differently
+    { id: 'x2', name: 'תאי Tenpower 21700 50SG', qty: 100, low: 300, cat: 'תאים' },   // LOW, not out
+    { id: 'x3', name: 'תאי EVE 21700 50PL', qty: 0, low: 120, cat: 'תאים' },          // OUT
+  ]);
+  restoreMissingCellModels();
+  closeNotice();
+  const once = getInventory().length;
+  restoreMissingCellModels();
+  const twice = getInventory().length;
+  navigateTo('inventory');
+  const alert = document.getElementById('inventoryLowAlert').innerText;
+  return { once, twice, fifty: getInventory().filter((r) => /50e/i.test(r.name)).length, alert };
+});
+check('the four missing cell models are added back', auto.once === 7, auto);
+check('a model already there under another name is not duplicated', auto.fifty === 1, auto);
+check('and it happens once — a second run adds nothing', auto.twice === 7, auto);
+check('"out of stock" is still announced', /אזל/.test(auto.alert), auto.alert);
+check('"low stock" is not', !/מלאי נמוך/.test(auto.alert), auto.alert);
+
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');

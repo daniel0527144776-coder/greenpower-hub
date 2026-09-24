@@ -63,7 +63,10 @@ await page.evaluate(() => {
   Sync.userId = 'u1';
   Sync._headers = async () => ({});
 });
-if (SELFTEST) await page.evaluate(() => { window.mergeRows = (k, local, server) => (Array.isArray(server) ? server : local); });
+if (SELFTEST) await page.evaluate(() => {
+  window.mergeRows = (k, local, server) => (Array.isArray(server) ? server : local);
+  window.mergeMap = (local, server) => server || local;
+});
 
 const later = () => new Date(Date.now() + 60000).toISOString();
 const r = await page.evaluate(async (LATER) => {
@@ -111,6 +114,35 @@ const r = await page.evaluate(async (LATER) => {
   await Sync.pull();
   await wait('worktime');
   out.hours = (Store.get('worktime') || []).map((x) => x.id).sort().join(',');
+
+  // 6. customers and repairs added on two devices both survive
+  Store.set('customers', [{ id: 'cA', name: 'לקוח מהמחשב', phone: '0501111111' }]);
+  await wait('customers');
+  window.CLOUD.customers = { value: [{ id: 'cB', name: 'לקוח מהטלפון', phone: '0502222222', _u: Date.now() }], updated_at: LATER };
+  Store.set('jobs', [{ id: 'jA', phone: '0501111111', price: 450, date: '2026-09-20T09:00:00.000Z' }]);
+  await wait('jobs');
+  window.CLOUD.jobs = { value: [{ id: 'jB', phone: '0502222222', price: 900, date: '2026-09-21T09:00:00.000Z', _u: Date.now() }], updated_at: LATER };
+  Sync.dirty.clear();
+  await Sync.pull();
+  await wait('customers'); await wait('jobs');
+  out.customers = (Store.get('customers') || []).map((x) => x.id).sort().join(',');
+  out.jobs = (Store.get('jobs') || []).map((x) => x.id).sort().join(',');
+
+  // 7. settings: two devices on this version change DIFFERENT fields at nearly the same moment.
+  //    The other device's push landed last and without this device's change in it (a race).
+  Store.set('settings', { hourly: 180, margin: 50, usd: 3 });
+  await wait('settings'); await wait('fs_settings');
+  const fs0 = { ...(Store.get('fs_settings') || {}) };
+  await new Promise((res) => setTimeout(res, 5));
+  const s = Store.get('settings'); s.hourly = 200; Store.set('settings', s);
+  await wait('settings'); await wait('fs_settings');
+  out.ownEditReachedCloud = window.CLOUD.settings && window.CLOUD.settings.value.hourly;
+  window.CLOUD.settings = { value: { hourly: 180, margin: 60, usd: 3 }, updated_at: LATER };
+  window.CLOUD.fs_settings = { value: { ...fs0, margin: Date.now() + 10000 }, updated_at: LATER };
+  Sync.dirty.clear();
+  await Sync.pull();
+  await wait('settings');
+  out.settings = Store.get('settings');
   return out;
 }, later());
 
@@ -121,6 +153,10 @@ check('while its own change still goes through', r.editKept === 80, r);
 check('a row deleted on purpose stays deleted', r.deletedStays === true, r);
 check('a newer change from another device wins', r.newerWins === 55, r);
 check('hours added on two devices both survive', r.hours === 'wA,wB', r);
+check('customers added on two devices both survive', r.customers === 'cA,cB', r);
+check('repairs added on two devices both survive', r.jobs === 'jA,jB', r);
+check('a setting changed here reaches the cloud with its new value', r.ownEditReachedCloud === 200, r.ownEditReachedCloud);
+check('settings changed on two devices keep both changes', r.settings && r.settings.hourly === 200 && r.settings.margin === 60, r.settings);
 check('no page errors', errs.length === 0, errs.join(' | '));
 check('no native dialogs', dialogs.length === 0, dialogs.join(' | '));
 await browser.close();

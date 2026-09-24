@@ -110,7 +110,10 @@ const clean = await page.evaluate(async (p) => {
   return { cust: cust.length, inc: inc.length, books: cust.filter((c) => c.src === 'books').length,
            oldest: inc.length ? inc.map((r) => r.date).sort()[0] : null };
 }, PAYLOAD);
-check('the import writes every customer', clean.cust === 144, clean.cust);
+// 144 from the books + the 2 the cloud already held. Since the per-row merge (v330+) a customer
+// the cloud has and this device does not is KEPT — it may be one entered on the phone — where
+// the old whole-list push erased it.
+check('the import writes every customer', clean.cust === 146, clean.cust);
 check('and every income row', clean.inc === 153, clean.inc);
 check('and marks them as coming from the books', clean.books === 144, clean.books);
 check('and the history really does go years back', clean.oldest && new Date(clean.oldest).getFullYear() <= 2021, clean.oldest);
@@ -131,7 +134,7 @@ const findable = await page.evaluate(() => {
   return { name: target.name, rows, listed: listed.length };
 });
 check('the OLDEST imported customer is findable by search', findable.rows > 0, findable);
-check('and the customers page lists them all', findable.listed === 144, findable.listed);
+check('and the customers page lists them all', findable.listed === 146, findable.listed);
 
 // ---------------------------------------------------------------- 2. it must reach the cloud
 const cloud = await page.evaluate(async () => {
@@ -139,7 +142,7 @@ const cloud = await page.evaluate(async () => {
   await new Promise((r) => setTimeout(r, 400));
   return { server: (window.__srv.rows['customers'].value || []).length, owed: Sync.pending() };
 });
-check('the import is pushed to the cloud, so the phone gets it', cloud.server === 144, cloud);
+check('the import is pushed to the cloud, so the phone gets it', cloud.server === 146, cloud);
 
 // ---------------------------------------------------------------- 3. the queue outlives a reload
 const queued = await page.evaluate(async () => {
@@ -252,6 +255,9 @@ check('re-running it duplicates nobody', retried.dupes === 0, retried);
 // three sales overlap and only ONE shares a date — ₪5,250 is twelve days out, so a same-date
 // check would have caught one of three and silently doubled ₪13,750.
 const dedup = await page.evaluate(async () => {
+  // a fresh scenario on the cloud too — otherwise the per-row merge rightly brings back the
+  // 153 incomes the cloud still holds from the sections above
+  delete window.__srv.rows['incomes']; delete window.__srv.rows['tomb_incomes'];
   // a payment-dated ledger, then books holding the same three sales on nearby invoice dates
   const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString();
   localStorage.setItem('gp_incomes', JSON.stringify([

@@ -1743,7 +1743,13 @@ let bizDetails = {};
 // either side has is kept, the newer version of a row wins, and a tombstone newer than the
 // row keeps it deleted. A merge that differs from the cloud is pushed back, so opening the hub
 // on any device that still holds the rows puts them back everywhere.
-const MERGE_KEYS = ['inventory', 'worktime', 'wage_payments'];
+// Lists of rows with an id: merged row by row (2026-09-25, extended to everything that has one).
+const MERGE_KEYS = ['inventory', 'worktime', 'wage_payments', 'customers', 'jobs', 'incomes', 'expenses',
+  'workers', 'orders', 'dims', 'biz_payments'];
+// Single objects and maps: merged field by field, each field stamped when it changed, the stamps
+// synced beside them in fs_<key>. Not merged: supplier_prices (no row ids — and "החלף רשימה" is
+// meant to replace it), sticker_history (its own merge), worktime_trash (a local-ish log).
+const MAP_KEYS = ['settings', 'biz', 'costs', 'diag_notes', 'bms_pick', 'supplier_costs'];
 const TOMB_DAYS = 180;
 const mRowId = (r) => (r && r.id != null ? String(r.id) : null);
 function stampRows(key, next) {
@@ -1784,6 +1790,44 @@ function mergeRows(key, local, server, tomb) {
   const seen = new Set();
   return rows.concat(noId.filter((r) => { const k = JSON.stringify(r); if (seen.has(k)) return false; seen.add(k); return true; }));
 }
+function stampMap(key, next) {
+  if (!next || typeof next !== 'object' || Array.isArray(next)) return;
+  let prev = {};
+  try { prev = JSON.parse(localStorage.getItem('gp_' + key) || '{}') || {}; } catch (e) { prev = {}; }
+  if (!prev || typeof prev !== 'object' || Array.isArray(prev)) prev = {};
+  let st = {};
+  try { st = JSON.parse(localStorage.getItem('gp_fs_' + key) || '{}') || {}; } catch (e) { st = {}; }
+  const now = Date.now();
+  let changedAny = false;
+  for (const k of new Set([...Object.keys(prev), ...Object.keys(next)])) {
+    if (JSON.stringify(prev[k]) !== JSON.stringify(next[k])) { st[k] = now; changedAny = true; }
+  }
+  // Written here, pushed AFTER the value (see Store.set): stamps that reach the cloud first make
+  // the cloud look as if it already had this change, and the old value would win the merge.
+  if (changedAny) localStorage.setItem('gp_fs_' + key, JSON.stringify(st));
+}
+// A field takes the value from the side that changed it last; a field removed on the newer side
+// stays removed; with no stamps on either side the cloud's value is kept and the rest is a union.
+function mergeMap(local, server, ls, ss) {
+  const L = (local && typeof local === 'object' && !Array.isArray(local)) ? local : {};
+  const S = (server && typeof server === 'object' && !Array.isArray(server)) ? server : {};
+  const out = {};
+  for (const k of new Set([...Object.keys(L), ...Object.keys(S), ...Object.keys(ls || {}), ...Object.keys(ss || {})])) {
+    const lt = Number((ls || {})[k]) || 0, st = Number((ss || {})[k]) || 0;
+    if (lt > st) { if (k in L) out[k] = L[k]; }
+    else if (st > lt) { if (k in S) out[k] = S[k]; }
+    // Same stamp on both sides and this side has one: this device's value. The stamps and the
+    // value are two cloud rows and cannot land together, so for a moment the cloud can carry
+    // this change's stamp with the value before it — the local value is the one stamped.
+    else if (lt && k in L) out[k] = L[k];
+    // No stamps either side: the cloud's value. A device still running a version
+    // from before stamps writes whole objects the old way until it reloads; for that short
+    // window it behaves as it always did — there is no way to tell which of its fields it meant.
+    else if (k in S) out[k] = S[k];
+    else if (k in L) out[k] = L[k];
+  }
+  return out;
+}
 function mergeTombs(a, b) {
   const u = { ...(b || {}) };
   for (const [id, ts] of Object.entries(a || {})) if (!(u[id] >= ts)) u[id] = ts;
@@ -1794,8 +1838,12 @@ const Store = {
   set(key, val) {
     try {
       if (MERGE_KEYS.includes(key) && Array.isArray(val)) stampRows(key, val);
+      else if (MAP_KEYS.includes(key)) stampMap(key, val);
       localStorage.setItem('gp_' + key, JSON.stringify(val));
       if (typeof Sync !== 'undefined' && SYNC_KEYS.includes(key)) Sync.push(key, val);
+      if (typeof Sync !== 'undefined' && MAP_KEYS.includes(key)) {
+        try { Sync.push('fs_' + key, JSON.parse(localStorage.getItem('gp_fs_' + key) || '{}')); } catch (e) { /* storage refused */ }
+      }
       return true;
     } catch (e) {
       console.error(e);
@@ -1827,7 +1875,10 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'bms_pick', 'supplier_costs', 'supplier_prices', 'biz_payments', 'wage_payments', 'worktime_trash', 'tomb_inventory', 'tomb_worktime', 'tomb_wage_payments'];
+const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'bms_pick', 'supplier_costs', 'supplier_prices', 'biz_payments', 'wage_payments', 'worktime_trash',
+  'tomb_inventory', 'tomb_worktime', 'tomb_wage_payments', 'tomb_customers', 'tomb_jobs', 'tomb_incomes', 'tomb_expenses',
+  'tomb_workers', 'tomb_orders', 'tomb_dims', 'tomb_biz_payments',
+  'fs_settings', 'fs_biz', 'fs_costs', 'fs_diag_notes', 'fs_bms_pick', 'fs_supplier_costs'];
 
 const Sync = {
   session: null,
@@ -1920,9 +1971,26 @@ const Sync = {
       if (row) { meta[tk] = new Date(row.updated_at).getTime(); serverKeys.add(tk); }
       if (row && JSON.stringify(u) !== JSON.stringify(row.value || {})) rowPush.push([tk, u]);
     }
+    for (const k of MAP_KEYS) {
+      const row = byKey.get(k), srow = byKey.get('fs_' + k);
+      let lv = {}, ls = {};
+      try { lv = JSON.parse(localStorage.getItem('gp_' + k) || '{}') || {}; } catch (e) { lv = {}; }
+      try { ls = JSON.parse(localStorage.getItem('gp_fs_' + k) || '{}') || {}; } catch (e) { ls = {}; }
+      const ss = srow ? (srow.value || {}) : {};
+      const stamps = mergeTombs(ls, ss);
+      if (srow) { meta['fs_' + k] = new Date(srow.updated_at).getTime(); serverKeys.add('fs_' + k); }
+      localStorage.setItem('gp_fs_' + k, JSON.stringify(stamps));
+      if (srow && JSON.stringify(stamps) !== JSON.stringify(ss)) rowPush.push(['fs_' + k, stamps]);
+      if (!row) continue;
+      const merged = mergeMap(lv, row.value, ls, ss);
+      localStorage.setItem('gp_' + k, JSON.stringify(merged));
+      meta[k] = new Date(row.updated_at).getTime();
+      changed = true;
+      if (JSON.stringify(merged) !== JSON.stringify(row.value || {})) rowPush.push([k, merged]);
+    }
     rows.forEach(row => {
       serverKeys.add(row.key);
-      if (/^tomb_/.test(row.key)) return;
+      if (/^(tomb|fs)_/.test(row.key) || MAP_KEYS.includes(row.key)) return;
       if (MERGE_KEYS.includes(row.key)) {
         // merged even when this device has an unsent change: the union contains it, and the
         // merge is what goes up
@@ -1991,6 +2059,23 @@ const Sync = {
         // Read-merge-write for the row-merged lists: whatever the cloud holds now is merged in
         // before this device's copy goes up, so a device with an old list cannot overwrite rows
         // it never had. If the read fails the push goes ahead as before — the next pull merges.
+        const mbase = key.replace(/^fs_/, '');
+        if (MAP_KEYS.includes(mbase)) {
+          try {
+            const g = await fetch(SB_URL + '/rest/v1/hub_state?select=key,value&key=in.(' + mbase + ',fs_' + mbase + ')', { headers: h });
+            if (g.ok) {
+              const got = await g.json();
+              const sv = (k) => { const r = got.find((x) => x.key === k); return r ? r.value : null; };
+              let ls = {};
+              try { ls = JSON.parse(localStorage.getItem('gp_fs_' + mbase) || '{}') || {}; } catch (e) { ls = {}; }
+              const ss = sv('fs_' + mbase) || {};
+              if (key === mbase) { if (sv(mbase)) value = mergeMap(value, sv(mbase), ls, ss); }
+              else value = mergeTombs(ls, ss);
+              localStorage.setItem('gp_' + key, JSON.stringify(value));
+            }
+          } catch (e) { /* push as-is; the next pull merges */ }
+          if (this._pushSeq[key] !== seq) return;
+        }
         const base = key.replace(/^tomb_/, '');
         if (MERGE_KEYS.includes(base)) {
           try {
@@ -2422,7 +2507,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v330';
+const HUB_BUILD = 'v331';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7266,7 +7351,10 @@ function saveWorkers() {
   for (let i = 0; i < ed.children.length; i++) {
     const name = (document.getElementById('wkName_' + i)?.value || '').trim();
     const rate = parseFloat(document.getElementById('wkRate_' + i)?.value) || 0;
-    if (name) workers.push({ id: 'wk' + i + '_' + Date.now(), name, rate });
+    // Keep the worker's own record: a fresh id on every save made each save look like a new
+    // set of workers to the row merge, and it also dropped aliases and an open shift.
+    const old = getWorkers()[i];
+    if (name) workers.push(old ? { ...old, name, rate } : { id: 'wk' + i + '_' + Date.now(), name, rate });
   }
   Store.set('workers', workers); closeModal(); renderWorktime();
 }
@@ -8794,6 +8882,36 @@ const INV_SEED = [
   { name: 'תאי EVE 18650 26V', qty: 350, low: 50, cat: 'תאים' },
   { name: 'תאי EVE 18650 25P', qty: 100, low: 30, cat: 'תאים' },
 ];
+// Four of the seven cell models vanished from stock (2026-09-25) — a device holding an old list
+// overwrote the full one, before per-row merging existed. Any model of the seven that is not on
+// the shelf is added back, with the last count known (the same as the 10.9 backup) and a note
+// to count it. The id is fixed per model, so two devices doing this at once make one row, not
+// two. It runs once per account (a synced flag) — a model removed on purpose afterwards stays
+// removed.
+function restoreMissingCellModels() {
+  try {
+    const settings = Store.get('settings') || {};
+    if (settings.cellModelsRestored20260925) return;
+    const inv = getInventory();
+    const add = [];
+    // Present if ANY row names the model code (50E, 50SG, 40P …) — the shelf row may be called
+    // "EVE 50E" or "תאי EVE 21700 50E"; a full-name match would add a duplicate of the first.
+    const words = (x) => String(x || '').toLowerCase().split(/[\s\-·()\/,]+/);
+    for (const s of INV_SEED) {
+      const model = s.name.split(/\s+/).pop().toLowerCase();
+      if (inv.some((r) => words(r.name).includes(model))) continue;
+      add.push({ id: 'cellmodel_' + s.name.split(/\s+/).slice(-2).join('_'), name: s.name, qty: s.qty, low: s.low,
+        cat: s.cat, note: 'נוסף מחדש 25.9 — כמות אחרונה ידועה, לספור' });
+    }
+    if (add.length) {
+      if (!Store.set('inventory', inv.concat(add))) return;
+      showNotice('📦 הוחזרו למלאי ' + add.length + ' דגמי תאים שחסרו: ' + add.map((a) => a.name.replace(/^תאי\s+/, '')).join(', ')
+        + '.\nהכמות היא האחרונה שהייתה ידועה — כדאי לספור ולתקן.');
+    }
+    settings.cellModelsRestored20260925 = true;
+    Store.set('settings', settings);
+  } catch (e) { /* never block boot on this */ }
+}
 function seedCellStockOnce() {
   try {
     if (localStorage.getItem(INV_SEED_KEY)) return;
@@ -8817,11 +8935,11 @@ function renderInventory() {
   // supplier — and not on a page about what is in the drawer.
   const inv = getInventory();
   const sh = invShortages();
-  const nameQty = (i) => `${i.name} (${Number(i.qty) || 0})`;
   document.getElementById('inventoryLowAlert').innerHTML =
     (sh.out.length ? `<div class="alert alert-danger">🔴 <b>אזל מהמלאי:</b> ${sh.out.map(i => i.name).join(' · ')}</div>` : '') +
-    (sh.low.length ? `<div class="alert alert-warning">⚠️ <b>מלאי נמוך:</b> ${sh.low.map(nameQty).join(' · ')}</div>` : '') +
-    (sh.total === 0 && inv.length ? `<div class="alert alert-success">✅ אין מחסור — כל הפריטים מעל הסף.</div>` : '');
+    // No "מלאי נמוך" alert any more (Daniel, 2026-09-25: only out of stock). The threshold
+    // still drives 'מה להזמין'.
+    '';
   const list = document.getElementById('inventoryList');
   if (inv.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים. הוסף תאים, BMS, מטענים, ניקל וכו\'.</div></div>'; return; }
   const CAT_ORDER = ['BMS', 'מטען', 'תא', 'ניקל', 'אחר'];
@@ -8862,7 +8980,7 @@ function renderInventory() {
     // a tap opens one. A category holding something low or out shows ⚠️ while folded, so
     // folding never hides a shortage.
     const open = INV_OPEN.has(c);
-    const warn = items.some((x) => x.low != null && Number(x.qty) <= Number(x.low));
+    const warn = items.some((x) => (Number(x.qty) || 0) <= 0);
     return `<div style="margin-bottom:10px;">
       <div onclick="toggleInvCat('${encodeURIComponent(c)}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;cursor:pointer;border-bottom:2px solid var(--primary);">
         <span style="font-weight:700;font-size:15px;">${open ? '▾' : '◂'} ${CAT_ICON[c] || '📦'} ${c}${warn ? ' <span style="color:var(--danger);">⚠️</span>' : ''}</span>
@@ -8913,12 +9031,12 @@ function restoreInventoryFromBackup(input) {
   rd.readAsText(file, 'utf-8');
 }
 function renderInvItem(i, cat) {
-  const isLow = i.low != null && Number(i.qty) <= Number(i.low);
+  const isLow = (Number(i.qty) || 0) <= 0;   // out of stock only — no 'low' marking
   let title = i.name || '';
   if (cat && cat !== 'אחר' && title.startsWith(cat + ' ')) title = title.slice(cat.length + 1);
   return `<div class="list-item" style="${isLow ? 'border-color:var(--danger);' : ''}">
       <div class="list-item-header">
-        <div><div class="list-item-title">${title} ${isLow ? '<span style="font-size:10px;color:var(--danger);">⚠️ נמוך</span>' : ''}</div>
+        <div><div class="list-item-title">${title} ${isLow ? '<span style="font-size:10px;color:var(--danger);">🔴 אזל</span>' : ''}</div>
           <div class="list-item-subtitle">${i.note || ''}${i.low != null ? ` · סף: ${i.low}` : ''}</div></div>
         <div class="num-input">
           <button class="num-btn" onclick="adjustInventory('${i.id}',-1)">−</button>
@@ -9401,6 +9519,7 @@ async function startApp() {
   if (statusEl) statusEl.textContent = '☁️ סנכרון ענן פעיל · ' + (Sync.email || '');
   seedInventoryOnce();
   seedCellStockOnce();
+  restoreMissingCellModels();
   init();
   Sync.flush().catch(() => {});
 }
