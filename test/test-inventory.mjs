@@ -131,6 +131,42 @@ const both = await page.evaluate(() => ({
 }));
 check('the cell seed and the BMS seed both exist', both.cells && both.parts, JSON.stringify(both));
 
+// ---- 7. missing rows come back from a backup, and nothing on the shelf is touched ----
+// 2026-09-25: four of seven cell models had gone from the shelf list; the 10.9 backup held them.
+await page.evaluate(() => {
+  Store.set('inventory', [
+    { id: 'c1', name: 'תאי EVE 21700 50E', qty: 1500, low: 300, cat: 'תאים' },
+    { id: 'c2', name: 'תאי Tenpower 21700 50SG', qty: 1800, low: 300, cat: 'תאים' },
+    { id: 'c3', name: 'תאי EVE 21700 50PL', qty: 220, low: 120, cat: 'תא' },
+  ]);
+  navigateTo('inventory');
+});
+const backup = JSON.stringify({ lastBackup: Date.UTC(2026, 8, 10), inventory: [
+  { id: 'c1', name: 'תאי EVE 21700 50E', qty: 2500, cat: 'תאים' },
+  { id: 'c2', name: 'תאי Tenpower 21700 50SG', qty: 2000, cat: 'תאים' },
+  { id: 'c3', name: 'תאי EVE 21700 50PL', qty: 400, cat: 'תאים' },
+  { id: 'c4', name: 'תאי EVE 21700 40P', qty: 50, cat: 'תאים' },
+  { id: 'c5', name: 'תאי EVE 18650 35V', qty: 200, cat: 'תאים' },
+  { id: 'c6', name: 'תאי EVE 18650 26V', qty: 350, cat: 'תאים' },
+  { id: 'c7', name: 'תאי EVE 18650 25P', qty: 100, cat: 'תאים' }] });
+const restoreOnce = async () => {
+  await page.setInputFiles('#invRestoreFile', { name: 'b.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { if (typeof _noticeYes === 'function') noticeConfirm(); closeNotice(); });
+  await page.waitForTimeout(150);
+  return page.evaluate(() => (Store.get('inventory') || []).map((r) => [r.name.split(' ').pop(), r.qty]));
+};
+// The restore reads the shelf blind — as if it were empty — so it re-adds every row on top.
+if (SELFTEST) await page.evaluate(() => { window.getInventory = () => []; });
+const r1 = await restoreOnce();
+const r2 = await restoreOnce();
+const q = (rows, m) => (rows.find(([n]) => n === m) || [])[1];
+check('the four missing cell models come back', r1.length === 7, JSON.stringify(r1));
+check('a model already on the shelf keeps its own count', q(r1, '50E') === 1500 && q(r1, '50PL') === 220, JSON.stringify(r1));
+check('running it again adds nothing', r2.length === 7, JSON.stringify(r2));
+const cats = await page.evaluate(() => [...new Set((Store.get('inventory') || []).map(invCatOf))]);
+check('"תאים" and "תא" are one category, not two', cats.length === 1 && cats[0] === 'תא', JSON.stringify(cats));
+
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');

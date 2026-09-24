@@ -1525,6 +1525,8 @@ body { min-height: 100vh; }
     <div class="btn-group">
       <button class="btn btn-secondary btn-sm" onclick="copyOrderList()">🛒 מה להזמין</button>
       <button class="btn btn-secondary btn-sm" onclick="openInventoryBulkImport()">📥 ייבוא מהיר</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('invRestoreFile').click()">♻️ שחזור מגיבוי</button>
+      <input type="file" id="invRestoreFile" accept=".json" style="display:none;" onchange="restoreInventoryFromBackup(this)">
       <button class="btn btn-primary btn-sm" onclick="openInventoryEditor(null)">➕ פריט</button>
     </div>
   </div>
@@ -2325,7 +2327,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v327';
+const HUB_BUILD = 'v328';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4129,12 +4131,8 @@ function renderSupplier() {
     html += `<div onclick="toggleSupCat(${i})" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">
       <span>${open ? '▾' : '▸'} ${c}</span>
       <span style="font-weight:400;font-size:11px;color:var(--text-muted);white-space:nowrap;">${note}</span></div>`;
-    // What the whole category costs landed — the question the page could not answer, and the
-    // one actually asked ("מה העלות סך הכל של כל מוצר"). Shown on the header so it is there
-    // whether the group is open or shut.
-    const catTotal = list.reduce((a, r) => a + supplierIls(r, vat, freight), 0);
-    html = html.replace(/(<span style="font-weight:400;font-size:11px;color:var\(--text-muted\);white-space:nowrap;">)([^<]*)(<\/span><\/div>)$/,
-      (mm, a, b, c) => a + b + ' · סה"כ ' + fmtIls(catTotal) + c);
+    // No category total (removed 2026-09-25, Daniel: "לא רלוונטי"). Adding up one of every
+    // item in a category answers nothing — the landed cost of each PRODUCT is on its own row.
     if (!open) return;
     list.forEach((r) => {
       const usd = r.usd != null ? `<span style="color:var(--text-muted);">$${r.usd}</span>` : '';
@@ -8781,11 +8779,43 @@ function renderInventory() {
 }
 // Category of an inventory item: an explicit .cat wins; otherwise derived from the
 // name prefix so items seeded/imported before .cat existed still group correctly.
+const INV_CAT_ALIAS = { 'תאים': 'תא', 'מטענים': 'מטען' };
 function invCatOf(it) {
-  if (it.cat) return it.cat;
+  if (it.cat) return INV_CAT_ALIAS[it.cat] || it.cat;
   const n = (it.name || '').trim();
   for (const k of ['BMS', 'מטען', 'תא', 'ניקל']) { if (n === k || n.startsWith(k + ' ')) return k; }
   return 'אחר';
+}
+// Stock rows that went missing (2026-09-25: four of seven cell models were gone from the shelf
+// list, while the 10.9 backup still held them). The general "יבוא גיבוי" REPLACES every key —
+// two weeks of customers and sales with it — so this touches the inventory only and only ADDS:
+// a row whose name is already on the shelf is left exactly as it is. The quantity comes from
+// the backup's day and is marked so, because stock has moved since.
+function restoreInventoryFromBackup(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    input.value = '';
+    let d;
+    try { d = JSON.parse(rd.result); } catch (e) { showNotice('❌ הקובץ לא נקרא: ' + e.message); return; }
+    let from = d.inventory;
+    if (typeof from === 'string') { try { from = JSON.parse(from); } catch (e) { from = null; } }
+    if (!Array.isArray(from) || !from.length) { showNotice('❌ אין מלאי בקובץ הזה. בחר קובץ גיבוי של לוח הבקרה.'); return; }
+    const when = d.lastBackup ? new Date(Number(d.lastBackup)).toLocaleDateString('he-IL') : 'הגיבוי';
+    const now = getInventory();
+    const add = from.filter((r) => r && r.name && !invFindRow(now, r.name) && !now.some((x) => x.id === r.id));
+    if (!add.length) { showNotice('לא חסר כלום — כל ' + from.length + ' הפריטים בגיבוי כבר נמצאים במלאי.'); return; }
+    askConfirm('להחזיר ' + add.length + ' פריטים שחסרים במלאי?\n\n'
+      + add.map((r) => (r.name || '') + ' · ' + (Number(r.qty) || 0) + " יח'").join('\n')
+      + '\n\nהכמות היא מה שהיה ב-' + when + ' — כדאי לספור ולתקן. פריטים שכבר במלאי לא ישתנו.', () => {
+      const rows = add.map((r) => ({ ...r, note: ((r.note ? r.note + ' · ' : '') + 'שוחזר מגיבוי ' + when + ' — לספור') }));
+      if (!Store.set('inventory', now.concat(rows))) return;
+      renderInventory();
+      showNotice('✅ הוחזרו ' + rows.length + ' פריטים. בדוק את הכמויות שלהם.');
+    });
+  };
+  rd.readAsText(file, 'utf-8');
 }
 function renderInvItem(i, cat) {
   const isLow = i.low != null && Number(i.qty) <= Number(i.low);
