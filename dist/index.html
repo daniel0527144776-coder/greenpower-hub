@@ -346,6 +346,9 @@ body { min-height: 100vh; }
   .wt-month-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .wt-month-chip { background: var(--bg); border: 1px solid var(--border-strong); color: var(--text); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12.5px; cursor: pointer; font-family: inherit; }
   .wt-month-chip b { color: var(--danger); }
+  .wt-tag { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+  .wt-tag.open { color: var(--danger); background: var(--danger-light); }
+  .wt-tag.done { color: var(--success); background: var(--success-light); }
   .wt-name-link { color: inherit; text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 3px; }
   .wt-month-head { font-size: 12px; font-weight: 700; color: var(--primary); padding: 10px 2px 2px; }
   .wt-acct { padding: 8px 0; border-bottom: 1px solid var(--border); }
@@ -2025,20 +2028,12 @@ document.addEventListener('keydown', function (e) {
     <h3 class="card-title">📥 דיווחים מהטלפון של העובדים — מחכים לאישור שלך</h3>
     <div id="punchList"></div>
   </div>
-  <div class="card" id="wageDebtCard" style="display:none;border-color:var(--danger);">
-    <h3 class="card-title">💸 עובדים — כמה אני חייב</h3>
+  <div class="card" id="wageDebtCard" style="display:none;">
+    <h3 class="card-title">👷 עובדים — מי חייב כמה</h3>
     <div id="wageDebtList"></div>
   </div>
-  <div class="card" id="wtMonthCard">
-    <div class="wt-monthbar">
-      <button class="btn btn-sm btn-secondary" onclick="stepMonth('wtMonth',-1)" aria-label="חודש קודם">‹</button>
-      <select id="wtMonth" class="form-select" onchange="renderWorktime()"></select>
-      <button class="btn btn-sm btn-secondary" onclick="stepMonth('wtMonth',1)" aria-label="חודש הבא">›</button>
-    </div>
-    <div id="worktimeSummary"></div>
-  </div>
   <div class="card">
-    <h3 class="card-title">📝 השעות שנרשמו בחודש</h3>
+    <h3 class="card-title">📝 שעות אחרונות</h3>
     <div id="worktimeList"></div>
   </div>
   <div class="card">
@@ -2960,7 +2955,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v322';
+const HUB_BUILD = 'v323';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7361,26 +7356,23 @@ function rejectPunch(id) {
 }
 
 // ============================================================
-// WORKER HOURS, PAYMENTS AND THE TRASH (rebuilt 2026-09-24, v318)
+// WORKER HOURS, PAYMENTS AND THE TRASH (rebuilt 2026-09-24, v318 → v323)
 // ============================================================
-// Daniel: "אין לי היסטוריה כמה שילמתי לכל עובד, אני צריך לדפדף כל חודש לראות כמה חוב יש".
-// The old model had no payments at all — only a paid/unpaid flag on each row of hours — so
-// "what did I pay יהודה, and when" had no answer anywhere, and a debt was found by stepping
-// through months. Now:
+// The questions this page exists to answer, in his words: "how much do I owe each worker",
+// "what did I pay him and when", and — v323 — "I paid שמואל ₪2,900 and I owe him nothing,
+// mark it so". Months are not one of them: "לא רוצה לדפדף לפי חודשים, סתם מסובך". So there is
+// no month picker here any more; each worker has ONE running account.
 //
-//   * a PAYMENT is its own record: worker, amount, date, note (synced key 'wage_payments').
-//     It can be an advance or a partial payment; nothing has to add up to a month.
-//   * the balance is derived: everything earned minus everything paid. Never stored.
-//   * rows flagged paid under the old model stay settled — they are history, and turning
-//     them into invented payments would put dates on money nobody recorded a date for.
-//   * a payment may name the month it was for (the per-month button does). It settles that
-//     month first; anything else is applied to the OLDEST open month (FIFO). That is what
-//     lets a per-month debt still be shown without asking him to split every payment.
-//   * delete goes to a trash ('worktime_trash'), restorable for 90 days. Hours were lost by
-//     mistake twice in two days (2026-09-23, 2026-09-24) and there was no way back.
+//   * a PAYMENT is its own record (synced 'wage_payments'): worker, amount, date, note.
+//   * the balance is derived — open hours minus open payments — never stored.
+//   * CLOSING an account ("אין חוב") is a record too: it names the exact hours and payments it
+//     settles (`closes: { rows, pays }`), and they stop counting. Whatever the difference was —
+//     he paid more than the hours on file (hours never typed in), or less (forgiven) — it is
+//     settled BY HIM, instead of the page inventing an "advance" out of it, which is what v318
+//     did to the ₪2,900. Ids, not a date: an hour back-dated after the closing is still owed.
+//   * rows flagged paid under the old model stay settled.
 //
-// Wages in כספים are unchanged: they are an expense when WORKED (accrual), and a payment is
-// the cash settling it — counting both would book the same wage twice.
+// Wages in כספים are unchanged: an expense when WORKED (accrual); a payment settles it.
 const TRASH_DAYS = 90;
 const wtName = (e) => e.workerName || 'ללא שם';
 const wtWage = (e) => (Number(e.hours) || 0) * (Number(e.rate) || 0);
@@ -7399,132 +7391,92 @@ function wtAllNames() {
   return [...s];
 }
 
-// One worker's whole account. `months` newest first; each month carries what was earned, what
-// has been applied to it (legacy flag + payments), and what is left.
+// One worker's account.
 function workerLedger(name) {
   const rows = (Store.get('worktime') || []).filter((e) => wtName(e) === name);
-  const byM = new Map();
-  for (const e of rows) {
-    const k = monthKeyOf(e.date); if (!k) continue;
-    const m = byM.get(k) || { key: k, hours: 0, earned: 0, legacy: 0, open: 0, paid: 0, left: 0 };
-    const w = wtWage(e);
-    m.hours += Number(e.hours) || 0; m.earned += w;
-    if (e.paid) m.legacy += w; else m.open += w;
-    byM.set(k, m);
-  }
-  const asc = [...byM.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
-  asc.forEach((m) => { m.left = m.open; });
   const payments = getWagePayments().filter((p) => p.worker === name)
     .sort((a, b) => new Date(a.date) - new Date(b.date));
-  let pool = 0;
-  // 1. a payment made FOR a month settles that month first
+  const closedRows = new Set(), closedPays = new Set();
+  let lastClose = null;
   for (const p of payments) {
-    const amt = Number(p.amount) || 0;
-    const m = p.forMonth && byM.get(p.forMonth);
-    if (m) { const c = Math.min(m.left, amt); m.left -= c; m.paid += c; pool += amt - c; }
-    else pool += amt;
+    if (!p.closes) continue;
+    (p.closes.rows || []).forEach((id) => closedRows.add(String(id)));
+    (p.closes.pays || []).forEach((id) => closedPays.add(String(id)));
+    lastClose = p;
   }
-  // 2. everything else, oldest month first
-  for (const m of asc) { const c = Math.min(m.left, pool); m.left -= c; m.paid += c; pool -= c; }
-  const sum = (f) => asc.reduce((s, m) => s + m[f], 0);
-  const paidTotal = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const openRows = rows.filter((e) => !e.paid && !closedRows.has(String(e.id)));
+  const openPays = payments.filter((p) => !closedPays.has(String(p.id)) && (Number(p.amount) || 0) > 0);
+  const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0);
+  const openEarned = sum(openRows, wtWage), openPaid = sum(openPays, (p) => Number(p.amount) || 0);
+  const money = payments.filter((p) => (Number(p.amount) || 0) > 0);
   return {
-    name, months: asc.slice().reverse(), payments: payments.slice().reverse(),
-    hours: sum('hours'), earned: sum('earned'), legacyPaid: sum('legacy'), paidTotal,
-    owed: sum('left'), credit: pool,
-    balance: sum('left') - pool,               // > 0 owed to him, < 0 an advance he holds
-    lastPay: payments.length ? payments[payments.length - 1] : null,
+    name, rows, payments: payments.slice().reverse(), openRows, openPays,
+    openIds: new Set(openRows.map((e) => String(e.id))),
+    hours: sum(rows, (e) => Number(e.hours) || 0), earned: sum(rows, wtWage),
+    legacyPaid: sum(rows.filter((e) => e.paid), wtWage),
+    paidTotal: sum(money, (p) => Number(p.amount) || 0),
+    openHours: sum(openRows, (e) => Number(e.hours) || 0), openEarned, openPaid,
+    balance: openEarned - openPaid,              // > 0 owed to him; < 0 paid ahead of the hours on file
+    lastClose,
+    lastPay: money.length ? money[money.length - 1] : null,
   };
 }
 
-// Per month, across workers — kept for the month chips and the tested month-level rule.
-function wageDebt() {
-  const byMonth = new Map();
-  for (const name of wtAllNames()) {
-    for (const m of workerLedger(name).months) {
-      if (m.left < 0.5) continue;
-      if (!byMonth.has(m.key)) byMonth.set(m.key, { key: m.key, total: 0, hours: 0, workers: new Map() });
-      const b = byMonth.get(m.key);
-      const h = m.open > 0 ? m.hours * (m.left / m.earned) : 0;
-      b.total += m.left; b.hours += h;
-      b.workers.set(name, { hours: h, wage: m.left });
-    }
-  }
-  return [...byMonth.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
-}
-function wageDebtByWorker() {
-  return wtAllNames().map((name) => {
-    const L = workerLedger(name);
-    const open = L.months.filter((m) => m.left >= 0.5);
-    return { name, hours: open.reduce((s, m) => s + m.hours * (m.left / (m.earned || 1)), 0), wage: L.balance, months: new Set(open.map((m) => m.key)) };
-  }).filter((w) => w.wage >= 0.5).sort((a, b) => b.wage - a.wage);
-}
-
-let WT_MONTH_WORKERS = [];
 let WT_LEDGER_NAMES = [];
+let WT_ROWS_SHOWN = 30;
 const wtHrs = (h) => (Math.round(h * 100) / 100).toLocaleString('he-IL');
 const wtDay = (d) => new Date(d).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' });
+// The one sentence that says where a worker stands. Used on the list, his page and the forms.
+function wtStatusHtml(L) {
+  if (L.balance >= 0.5) return `<b style="color:var(--danger);">חייב לו ${shek(L.balance)}</b>`;
+  if (L.balance <= -0.5) return `<b style="color:var(--primary);">שילמת ${shek(-L.balance)} יותר מהשעות הרשומות</b>`;
+  return '<b style="color:var(--success);">✓ אין חוב</b>';
+}
+function wtSinceHtml(L) {
+  const since = L.lastClose ? `מאז הסגירה ב-${wtDay(L.lastClose.date)}` : 'שלא שולמו';
+  if (!L.openRows.length && !L.openPays.length) return L.lastClose ? `החשבון נסגר ב-${wtDay(L.lastClose.date)}` : '';
+  return `${since}: ${wtHrs(L.openHours)} שעות · ${shek(L.openEarned)}` + (L.openPaid >= 0.5 ? ` · שולם ${shek(L.openPaid)}` : '');
+}
 
 function renderWorktime() {
-  const mk = ensureMonthInput('wtMonth'); ensureDateInput('wtDate');
+  ensureDateInput('wtDate');
   renderShifts();
   startShiftTicker();
   fetchPunches();
   renderPunches();
   const workers = getWorkers(), sel = document.getElementById('wtWorker');
+  const keep = sel.value;
   sel.innerHTML = workers.length ? workers.map(w => `<option value="${w.id}">${escPunch(w.name)} (₪${w.rate} לשעה)</option>`).join('') : '<option value="">הוסף עובד תחילה</option>';
+  if (keep && workers.some((w) => w.id === keep)) sel.value = keep;
   renderWageDebt();
 
-  // ---- the chosen month, per worker ----
-  const entries = (Store.get('worktime') || []).filter(e => monthKeyOf(e.date) === mk);
-  const names = [...new Set(entries.map(wtName))];
-  WT_MONTH_WORKERS = names.map((name) => {
-    const m = workerLedger(name).months.find((x) => x.key === mk) || { hours: 0, earned: 0, left: 0 };
-    return { name, hours: m.hours, wage: m.earned, owed: m.left };
-  }).sort((a, b) => b.wage - a.wage);
-  const sum = (f) => WT_MONTH_WORKERS.reduce((s, w) => s + w[f], 0);
-  document.getElementById('worktimeSummary').innerHTML = !WT_MONTH_WORKERS.length
-    ? `<div class="empty-state"><div class="empty-state-text">לא נרשמו שעות ב${monthLabelHe(mk)}</div></div>`
-    : WT_MONTH_WORKERS.map((w, i) => `
-      <div class="wt-worker">
-        <div class="wt-worker-head">
-          <span class="wt-worker-name">${wtNameLink(w.name)}</span>
-          <span class="wt-muted">${wtHrs(w.hours)} שעות בחודש</span>
-        </div>
-        <div class="wt-nums">
-          <div class="wt-num"><span>שכר החודש</span><b>${shek(w.wage)}</b></div>
-          <div class="wt-num"><span>שולם</span><b>${shek(w.wage - w.owed)}</b></div>
-          <div class="wt-num${w.owed >= 0.5 ? ' wt-owed' : ''}"><span>נשאר לשלם</span><b>${shek(w.owed)}</b></div>
-        </div>
-        ${w.owed >= 0.5
-          ? `<button class="btn btn-primary btn-block btn-sm" onclick="payWorkerMonth(${i})">💵 רשום תשלום ל${escPunch(w.name)} על ${monthLabelHe(mk)}</button>`
-          : '<div class="wt-done">✓ החודש הזה שולם</div>'}
-      </div>`).join('')
-      + `<div class="wt-total"><span>סה"כ ${monthLabelHe(mk)}: <b>${wtHrs(sum('hours'))} שעות · ${shek(sum('wage'))}</b></span>`
-      + (sum('owed') >= 0.5 ? `<span style="color:var(--danger);">נשאר ${shek(sum('owed'))}</span>` : '<span style="color:var(--success);">הכל שולם</span>') + '</div>';
-
-  // ---- the rows ----
-  const sorted = entries.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
-  document.getElementById('worktimeList').innerHTML = !sorted.length
-    ? '<div class="empty-state"><div class="empty-state-text">אין רישומים בחודש הזה</div></div>'
-    : sorted.map(e => {
-      const day = new Date(e.date).toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' });
+  // ---- the latest hours, all workers, newest first: no month to choose ----
+  const all = (Store.get('worktime') || []).slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  const open = new Map();
+  for (const n of new Set(all.map(wtName))) open.set(n, workerLedger(n).openIds);
+  const shown = all.slice(0, WT_ROWS_SHOWN);
+  document.getElementById('worktimeList').innerHTML = !all.length
+    ? '<div class="empty-state"><div class="empty-state-text">עוד לא נרשמו שעות</div></div>'
+    : shown.map(e => {
+      const day = new Date(e.date).toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric', year: '2-digit' });
       const note = wtNoteHtml(e.note);
+      const isOpen = open.get(wtName(e)).has(String(e.id));
       return `<div class="wt-row">
         <div class="wt-row-main">
           <div class="wt-row-title">${wtNameLink(wtName(e))} · ${wtHrs(Number(e.hours) || 0)} שעות</div>
-          <div class="wt-muted">${day}${note ? ' · ' + note : ''}${e.paid ? ' · <span style="color:var(--success);">✓ סומן שולם</span>' : ''}</div>
+          <div class="wt-muted">${day}${note ? ' · ' + note : ''}</div>
         </div>
-        <div class="wt-row-side"><b>${shek(wtWage(e))}</b></div>
+        <div class="wt-row-side"><b>${shek(wtWage(e))}</b><span class="wt-tag ${isOpen ? 'open' : 'done'}">${isOpen ? 'לא שולם' : '✓ שולם'}</span></div>
         <button class="wt-del" onclick="deleteWorktime('${e.id}')" aria-label="מחק רישום" title="מחק רישום (עובר לסל)">🗑</button>
       </div>`;
-    }).join('');
+    }).join('')
+    + (all.length > WT_ROWS_SHOWN ? `<button class="btn btn-secondary btn-block btn-sm" style="margin-top:8px;" onclick="WT_ROWS_SHOWN += 30; renderWorktime();">הצג עוד (${all.length - WT_ROWS_SHOWN})</button>` : '');
   renderWorktimeTrash();
   const wp = document.getElementById('page-worker');
   if (wp && wp.classList.contains('active')) renderWorkerPage();
 }
 
-// The top card: every worker's balance, all months at once — no stepping through months.
+// The top card: every worker, where he stands, and the two buttons that change it.
 function renderWageDebt() {
   const card = document.getElementById('wageDebtCard');
   const list = document.getElementById('wageDebtList');
@@ -7536,27 +7488,18 @@ function renderWageDebt() {
   if (!ledgers.length) { card.style.display = 'none'; return; }
   card.style.display = 'block';
   const owed = ledgers.reduce((s, L) => s + Math.max(0, L.balance), 0);
-  const now = monthKeyOf(new Date().toISOString());
-  const debt = wageDebt();
   list.innerHTML =
-    `<div class="wt-debt-line wt-debt-total"><span>סה"כ לתשלום</span><b${owed < 0.5 ? ' style="color:var(--success);"' : ''}>${shek(owed)}</b></div>`
-    + ledgers.map((L, i) => {
-      const bal = L.balance >= 0.5 ? `<b style="color:var(--danger);">${shek(L.balance)}</b>`
-        : L.balance <= -0.5 ? `<b style="color:var(--primary);">מקדמה ${shek(-L.balance)}</b>`
-        : '<b style="color:var(--success);">אין חוב</b>';
-      const last = L.lastPay ? `שולם לאחרונה ${shek(L.lastPay.amount)} ב-${wtDay(L.lastPay.date)}` : 'עוד לא נרשם תשלום';
-      return `<div class="wt-acct">
-        <div class="wt-debt-line"><span><b>${wtNameLink(L.name)}</b></span>${bal}</div>
-        <div class="wt-muted">${last}</div>
+    `<div class="wt-debt-line wt-debt-total"><span>סה"כ חייב לעובדים</span><b${owed < 0.5 ? ' style="color:var(--success);"' : ''}>${owed < 0.5 ? '₪0' : shek(owed)}</b></div>`
+    + ledgers.map((L, i) => `<div class="wt-acct">
+        <div class="wt-debt-line"><span><b>${wtNameLink(L.name)}</b></span>${wtStatusHtml(L)}</div>
+        <div class="wt-muted">${wtSinceHtml(L)}</div>
+        <div class="wt-muted">${L.lastPay ? `תשלום אחרון: ${shek(L.lastPay.amount)} ב-${wtDay(L.lastPay.date)}` : 'עוד לא נרשם תשלום'}</div>
         <div class="btn-group" style="margin-top:6px;">
-          <button class="btn btn-sm btn-primary" onclick="openPayModal(${i})">💵 רשום תשלום</button>
-          <button class="btn btn-sm btn-secondary" onclick="openWorkerLedger(${i})">👤 כל ההיסטוריה</button>
+          <button class="btn btn-sm btn-primary" onclick="openPayModal(${i})">💵 שילמתי</button>
+          ${Math.abs(L.balance) >= 0.5 ? `<button class="btn btn-sm btn-secondary" onclick="closeAccount(${i})">✓ אין חוב</button>` : ''}
+          <button class="btn btn-sm btn-secondary" onclick="openWorkerLedger(${i})">👤 פרטים</button>
         </div>
-      </div>`;
-    }).join('')
-    + (debt.length ? `<div class="wt-muted" style="margin-top:8px;">מאיזה חודש החוב:</div><div class="wt-month-chips">`
-      + debt.map((d) => `<button class="wt-month-chip" onclick="openWageMonth('${d.key}')">${monthLabelHe(d.key)}${d.key === now ? ' (החודש)' : ''} · <b>${shek(d.total)}</b></button>`).join('')
-      + '</div>' : '');
+      </div>`).join('');
 }
 
 // ---- one page per worker (2026-09-24, v321) ----
@@ -7592,6 +7535,7 @@ function wtRateHistory(rows) {
   return out.reverse();
 }
 
+
 function renderWorkerPage() {
   const name = WT_WORKER;
   const body = document.getElementById('wkBody');
@@ -7601,54 +7545,50 @@ function renderWorkerPage() {
   title.textContent = '👷 ' + name;
   const L = workerLedger(name);
   const w = getWorkers().find((x) => x.name === name);
-  const rows = (Store.get('worktime') || []).filter((e) => wtName(e) === name)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-  const bal = L.balance >= 0.5 ? `<span style="color:var(--danger);">חייב לו ${shek(L.balance)}</span>`
-    : L.balance <= -0.5 ? `<span style="color:var(--primary);">קיבל מקדמה של ${shek(-L.balance)}</span>`
-    : '<span style="color:var(--success);">אין חוב</span>';
-  const months = L.months;
-  const avgH = months.length ? L.hours / months.length : 0;
-  const avgW = months.length ? L.earned / months.length : 0;
+  const rows = L.rows.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
   const hist = wtRateHistory(rows);
+  const nMonths = new Set(rows.map((e) => monthKeyOf(e.date))).size || 1;
 
-  // one list, grouped by month, every row this worker ever had
+  // Every hour he ever had, newest first. Month headings are there to read by, not to page by.
   let lastM = '';
   const rowHtml = rows.map((e) => {
     const k = monthKeyOf(e.date);
     const head = k !== lastM ? `<div class="wt-month-head">${monthLabelHe(k)}</div>` : '';
     lastM = k;
     const note = wtNoteHtml(e.note);
+    const isOpen = L.openIds.has(String(e.id));
     return head + `<div class="wt-row">
       <div class="wt-row-main">
         <div class="wt-row-title">${wtHrs(Number(e.hours) || 0)} שעות × ₪${Number(e.rate) || 0}</div>
-        <div class="wt-muted">${new Date(e.date).toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' })}${note ? ' · ' + note : ''}${e.paid ? ' · <span style="color:var(--success);">✓ סומן שולם</span>' : ''}</div>
+        <div class="wt-muted">${new Date(e.date).toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' })}${note ? ' · ' + note : ''}</div>
       </div>
-      <div class="wt-row-side"><b>${shek(wtWage(e))}</b></div>
+      <div class="wt-row-side"><b>${shek(wtWage(e))}</b><span class="wt-tag ${isOpen ? 'open' : 'done'}">${isOpen ? 'לא שולם' : '✓ שולם'}</span></div>
       <button class="wt-del" onclick="deleteWorktime('${e.id}')" aria-label="מחק רישום" title="מחק רישום (עובר לסל)">🗑</button>
     </div>`;
   }).join('');
 
   body.innerHTML = `
     <div class="card">
-      <div class="wt-nums">
-        <div class="wt-num"><span>הרוויח סה"כ</span><b>${shek(L.earned)}</b></div>
-        <div class="wt-num"><span>קיבל סה"כ</span><b>${shek(L.paidTotal + L.legacyPaid)}</b></div>
-        <div class="wt-num${L.balance >= 0.5 ? ' wt-owed' : ''}"><span>יתרה</span><b>${L.balance >= 0.5 ? shek(L.balance) : L.balance <= -0.5 ? '−' + shek(-L.balance) : '₪0'}</b></div>
-      </div>
-      <div style="font-weight:600;margin-bottom:4px;">${bal}</div>
+      <div style="font-size:20px;margin-bottom:6px;">${wtStatusHtml(L)}</div>
+      <div class="wt-muted">${wtSinceHtml(L)}</div>
       <div class="wt-muted">${L.lastPay ? `תשלום אחרון: ${shek(L.lastPay.amount)} ב-${wtDay(L.lastPay.date)}` : 'עוד לא נרשם תשלום'}</div>
-      <div class="btn-group" style="margin-top:10px;">
-        <button class="btn btn-primary" onclick="openPayModal(WT_WORKER)">💵 רשום תשלום</button>
+      <div class="btn-group" style="margin-top:10px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="openPayModal(WT_WORKER)">💵 שילמתי</button>
+        ${Math.abs(L.balance) >= 0.5 ? '<button class="btn btn-secondary" onclick="closeAccount(WT_WORKER)">✓ אין חוב</button>' : ''}
         <button class="btn btn-secondary" onclick="addHoursFor(WT_WORKER)">➕ הוסף שעות</button>
+      </div>
+      <div class="wt-nums" style="margin-top:12px;">
+        <div class="wt-num"><span>הרוויח מאז שהתחיל</span><b>${shek(L.earned)}</b></div>
+        <div class="wt-num"><span>קיבל מאז שהתחיל</span><b>${shek(L.paidTotal + L.legacyPaid)}</b></div>
+        <div class="wt-num"><span>שעות מאז שהתחיל</span><b>${wtHrs(L.hours)}</b></div>
       </div>
     </div>
 
     <div class="card">
       <h3 class="card-title">💰 תמחור</h3>
       <div class="wt-debt-line"><span>תעריף עכשיו</span><b>${w ? '₪' + w.rate + ' לשעה' : '<span class="wt-muted">לא ברשימת העובדים</span>'}</b></div>
-      <div class="wt-debt-line"><span>סה"כ שעות</span><b>${wtHrs(L.hours)}</b></div>
-      <div class="wt-debt-line"><span>ממוצע לחודש</span><b>${wtHrs(avgH)} שעות · ${shek(avgW)}</b></div>
-      ${hist.length ? `<div class="wt-muted" style="margin:8px 0 4px;">לפי תעריף (כל שעה נשמרת בתעריף שהיה ביום שנרשמה):</div>
+      <div class="wt-debt-line"><span>ממוצע לחודש</span><b>${wtHrs(L.hours / nMonths)} שעות · ${shek(L.earned / nMonths)}</b></div>
+      ${hist.length ? `<div class="wt-muted" style="margin:8px 0 4px;">כל שעה נשמרת בתעריף שהיה ביום שנרשמה:</div>
       <div style="overflow-x:auto;"><table class="wt-table"><thead><tr><th>תעריף</th><th>מתאריך</th><th>עד</th><th>שעות</th><th>שכר</th></tr></thead><tbody>
         ${hist.map((h) => `<tr><td>₪${h.rate}</td><td>${wtDay(h.from)}</td><td>${wtDay(h.to)}</td><td>${wtHrs(h.hours)}</td><td>${shek(h.wage)}</td></tr>`).join('')}
       </tbody></table></div>` : ''}
@@ -7657,21 +7597,19 @@ function renderWorkerPage() {
 
     <div class="card">
       <h3 class="card-title">💵 תשלומים</h3>
-      ${L.payments.length ? L.payments.map((p) => `<div class="wt-row">
-        <div class="wt-row-main">
-          <div class="wt-row-title">${shek(p.amount)}</div>
-          <div class="wt-muted">${wtDay(p.date)}${p.forMonth ? ' · על ' + monthLabelHe(p.forMonth) : ''}${p.note ? ' · ' + escPunch(p.note) : ''}</div>
-        </div>
-        <button class="wt-del" onclick="deleteWagePayment('${p.id}')" aria-label="מחק תשלום" title="מחק תשלום (עובר לסל)">🗑</button>
-      </div>`).join('') : '<div class="wt-muted">עוד לא נרשם תשלום.</div>'}
+      ${L.payments.length ? L.payments.map((p) => {
+        const amt = Number(p.amount) || 0;
+        const what = amt > 0 ? shek(amt) : '✓ סגירת חשבון';
+        const closed = p.closes ? (amt > 0 ? ' · <span style="color:var(--success);">✓ סגר את החשבון</span>' : '') : '';
+        return `<div class="wt-row">
+          <div class="wt-row-main">
+            <div class="wt-row-title">${what}</div>
+            <div class="wt-muted">${wtDay(p.date)}${closed}${p.note ? ' · ' + escPunch(p.note) : ''}</div>
+          </div>
+          <button class="wt-del" onclick="deleteWagePayment('${p.id}')" aria-label="מחק" title="מחק (עובר לסל)">🗑</button>
+        </div>`;
+      }).join('') : '<div class="wt-muted">עוד לא נרשם תשלום.</div>'}
       ${L.legacyPaid >= 0.5 ? `<div class="wt-muted" style="margin-top:6px;">בנוסף ${shek(L.legacyPaid)} סומנו "שולם" לפני שנרשמו תשלומים (בלי תאריך).</div>` : ''}
-    </div>
-
-    <div class="card">
-      <h3 class="card-title">📅 לפי חודש</h3>
-      ${months.length ? `<div style="overflow-x:auto;"><table class="wt-table"><thead><tr><th>חודש</th><th>שעות</th><th>שכר</th><th>שולם</th><th>נשאר</th></tr></thead><tbody>
-        ${months.map((m) => `<tr><td>${monthLabelHe(m.key)}</td><td>${wtHrs(m.hours)}</td><td>${shek(m.earned)}</td><td>${shek(m.earned - m.left)}</td><td style="color:${m.left >= 0.5 ? 'var(--danger)' : 'var(--success)'};">${m.left >= 0.5 ? shek(m.left) : '✓'}</td></tr>`).join('')}
-      </tbody></table></div>` : '<div class="wt-muted">אין שעות.</div>'}
     </div>
 
     <div class="card">
@@ -7683,6 +7621,7 @@ function renderWorkerPage() {
       <button class="btn btn-secondary btn-block btn-sm" onclick="openMergeWorker()">🔗 איחוד עם שם אחר של אותו עובד</button>
     </div>`;
 }
+
 
 // From the worker's page straight into the manual-hours form, with him already chosen.
 function addHoursFor(name) {
@@ -7762,24 +7701,26 @@ function mergeWorker(from, into) {
   return { rows, pays: n };
 }
 
-// Record a payment. The amount is prefilled with what is owed (or the month's remainder when
-// opened from a month), and can be changed freely — an advance or a part payment is normal.
+
+// Record a payment. The amount is prefilled with what is owed. Two ways to save, named for
+// what they mean: the payment settles everything ("אין יותר חוב"), or it is a part / an
+// advance and the rest stays open. Asking him beats guessing — guessing is how ₪2,900 paid in
+// full became "an advance of ₪X" in v318.
 let WT_PAY_CTX = null;
-function openPayModal(i, forMonth) {
+function openPayModal(i) {
   const name = typeof i === 'string' ? i : WT_LEDGER_NAMES[i];
   if (!name) return;
   const L = workerLedger(name);
-  let suggest = Math.max(0, Math.round(L.balance));
-  if (forMonth) { const m = L.months.find((x) => x.key === forMonth); suggest = m ? Math.round(m.left) : 0; }
-  WT_PAY_CTX = { name, forMonth: forMonth || null };
-  openModal('💵 תשלום ל' + escPunch(name), `
-    <div class="wt-muted" style="margin-bottom:8px;">${forMonth ? 'על ' + monthLabelHe(forMonth) + ' · ' : ''}יתרה עכשיו: <b>${L.balance >= 0.5 ? shek(L.balance) : L.balance <= -0.5 ? 'מקדמה ' + shek(-L.balance) : '₪0'}</b></div>
-    <div class="form-row"><label>סכום ₪</label><input type="number" class="form-input" id="payAmount" min="0" step="1" value="${suggest || ''}"></div>
+  WT_PAY_CTX = { name };
+  openModal('💵 שילמתי ל' + escPunch(name), `
+    <div style="margin-bottom:8px;">${wtStatusHtml(L)}</div>
+    <div class="form-row"><label>סכום ₪</label><input type="number" class="form-input" id="payAmount" min="0" step="1" value="${L.balance >= 0.5 ? Math.round(L.balance) : ''}"></div>
     <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="payDate" style="width:auto;direction:ltr;" value="${todayLocalISO()}"></div>
-    <div class="form-row"><label>הערה</label><input type="text" class="form-input" id="payNote" placeholder="מזומן / העברה / מקדמה"></div>`,
-    `<button class="btn btn-primary" onclick="saveWagePayment()">💾 שמור תשלום</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+    <div class="form-row"><label>הערה</label><input type="text" class="form-input" id="payNote" placeholder="מזומן / העברה"></div>`,
+    `<button class="btn btn-primary" onclick="saveWagePayment(true)">✓ שמור — אין יותר חוב</button>
+     <button class="btn btn-secondary" onclick="saveWagePayment(false)">שמור — נשאר חוב / מקדמה</button>`);
 }
-function saveWagePayment() {
+function saveWagePayment(close = false) {
   const ctx = WT_PAY_CTX; if (!ctx) return;
   const amount = Math.round((parseFloat(document.getElementById('payAmount').value) || 0) * 100) / 100;
   if (!(amount > 0)) { showNotice('הזן סכום'); return; }
@@ -7787,7 +7728,10 @@ function saveWagePayment() {
   const note = (document.getElementById('payNote').value || '').trim();
   const pays = getWagePayments();
   const rec = { id: 'pay' + Date.now(), worker: ctx.name, amount, date: new Date(d + 'T12:00:00').toISOString(), note };
-  if (ctx.forMonth) rec.forMonth = ctx.forMonth;
+  if (close) {
+    const L = workerLedger(ctx.name);
+    rec.closes = { rows: [...L.openIds], pays: L.openPays.map((p) => p.id).concat(rec.id) };
+  }
   pays.push(rec);
   if (!Store.set('wage_payments', pays)) return;
   closeModal();
@@ -7795,30 +7739,28 @@ function saveWagePayment() {
   renderWorktime();
   const L = workerLedger(ctx.name);
   showNotice(`נרשם: ${shek(amount)} ל${ctx.name} ב-${wtDay(rec.date)}.\n`
-    + (L.balance >= 0.5 ? `נשאר לשלם לו ${shek(L.balance)}.` : L.balance <= -0.5 ? `הוא מחזיק מקדמה של ${shek(-L.balance)}.` : 'אין לו יותר חוב.'));
+    + (close ? 'החשבון שלו סגור — אין חוב.' : L.balance >= 0.5 ? `נשאר לשלם לו ${shek(L.balance)}.` : L.balance <= -0.5 ? `שילמת לו ${shek(-L.balance)} יותר מהשעות הרשומות.` : 'אין לו יותר חוב.'));
 }
-function payWorkerMonth(i) {
-  const w = WT_MONTH_WORKERS[i];
-  const mk = document.getElementById('wtMonth').value;
-  if (!w || !(w.owed >= 0.5)) return;
-  openPayModal(w.name, mk);
-}
-// Settles a whole month for every worker at once — one payment per worker, for that month.
-// No button calls it since v317; kept as the tested month-level rule.
-function payWageMonth(k) {
-  const d = wageDebt().find((x) => x.key === k);
-  if (!d) return;
-  askConfirm(`לרשום תשלום על כל ${monthLabelHe(k)}?\n${shek(d.total)}`, () => {
+// "אין חוב" without a new payment: everything open until now is settled — whatever the
+// difference. For the case where the money already went out (and was recorded, or was not).
+function closeAccount(i) {
+  const name = typeof i === 'string' ? i : WT_LEDGER_NAMES[i];
+  if (!name) return;
+  const L = workerLedger(name);
+  const why = L.balance >= 0.5 ? `כרגע רשום שאתה חייב לו ${shek(L.balance)} — הסכום הזה יימחק מהחוב.`
+    : L.balance <= -0.5 ? `כרגע רשום ששילמת לו ${shek(-L.balance)} יותר מהשעות — זה לא ייחשב מקדמה.`
+    : 'אין כרגע הפרש.';
+  askConfirm(`לסמן שאין חוב ל${name}?\n${why}\nשעות שיירשמו מעכשיו ייספרו מחדש.`, () => {
     const pays = getWagePayments();
-    let n = 0;
-    for (const [name, v] of d.workers) {
-      pays.push({ id: 'pay' + Date.now() + '_' + (n++), worker: name, amount: Math.round(v.wage * 100) / 100, date: new Date().toISOString(), note: 'תשלום ' + monthLabelHe(k), forMonth: k });
-    }
+    const id = 'close' + Date.now();
+    pays.push({ id, worker: name, amount: 0, date: new Date().toISOString(), note: 'סגירת חשבון',
+      closes: { rows: [...L.openIds], pays: L.openPays.map((p) => p.id) } });
     if (!Store.set('wage_payments', pays)) return;
     renderWorktime();
-    showNotice(`${monthLabelHe(k)} שולם — ${shek(d.total)}.`);
+    showNotice(`✓ ${name} — אין חוב.`);
   });
 }
+
 
 // ---- the trash ----
 function wtToTrash(item) {
@@ -7840,7 +7782,7 @@ function deleteWagePayment(id) {
   const pays = getWagePayments();
   const p = pays.find((x) => x.id === id);
   if (!p) return;
-  askConfirm(`למחוק תשלום של ${shek(p.amount)} ל${p.worker} מ-${wtDay(p.date)}?\nהוא עובר לסל ואפשר להחזיר אותו.`, () => {
+  askConfirm(`למחוק ${(Number(p.amount) || 0) > 0 ? 'תשלום של ' + shek(p.amount) : 'את סגירת החשבון'} של ${p.worker} מ-${wtDay(p.date)}?\nזה עובר לסל ואפשר להחזיר.`, () => {
     if (!wtToTrash({ kind: 'payment', row: p })) return;
     Store.set('wage_payments', pays.filter((x) => x.id !== id));
     renderWorktime();
@@ -7855,7 +7797,7 @@ function renderWorktimeTrash() {
     : trash.map((t, i) => {
       const r = t.row || {};
       const what = t.kind === 'payment'
-        ? `💵 תשלום ${shek(r.amount)} ל${escPunch(r.worker)} · ${wtDay(r.date)}`
+        ? ((Number(r.amount) || 0) > 0 ? `💵 תשלום ${shek(r.amount)} ל${escPunch(r.worker)} · ${wtDay(r.date)}` : `✓ סגירת חשבון של ${escPunch(r.worker)} · ${wtDay(r.date)}`)
         : `${escPunch(wtName(r))} · ${wtHrs(Number(r.hours) || 0)} שעות · ${wtDay(r.date)} · ${shek(wtWage(r))}`;
       return `<div class="wt-row"><div class="wt-row-main"><div class="wt-row-title" style="font-size:13px;">${what}</div>
         <div class="wt-muted">נמחק ${wtDay(t.deletedAt)}</div></div>
@@ -7935,14 +7877,7 @@ function toggleWtAdd(open) {
   body.hidden = open === undefined ? !body.hidden : !open;
   if (!body.hidden) { const h = document.getElementById('wtHours'); if (h) h.focus(); }
 }
-function openWageMonth(k) {
-  const el = document.getElementById('wtMonth');
-  if (!el) return;
-  el.value = k;
-  renderWorktime();
-  const card = document.getElementById('wtMonthCard');
-  if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+
 // The old per-row flag. No button sets it any more (payments replaced it); kept so a legacy
 // row can still be flipped from code and so existing callers do not throw.
 function toggleWorktimePaid(id) {

@@ -134,17 +134,19 @@ check('no native month picker survives anywhere', nativeMonth === 0, String(nati
 
 const month = await page.evaluate(() => {
   Store.set('worktime', [{ id: 'mw1', date: '2026-06-15', workerName: 'בדיקה', rate: 50, hours: 5 }]);
-  navigateTo('worktime');
-  const el = document.getElementById('wtMonth');
+  // The clock page has no month any more (v323, one running account per worker); כספים still
+  // pages by month through the same stepMonth control, so the rule is checked there.
+  navigateTo('finances');
+  const el = document.getElementById('finMonth');
   if (!el) return { tag: null };
   const before = el.value;
-  stepMonth('wtMonth', -1);
+  stepMonth('finMonth', -1);
   return {
     tag: el.tagName,
     opts: el.options.length,
     hasDataMonth: Array.prototype.some.call(el.options, (o) => o.value === '2026-06'),
     before,
-    after: document.getElementById('wtMonth').value,
+    after: document.getElementById('finMonth').value,
   };
 });
 check('the month is a select, which a WebView can open', month.tag === 'SELECT', String(month.tag));

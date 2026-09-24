@@ -5,9 +5,8 @@
 //
 // Two reports, one fault shape: a figure that is confidently wrong rather than missing.
 //
-// 1. WAGES. Daniel: "אני לא יודע איזה חודשים אחורה יש חוב לעובדים." The page warned that money
-//    was owed but only as ONE TOTAL, so finding WHICH month meant stepping back through the
-//    picker. Now: a card broken down by month and by worker, each openable and payable.
+// 1. WAGES. One running account per worker (v323): what is owed, dated payments, and a
+//    closing that settles it — no months to page through.
 //
 // 2. MONTHS WITH NO EXPENSES. After importing the accountant's books the page read
 //    "רווח מצטבר ₪284,895" for 2020-2025 — five years of income against zero recorded cost,
@@ -48,7 +47,9 @@ page.on('dialog', (d) => { dialogs.push(d.message().slice(0, 60)); d.dismiss().c
 await page.goto('http://localhost:4349/index.html', { waitUntil: 'load' });
 await page.waitForFunction(() => typeof window.navigateTo === 'function', null, { timeout: 30000 });
 
-// ---------------------------------------------------------------- 1. where the wages are owed
+// ---------------------------------------------------------------- 1. what is owed to whom
+// v323: one running account per worker, no months. Daniel: "שמואל קיבל 2900 ואין לו עוד חוב —
+// צריך לסמן שאין לי חוב עליו, לא רק מקדמה" and "לא רוצה לדפדף לפי חודשים".
 await page.evaluate(() => {
   const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString();
   localStorage.clear();
@@ -57,91 +58,71 @@ await page.evaluate(() => {
     { id: 'a', workerName: 'יוסי', rate: 45, hours: 6, date: iso(2026, 3, 4), paid: false },
     { id: 'b', workerName: 'יוסי', rate: 45, hours: 10, date: iso(2026, 3, 18), paid: false },
     { id: 'c', workerName: 'אבי', rate: 50, hours: 4, date: iso(2026, 3, 20), paid: false },
-    { id: 'd', workerName: 'יוסי', rate: 45, hours: 8, date: iso(2026, 6, 2), paid: true },   // paid — must not appear
+    { id: 'd', workerName: 'יוסי', rate: 45, hours: 8, date: iso(2026, 6, 2), paid: true },   // old flag — settled
     { id: 'e', workerName: 'יוסי', rate: 45, hours: 12, date: iso(2026, 7, 9), paid: false },
   ]));
 });
 await page.evaluate(() => { const o = document.getElementById('loginOverlay'); if (o) o.style.display = 'none'; init(); navigateTo('worktime'); });
 await page.waitForTimeout(500);
 
+const acct = await page.evaluate(() => ({
+  noMonthPicker: !document.getElementById('wtMonth'),
+  text: document.getElementById('wageDebtList').innerText,
+  yossi: workerLedger('יוסי').balance, avi: workerLedger('אבי').balance,
+}));
+check('the clock page has no month to page through', acct.noMonthPicker, acct);
+// Derived from the seed, never typed: (6 + 10 + 12) x 45 and 4 x 50.
+check('each worker\'s debt is the sum of ALL his unpaid hours', acct.yossi === 1260 && acct.avi === 200, acct);
+check('an hour flagged paid the old way is not owed', acct.yossi === 1260, acct);
+check('the list names every worker with what is owed and the total',
+  /יוסי/.test(acct.text) && /אבי/.test(acct.text) && acct.text.replace(/\s/g, '').includes('1,460'), acct.text.slice(0, 120));
+
 if (SELFTEST) {
-  // Put the old behaviour back: one total, no breakdown. The "which month" checks must go red.
-  await page.evaluate(() => { window.wageDebt = () => []; renderWageDebt(); });
+  // The v318 behaviour this replaced: a payment that covers everything is still just a payment,
+  // and the page calls the difference an advance instead of letting him close the account.
+  await page.evaluate(() => { window.saveWagePayment = ((orig) => () => orig(false))(saveWagePayment); });
 }
-
-const debt = await page.evaluate(() => {
-  const card = document.getElementById('wageDebtCard');
-  const d = (typeof wageDebt === 'function') ? wageDebt() : [];
-  return {
-    shown: !!card && getComputedStyle(card).display !== 'none',
-    months: d.map((x) => x.key),
-    totals: d.map((x) => Math.round(x.total)),
-    text: (document.getElementById('wageDebtList') || {}).innerText || '',
-  };
+const paidAll = await page.evaluate(async () => {
+  // He paid יוסי MORE than the hours on file (hours that were never typed in) and says: no debt.
+  openPayModal('יוסי');
+  const pre = Number(document.getElementById('payAmount').value);
+  document.getElementById('payAmount').value = '1500';
+  saveWagePayment(true);
+  closeNotice();
+  const L = workerLedger('יוסי');
+  return { pre, balance: L.balance, closed: !!L.lastClose, text: document.getElementById('wageDebtList').innerText };
 });
-check('the debt card appears when money is owed', debt.shown, debt.shown);
-// The whole point: WHICH months, not just how much.
-check('it names every month with an unpaid record', debt.months.join(',') === '2026-07,2026-03', debt.months);
-check('newest month first', debt.months[0] === '2026-07', debt.months);
-check('a month totals all its workers', debt.totals.includes(920), debt.totals);   // 720 + 200
-check('a PAID month is not listed', !debt.months.includes('2026-06'), debt.months);
-check('each worker is named inside the month', /יוסי/.test(debt.text) && /אבי/.test(debt.text), debt.text.slice(0, 80));
-// Derived from the seeded rows, never typed: a first version asserted 1,640 against a real
-// 1,460 and failed the CODE for the test's own arithmetic.
-const owed = await page.evaluate(() => (Store.get('worktime') || [])
-  .filter((e) => !e.paid).reduce((s, e) => s + e.hours * e.rate, 0));
-check('the total owed is shown, and it is the sum of the unpaid rows',
-  debt.text.replace(/\s/g, '').includes(owed.toLocaleString('he-IL')), `expected ${owed}: ${debt.text.slice(0, 40)}`);
+check('"שילמתי" prefills everything he is owed', paidAll.pre === 1260, paidAll);
+check('paying and closing leaves NO debt and NO "advance", whatever the difference',
+  paidAll.balance === 0 && paidAll.closed, paidAll);
+check('and the list says so', /אין חוב/.test(paidAll.text), paidAll.text.slice(0, 160));
 
-// "How much do I owe יוסי" was three months of mental arithmetic off the per-month breakdown.
-const per = await page.evaluate(() => {
-  const w = (typeof wageDebtByWorker === 'function') ? wageDebtByWorker() : [];
-  // the same rows totalled independently, so the check is not the code repeating itself
-  const want = {};
-  for (const e of (Store.get('worktime') || [])) {
-    if (e.paid) continue;
-    want[e.workerName] = (want[e.workerName] || 0) + e.hours * e.rate;
-  }
-  return { shown: w.map((x) => ({ name: x.name, wage: Math.round(x.wage), hours: x.hours, months: x.months.size })), want };
+const after = await page.evaluate(async () => {
+  // A new shift after the closing is owed again — the closing named the hours it settled.
+  const wt = Store.get('worktime'); wt.push({ id: 'f', workerName: 'יוסי', rate: 45, hours: 2, date: new Date(2026, 2, 1).toISOString(), paid: false });
+  Store.set('worktime', wt);
+  const back = workerLedger('יוסי').balance;
+  // A part payment leaves the rest owed; closing without paying settles what is left.
+  openPayModal('אבי');
+  document.getElementById('payAmount').value = '50';
+  saveWagePayment(false);
+  closeNotice();
+  const part = workerLedger('אבי').balance;
+  closeAccount('אבי');
+  await new Promise((r) => setTimeout(r, 100));
+  noticeConfirm();
+  await new Promise((r) => setTimeout(r, 100));
+  closeNotice();
+  const pays = getWagePayments();
+  return { back, part, closedAvi: workerLedger('אבי').balance, dated: pays.every((p) => !isNaN(new Date(p.date))), n: pays.length };
 });
-check('every worker owed money is listed on his own',
-  per.shown.length === Object.keys(per.want).length && per.shown.length > 1, per.shown);
-check('and his total is the sum of his unpaid hours across all months',
-  per.shown.every((x) => Math.round(per.want[x.name]) === x.wage), { shown: per.shown, want: per.want });
-check('with the hours and how many months they span',
-  per.shown.every((x) => x.hours > 0 && x.months >= 1), per.shown);
-// יוסי is owed for March and July; a per-month figure alone would never show the 28 hours.
-check('a worker owed across several months is totalled across them',
-  per.shown.some((x) => x.months >= 2), per.shown);
+check('hours added after a closing are owed again — even back-dated ones', after.back === 90, after);
+check('a part payment leaves the rest owed', after.part === 150, after);
+check('"אין חוב" settles what is left without inventing a payment', after.closedAvi === 0, after);
+check('every payment and closing is a dated record', after.dated && after.n === 3, after);
 
-const paid = await page.evaluate(async () => {
-  if (typeof payWageMonth !== 'function') return { skipped: true };
-  const before = (Store.get('worktime') || []).filter((e) => !e.paid).length;
-  payWageMonth('2026-03');
-  await new Promise((r) => setTimeout(r, 150));
-  noticeConfirm();                       // offsetParent is null on a fixed element; call it
-  await new Promise((r) => setTimeout(r, 300));
-  return {
-    left: wageDebt().map((x) => x.key),
-    pays: getWagePayments().map((p) => p.forMonth),
-    rowsUntouched: (Store.get('worktime') || []).filter((e) => !e.paid).length === before,
-  };
-});
-check('paying a month clears exactly that month',
-  !paid.skipped && paid.left.join(',') === '2026-07', paid);
-check('and it is recorded as dated payments for that month, not by rewriting the hours',
-  paid.pays && paid.pays.length > 0 && paid.pays.every((m) => m === '2026-03') && paid.rowsUntouched, paid);
-
-// ---- v318: payments are records — amount + date — and the balance is derived ----
-if (SELFTEST) {
-  // A real way to get this wrong: save the payment without the month it was made for, so it
-  // lands on the oldest debt instead of the month the button was pressed on.
-  await page.evaluate(() => {
-    const orig = saveWagePayment;
-    window.saveWagePayment = () => { if (WT_PAY_CTX) WT_PAY_CTX.forMonth = null; orig(); };
-  });
-}
-const led = await page.evaluate(async () => {
+// rows the trash and phone-report sections below work on
+await page.evaluate(() => {
   const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 9)).toISOString();
   Store.set('wage_payments', []);
   Store.set('worktime_trash', []);
@@ -149,32 +130,8 @@ const led = await page.evaluate(async () => {
   Store.set('worktime', [
     { id: 'p1', workerName: 'יוסי', rate: 45, hours: 4, date: iso(2026, 5, 3), paid: false },
     { id: 'p2', workerName: 'אבי', rate: 40, hours: 5, date: iso(2026, 5, 4), paid: false },
-    { id: 'p3', workerName: 'יוסי', rate: 45, hours: 6, date: iso(2026, 4, 9), paid: false },
   ]);
-  openWageMonth('2026-05');
-  const i = WT_MONTH_WORKERS.findIndex((w) => w.name === 'יוסי');
-  if (i < 0) return { missing: true };
-  payWorkerMonth(i);                                   // opens the form, prefilled
-  const pre = Number(document.getElementById('payAmount').value);
-  saveWagePayment();
-  closeNotice();
-  const L1 = workerLedger('יוסי');
-  const may = L1.months.find((m) => m.key === '2026-05'), apr = L1.months.find((m) => m.key === '2026-04');
-  const avi = workerLedger('אבי');
-  // an advance beyond what is owed
-  openPayModal('יוסי');
-  document.getElementById('payAmount').value = '500';
-  saveWagePayment();
-  closeNotice();
-  const L2 = workerLedger('יוסי');
-  return { pre, mayLeft: may.left, aprLeft: apr.left, avi: avi.balance, balAfterAdvance: L2.balance,
-    payCount: getWagePayments().length, dated: getWagePayments().every((p) => !isNaN(new Date(p.date))) };
 });
-check('the month button prefills what that worker is owed for that month', led.pre === 180, led);
-check('and the payment settles THAT month, not the oldest one', led.mayLeft === 0 && led.aprLeft === 270, led);
-check('another worker is untouched', led.avi === 200, led);
-check('an advance beyond the debt shows as a credit, not a negative debt hidden away', led.balAfterAdvance === -230, led);
-check('every payment is a dated record', led.payCount === 2 && led.dated, led);
 
 // ---- v318: delete goes to a trash and comes back ----
 const tr = await page.evaluate(async () => {
