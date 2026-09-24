@@ -116,29 +116,36 @@ check('a worker owed across several months is totalled across them',
 
 const paid = await page.evaluate(async () => {
   if (typeof payWageMonth !== 'function') return { skipped: true };
+  const before = (Store.get('worktime') || []).filter((e) => !e.paid).length;
   payWageMonth('2026-03');
   await new Promise((r) => setTimeout(r, 150));
   noticeConfirm();                       // offsetParent is null on a fixed element; call it
   await new Promise((r) => setTimeout(r, 300));
-  return { left: wageDebt().map((x) => x.key), stillUnpaid: (Store.get('worktime') || []).filter((e) => !e.paid).length };
+  return {
+    left: wageDebt().map((x) => x.key),
+    pays: getWagePayments().map((p) => p.forMonth),
+    rowsUntouched: (Store.get('worktime') || []).filter((e) => !e.paid).length === before,
+  };
 });
-check('marking a month paid clears exactly that month',
-  !paid.skipped && paid.left.join(',') === '2026-07' && paid.stillUnpaid === 1, paid);
+check('paying a month clears exactly that month',
+  !paid.skipped && paid.left.join(',') === '2026-07', paid);
+check('and it is recorded as dated payments for that month, not by rewriting the hours',
+  paid.pays && paid.pays.length > 0 && paid.pays.every((m) => m === '2026-03') && paid.rowsUntouched, paid);
 
-// ---- the 2026-09-24 rebuild: paying is per worker, per month ----
+// ---- v318: payments are records — amount + date — and the balance is derived ----
 if (SELFTEST) {
-  // Break the button, not the expectation: pay every row of that worker, in every month.
+  // A real way to get this wrong: save the payment without the month it was made for, so it
+  // lands on the oldest debt instead of the month the button was pressed on.
   await page.evaluate(() => {
-    window.payWorkerMonth = (i) => {
-      const w = WT_MONTH_WORKERS[i];
-      const wt = Store.get('worktime') || [];
-      wt.forEach((e) => { if (e.workerName === w.name) e.paid = true; });
-      Store.set('worktime', wt); renderWorktime();
-    };
+    const orig = saveWagePayment;
+    window.saveWagePayment = () => { if (WT_PAY_CTX) WT_PAY_CTX.forMonth = null; orig(); };
   });
 }
-const perPay = await page.evaluate(async () => {
+const led = await page.evaluate(async () => {
   const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 9)).toISOString();
+  Store.set('wage_payments', []);
+  Store.set('worktime_trash', []);
+  Store.set('workers', [{ id: 'k1', name: 'יוסי', rate: 45 }, { id: 'k2', name: 'אבי', rate: 40 }]);
   Store.set('worktime', [
     { id: 'p1', workerName: 'יוסי', rate: 45, hours: 4, date: iso(2026, 5, 3), paid: false },
     { id: 'p2', workerName: 'אבי', rate: 40, hours: 5, date: iso(2026, 5, 4), paid: false },
@@ -146,17 +153,64 @@ const perPay = await page.evaluate(async () => {
   ]);
   openWageMonth('2026-05');
   const i = WT_MONTH_WORKERS.findIndex((w) => w.name === 'יוסי');
-  if (i < 0 || typeof payWorkerMonth !== 'function') return { missing: true };
-  payWorkerMonth(i);
-  await new Promise((r) => setTimeout(r, 150));
-  if (typeof noticeConfirm === 'function') noticeConfirm();
-  await new Promise((r) => setTimeout(r, 300));
-  const wt = Store.get('worktime');
-  return { paid: wt.filter((e) => e.paid).map((e) => e.id).join(','), text: document.getElementById('worktimeSummary').innerText };
+  if (i < 0) return { missing: true };
+  payWorkerMonth(i);                                   // opens the form, prefilled
+  const pre = Number(document.getElementById('payAmount').value);
+  saveWagePayment();
+  closeNotice();
+  const L1 = workerLedger('יוסי');
+  const may = L1.months.find((m) => m.key === '2026-05'), apr = L1.months.find((m) => m.key === '2026-04');
+  const avi = workerLedger('אבי');
+  // an advance beyond what is owed
+  openPayModal('יוסי');
+  document.getElementById('payAmount').value = '500';
+  saveWagePayment();
+  closeNotice();
+  const L2 = workerLedger('יוסי');
+  return { pre, mayLeft: may.left, aprLeft: apr.left, avi: avi.balance, balAfterAdvance: L2.balance,
+    payCount: getWagePayments().length, dated: getWagePayments().every((p) => !isNaN(new Date(p.date))) };
 });
-check('"שילמתי ל…" pays that worker in that month only — not the other worker, not another month',
-  !perPay.missing && perPay.paid === 'p1', perPay);
-check('and his card then says it is all paid', /שולם הכל/.test(perPay.text || ''), (perPay.text || '').slice(0, 80));
+check('the month button prefills what that worker is owed for that month', led.pre === 180, led);
+check('and the payment settles THAT month, not the oldest one', led.mayLeft === 0 && led.aprLeft === 270, led);
+check('another worker is untouched', led.avi === 200, led);
+check('an advance beyond the debt shows as a credit, not a negative debt hidden away', led.balAfterAdvance === -230, led);
+check('every payment is a dated record', led.payCount === 2 && led.dated, led);
+
+// ---- v318: delete goes to a trash and comes back ----
+const tr = await page.evaluate(async () => {
+  deleteWorktime('p2');
+  await new Promise((r) => setTimeout(r, 100));
+  noticeConfirm();
+  const gone = !(Store.get('worktime') || []).some((e) => e.id === 'p2');
+  const inTrash = getWorktimeTrash().length;
+  restoreFromTrash(0);
+  closeNotice();
+  return { gone, inTrash, back: (Store.get('worktime') || []).some((e) => e.id === 'p2'), trashAfter: getWorktimeTrash().length };
+});
+check('deleting hours moves them to the trash', tr.gone && tr.inTrash === 1, tr);
+check('and they can be restored from it', tr.back && tr.trashAfter === 0, tr);
+
+// ---- v318: approved phone reports can be brought back, at the hub's rate ----
+const pr = await page.evaluate(async () => {
+  Sync.isAuthed = () => true;
+  Sync._headers = async () => ({});
+  const realFetch = window.fetch;
+  window.fetch = async (url) => /worker_punches/.test(String(url))
+    ? new Response(JSON.stringify([
+        { id: 'u-1', worker: 'אבי', work_date: '2026-05-04', hours: 5, note: '' },        // already there (same shift)
+        { id: 'u-2', worker: 'אבי', work_date: '2026-05-11', hours: 3.5, note: 'שעון: 08:00–11:30' },
+        { id: 'u-3', worker: 'זר', work_date: '2026-05-12', hours: 9, note: '' },          // not a known worker
+      ]), { status: 200 })
+    : realFetch(url);
+  await restoreFromPunches();
+  await new Promise((r) => setTimeout(r, 100));
+  noticeConfirm();
+  window.fetch = realFetch;
+  const rows = (Store.get('worktime') || []).filter((e) => e.punchId);
+  return { rows: rows.map((e) => [e.punchId, e.workerName, e.hours, e.rate]) };
+});
+check('a missing approved report comes back, once, at the rate in the workers list',
+  pr.rows.length === 1 && pr.rows[0][0] === 'u-2' && pr.rows[0][3] === 40, pr);
 
 // A clock note "שעון: 09:02–15:32" read backwards in RTL until the span was isolated.
 const note = await page.evaluate(() => (typeof wtNoteHtml === 'function') ? wtNoteHtml('שעון: 09:02–15:32') : '');
