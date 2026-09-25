@@ -220,6 +220,7 @@ console.log('5. every mapped catalogue name still exists');
 
 // ---- his cost follows where he buys cells: sea / air / local (2026-09-25) ----
 {
+  await p.evaluate((s) => { window.__SELF = s; }, SELFTEST);
   const rt = await p.evaluate(() => {
     Store.set('supplier_prices', [
       { who: 'Vapcell', cat: 'Vapcell · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 6.43 },
@@ -231,14 +232,31 @@ console.log('5. every mapped catalogue name still exists');
     for (const r of ['sea', 'air', 'local']) { setCellRoute(r); out[r] = { cell: routeCellCost('50E'), pl: routeCellCost('50PL'), cost: productCost(it) }; }
     setCellRoute('air'); navigateTo('supplier'); setSupWho(SUP_WHOS.indexOf('Vapcell')); toggleSupCat(0);
     const lines = document.querySelectorAll('#supplierList .sup-line').length;
-    const bold = (document.querySelector('#supplierList .sup-rt.on') || {}).textContent || '';
-    setCellRoute('sea');
-    return { out, lines, bold, calcRows: supplierRows().filter((r) => r.who === 'מחשבון תיקונים').length };
+    const both = [...document.querySelectorAll('#supplierList .sup-rt')].map((e) => e.textContent).join(' ');
+    const supChips = document.querySelectorAll('#page-supplier .sup-chip[onclick*=setCellRoute]').length;
+    // The route is chosen in the full price list, with the cost it moves (2026-09-25).
+    navigateTo('catalog');
+    if (window.__SELF) window.renderCatRoute = () => {};
+    if (!showCost) toggleCostView();
+    const box = document.getElementById('catRoute');
+    const chips = box && !box.hidden ? box.querySelectorAll('.sup-chip').length : 0;
+    const firstCost = () => { const e = [...document.querySelectorAll('#catalogList .price-item-name div')].find((d) => /עלות ~/.test(d.textContent)); return e ? e.textContent : ''; };
+    catExpandAll(true);
+    setCellRoute('sea'); const seaLine = firstCost();
+    setCellRoute('air'); const airLine = firstCost();
+    const onChip = (document.querySelector('#catRoute .sup-chip.on') || {}).textContent || '';
+    setCellRoute('sea'); toggleCostView();
+    const hiddenOff = !!(document.getElementById('catRoute') || {}).hidden;
+    return { out, lines, both, supChips, chips, seaLine, airLine, onChip, hiddenOff, calcRows: supplierRows().filter((r) => r.who === 'מחשבון תיקונים').length };
   });
   check('each route gives its own cell cost', rt.out.sea.cell === 6.43 && rt.out.air.cell === 9.65 && rt.out.local.cell === 14.8, rt.out);
   check('a cell the route does not carry falls back to the sea cost', rt.out.local.pl === rt.out.sea.pl, rt.out);
   check('and a pack cost moves with the route', rt.out.sea.cost < rt.out.air.cost && rt.out.air.cost < rt.out.local.cost, rt.out);
-  check('a cell with a sea and an air price is ONE row, the chosen route in bold', rt.lines === 1 && /9\.65/.test(rt.bold), rt);
+  check('a cell with a sea and an air price is ONE row showing both', rt.lines === 1 && /6\.43/.test(rt.both) && /9\.65/.test(rt.both), rt);
+  check('the supplier page no longer carries the route choice', rt.supChips === 0, rt.supChips);
+  check('the full price list carries it, beside the cost view', rt.chips === 3 && /אווירי/.test(rt.onChip), rt);
+  check('and choosing a route there moves the cost shown on a battery', !!rt.seaLine && rt.seaLine !== rt.airLine, [rt.seaLine, rt.airLine]);
+  check('the choice hides again with the cost view', rt.hiddenOff === true, rt.hiddenOff);
   check('the repair calculator is no longer listed as a supplier', rt.calcRows === 0, rt);
 }
 

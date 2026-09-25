@@ -1152,11 +1152,8 @@ body { min-height: 100vh; }
        two banners, suppliers as buttons instead of a dropdown plus a category dropdown plus
        open/close-all, the cell route that decides HIS cost at the top, and each cell once. -->
   <div class="card">
-    <div id="supRoute" class="sup-row"></div>
-    <div id="supRouteNote" class="sup-note"></div>
     <div id="supWhoChips" class="sup-row"></div>
     <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש (תא / BMS / מטען / ניקל…)" style="width:100%;margin-bottom:6px;" oninput="renderSupplier()">
-    <div class="sup-note">כל מחיר הוא העלות הסופית עד אליך — כולל שילוח ומע"מ, בלי מכס.</div>
     <div id="supplierList"></div>
     <div class="btn-group" style="margin-top:12px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openSupplierAdd()">➕ הוסף פריט</button>
@@ -1318,8 +1315,9 @@ body { min-height: 100vh; }
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(true)">⊕ פתח הכל</button>
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(false)">⊖ סגור הכל</button>
     </div>
-    <label class="check" id="costToggle" onclick="toggleCostView()" style="margin-bottom:4px;"><div class="check-box"></div>💵 הצג עלות לי ורווח</label>
-    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">עלות סוללות = אומדן אוטומטי מהתאים. לחיצה על מוצר מאפשרת להזין עלות ספק מדויקת.</div>
+    <label class="check" id="costToggle" onclick="toggleCostView()" style="margin-bottom:6px;"><div class="check-box"></div>💵 הצג עלות לי ורווח</label>
+    <div id="catRoute" class="sup-row" hidden></div>
+    <div id="catRouteNote" class="sup-note" hidden></div>
     <div id="catalogList" class="price-list"></div>
   </div>
 </section>
@@ -2525,7 +2523,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v345';
+const HUB_BUILD = 'v346';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4178,8 +4176,7 @@ function setCellRoute(r) {
   const s = Store.get('settings') || {};
   s.cellRoute = r;
   Store.set('settings', s);
-  renderSupplier();
-  if (document.getElementById('page-catalog') && document.getElementById('page-catalog').classList.contains('active')) renderCatalog();
+  renderCatalog();
 }
 const CELL_CODE_SEA = { '50E': 'EVE 50E', '50SG': 'Tenpower 50SG', '50PL': 'EVE 50PL (Tabless)', '40P': 'EVE 40P', '35V': 'EVE 35V', '25P': 'EVE 25P', '26V': 'EVE 26V' };
 const cellWords = (x) => String(x || '').toLowerCase().split(/[\s\-·—()\/,|]+/);
@@ -4309,16 +4306,9 @@ function renderSupplier() {
   const q = (document.getElementById('supQ') ? document.getElementById('supQ').value : '').trim().toLowerCase();
   const route = cellRoute();
 
-  // where he buys cells — this is what his cost is measured on everywhere in the hub
-  const rc = document.getElementById('supRoute');
-  if (rc) rc.innerHTML = '<span class="sup-lbl">העלות שלי לפי:</span>'
-    + CELL_ROUTES.map(([k, l]) => `<button class="sup-chip${k === route ? ' on' : ''}" onclick="setCellRoute('${k}')">${l}</button>`).join('');
-  const rn = document.getElementById('supRouteNote');
-  if (rn) {
-    const missing = route === 'sea' ? [] : ['50E', '50SG', '50PL', '25P', '26V'].filter((c) => routeCellCostOn(c, route) == null);
-    rn.textContent = missing.length ? 'אין מחיר ' + (route === 'air' ? 'אווירי' : 'מקומי') + ' ל-' + missing.join(', ') + ' — להם העלות נשארת לפי ימי.' : '';
-    rn.hidden = !missing.length;
-  }
+  // The sea / air / local choice lives in the full price list now, beside "עלות לי ורווח"
+  // (Daniel, 2026-09-25: "זה רק במחירון המלא לא בעלויות ספקים") — that is where the margin it
+  // moves is read. This page just lists what things cost.
 
   // One row per cell: a distributor's sea and air prices for the same cell are two prices on
   // one row, not two rows in two categories.
@@ -4365,7 +4355,7 @@ function renderSupplier() {
       const src = r.src && !/יבוא ימי/.test(r.src) ? `<span class="sup-src" style="color:${warn ? '#f59e0b' : (SRC_COLOUR[r.src] || 'var(--text-muted)')};">${r.src}${r.on ? ' ' + String(r.on).slice(0, 7) : ''}</span>` : '';
       const price = r.routes
         ? [['sea', '🚢'], ['air', '✈️']].filter(([rt]) => r.routes[rt]).map(([rt, ic]) =>
-            `<span class="sup-rt${route === rt ? ' on' : ''}">${ic} ${fmtIls(supplierIls(r.routes[rt], true, true))}</span>`).join(' ')
+            `<span class="sup-rt on">${ic} ${fmtIls(supplierIls(r.routes[rt], true, true))}</span>`).join(' ')
         : `<span class="sup-rt on">${fmtIls(supplierIls(r, true, true))}</span>`;
       const del = r.custom ? `<span onclick="event.stopPropagation();removeSupplierRow(${r.idx})" style="color:#ef4444;cursor:pointer;">🗑️</span>` : '';
       html += `<div class="sup-line"><div><div>${r.name}${r.custom ? ' <span class="sup-src">(שלי)</span>' : ''}</div>${src}</div>
@@ -5124,6 +5114,20 @@ function homePriceSearch() {
   out.innerHTML = rows + more;
 }
 
+// Where he buys his cells decides "עלות לי" on every battery row — so the choice sits here, with
+// the margin it moves, and only while the cost is shown.
+function renderCatRoute() {
+  const rc = document.getElementById('catRoute'), rn = document.getElementById('catRouteNote');
+  if (!rc) return;
+  rc.hidden = !showCost;
+  if (rn) rn.hidden = true;
+  if (!showCost) return;
+  const route = cellRoute();
+  rc.innerHTML = '<span class="sup-lbl">עלות תאים לפי:</span>'
+    + CELL_ROUTES.map(([k, l]) => `<button class="sup-chip${k === route ? ' on' : ''}" onclick="setCellRoute('${k}')">${l}</button>`).join('');
+  const missing = route === 'sea' ? [] : ['50E', '50SG', '50PL', '25P', '26V'].filter((c) => routeCellCostOn(c, route) == null);
+  if (rn && missing.length) { rn.textContent = 'אין מחיר ' + (route === 'air' ? 'אווירי' : 'מקומי') + ' ל-' + missing.join(', ') + ' — לפי ימי.'; rn.hidden = false; }
+}
 function renderCatalog() {
   addShallowCatalogRows();   // idempotent — also run from init()
   const sel = document.getElementById('catalogCat');
@@ -5243,6 +5247,7 @@ function renderCatalog() {
     });
     }
   }
+  renderCatRoute();
   document.getElementById('catalogList').innerHTML = html || '<div class="empty-state"><div class="empty-state-text">לא נמצאו מוצרים</div></div>';
 }
 // Index, not name: the category strings carry quotes, slashes and · — interpolating them
@@ -8352,7 +8357,10 @@ function getDims() { return Store.get('dims') || []; }
 function seedOxTub() {
   try {
     const dims = getDims();
-    const keep = dims.filter((d) => !(/Inokim OX\b/i.test(d.model || '') && !d.measured && !(+d.h) && /מ-AI, לא נמדד/.test(d.notes || '')));
+    // Identified by what the seed wrote — the model, 425×165 and no height — not by its note,
+    // which was rewritten on his device after the seed ("אמבטיה בשני חלקים… גובה טרם נמדד").
+    const keep = dims.filter((d) => !(/Inokim OX\b/i.test(d.model || '') && !d.measured && !(+d.h)
+      && +d.l === 425 && +d.w === 165));
     if (keep.length !== dims.length) Store.set('dims', keep);
   } catch (e) { /* private mode, or storage refused — the page still works without it */ }
 }

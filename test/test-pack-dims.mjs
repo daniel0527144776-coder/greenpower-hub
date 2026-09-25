@@ -175,7 +175,7 @@ check('square rows are not', stag.squareFirstTwoRows, JSON.stringify(stag));
 // (Daniel, 2026-09-25), and the copy seeded earlier is removed — but ONLY that one: a tray he
 // measured and saved himself, even under the same model name, is never touched.
 const seeded = await page.evaluate((SELF) => {
-  const aiOx = { id: 'dox', model: 'Inokim OX', l: 425, w: 165, h: 0, notes: 'שוקת כפולה — מ-AI, לא נמדד' };
+  const aiOx = { id: 'dox', model: 'Inokim OX', l: 425, w: 165, h: 0, notes: 'אמבטיה בשני חלקים: רחב 425×165 + צר 60×140 מ"מ. גובה טרם נמדד.' };
   const mine = { id: 'dmine', model: 'Inokim OX', l: 420, w: 160, h: 70, notes: 'מדדתי', measured: true };
   const other = { id: 'dz', model: 'Zero 10X', l: 300, w: 150, h: 60 };
   localStorage.removeItem('gp_dims_seed_ox'); localStorage.setItem('gp_dims', '[]');
