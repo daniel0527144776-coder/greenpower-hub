@@ -1139,7 +1139,7 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">🔒 עלויות ספקים</h2>
   </div>
-  <div class="info-banner"><span>💡</span><div>₪ = מחיר הספק ב-$ × 3, ועוד <b>שילוח</b>: לפי משקל כשהוא ידוע (QS $24 לק"ג, ספק הרכיבים $13.5 לק"ג), אחרת אחוז לפי קטגוריה. ועוד <b>מע"מ יבוא 18%</b>. לא כולל מכס. תאים מהיבוא הימי וספקים מקומיים מוצגים כבר כעלות סופית, והכפתורים לא משנים אותם.</div></div>
+  <div class="info-banner"><span>💡</span><div>המחיר הוא <b>העלות הסופית עד אליך</b>: כולל שילוח ומע"מ, בלי מכס.</div></div>
   <div class="info-banner"><span>🔒</span><div style="font-size:11px;">מחירוני הספקים נשמרים <b>בחשבון שלך</b> ולא בקובץ האתר — קובץ ה-HTML מוגש לכל מי שיודע את הכתובת. <b>עלויות התאים ו-BMS כן נשארו בקובץ</b> כי מחשבון התיקונים מחשב מהן.</div></div>
   <div class="card">
     <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש רכיב (תא / BMS / מטען / ניקל...)" style="width:100%;margin-bottom:10px;" oninput="renderSupplier()">
@@ -1149,14 +1149,6 @@ body { min-height: 100vh; }
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="supExpandAll(true)">⊕ פתח הכל</button>
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="supExpandAll(false)">⊖ סגור הכל</button>
     </div>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
-      <input type="checkbox" id="supVat" checked onchange="renderSupplier()" style="width:16px;height:16px;">
-      <span>הצג <b>כולל מע"מ יבוא 18%</b></span>
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
-      <input type="checkbox" id="supFreight" checked onchange="renderSupplier()" style="width:16px;height:16px;">
-      <span>הצג <b>כולל שילוח</b></span>
-    </label>
     <div class="btn-group" style="margin-bottom:10px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openSupplierAdd()">➕ הוסף פריט</button>
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openSupplierImport()">📥 ייבוא מחירון</button>
@@ -2525,7 +2517,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v336';
+const HUB_BUILD = 'v337';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4267,10 +4259,9 @@ function renderSupplier() {
   const el = document.getElementById('supplierList');
   if (!el) return;
   const q = (document.getElementById('supQ') ? document.getElementById('supQ').value : '').trim().toLowerCase();
-  const vatEl = document.getElementById('supVat');
-  const vat = vatEl ? vatEl.checked : true;
-  const frEl = document.getElementById('supFreight');
-  const freight = frEl ? frEl.checked : true;
+  // One number per item: what it costs him delivered — freight and import VAT in, customs out
+  // (Daniel, 2026-09-25: "עלות כולל הכל עד שמגיע אלי… כי לפעמים אין מכס"). No switches.
+  const vat = true, freight = true;
   const all = supplierRows();
 
   // supplier dropdown, rebuilt from the data so a new supplier appears by itself
@@ -4327,20 +4318,15 @@ function renderSupplier() {
     const open = forceOpen || supOpenCats.has(c);
     // Say exactly which of the two add-ons are in the number — "כולל מע"מ" alone was
     // ambiguous once freight became a separate, switchable term.
-    const parts = [freight ? 'שילוח' : null, vat ? 'מע"מ' : null].filter(Boolean);
-    let note = list[0].ils != null ? 'עלות נחיתה ₪' : (parts.length ? '+ ' + parts.join(' + ') : 'מחיר ספק בלבד');
-    // Which freight rate, when it is not the default. A category charged 153% and one charged
-    // 28% looked identical on this screen, and the difference is most of the cost.
-    const fr = freightRateFor(c);
-    if (freight && list[0].ils == null && fr !== SUPPLIER_FREIGHT) note += ' ' + Math.round(fr * 100) + '%';
+    const note = '';
     html += `<div onclick="toggleSupCat(${i})" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">
-      <span>${open ? '▾' : '▸'} ${c}</span>
+      <span>${open ? '▾' : '▸'} ${who && c.startsWith(who + ' · ') ? c.slice(who.length + 3) : c}</span>
       <span style="font-weight:400;font-size:11px;color:var(--text-muted);white-space:nowrap;">${note}</span></div>`;
     // No category total (removed 2026-09-25, Daniel: "לא רלוונטי"). Adding up one of every
     // item in a category answers nothing — the landed cost of each PRODUCT is on its own row.
     if (!open) return;
     list.forEach((r) => {
-      const usd = r.usd != null ? `<span style="color:var(--text-muted);">$${r.usd}</span>` : '';
+      const usd = '';   // the delivered ₪ only (2026-09-25); the $ quote stays in the data and in the editor
       // WHERE THE PRICE CAME FROM, on the row. Three sources were merged into one list and
       // the same DKD display appeared at $34, $36, $45, $55 and $63 — every figure true about
       // something, and together an answer to nothing (Daniel: "זה עושה בלגן"). The list is one
