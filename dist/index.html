@@ -2517,7 +2517,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v340';
+const HUB_BUILD = 'v341';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4651,9 +4651,12 @@ function getCosts() { return Store.get('costs') || {}; }
 // and more fit up.
 //
 // Two cells, his: EVE 26V at the CLASSIC margin, EVE 25P at the ADVANCED one.
+// The cell cost is READ from CELL_UNIT_COST — the audited mirror of cost-model — never typed:
+// until 2026-09-25 these two carried the March figures (₪4.03, ₪5.14) while the margin they
+// borrow is measured against the June cost, so every shallow-tray quote came out too high.
 const SHALLOW_CELLS = [
-  { key: '18650-26v', label: 'EVE 26V', price: 4.03, tier: 'CLASSIC', tierRe: /CLASSIC/ },
-  { key: '18650-25p', label: 'EVE 25P', price: 5.14, tier: 'ADVANCED', tierRe: /ADVANCED/ },
+  { key: '18650-26v', label: 'EVE 26V', price: CELL_UNIT_COST['EVE 26V'], tier: 'CLASSIC', tierRe: /CLASSIC/ },
+  { key: '18650-25p', label: 'EVE 25P', price: CELL_UNIT_COST['EVE 25P'], tier: 'ADVANCED', tierRe: /ADVANCED/ },
 ];
 
 function shallowCellOptions(TL, TW, TH, V, S) {

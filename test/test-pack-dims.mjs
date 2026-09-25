@@ -317,6 +317,18 @@ const prov = await page.evaluate(() => {
 check('the page says the vehicle data is AI, not measured', /מ-AI, לא נמדדו/.test(prov.card), prov.card.slice(0, 90));
 check('and the seeded OX tub says it too', /לא נמדד/.test(prov.ox), prov.ox.slice(0, 70));
 
+// ---- shallow trays: the 18650 option is costed on the CURRENT cell cost ----
+// Until 2026-09-25 these carried the March figures typed in by hand, while the margin they
+// borrow was measured against the June cost — so every shallow-tray quote came out too high.
+const shallow = await page.evaluate(() => ({
+  prices: SHALLOW_CELLS.map((s) => [s.label, s.price]),
+  want: [['EVE 26V', CELL_UNIT_COST['EVE 26V']], ['EVE 25P', CELL_UNIT_COST['EVE 25P']]],
+  html: shallowCellOptions(300, 150, 69, 48, 13),
+}));
+check('the 18650 builds read the current cell cost, not a typed one',
+  JSON.stringify(shallow.prices) === JSON.stringify(shallow.want) && shallow.want.every(([, v]) => v > 0), shallow);
+check('and a shallow tray still gets a priced 18650 option', /EVE 26V[\s\S]*מחיר ₪/.test(shallow.html), shallow.html.slice(0, 160));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();
