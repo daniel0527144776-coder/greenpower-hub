@@ -2164,47 +2164,31 @@
              * and that is not an error state — the PC has a driver and a print dialog and is
              * already doing fine there. So the button explains itself rather than failing.
              */
-            const PRINTER_MAC_KEY = 'gp_printer_mac';
-            const PRINTER_NAME_KEY = 'gp_printer_name';
-            const PRINTER_GAP_KEY = 'gp_printer_gap';
-            const PRINTER_DENSITY_KEY = 'gp_printer_density';
-            const PRINTER_OFFX_KEY = 'gp_printer_offx';
-            const PRINTER_OFFY_KEY = 'gp_printer_offy';
-            const PRINTER_SPEED_KEY = 'gp_printer_speed';
+            // The keys and defaults live in tspl.js (2026-09-25): the hub prints a label of its
+            // own now, and both must read the printer the same way.
+            const PRINTER_MAC_KEY = TSPL.PRINTER_KEYS.mac;
+            const PRINTER_NAME_KEY = TSPL.PRINTER_KEYS.name;
+            const PRINTER_GAP_KEY = TSPL.PRINTER_KEYS.gap;
+            const PRINTER_DENSITY_KEY = TSPL.PRINTER_KEYS.density;
+            const PRINTER_OFFX_KEY = TSPL.PRINTER_KEYS.offx;
+            const PRINTER_OFFY_KEY = TSPL.PRINTER_KEYS.offy;
+            const PRINTER_SPEED_KEY = TSPL.PRINTER_KEYS.speed;
 
             // One place that decides what the printer is told, so the calibration pattern and
             // the real label can never disagree — which would make the pattern worthless.
+            // One place that decides what the printer is told, so the calibration pattern, the real
+            // label and the hub's layout label can never disagree.
             function printerOpts() {
-                const num = (k, dflt) => {
-                    const v = parseFloat(localStorage.getItem(k));
-                    return isNaN(v) ? dflt : v;
-                };
-                return {
-                    widthMm: 100,
-                    heightMm: 50,
-                    gapMm: num(PRINTER_GAP_KEY, 2),
-                    // 8 is what the Windows driver uses for this printer, and that driver has
-                    // been printing these labels correctly for months.
-                    density: num(PRINTER_DENSITY_KEY, 8),
-                    offsetXmm: num(PRINTER_OFFX_KEY, 0),
-                    offsetYmm: num(PRINTER_OFFY_KEY, 0),
-                    // Inches per second, and slow on purpose (Daniel, 2026-08-23). Thermal
-                    // transfer is a heat-and-time process: the slower the head passes, the
-                    // more completely the ribbon releases, and edges stop smearing. 2 is the
-                    // slowest this class of 300dpi printer reliably accepts — the field allows
-                    // 1, which either works or is clamped by the printer, and one label says
-                    // which.
-                    speed: num(PRINTER_SPEED_KEY, 2),
-                };
+                return TSPL.optsFromStorage(localStorage);
             }
 
             function bindCalibration() {
                 const pairs = [
-                    ['calDensity', PRINTER_DENSITY_KEY, 8],
-                    ['calSpeed', PRINTER_SPEED_KEY, 2],
-                    ['calGap', PRINTER_GAP_KEY, 2],
-                    ['calOffX', PRINTER_OFFX_KEY, 0],
-                    ['calOffY', PRINTER_OFFY_KEY, 0],
+                    ['calDensity', PRINTER_DENSITY_KEY, TSPL.PRINTER_DEFAULTS.density],
+                    ['calSpeed', PRINTER_SPEED_KEY, TSPL.PRINTER_DEFAULTS.speed],
+                    ['calGap', PRINTER_GAP_KEY, TSPL.PRINTER_DEFAULTS.gap],
+                    ['calOffX', PRINTER_OFFX_KEY, TSPL.PRINTER_DEFAULTS.offx],
+                    ['calOffY', PRINTER_OFFY_KEY, TSPL.PRINTER_DEFAULTS.offy],
                 ];
                 pairs.forEach(([id, key, dflt]) => {
                     const el = document.getElementById(id);

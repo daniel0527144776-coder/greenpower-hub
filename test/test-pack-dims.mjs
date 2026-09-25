@@ -391,6 +391,41 @@ const hw = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('a group too wide for the tray takes two rows, and says so', /כל קבוצת 10P ב-2 שורות/.test(hw.txt), hw.txt.slice(0, 260));
 
+// ---- the build on a label for the worker (2026-09-25) ----
+// 100 x 50mm at 300dpi is 1181 x 590 dots: one canvas pixel per printer dot, like the battery
+// sticker. The phone path must reach the Bluetooth bridge with real TSPL, and the PC path must
+// open a print page sized to the label. --selftest hands back a blank label.
+const lbl = await page.evaluate(async (SELF) => {
+  if (SELF) window.packLabelCanvas = () => { const c = document.createElement('canvas'); c.width = 1181; c.height = 590; return c; };
+  useVehiclePack('Sur-Ron');
+  const cv = packLabelCanvas();
+  const px = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+  let ink = 0; for (let i = 0; i < px.length; i += 4) if (px[i] < 128) ink++;
+  // phone: a stand-in bridge records what would go over Bluetooth
+  let sent = null;
+  window.GPPrint = { ensure: () => 'OK', print: (mac, b64) => { sent = { mac, head: atob(b64).slice(0, 160) }; return 'OK'; } };
+  localStorage.setItem(TSPL.PRINTER_KEYS.mac, 'AA:BB:CC:DD:EE:FF');
+  await printPackLabel();
+  // no printer chosen yet: says so, sends nothing
+  localStorage.removeItem(TSPL.PRINTER_KEYS.mac);
+  let sentNoMac = null;
+  window.GPPrint.print = () => { sentNoMac = true; return 'OK'; };
+  await printPackLabel();
+  const notice = (document.getElementById('noticeBackdrop') || {}).innerText || '';
+  // PC: no bridge — a print page the size of the label
+  delete window.GPPrint;
+  await printPackLabel();
+  const fr = document.getElementById('packLabelFrame');
+  return { w: cv.width, h: cv.height, ink: ink / (cv.width * cv.height), sent, sentNoMac, notice,
+    pc: fr ? fr.srcdoc.slice(0, 200) : '' };
+}, SELFTEST);
+check('the label is the printer\'s own size, 1181 x 590 dots', lbl.w === 1181 && lbl.h === 590, [lbl.w, lbl.h]);
+check('and carries a drawing, not a blank label', lbl.ink > 0.03 && lbl.ink < 0.45, lbl.ink.toFixed(3));
+check('on the phone it goes to the Bluetooth printer as TSPL', !!lbl.sent && lbl.sent.mac === 'AA:BB:CC:DD:EE:FF'
+  && /SIZE 100 mm,50 mm/.test(lbl.sent.head) && /BITMAP/.test(lbl.sent.head), lbl.sent);
+check('with no printer chosen it says so and sends nothing', !lbl.sentNoMac && /לא נבחרה מדפסת/.test(lbl.notice), lbl.notice.slice(0, 80));
+check('on the PC it opens a print page the size of the label', /@page\{size:100mm 50mm/.test(lbl.pc) && /data:image\/png/.test(lbl.pc), lbl.pc.slice(0, 90));
+
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {
   if (SELF) {

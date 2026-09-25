@@ -206,5 +206,36 @@
     return btoa(s);
   }
 
-  return { DOTS_PER_MM, packMono, buildLabel, buildAlignmentPattern, fromCanvas, toBase64 };
+  // The printer's settings, ONCE (2026-09-25). They were read inside stickers.html only; the
+  // hub now prints a label of its own (the pack layout, for the worker), and a second copy of
+  // five keys and their defaults is how two printers come to disagree about one roll. Both read
+  // from here, and the same localStorage — the hub and the editor frame share an origin.
+  const PRINTER_KEYS = {
+    mac: 'gp_printer_mac', name: 'gp_printer_name', gap: 'gp_printer_gap',
+    density: 'gp_printer_density', offx: 'gp_printer_offx', offy: 'gp_printer_offy',
+    speed: 'gp_printer_speed',
+  };
+  // density 8: what the Windows driver uses for this printer, and it has printed these labels
+  // correctly for months. speed 2 ips: slow on purpose (Daniel, 2026-08-23) — thermal transfer
+  // is heat and time, and a slower head releases the ribbon more completely.
+  const PRINTER_DEFAULTS = { gap: 2, density: 8, offx: 0, offy: 0, speed: 2 };
+  function optsFromStorage(storage) {
+    const num = (k, dflt) => {
+      let v = NaN;
+      try { v = parseFloat(storage.getItem(PRINTER_KEYS[k])); } catch (e) { v = NaN; }
+      return isNaN(v) ? dflt : v;
+    };
+    return {
+      widthMm: 100,
+      heightMm: 50,
+      gapMm: num('gap', PRINTER_DEFAULTS.gap),
+      density: num('density', PRINTER_DEFAULTS.density),
+      offsetXmm: num('offx', PRINTER_DEFAULTS.offx),
+      offsetYmm: num('offy', PRINTER_DEFAULTS.offy),
+      speed: num('speed', PRINTER_DEFAULTS.speed),
+    };
+  }
+
+  return { DOTS_PER_MM, packMono, buildLabel, buildAlignmentPattern, fromCanvas, toBase64,
+    PRINTER_KEYS, PRINTER_DEFAULTS, optsFromStorage };
 });
