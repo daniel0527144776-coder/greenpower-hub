@@ -54,22 +54,23 @@ const read = async (opts) => page.evaluate((o) => {
 const TRAY = [{ id: 1, model: 'מבחן-גדול', l: 400, w: 200, h: 120 }, { id: 2, model: 'מבחן-קטן', l: 150, w: 90, h: 80 }];
 const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 
-// 16S4P = 64 cells, 10 per row -> 7 rows, on the 21.5 diagonal (18.62 between rows).
-//   L = 9*21.5 + 21.15 + 3 + 22 (BMS at 60V) = 240     W = 6*18.62 + 21.15 + 3 = 136     H = 70.15 + 4 = 74
+// 16S4P = 64 cells, HIS way (2026-09-25): each 4P group across, sixteen rows along, on the 21.5
+// diagonal (18.62 between rows).
+//   L = 15*18.62 + 21.15 + 3 + 22 (BMS at 60V) = 325     W = 3*21.5 + 21.15 + 3 = 89     H = 70.15 + 4 = 74
 // The BMS allowance goes on the LENGTH since 2026-09-25; the height is the standing cells alone.
 // (The two Wellgo catalogue brackets this used — square and honeycomb 21.4 — left the list on
 // 2026-09-25; he does not build on them.)
 const honey = await read({ ...base, holder: 'diag-b' });
-check('16S4P block, 21.5 diagonal: 240 x 136 x 74', honey.L === 240 && honey.W === 136 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
+check('16S4P block, 21.5 diagonal: 325 x 89 x 74', honey.L === 325 && honey.W === 89 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
 check('and it reports 64 cells / 1152 Wh', /64/.test(honey.text) && /1152/.test(honey.text), honey.text.slice(0, 80));
 
-// A square bracket must be WIDER across the rows than a diagonal one: the diagonal nests the
-// rows at pitch x sin60, which is the 13% the diagonal exists for.
+// A square bracket must be LONGER than a diagonal one: the diagonal nests the rows at
+// pitch x sin60 along the length, which is the 13% the diagonal exists for.
 const diagA = await read({ ...base, holder: 'diag-a' });
 const square = await read({ ...base, holder: 'square-23' });
-check('square is wider across rows than the diagonal', square.W > diagA.W, `${square.W} vs ${diagA.W}`);
-check('the diagonal row spacing is the sin60 one', Math.abs((diagA.W - 24.15) - 6 * 22.5 * 0.866) <= 1.5, String(diagA.W));
-check('the 22.5 diagonal is 1mm a cell longer than the 21.5 one', Math.abs((diagA.L - honey.L) - 9) <= 1, `${diagA.L} vs ${honey.L}`);
+check('square is longer along the rows than the diagonal', square.L > diagA.L, `${square.L} vs ${diagA.L}`);
+check('the diagonal row spacing is the sin60 one', Math.abs((diagA.L - 22 - 24.15) - 15 * 22.5 * 0.866) <= 1.5, String(diagA.L));
+check('the 22.5 diagonal is 1mm a cell wider across than the 21.5 one', diagA.W - honey.W === 3, `${diagA.W} vs ${honey.W}`);
 check('the 23mm square bracket is longer than the 21.5 one', square.L > honey.L, `${square.L} vs ${honey.L}`);
 const cell18 = await read({ ...base, cell: '18650-25p', holder: 'diag-b' });
 check('18650 is a shorter cell', cell18.H < honey.H, `${cell18.H} vs ${honey.H}`);
@@ -84,7 +85,7 @@ check('does not claim the small tray', !/מבחן-קטן/.test(honey.text), hone
 // check above, so the first version of this measured a 166mm-tall block against a 150mm tray
 // and failed on its own leftover state. A test that carries state between cases is testing
 // the order it was written in.
-const rotated = await read({ ...base, holder: 'diag-b', models: [{ id: 3, model: 'מסובב', l: 100, w: 240, h: 150 }] });
+const rotated = await read({ ...base, holder: 'diag-b', models: [{ id: 3, model: 'מסובב', l: 100, w: 340, h: 150 }] });
 check('a turned tray still counts as a fit', /מסובב/.test(rotated.text), rotated.text.slice(-90));
 
 // The allowance is derived from the VOLTAGE now — 14 / 18 / 22 / 26 — and is still an input
@@ -129,7 +130,7 @@ check('no warning when the build equals the ceiling', !/⚠/.test(over.atMax), o
 // with no diagonal holder, 136 on one and 126 on the other. A build of 136 is therefore fine
 // on the square holder and over on the 21.6/24.6 one, which a single ceiling cannot express.
 const ox = await page.evaluate(() => {
-  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   useVehiclePack('Inokim OX');
   const filled = document.getElementById('dimResult').textContent;
   // The 21.5 nickel is the OX's tightest: 126 counted, against 136 on the 22.5 and 140 with
@@ -148,10 +149,10 @@ check('and not over the 140 counted on the square one', !/⚠/.test(ox.okSquare)
 // per cell, in the grid the numbers above it describe. A picture that disagrees with the
 // figures is worse than no picture.
 const draw = await page.evaluate(() => {
-  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30);
   clearDimVehicle();
-  set('dimHolder', 'diag-a'); set('dimPerRow', 20); calcPackDims();
+  set('dimHolder', 'diag-a'); calcPackDims();
   const svg = document.getElementById('dimDraw');
   const block = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/) || [];
   return { circles: svg.querySelectorAll('circle').length, hasSvg: !!svg.querySelector('svg'),
@@ -171,14 +172,17 @@ const bmsDraw = await page.evaluate((SELF) => {
 check('and draws the BMS at the end of the block, inside its length', /BMS/.test(bmsDraw.with26.txt) && bmsDraw.with26.txt.includes(bmsDraw.with26.L + ' מ"מ'), bmsDraw.with26);
 check('and no BMS box when there is no allowance', !/BMS/.test(bmsDraw.with0.txt), bmsDraw.with0.txt);
 check('and does not repeat the counts', !/תאים בשורה|שורות|עיגול/.test(draw.txt), draw.txt);
-check('the layout is said in S and P', /לאורך 20S · לרוחב 6P/.test(draw.res), draw.res);
+check('the layout is said his way: the group across, the series along', /לרוחב 6P · לאורך 20S/.test(draw.res), draw.res);
+
 
 // A staggered layout must actually be drawn staggered, or the picture lies about the shape.
 const stag = await page.evaluate(() => {
-  const xs = (h) => { document.getElementById('dimHolder').value = h; calcPackDims();
-    return [...document.querySelectorAll('#dimDraw circle')].map(c => +c.getAttribute('cx')); };
-  const d = xs('diag-a'), s = xs('square-23');
-  return { diagFirstTwoRows: d[0] !== d[20], squareFirstTwoRows: s[0] === s[20] };
+  // Drawn along the length now: a group is a column, and the stagger shows as a vertical
+  // offset between the first cell of one group and the first of the next.
+  const ys = (h) => { document.getElementById('dimHolder').value = h; calcPackDims();
+    return [...document.querySelectorAll('#dimDraw circle')].map(c => +c.getAttribute('cy')); };
+  const d = ys('diag-a'), s = ys('square-23');
+  return { diagFirstTwoRows: d[0] !== d[6], squareFirstTwoRows: s[0] === s[6] };
 });
 check('diagonal rows are offset from each other', stag.diagFirstTwoRows, JSON.stringify(stag));
 check('square rows are not', stag.squareFirstTwoRows, JSON.stringify(stag));
@@ -230,7 +234,7 @@ check('no "minimum area" line on the vehicle cards', !/שטח מינימלי/.te
 // because the nearest neighbour sits half a pitch sideways, and the first version of this
 // check condemned every honeycomb pack in the table.
 const clear = await page.evaluate(() => {
-  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   const run = (cell, holder) => { set('dimCell', cell); set('dimHolder', holder); set('dimV', 72); set('dimAh', 20); calcPackDims();
     return document.getElementById('dimResult').textContent; };
   clearDimVehicle();
@@ -247,7 +251,7 @@ check('and a honeycomb row pitch under the diameter is fine', !/לא נכנס/.t
 // feature leaves a live call to something that no longer exists, and that fails in the console
 // instead of on screen. BRACKET_MAX itself is deliberately kept: it is the real sheet size.
 const pieces = await page.evaluate(() => {
-  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   set('dimCell', '21700-50e'); set('dimHolder', 'square-23'); set('dimV', 72); set('dimAh', 60); set('dimPerRow', 20); calcPackDims();
   const big = document.getElementById('dimResult').textContent;
   set('dimAh', 10); set('dimPerRow', 10); calcPackDims();
@@ -258,7 +262,7 @@ check('and on a small pack too', !/חלקי תושבת/.test(pieces.small), piec
 check('but the layout itself still computes', /תצורה/.test(pieces.big), pieces.big.slice(0, 60));
 
 const nickels = await page.evaluate(() => {
-  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   const run = (h) => { set('dimHolder', h); set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
     const m = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/); return [+m[1], +m[2]]; };
   return { a: run('diag-a'), b: run('diag-b'), sq: run('square-23') };
@@ -282,7 +286,7 @@ check('and the corrected four are the ones that used to be', /10P|12P/.test(awai
 
 // The nickel line used to price off his stock.
 const nick = await page.evaluate(() => {
-  const set = (id, v) => { document.getElementById(id).value = String(v); };
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   set('dimCell', '21700-50e'); set('dimHolder', 'diag-a'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
   const six = document.getElementById('dimResult').textContent;
   set('dimAh', 15); calcPackDims();
@@ -373,6 +377,19 @@ const cat18 = await page.evaluate(() => {
 });
 check('the catalogue carries 18650 scooter packs', cat18.n >= 20, cat18);
 check('each priced above its cost, with a trade price between', cat18.ok, cat18);
+
+// ---- his method: the group across the narrow side, the series along the length ----
+const hw = await page.evaluate((SELF) => {
+  if (SELF) window.groupLayout = (S, P, layers) => { const per = Math.ceil(S * P / layers); return { inRow: 17, g: 1, rowsAlong: Math.ceil(per / 17) }; };
+  document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
+  // a 10P group in a 170mm-wide tray: seven across is the most, so each group takes two rows of five
+  useVehiclePack('אופנוע שליחויות 72V'); dimAhPending = 50; calcPackDims();
+  const txt = document.getElementById('dimResult').innerText;
+  const circles = [...document.querySelectorAll('#dimDraw circle')].map((c) => [+c.getAttribute('cx'), +c.getAttribute('cy')]);
+  clearDimVehicle();
+  return { txt, n: circles.length };
+}, SELFTEST);
+check('a group too wide for the tray takes two rows, and says so', /כל קבוצת 10P ב-2 שורות/.test(hw.txt), hw.txt.slice(0, 260));
 
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {

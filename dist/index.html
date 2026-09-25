@@ -1073,12 +1073,6 @@ body { min-height: 100vh; }
     <div class="form-row"><label>קיבולת</label>
       <select class="form-select" id="dimAh" onchange="calcPackDims()"></select>
     </div>
-    <div class="form-row"><label>תאים בשורה</label>
-      <div style="display:flex;gap:6px;align-items:center;">
-        <input type="number" class="form-input" id="dimPerRow" value="10" min="1" step="1" oninput="calcPackDims()" style="width:80px;">
-        <span style="font-size:11px;color:var(--text-muted);" id="dimPerRowNote"></span>
-      </div>
-    </div>
     <div class="form-row"><label>תוספת BMS באורך (מ"מ)</label>
       <div style="display:flex;gap:6px;align-items:center;">
         <input type="number" class="form-input" id="dimExtra" value="18" min="0" step="1" oninput="dimExtraTouched = true; calcPackDims()" style="width:80px;">
@@ -2541,7 +2535,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v350';
+const HUB_BUILD = 'v351';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4734,18 +4728,21 @@ function addShallowCatalogRows() {
   for (const r of shallowCatalogRows()) PRICING.push(r);
 }
 function shallowCellOptions(TL, TW, TH, V, S) {
-  if (typeof DIM_CELLS === "undefined" || typeof fitCount !== "function") return "";
+  if (typeof DIM_CELLS === "undefined" || typeof hisFit !== "function") return "";
   const rows = [];
+  let stands = false;
   for (const sc of SHALLOW_CELLS) {
     const cd = DIM_CELLS[sc.key];
     if (!cd) continue;
     // Standing only. A cell too long for the tray is not offered at all — there is no
     // sideways arrangement to fall back on.
     if (TH < cd.len + DIM_CAP) continue;
+    stands = true;
     const pair = (DIM_PITCH[18650] || {})["diag-b"] || [21.5, 18.62];
     const p = pair[0], rp = pair[1];
-    const cells = fitCount(TL, TW, p, rp, cd.dia);
-    const P = Math.floor(cells / S);
+    // The biggest P that goes in his way: the group across the narrow side, S along the length.
+    let P = 0;
+    for (let q = 40; q >= 1; q--) if (hisFit({ L: TL, W: TW, H: TH }, S, q, 1, p, rp, cd.dia).fits) { P = q; break; }
     if (P < 1) continue;
     const Ah = Math.round(P * cd.ah * 10) / 10;
     // Cost the real pack, then borrow the margin the catalogue already earns on that tier.
@@ -4760,6 +4757,11 @@ function shallowCellOptions(TL, TW, TH, V, S) {
       : " · <span style=\"opacity:.7;\">אין שורת ייחוס במחירון לחישוב מרווח</span>";
     rows.push("<div style=\"margin-top:4px;\"><b>" + sc.label + "</b> — " +
       (S * P) + " תאים · " + S + "S" + P + "P · <b>" + Ah + "Ah</b>" + tail + "</div>");
+  }
+  // Two different reasons for no option, and they must not share a sentence: the 18650 may
+  // STAND and still not reach S rows along the tray (a Zero 11X at 72V: 20 rows are 375mm).
+  if (!rows.length && stands) {
+    return "<div class=\"dim-rec\" style=\"margin-top:6px;\"><b style=\"color:var(--danger);\">18650 עומד כאן, אבל <bdi dir=\"ltr\">" + S + "S</bdi> לא נכנס לאורך המגש</b> — נסה מתח נמוך יותר.</div>";
   }
   if (!rows.length) {
     return "<div class=\"dim-rec\" style=\"margin-top:6px;\"><b style=\"color:var(--danger);\">גם תא 18650 לא עומד באמבטיה הזו</b> — צריך לפחות 69 מ\"מ גובה פנוי. מדוד שוב, או שזה כלי שלא בונים לו כאן.</div>";
@@ -7555,45 +7557,43 @@ function drawPackLayout(o) {
   if (!box) return;
   const { cols, rows, pitch, rowPitch, dia, stagger, N, P, layers } = o;
   if (!cols || !rows) { box.innerHTML = ""; return; }
-  // Drawn flush: the offset rows are nested inside the block edge rather than hanging off it,
-  // which is how the packs measure. The circles still sit at their real offsets.
-  const wMM = (cols - 1) * pitch + dia;
-  const hMM = (rows - 1) * rowPitch + dia;
-  // The BMS allowance sits at the end of the LONG side (2026-09-25), so it is drawn there as a
-  // box of its own and the labels are the whole block — the same numbers as the size row.
+  // Drawn ALONG THE LENGTH, the way he builds: each column of circles is one row of the
+  // bracket across the pack's width — a parallel group — and the series climbs left to right.
+  // The BMS allowance sits at the end of the length, drawn as a box of its own, and the labels
+  // are the whole block: the same numbers as the size row.
+  const lenMM = (rows - 1) * rowPitch + dia;
+  const widMM = (cols - 1) * pitch + dia;
   const bms = Math.max(0, o.extra || 0), wall = o.wall || 0;
-  const horiz = wMM >= hMM;
-  const totW = wMM + (horiz ? bms : 0), totH = hMM + (horiz ? 0 : bms);
-  const PAD = 26;                       // room for the dimension labels
-  const scale = Math.min(1, (340 - PAD * 2) / totW);
-  const W = Math.round(totW * scale) + PAD * 2, H = Math.round(totH * scale) + PAD * 2;
+  const drawH = widMM + (stagger ? pitch / 2 : 0);
+  const PAD = 26;
+  const scale = Math.min(1, (340 - PAD * 2) / (lenMM + bms));
+  const W = Math.round((lenMM + bms) * scale) + PAD * 2, H = Math.round(drawH * scale) + PAD * 2;
   const r = (dia / 2) * scale;
+  const perLayer = Math.ceil(N / (layers || 1));
   let cells = "", n = 0;
   for (let row = 0; row < rows; row++) {
     const off = stagger && row % 2 ? pitch / 2 : 0;
     for (let col = 0; col < cols; col++) {
-      if (n >= Math.ceil(N / (layers || 1))) break;      // the last row is usually partial
-      const cx = PAD + (off + col * pitch + dia / 2) * scale;
-      const cy = PAD + (row * rowPitch + dia / 2) * scale;
-      // Alternating bands of P cells: one band is one parallel group, i.e. one weld.
+      if (n >= perLayer) break;
+      const cx = PAD + (row * rowPitch + dia / 2) * scale;
+      const cy = PAD + (off + col * pitch + dia / 2) * scale;
       const band = P > 1 ? Math.floor(n / P) % 2 : 0;
       cells += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${band ? "var(--primary)" : "var(--bg-card, #1e293b)"}" fill-opacity="${band ? 0.35 : 0.9}" stroke="var(--primary)" stroke-width="1"/>`;
       n++;
     }
   }
-  const lab = (x, y, s, anchor2) => `<text x="${x}" y="${y}" fill="var(--text-muted)" font-size="11" text-anchor="${anchor2 || "middle"}">${s}</text>`;
+  const lab = (x, y, s) => `<text x="${x}" y="${y}" fill="var(--text-muted)" font-size="11" text-anchor="middle">${s}</text>`;
+  const bx = PAD + lenMM * scale + 2, bw = Math.max(1, bms * scale - 2), bh = drawH * scale;
+  const bmsBox = !bms ? '' :
+    `<rect x="${bx.toFixed(1)}" y="${PAD}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>` +
+    (bw >= 24 ? lab(bx + bw / 2, PAD + bh / 2 + 4, 'BMS')
+      : `<g transform="translate(${(bx + bw / 2 + 4).toFixed(1)},${(PAD + bh / 2).toFixed(1)}) rotate(-90)">` + lab(0, 0, 'BMS') + '</g>');
   box.innerHTML =
     `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;">` +
     `<rect x="${PAD - 4}" y="${PAD - 4}" width="${W - PAD * 2 + 8}" height="${H - PAD * 2 + 8}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>` +
-    cells +
-    (bms ? (horiz
-      ? `<rect x="${(PAD + wMM * scale + 2).toFixed(1)}" y="${PAD}" width="${Math.max(1, bms * scale - 2).toFixed(1)}" height="${(hMM * scale).toFixed(1)}" rx="3" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>`
-        + (bms * scale >= 24 ? lab(PAD + wMM * scale + bms * scale / 2, PAD + hMM * scale / 2 + 4, 'BMS')
-          : `<g transform="translate(${(PAD + wMM * scale + bms * scale / 2 + 4).toFixed(1)},${(PAD + hMM * scale / 2).toFixed(1)}) rotate(-90)">` + lab(0, 0, 'BMS') + '</g>')
-      : `<rect x="${PAD}" y="${(PAD + hMM * scale + 2).toFixed(1)}" width="${(wMM * scale).toFixed(1)}" height="${Math.max(1, bms * scale - 2).toFixed(1)}" rx="3" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>`
-        + (bms * scale >= 14 ? lab(PAD + wMM * scale / 2, PAD + hMM * scale + bms * scale / 2 + 4, 'BMS') : '')) : '') +
-    lab(W / 2, H - 8, `${Math.round(totW + 2 * wall)} מ"מ`) +
-    `<g transform="translate(12,${H / 2}) rotate(-90)">` + lab(0, 0, `${Math.round(totH + 2 * wall)} מ"מ`) + "</g>" +
+    cells + bmsBox +
+    lab(W / 2, H - 8, `${Math.round(lenMM + bms + 2 * wall)} מ"מ`) +
+    `<g transform="translate(12,${H / 2}) rotate(-90)">` + lab(0, 0, `${Math.round(widMM + 2 * wall)} מ"מ`) + "</g>" +
     "</svg>" +
     (layers > 1 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">שכבה אחת מתוך ${layers}</div>` : '');
 }
@@ -7613,66 +7613,53 @@ function stackAllowed(v) {
   return /אופנוע|ריקשה|E-Moto|טרקטורון/i.test((v.g || '') + ' ' + (v.m || ''));
 }
 
-// How many cells the chosen holder fits in a given tub face. Same formula the block size uses,
-// read backwards.
+// HOW HE BUILDS (Daniel, 2026-09-25: "בונה בקבוצות מהחלק הצר לרוחב ואז עולה עם השורות לכל
+// האורך"). A parallel group goes ACROSS the narrow side of the tray, in one row of the bracket;
+// the series then climbs group by group along the LENGTH. His measured 390 x 135 pack is exactly
+// that: six across, twenty rows along. A group wider than the tray takes two rows (or more),
+// split evenly. The old code packed cells into long rows until they ran out — "17 cells a row x
+// 9 rows, groups of 7P" — which smeared a group over two rows and is not a pack anyone welds.
 //
-// BOTH ORIENTATIONS (2026-09-25). It used to count only rows-along-the-short-side, and on a
-// diagonal bracket the two are not the same: a Talaria tray takes 17 x 8 = 136 one way and
-// 7 x 20 = 140 the other — which is exactly how his measured 390 x 135 pack is built (six
-// across, twenty rows). The one-way count told him a build that fits did not.
-function fitCount(L, W, pitch, rowPitch, dia) {
-  const one = (a, b) => {
-    const cols = Math.floor((a - dia - 2 * DIM_WALL) / pitch) + 1;
-    const rows = Math.floor((b - dia - 2 * DIM_WALL) / rowPitch) + 1;
-    return cols > 0 && rows > 0 ? cols * rows : 0;
-  };
-  return Math.max(one(L, W), one(W, L));
+// Across the narrow side the cells sit at the in-row pitch; the rows follow each other along
+// the length at the row pitch (19.49 on the 22.5 diagonal, where the rows nest).
+function acrossFit(W, pitch, dia) {
+  return Math.floor((W - dia - 2 * DIM_WALL) / pitch) + 1;
 }
-// The block a grid makes, in mm (walls included), and whether it goes in a tray either way round.
-function gridMM(cols, rows, pitch, rowPitch, dia) {
-  return [(cols - 1) * pitch + dia + 2 * DIM_WALL, (rows - 1) * rowPitch + dia + 2 * DIM_WALL];
+function groupLayout(S, P, layers, acrossMax) {
+  const g = Math.max(1, Math.ceil(P / Math.max(1, acrossMax)));   // bracket rows per group
+  const inRow = Math.ceil(P / g);                                   // cells across
+  return { inRow, g, rowsAlong: Math.ceil(S / layers) * g };
 }
-function gridFits(cols, rows, pitch, rowPitch, dia, tub) {
-  const [a, b] = gridMM(cols, rows, pitch, rowPitch, dia);
-  const x = [a, b].sort((p, q) => q - p);
-  return x[0] <= tub.L + 0.5 && x[1] <= tub.W + 0.5;
+// Does this build go in the tray, his way, in this many layers? Tray L is the long side,
+// already less the BMS at its end (cellTub).
+function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
+  const across = acrossFit(tub.W, pitch, dia);
+  const lay = groupLayout(S, P, layers, across);
+  const acrossMM = (lay.inRow - 1) * pitch + dia + 2 * DIM_WALL;
+  const alongMM = (lay.rowsAlong - 1) * rowPitch + dia + 2 * DIM_WALL;
+  return { ...lay, fits: across >= 1 && acrossMM <= tub.W + 0.5 && alongMM <= tub.L + 0.5 };
 }
-// How the cells are laid out in one layer of a tray. The series string folds between layers
-// (S1..S10 below, S11..S20 above), so each layer carries S/layers groups of P. A layout where
-// every row is one P group, or every row is the whole string, is how a pack is actually welded
-// — try those first, in the order he builds (a P group per row, as on his 390 x 135 pack). Only
-// when neither goes in does it fall back to as many cells as the tray's side takes.
-function pickLayout(S, P, layers, tub, pitch, rowPitch, dia) {
-  const sPer = Math.ceil(S / layers);
-  const perLayer = Math.ceil(S * P / layers);
-  for (const k of [{ cols: P, rows: sPer, kind: 'P' }, { cols: sPer, rows: P, kind: 'S' }]) {
-    if (gridFits(k.cols, k.rows, pitch, rowPitch, dia, tub)) return k;
-  }
-  for (const side of [tub.L, tub.W]) {
-    const along = Math.floor((side - dia - 2 * DIM_WALL) / pitch) + 1;
-    if (along < 1) continue;
-    const cols = Math.min(along, perLayer), rows = Math.ceil(perLayer / cols);
-    if (gridFits(cols, rows, pitch, rowPitch, dia, tub)) return { cols, rows, kind: 'snake' };
-  }
-  const along = Math.max(1, Math.floor((tub.L - dia - 2 * DIM_WALL) / pitch) + 1);
-  const cols = Math.min(along, perLayer);
-  return { cols, rows: Math.ceil(perLayer / cols), kind: 'snake' };
+// The fewest layers that take the build (1 if none do — the verdict then says why).
+function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia) {
+  for (let l = 1; l <= maxLayers; l++) if (hisFit(tub, S, P, l, pitch, rowPitch, dia).fits) return l;
+  return 0;
 }
 
 // Densest first: 21.5 gives the narrowest block, then 22.5, then the square 23. He asked for
-// "the densest that fits", so the recommendation is the first one that gets the pack in — not
-// the one with the most room left over.
+// "the densest that fits", so the recommendation is the first one that gets the pack in.
 const HOLDER_ORDER = ['diag-b', 'diag-a', 'square-23'];
 const HOLDER_NAME = { 'diag-b': 'ניקל ב׳ (21.5)', 'diag-a': 'ניקל א׳ (22.5)', 'square-23': 'ריבועי 23' };
-function recommendHolder(fmt, N, L, W, dia) {
-  const out = [];
-  for (const h of HOLDER_ORDER) {
-    const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
-    if (!p) continue;
-    const n = fitCount(L, W, p, rp, dia);
-    out.push({ h, n, fits: n >= N, spare: n - N });
-  }
-  return out;
+// A holder takes the build if it goes in his way within the layers the vehicle allows — or,
+// where he COUNTED that holder in this tray (the OX), if his count covers it.
+function holderTakes(v, tub, fmt, h, S, P, c, maxLayers) {
+  const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
+  if (!p) return 0;
+  if (v && v.caps && v.caps[h] != null) return S * P <= v.caps[h] ? 1 : 0;
+  return layersFor(tub, S, P, maxLayers, p, rp, c.dia);
+}
+function maxLayersFor(v, tub, c) {
+  const standH = c.len + DIM_CAP;
+  return stackAllowed(v) && tub && tub.H ? Math.max(1, Math.floor(tub.H / standH)) : 1;
 }
 
 // The capacity list is what the vehicle can actually take, in 5Ah steps — never typed. Above
@@ -7724,8 +7711,6 @@ function calcPackDims() {
   const derived = fmt === 18650 && (holder.startsWith('diag'));
   const V = parseFloat(document.getElementById('dimV').value);
   const Ah = parseFloat(document.getElementById('dimAh').value) || c.ah;
-  const perRowEl = document.getElementById('dimPerRow');
-  const perRow = Math.max(1, parseInt((perRowEl || {}).value) || 1);
   // The BMS, its wiring and the shrink take room, and how much depends on the pack — a 20S
   // board is physically bigger than a 13S. Filled in from the voltage until he types over it;
   // once he does, his number stays (dimExtraTouched), because he is the one holding the case.
@@ -7746,37 +7731,27 @@ function calcPackDims() {
   const P = Math.max(1, Math.ceil(Ah / c.ah));
   const N = S * P;
   // ---- layers and layout are DECIDED, not typed (Daniel, 2026-09-25: "תעשה מתי שצריך לקפל
-  // את הסוללה ל-2 שכבות אז שאני ידע ולא צריך מספר שכבות"). With a tray to fit into: one layer
-  // whenever one layer takes the pack; a second only when it does not, only on a motorcycle
-  // or an ATV (a scooter tub is one layer deep), and only when the height takes another
-  // standing cell. The layout inside a layer is picked to fit the tray too.
+  // את הסוללה ל-2 שכבות אז שאני ידע ולא צריך מספר שכבות"). Layout is his method (hisFit): the
+  // group across the narrow side, the series along the length. With a tray: the fewest layers
+  // that take it — a second only on a motorcycle or ATV, and only when the height takes another
+  // standing cell. Without a tray: one layer, each group in one row.
   const tubAll = tubOf(dimVehicle);
   const tub = cellTub(tubAll, extra);
   const standH = c.len + DIM_CAP;
-  let layers = 1, cols, rows, layoutKind = 'manual';
+  let layers = 1, lay = groupLayout(S, P, 1, Infinity), fitsTray = null;
+  const maxLayers = maxLayersFor(dimVehicle, tub, c);
   if (tub && !(tub.H && tub.H < standH)) {
-    const counted = dimVehicle.caps && dimVehicle.caps[holder] != null;
-    const room1 = counted ? dimVehicle.caps[holder] : fitCount(tub.L, tub.W, pitch, rowPitch, c.dia);
-    const maxLayers = stackAllowed(dimVehicle) && tub.H ? Math.max(1, Math.floor(tub.H / standH)) : 1;
-    while (layers < maxLayers && Math.ceil(N / layers) > room1) layers++;
-    const lay = pickLayout(S, P, layers, tub, pitch, rowPitch, c.dia);
-    cols = lay.cols; rows = lay.rows; layoutKind = lay.kind;
-    if (perRowEl) perRowEl.value = cols;
-  } else {
-    cols = Math.min(perRow, N);
-    rows = Math.ceil(N / cols);
+    layers = layersFor(tub, S, P, maxLayers, pitch, rowPitch, c.dia) || 1;
+    lay = hisFit(tub, S, P, layers, pitch, rowPitch, c.dia);
+    fitsTray = lay.fits;
   }
-  if (perRowEl) perRowEl.disabled = layoutKind !== 'manual';
-  const prNote = document.getElementById('dimPerRowNote');
-  if (prNote) prNote.textContent = layoutKind !== 'manual' ? 'אוטומטי לפי המגש' : '';
+  const cols = lay.inRow, rows = lay.rowsAlong;
   const stagger = (holder.startsWith('diag') || holder === 'custom') && rows > 1;
-  // Outer size of the block: centres span (n-1) pitches, then half a cell each end. Reported
-  // long side first, so "א" is always the length.
-  // The BMS sits at the END of the pack, so its allowance is added to the length; the height
-  // is the standing cells and their holders alone (Daniel, 2026-09-25 — it used to be added
-  // to the height, which is why a one-layer pack read 100mm tall).
-  const [gA, gB] = gridMM(cols, rows, pitch, rowPitch, c.dia);
-  const L = Math.round(Math.max(gA, gB) + extra), W = Math.round(Math.min(gA, gB));
+  // The block: L runs along the series (the BMS sits at its end, so its allowance is added
+  // there), W is across the groups, H is the standing cells and their holders alone.
+  const alongMM = (rows - 1) * rowPitch + c.dia + 2 * DIM_WALL;
+  const acrossMM = (cols - 1) * pitch + c.dia + 2 * DIM_WALL;
+  const L = Math.round(alongMM + extra), W = Math.round(acrossMM);
   const H = Math.round(layers * (c.len + DIM_CAP));
   const kg = (N * c.g + 500) / 1000;
   // 3.6V nominal per cell, which is what the series table is built on; 3.7 here overstated
@@ -7798,28 +7773,31 @@ function calcPackDims() {
       head = `<div class="dim-over">⛔ ${c.label} לא נכנס לאמבטיה הזו — גובה פנוי ${tub.H} מ"מ, ותא עומד צריך ${Math.round(standH)}.</div>`;
       rec = shallowCellOptions(tub.L, tub.W, tub.H, V, S);
     } else if (tub) {
-      // Against the count for THIS holder where one exists: on an OX a diagonal holder takes 126
-      // and the square one 140, so a 140-cell build is fine on one and over on the other.
+      // Where he COUNTED this holder in this tray (the OX), his count decides; elsewhere his method.
       const counted = dimVehicle.caps && dimVehicle.caps[holder] != null;
-      const room = (counted ? dimVehicle.caps[holder] : fitCount(tub.L, tub.W, pitch, rowPitch, c.dia)) * layers;
-      if (N <= room) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` — בקיפול ל-${layers} שכבות` : ''}</div>`;
+      const ok = counted ? N <= dimVehicle.caps[holder] : fitsTray;
+      if (ok) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` — בקיפול ל-${layers} שכבות` : ''}</div>`;
       else {
-        head = `<div class="dim-over">⛔ לא נכנס ל-${name} — חורג ב-${N - room} תאים (נכנסים ${room} עם המחזיק הזה${layers > 1 ? ` גם ב-${layers} שכבות` : ''}${counted ? ', נספר' : ''})</div>`;
+        // Say WHY in his terms: how many series groups the length takes, against how many he needs.
+        const across = acrossFit(tub.W, pitch, c.dia);
+        const g = Math.ceil(P / Math.max(1, across));
+        const rowsFit = Math.max(0, Math.floor((tub.L - c.dia - 2 * DIM_WALL) / rowPitch) + 1);
+        const sFit = Math.floor(rowsFit / g) * Math.max(1, maxLayers);
+        const why = counted ? `חורג ב-${N - dimVehicle.caps[holder]} תאים (נכנסים ${dimVehicle.caps[holder]} עם המחזיק הזה, נספר)`
+          : across < 1 ? 'המגש צר מדי לתא אחד'
+          : `לאורך נכנסות <bdi dir="ltr">${sFit}S</bdi> מתוך <bdi dir="ltr">${S}S</bdi>${g > 1 ? ` (כל קבוצה ${g} שורות)` : ''}${maxLayers > 1 ? ` גם ב-${maxLayers} שכבות` : ''}`;
+        head = `<div class="dim-over">⛔ לא נכנס ל-${name} — ${why}</div>`;
         const b = tubBest(dimVehicle, V, c, fmt, extra);
         if (b && b.P >= 1) {
           dimBest = b;
           best = `<button class="btn btn-secondary btn-sm dim-best" onclick="applyDimBest()"><span>הכי גדול שנכנס: <bdi dir="ltr">${b.S}S ${b.P}P · ${+(b.P * c.ah).toFixed(1)}Ah</bdi> · ${HOLDER_NAME[b.h]}${b.layers > 1 ? ' · ' + b.layers + ' שכבות' : ''} ←</span></button>`;
         }
       }
-      // Which holder to reach for, densest first — only meaningful with a tray to fit into.
-      const opts = recommendHolder(fmt, Math.ceil(N / layers), tub.L, tub.W, c.dia);
-      // Where he COUNTED a holder in this tray (the OX), his count is the number, not the geometry.
-      if (dimVehicle.caps) for (const o of opts) if (dimVehicle.caps[o.h] != null) { o.n = dimVehicle.caps[o.h]; o.fits = o.n >= Math.ceil(N / layers); o.spare = o.n - Math.ceil(N / layers); }
-      const win = opts.find((o) => o.fits);
-      const chip = (o) => `<span class="dim-holder" style="color:${o.fits ? '#34d399' : 'var(--text-muted)'};">${o.fits ? '✓' : '✗'} ${HOLDER_NAME[o.h]}: ${o.n}</span>`;
-      const top = win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]} — ${win.n} בשכבה</b>`
-        : `<b style="color:var(--danger);">אף מחזיק לא מכיל ${Math.ceil(N / layers)} תאים בשכבה</b>`;
-      rec = `<div class="dim-rec">${top}${opts.filter((o) => o !== win).map((o) => ' · ' + chip(o)).join('')}</div>`;
+      // Which holder to reach for, densest first: the first one that takes this build.
+      const hs = HOLDER_ORDER.map((h) => ({ h, fits: !!holderTakes(dimVehicle, tub, fmt, h, S, P, c, maxLayers) }));
+      const win = hs.find((o) => o.fits);
+      const mark = (o) => `<span class="dim-holder" style="color:${o.fits ? '#34d399' : 'var(--text-muted)'};">${o.fits ? '✓' : '✗'} ${HOLDER_NAME[o.h]}</span>`;
+      rec = `<div class="dim-rec">${win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]}</b>` : '<b style="color:var(--danger);">אף מחזיק לא מכיל את החבילה במגש הזה</b>'}${hs.filter((o) => o !== win).map((o) => ' · ' + mark(o)).join('')}</div>`;
     } else if (dimVehicle.max) {
       // No tray size at all — only the table's ceiling, which is an AI estimate. Loud, and NOT a
       // block: refusing to compute a pack on the strength of a guess would stop a real build.
@@ -7834,7 +7812,7 @@ function calcPackDims() {
     kv('תצורה', `<bdi dir="ltr">${S}S ${P}P</bdi> · ${N} תאים`) +
     kv('אנרגיה ומשקל', `<bdi dir="ltr">${wh} Wh</bdi> · <bdi dir="ltr">~${kg.toFixed(1)}</bdi> ק"ג`) +
     kv('בלוק <bdi dir="ltr">(L × W × H)</bdi>', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
-    kv('פריסה', layoutText(S, P, layers, cols, rows, gA >= gB, derived)) +
+    kv('פריסה', layoutText(S, P, layers, cols, rows, derived)) +
     rec;
   // A cell wider than the space it goes in cannot be assembled. The distance to check is the
   // NEAREST NEIGHBOUR, not the row pitch: in a staggered layout the rows nest, so a row pitch of
@@ -7862,17 +7840,16 @@ function calcPackDims() {
   drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra, wall: DIM_WALL });
 }
 
-// The layout in S and P, which is how a pack is welded and how he thinks about it ("פריסה לפי S
-// ולפי P" — Daniel, 2026-09-25). S and P stay Latin and isolated: inside Hebrew "20S 4P" reads
-// back as "4P 20S". Which way the string runs is said against the block's LENGTH.
-function layoutText(S, P, layers, cols, rows, colsAlongLength, derived) {
+// The layout in S and P, in his words: the group ACROSS (לרוחב), the series ALONG (לאורך).
+// S and P stay Latin and isolated — inside Hebrew "20S 4P" reads back as "4P 20S".
+function layoutText(S, P, layers, cols, rows, derived) {
   const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
   const sPer = Math.ceil(S / layers);
+  const g = Math.ceil(P / cols);
   const pre = layers > 1 ? `${layers} שכבות, בכל שכבה ${iso(sPer + 'S')} · ` : '';
-  let body;
-  if (cols === P && rows === sPer) body = colsAlongLength ? `לאורך ${iso(P + 'P')} · לרוחב ${iso(sPer + 'S')}` : `לאורך ${iso(sPer + 'S')} · לרוחב ${iso(P + 'P')}`;
-  else if (cols === sPer && rows === P) body = colsAlongLength ? `לאורך ${iso(sPer + 'S')} · לרוחב ${iso(P + 'P')}` : `לאורך ${iso(P + 'P')} · לרוחב ${iso(sPer + 'S')}`;
-  else body = `${cols} תאים בשורה × ${rows} שורות · קבוצות של ${iso(P + 'P')}${cols * rows * layers > S * P ? ' (אחרונה חלקית)' : ''}`;
+  const body = g <= 1
+    ? `לרוחב ${iso(P + 'P')} · לאורך ${iso(sPer + 'S')}`
+    : `לרוחב ${cols} תאים · כל קבוצת ${iso(P + 'P')} ב-${g} שורות · לאורך ${iso(sPer + 'S')} (${rows} שורות)`;
   return pre + body + (derived ? ' · מרווח משוער' : '');
 }
 // ---- the vehicle the estimator is answering for ----------------------------------------
@@ -7911,22 +7888,19 @@ function vehicleByName(name) {
 function tubBest(v, V, c, fmt, extra) {
   const tb = cellTub(tubOf(v), extra != null ? extra : dimExtraFor(V));
   if (!tb) return null;
+  if (tb.H && tb.H < c.len + DIM_CAP) return null;
   const S = seriesForV(V);
-  const standH = c.len + DIM_CAP;
-  let layers = 1;
-  if (tb.H) {
-    if (tb.H < standH) return null;
-    layers = stackAllowed(v) ? Math.max(1, Math.floor(tb.H / standH)) : 1;
-  }
+  const maxL = maxLayersFor(v, tb, c);
   let best = null;
   for (const h of HOLDER_ORDER) {
-    const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
-    if (!p) continue;
-    const n = (v.caps && v.caps[h] != null ? v.caps[h] : fitCount(tb.L, tb.W, p, rp, c.dia)) * layers;
-    if (!best || n > best.n) best = { h, n };
+    for (let P = 40; P >= 1; P--) {
+      const l = holderTakes(v, tb, fmt, h, S, P, c, maxL);
+      if (!l) continue;
+      if (!best || P > best.P) best = { h, S, P, n: S * P, layers: v && v.caps && v.caps[h] != null ? 1 : l };
+      break;
+    }
   }
-  if (!best) return null;
-  return { h: best.h, n: best.n, S, P: Math.floor(best.n / S), layers };
+  return best;
 }
 let dimBest = null;
 function applyDimBest() {
@@ -7951,12 +7925,6 @@ function fillDimBuild(v, V, P, holder, layers, c) {
   // Capacity is a list in 5Ah steps; the vehicle's P is for a 5Ah cell.
   dimAhPending = Math.max(5, Math.round(P * c.ah / 5) * 5);
   set('dimHolder', holder);
-  // Cells per row: as many as the tray's long side takes, else the S count in one run.
-  const tb = cellTub(tubOf(v), dimExtraFor(V));
-  const [p] = (DIM_PITCH[fmt] || {})[holder] || [22.5];
-  const perLayer = Math.ceil(S * P / (layers || 1));
-  const alongL = tb ? Math.floor((tb.L - c.dia - 2 * DIM_WALL) / p) + 1 : 0;
-  set('dimPerRow', alongL > 0 ? Math.min(alongL, perLayer) : Math.min(S, perLayer));
   calcPackDims();
 }
 // Fills the estimator from a vehicle. 72V is the default because it is what most of these are
@@ -7976,7 +7944,11 @@ function useVehiclePack(model, volts) {
   let V = volts || (v.s72 ? 72 : v.s60 ? 60 : 72);
   let P = V === 72 ? v.p72 : v.p60;
   let holder = holderForPitch(v.p), layers = 1;
-  // A tray he measured decides the build — the table is a guess, his tape is not.
+  // A tray he measured decides the build — the table is a guess, his tape is not. With no
+  // voltage asked for, the highest one at which his tray takes anything.
+  if ((v.mine || !P) && !volts) {
+    for (const vv of [72, 60, 52, 48, 36]) { if (tubBest(v, vv, c, fmt, dimExtraFor(vv))) { V = vv; P = V === 72 ? v.p72 : v.p60; break; } }
+  }
   if (v.mine || !P) {
     const b = tubBest(v, V, c, fmt, dimExtraFor(V));
     if (b && b.P >= 1) { P = b.P; holder = b.h; layers = b.layers; }
@@ -7985,11 +7957,7 @@ function useVehiclePack(model, volts) {
   // Densest holder that takes the build, where the tray is known; else the table's own pitch.
   const tb = cellTub(tubOf(v), dimExtraFor(V));
   if (tb && !v.mine) {
-    const N = seriesForV(V) * P;
-    const ok = HOLDER_ORDER.find((h) => {
-      const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
-      return p && (v.caps && v.caps[h] != null ? v.caps[h] : fitCount(tb.L, tb.W, p, rp, c.dia)) >= N;
-    });
+    const ok = HOLDER_ORDER.find((h) => holderTakes(v, tb, fmt, h, seriesForV(V), P, c, maxLayersFor(v, tb, c)));
     if (ok) holder = ok;
   }
   fillDimBuild(v, V, P, holder, layers, c);
@@ -8499,7 +8467,7 @@ function oldPackFit() {
   // does. Measured: the forward estimator rounds a 100.15mm block to 100, and feeding that
   // straight back gave ZERO layers, i.e. "nothing fits" for the pack it had just designed.
   const TOL = 2;
-  // Either way round, like fitCount: on a diagonal bracket turning it can take more cells.
+  // Either way round: on a diagonal bracket, turning it can take more cells.
   const grid = (a, b) => [Math.floor((a + TOL - c.dia - 2 * DIM_WALL) / pitch) + 1, Math.floor((b + TOL - c.dia - 2 * DIM_WALL) / rowPitch) + 1];
   const Lc = Math.max(L, W) - extra, Wc = Math.min(L, W);
   const g1 = grid(Lc, Wc), g2 = grid(Wc, Lc);

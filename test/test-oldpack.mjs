@@ -69,7 +69,6 @@ const trip = await page.evaluate(() => {
     document.getElementById('dimV').value = String(V);
     refreshAhOptions();
     document.getElementById('dimAh').value = String(Ah);
-    document.getElementById('dimPerRow').value = String(perRow);
     clearDimVehicle();   // no tray: the layout is the one typed, one layer
     calcPackDims();
     const txt = document.getElementById('dimResult').innerText;

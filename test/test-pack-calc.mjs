@@ -82,7 +82,7 @@ const stack = await page.evaluate((SELF) => {
   const r = (name, ah) => { useVehiclePack(name); dimAhPending = ah; calcPackDims(); return document.getElementById('dimResult').innerText; };
   return {
     field: !!document.getElementById('dimLayers'),
-    moto40: r('אופנוע שליחויות 72V', 40),    // 160 cells, the 485x170 floor takes 176
+    moto40: r('אופנוע שליחויות 72V', 35),    // 20S7P: seven across a 170mm tray, twenty rows along
     moto50: r('אופנוע שליחויות 72V', 50),    // 200 cells: two layers, the box is 170mm deep
     fc1: r('Bomber FC-1 48V', 50),            // 280x75 floor, 150mm deep: stacks
     scooter: r('Inokim OX', 50),              // 200 cells in a scooter tub: never stacked
@@ -103,15 +103,15 @@ const rec = await page.evaluate(() => {
   calcPackDims();
   const html = document.getElementById('dimResult').innerHTML;
   const order = HOLDER_ORDER.slice();
-  const opts = recommendHolder(21700, 60, 425, 165, 21.15);
-  return { html, order, opts };
+  return { html, order };
 });
 check('the densest holder is tried first', rec.order[0] === 'diag-b', rec.order.join(','));
 check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), rec.html.slice(0, 80).replace(/<[^>]*>/g, ''));
 // Densest FIRST is only right if it also has to fit: a recommendation that ignores whether the
 // pack goes in is just the first item of a list.
-check('and it only recommends one that fits', rec.opts.every((o) => typeof o.fits === 'boolean' && o.n >= 0),
-  rec.opts.map((o) => `${o.h}:${o.n}${o.fits ? '✓' : '✗'}`).join(' '));
+// 140 cells in the OX: he counted 126 on the 21.5 nickel, 136 on the 22.5 and 140 on the square.
+// Densest FIRST is only right if it also has to fit — so the recommendation is the square.
+check('and it only recommends one that fits', /מומלץ: ריבועי 23/.test(rec.html), rec.html.replace(/<[^>]*>/g, '').slice(-120));
 
 // ---- 4b. the tray HEIGHT, which was stored and never read until 2026-09-22 ----
 // A 21700 is 70.15mm long. A tray shallower than that cannot take a standing cell, and the
@@ -122,7 +122,10 @@ const heights = await page.evaluate(() => {
     calcPackDims();
     return document.getElementById('dimResult').innerHTML;
   };
-  return { shallow: read('Zero 10X'), mid: read('Zero 11X'), deep: read('Nami Klima'), compound: read('Inokim OX') };
+  // Zero 11X at 60V: the 18650 stands in its 70mm tray and sixteen rows reach along it. At 72V
+  // twenty rows are 375mm against a 360mm tray, so there it must say the LENGTH is short.
+  const read60 = (name) => { useVehiclePack(name, 60); calcPackDims(); return document.getElementById('dimResult').innerHTML; };
+  return { shallow: read('Zero 10X'), mid: read60('Zero 11X'), mid72: read('Zero 11X'), deep: read('Nami Klima'), compound: read('Inokim OX') };
 });
 check('a shallow tray refuses the cell outright', /לא נכנס לאמבטיה/.test(heights.shallow),
   heights.shallow.replace(/<[^>]*>/g, '').slice(0, 90));
@@ -148,6 +151,8 @@ check('and names both cells where one fits', /EVE 26V/.test(heights.mid) && /EVE
 // of inventing a number — which is honest, and was also the bug: the field is retail, not
 // price, so every reference row read undefined.
 // The Zero 10X is 58mm: nothing stands in it, so the block says that instead of pricing.
+check('where the 18650 stands but the string does not reach, it says the length', /לא נכנס לאורך המגש/.test(heights.mid72) && !/לא עומד/.test(heights.mid72),
+  heights.mid72.replace(/<[^>]*>/g, '').slice(-140));
 check('and says so when no cell stands at all', /גם תא 18650 לא עומד/.test(heights.shallow),
   heights.shallow.replace(/<[^>]*>/g, '').slice(-140));
 check('a deep tray is not offered 18650s', !/אפשרויות 18650/.test(heights.deep),
