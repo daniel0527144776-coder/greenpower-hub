@@ -33,7 +33,7 @@ const out = await p.evaluate(() => {
   const after = [...document.querySelectorAll('#page-catalog .price-cat')].map((x) => x.textContent.trim());
   const opened = after.find((x) => x.startsWith('▾'));
   return { banners, catCount: cats.length, clicked: before, opened,
-           notes: document.querySelectorAll('.info-banner[data-note]').length,
+           notes: [...document.querySelectorAll('.info-banner:not([id])')].filter((el) => !el.querySelector('button, [id]')).length,
            tucked: [...document.querySelectorAll('.info-banner[data-note]')].filter((x) => x.style.display === 'none').length,
            icons: document.querySelectorAll('[title="הסבר"]').length };
 });
@@ -48,8 +48,9 @@ check('and none fell into the rest bucket', !out.banners.some((x) => x.includes(
 check('clicking a category opens that category', out.opened === out.clicked.replace('▸', '▾'), out.clicked + ' -> ' + out.opened);
 // Explanations behind an icon, and reachable: hiding text with no way back is worse than
 // the row it was costing.
-check('explanations are hidden', out.notes > 0 && out.tucked === out.notes, out.tucked + '/' + out.notes);
-check('and each has an ⓘ to open it', out.icons === out.notes, out.icons + '/' + out.notes);
+// Since 2026-09-25 explanations are not shown at all (Daniel: "תסיר את ההסברים באייקון").
+check('no explanation notes are shown', out.notes === 0, String(out.notes));
+check('and no ⓘ icons are left behind', out.icons === 0, String(out.icons));
 check('no JS errors', errs.length === 0, errs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');
 await b.close(); srv.close();

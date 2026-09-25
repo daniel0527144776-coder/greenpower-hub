@@ -2528,7 +2528,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v343';
+const HUB_BUILD = 'v344';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4364,7 +4364,8 @@ function renderSupplier() {
     if (!open) return;
     g.list.forEach((r) => {
       const warn = r.src && (r.src.includes('ישן') || r.src.includes('מחירון'));
-      const src = r.src ? `<span class="sup-src" style="color:${warn ? '#f59e0b' : (SRC_COLOUR[r.src] || 'var(--text-muted)')};">${r.src}${r.on ? ' ' + String(r.on).slice(0, 7) : ''}</span>` : '';
+      // the sea-import date is not interesting (Daniel, 2026-09-25) — landed sea rows show no source line
+      const src = r.src && !/יבוא ימי/.test(r.src) ? `<span class="sup-src" style="color:${warn ? '#f59e0b' : (SRC_COLOUR[r.src] || 'var(--text-muted)')};">${r.src}${r.on ? ' ' + String(r.on).slice(0, 7) : ''}</span>` : '';
       const price = r.routes
         ? [['sea', '🚢'], ['air', '✈️']].filter(([rt]) => r.routes[rt]).map(([rt, ic]) =>
             `<span class="sup-rt${route === rt ? ' on' : ''}">${ic} ${fmtIls(supplierIls(r.routes[rt], true, true))}</span>`).join(' ')
@@ -9580,6 +9581,11 @@ function tuckNotes() {
   const HEAD = 'h1,h2,h3,h4,.card-title,.page-title';
   document.querySelectorAll('.info-banner:not([id])').forEach((el) => {
     if (el.dataset.note || el.querySelector('button') || el.querySelector('[id]')) return;
+    // Explanatory notes are not shown at all any more (Daniel, 2026-09-25: "תסיר את ההסברים
+    // באייקון") — they used to fold into an ⓘ beside the heading. Notes that hold a button or a
+    // live figure are not notes, and are left alone above.
+    el.remove();
+    return;
     el.dataset.note = '1';
 
     // The heading this note belongs to: the nearest one before it, without leaving the card.
