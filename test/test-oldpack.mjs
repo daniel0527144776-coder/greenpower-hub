@@ -70,7 +70,7 @@ const trip = await page.evaluate(() => {
     refreshAhOptions();
     document.getElementById('dimAh').value = String(Ah);
     document.getElementById('dimPerRow').value = String(perRow);
-    document.getElementById('dimLayers').value = '1';
+    clearDimVehicle();   // no tray: the layout is the one typed, one layer
     calcPackDims();
     const txt = document.getElementById('dimResult').innerText;
     const m = txt.match(/(\d+)\s*[×x]\s*(\d+)\s*[×x]\s*(\d+)/);

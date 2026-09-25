@@ -73,9 +73,7 @@ check('the 23mm square bracket is longer than the 21.5 one', square.L > honey.L,
 const cell18 = await read({ ...base, cell: '18650-25p', holder: 'diag-b' });
 check('18650 is a shorter cell', cell18.H < honey.H, `${cell18.H} vs ${honey.H}`);
 
-// Two layers: half the footprint, double the height.
-const two = await read({ ...base, holder: 'diag-b', layers: 2 });
-check('two layers halve the rows and stack the height', two.W < honey.W && two.H > honey.H, `${two.W}/${two.H} vs ${honey.W}/${honey.H}`);
+// (Two layers are decided by the tray now, never typed — test-pack-calc covers when.)
 
 // The fit check is the point of the page. 227x135x92 goes in the 400x200x120 tray and not in
 // the 150x90x80 one — and it must survive being turned, which is why it sorts both triples.
@@ -151,14 +149,19 @@ check('and not over the 140 counted on the square one', !/⚠/.test(ox.okSquare)
 const draw = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30);
-  set('dimHolder', 'diag'); set('dimPerRow', 20); set('dimLayers', 1); calcPackDims();
+  clearDimVehicle();
+  set('dimHolder', 'diag-a'); set('dimPerRow', 20); calcPackDims();
   const svg = document.getElementById('dimDraw');
+  const block = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/) || [];
   return { circles: svg.querySelectorAll('circle').length, hasSvg: !!svg.querySelector('svg'),
-           txt: svg.textContent };
+           txt: svg.textContent, L: block[1], W: block[2], res: document.getElementById('dimResult').innerText };
 });
 check('the drawing has one circle per cell (120)', draw.circles === 120, String(draw.circles));
-check('and labels the row length and the row count', /20 תאים בשורה/.test(draw.txt) && /6 שורות/.test(draw.txt), draw.txt.slice(0, 80));
-check('and names the parallel group so it reads as a weld', /6P/.test(draw.txt), draw.txt.slice(0, 80));
+// The drawing's labels are the block's OWN size — they once read 473 beside a block of 476,
+// because the picture left the bracket walls out. Counts are said once, in the layout row.
+check('the drawing is labelled with the block size itself', draw.txt.includes(draw.L + ' מ"מ') && draw.txt.includes(draw.W + ' מ"מ'), [draw.txt, draw.L, draw.W]);
+check('and does not repeat the counts', !/תאים בשורה|שורות|עיגול/.test(draw.txt), draw.txt);
+check('the layout is said in S and P', /לאורך 20S · לרוחב 6P/.test(draw.res), draw.res);
 
 // A staggered layout must actually be drawn staggered, or the picture lies about the shape.
 const stag = await page.evaluate(() => {
@@ -366,10 +369,12 @@ check('each priced above its cost, with a trade price between', cat18.ok, cat18)
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {
   if (SELF) {
-    // the two bugs this replaced: a holder key that does not exist, and no way out of a
-    // build that does not fit
+    // the bugs this replaced: a holder key that does not exist, no way out of a build that
+    // does not fit, and a count that never turns the bracket round
     window.holderForPitch = () => 'diag-224';
     window.tubBest = () => null;
+    const one = window.fitCount;
+    window.fitCount = (L, W, p, rp, d) => { const c = Math.floor((L - d - 3) / p) + 1, r = Math.floor((W - d - 3) / rp) + 1; return c > 0 && r > 0 ? c * r : 0; };
   }
   const out = {};
   const hv = (id) => !!document.getElementById(id).hidden;
@@ -385,6 +390,8 @@ const rb = await page.evaluate((SELF) => {
   // Talaria: the table's 20S7P does not fit its 381x171 tray. It must say so and offer the
   // biggest that does — which then fits, in a block shorter than the tray.
   useVehiclePack('Talaria');
+  out.talaria7 = res();
+  dimAhPending = 50; calcPackDims();
   out.talaria = res();
   out.hasBest = !!document.querySelector('#dimResult .dim-best');
   if (out.hasBest) applyDimBest();
@@ -410,6 +417,9 @@ check('only his three holders and a custom one are offered', JSON.stringify(rb.o
 check('the calculator opens on the vehicle list', rb.vehFirst, rb.vehFirst);
 check('a 22.5mm vehicle gets the 22.5 diagonal', rb.enduroHolder === 'diag-a', rb.enduroHolder);
 check('picking a vehicle shows its result', rb.toBuild, rb.toBuild);
+// 20S7P = 140 in a 381x171 tray: 17 x 8 = 136 one way round, 7 x 20 = 140 the other. The
+// one-way count said no; the pack goes in, the way his own 390x135 pack is built.
+check('the bracket may be turned: Talaria takes its 140 cells', /^✅ נכנס ל-Talaria/.test(rb.talaria7.trim()) && /לרוחב 7P|לאורך 7P/.test(rb.talaria7), rb.talaria7.slice(0, 120));
 check('a build that does not fit its tray says so first', /^⛔ לא נכנס ל-Talaria/.test(rb.talaria.trim()), rb.talaria.slice(0, 80));
 check('and offers the biggest that does', rb.hasBest, rb.hasBest);
 check('which then fits, in a block shorter than the tray', /^✅ נכנס ל-Talaria/.test(rb.after.trim()) && rb.afterL > 0 && rb.afterL <= 381, [rb.after.slice(0, 40), rb.afterL]);

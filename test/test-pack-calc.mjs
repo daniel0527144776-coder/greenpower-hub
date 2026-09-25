@@ -73,24 +73,27 @@ const held = await page.evaluate(() => {
 check('once he types his own, the voltage stops overwriting it', held.value === '40', held.value);
 check('and it says so', /ידני/.test(held.note), held.note);
 
-// ---- 3. stacking is for motorcycles ----
-const stack = await page.evaluate(() => {
-  const scooter = VEHICLE_PACKS.find((v) => /קורקינט/.test(v.g));
-  const moto = VEHICLE_PACKS.find((v) => /E-Moto|אופנוע/.test(v.g));
-  useVehiclePack(scooter.m);
-  document.getElementById('dimLayers').value = '2';
-  calcPackDims();
-  const afterScooter = { layers: document.getElementById('dimLayers').value, disabled: document.getElementById('dimLayers').disabled };
-  useVehiclePack(moto.m);
-  document.getElementById('dimLayers').value = '2';
-  calcPackDims();
-  const afterMoto = { layers: document.getElementById('dimLayers').value, disabled: document.getElementById('dimLayers').disabled };
-  return { scooter: scooter.m, moto: moto.m, afterScooter, afterMoto };
-});
-check('a scooter is pinned to one layer', stack.afterScooter.layers === '1' && stack.afterScooter.disabled,
-  `${stack.scooter}: ${JSON.stringify(stack.afterScooter)}`);
-check('a motorcycle may be stacked', stack.afterMoto.layers === '2' && !stack.afterMoto.disabled,
-  `${stack.moto}: ${JSON.stringify(stack.afterMoto)}`);
+// ---- 3. layers are DECIDED, not typed (2026-09-25) ----
+// Daniel: "תעשה מתי שצריך לקפל את הסוללה ל-2 שכבות אז שאני ידע ולא צריך מספר שכבות". One
+// layer whenever one layer takes the pack; a second only on a motorcycle whose tray is too
+// small in plan and tall enough for another standing cell; never in a scooter tub.
+const stack = await page.evaluate((SELF) => {
+  if (SELF) window.stackAllowed = () => false;  // the old behaviour: never folded unless typed
+  const r = (name, ah) => { useVehiclePack(name); dimAhPending = ah; calcPackDims(); return document.getElementById('dimResult').innerText; };
+  return {
+    field: !!document.getElementById('dimLayers'),
+    moto40: r('אופנוע שליחויות 72V', 40),    // 160 cells, the 485x170 floor takes 176
+    moto50: r('אופנוע שליחויות 72V', 50),    // 200 cells: two layers, the box is 170mm deep
+    fc1: r('Bomber FC-1 48V', 50),            // 280x75 floor, 150mm deep: stacks
+    scooter: r('Inokim OX', 50),              // 200 cells in a scooter tub: never stacked
+  };
+}, SELFTEST);
+check('there is no layers field to type into', !stack.field, stack.field);
+check('a pack that fits one layer is not folded', /✅/.test(stack.moto40) && !/שכבות/.test(stack.moto40), stack.moto40.slice(0, 90));
+check('one that does not is folded, and the page says so', /בקיפול ל-2 שכבות/.test(stack.moto50), stack.moto50.slice(0, 90));
+check('and the layout names the S per layer', /2 שכבות, בכל שכבה 10S/.test(stack.moto50), stack.moto50.slice(0, 260));
+check('a tall motorcycle frame stacks as far as its height allows', /שכבות/.test(stack.fc1), stack.fc1.slice(0, 90));
+check('a scooter tub is never folded', /⛔/.test(stack.scooter) && !/בקיפול/.test(stack.scooter), stack.scooter.slice(0, 90));
 
 // ---- 4. which nickel, and it must be the densest that FITS ----
 const rec = await page.evaluate(() => {
