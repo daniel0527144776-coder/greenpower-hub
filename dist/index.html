@@ -1139,7 +1139,7 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">🔒 עלויות ספקים</h2>
   </div>
-  <div class="info-banner"><span>💡</span><div>הסכום ב-$ הוא <b>מחיר הספק ליחידה</b> כפי שנקב בהצעה האחרונה. הסכום ב-₪ מוסיף שער <b>$1 = ₪3</b>, שילוח <b>39%</b> (ממוצע 5 משלוחים אמיתיים) ומע"מ 18% · <b>לא כולל מכס</b>. כעוסק פטור מע"מ הוא עלות אמיתית שלא מתקזזת.</div></div>
+  <div class="info-banner"><span>💡</span><div>₪ = מחיר הספק ב-$ × 3, ועוד <b>שילוח</b>: לפי משקל כשהוא ידוע (QS $24 לק"ג, ספק הרכיבים $13.5 לק"ג), אחרת אחוז לפי קטגוריה. ועוד <b>מע"מ יבוא 18%</b>. לא כולל מכס. תאים מהיבוא הימי וספקים מקומיים מוצגים כבר כעלות סופית, והכפתורים לא משנים אותם.</div></div>
   <div class="info-banner"><span>🔒</span><div style="font-size:11px;">מחירוני הספקים נשמרים <b>בחשבון שלך</b> ולא בקובץ האתר — קובץ ה-HTML מוגש לכל מי שיודע את הכתובת. <b>עלויות התאים ו-BMS כן נשארו בקובץ</b> כי מחשבון התיקונים מחשב מהן.</div></div>
   <div class="card">
     <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש רכיב (תא / BMS / מטען / ניקל...)" style="width:100%;margin-bottom:10px;" oninput="renderSupplier()">
@@ -1151,11 +1151,11 @@ body { min-height: 100vh; }
     </div>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
       <input type="checkbox" id="supVat" checked onchange="renderSupplier()" style="width:16px;height:16px;">
-      <span>הצג <b>כולל מע"מ 18%</b> (העלות האמיתית שלך)</span>
+      <span>הצג <b>כולל מע"מ יבוא 18%</b></span>
     </label>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px;cursor:pointer;">
       <input type="checkbox" id="supFreight" checked onchange="renderSupplier()" style="width:16px;height:16px;">
-      <span>הצג <b>כולל שילוח 39%</b> — כבה כדי לראות מחיר ספק נטו</span>
+      <span>הצג <b>כולל שילוח</b></span>
     </label>
     <div class="btn-group" style="margin-bottom:10px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openSupplierAdd()">➕ הוסף פריט</button>
@@ -2525,7 +2525,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v335';
+const HUB_BUILD = 'v336';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4112,6 +4112,11 @@ const SUPPLIER_FREIGHT = 0.39;
 // orders, not haggling the rate. And this replaces a guess: 10 was the middle of a quoted
 // $8-12 forwarder band, and it happened to land within 10% of the truth, which is luck.
 let FREIGHT_USD_PER_KG = 24;
+// The components supplier (BMS, nickel, shrink…) consolidates through an agent at $11-16/kg;
+// $13.5 is the middle, his call on 2026-09-25. QS's $24 is DHL direct and was being charged on
+// every weighed row, a BMS board included.
+const AGENT_FREIGHT_USD_PER_KG = 13.5;
+const freightPerKgFor = (r) => (/^QS/.test(String(r.who || '')) ? FREIGHT_USD_PER_KG : AGENT_FREIGHT_USD_PER_KG);
 
 // AND THE 0.39 DOES NOT BELONG TO THESE ROWS AT ALL (Daniel, 2026-08-26: the motors and
 // controllers do not come from the components supplier). NOTE: this file is served publicly
@@ -4129,6 +4134,8 @@ let FREIGHT_USD_PER_KG = 24;
 // cost basis; they are what a rush order would cost.
 const SUPPLIER_FREIGHT_BY = [
   [/QS Motor · מנועים/, 0.75],
+  [/QS Motor · מנועי קורקינט/, 0.75],
+  [/QS Motor · קיטים/, 0.75],
   [/QS Motor · בקרים/, 0.12],
   [/QS Motor · צגים/, 0.15],
 ];
@@ -4248,10 +4255,10 @@ function supplierIls(r, vat, freight) {
     // Most exact first: a quoted shipping price for this very item, then its weight at the
     // per-kilo rate, then the category's share of value, then the order-level average.
     if (r.frUsd != null) v += Number(r.frUsd) * SUPPLIER_USD;
-    else if (r.kg != null) v += Number(r.kg) * FREIGHT_USD_PER_KG * SUPPLIER_USD;
+    else if (r.kg != null) v += Number(r.kg) * freightPerKgFor(r) * SUPPLIER_USD;
     // A category whose typical weight is known beats a share of value, because freight is
     // charged by mass and a share of value scales with the wrong quantity entirely.
-    else if (typicalKgFor(r.cat) != null) v += typicalKgFor(r.cat) * FREIGHT_USD_PER_KG * SUPPLIER_USD;
+    else if (typicalKgFor(r.cat) != null) v += typicalKgFor(r.cat) * freightPerKgFor(r) * SUPPLIER_USD;
     else v += v * freightRateFor(r.cat);
   }
   return vat ? v * (1 + SUPPLIER_VAT) : v;
@@ -9555,7 +9562,9 @@ function init() {
     COST_PCT = (s.costPct != null) ? s.costPct : 60;
     BIZ_DISCOUNT = (s.bizDisc != null) ? s.bizDisc : 15;
     LABOUR_COST = (s.labourCost != null) ? s.labourCost : 60;
-    FREIGHT_USD_PER_KG = (s.freightKg != null) ? s.freightKg : 24;
+    // Not read from settings since 2026-09-25: the field is gone from the screen, and a value
+    // saved before could be the old $11 — half the model's rate, invisibly. The model's $24
+    // (QS_BLENDED_USD_PER_KG, audited by audit-qs-landed) is used instead.
     document.getElementById('setHourly').value = HOURLY;
     document.getElementById('setMargin').value = Math.round(MARGIN * 100);
     document.getElementById('setUsd').value = USD;

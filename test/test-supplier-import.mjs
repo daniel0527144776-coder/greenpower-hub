@@ -189,6 +189,35 @@ console.log('5. every mapped catalogue name still exists');
   check('other suppliers are untouched', tidy.other, tidy.other);
 }
 
+// ---- freight is the route each supplier really uses (2026-09-25) ----
+{
+  const fr = await p.evaluate(() => {
+    const bms = { who: 'ספק רכיבים', cat: 'BMS DALY', name: 'DALY 13S 60A', usd: 30 };
+    const kit = { who: 'QS Motor', cat: 'QS Motor · קיטים מוכנים', name: 'kit', usd: 500 };
+    const motor = { who: 'QS Motor', cat: 'QS Motor · מנועים — גלגל (Hub)', name: 'm', usd: 200, kg: 16 };
+    const landed = { who: 'LaBatteria', cat: 'LaBatteria · 21700', name: 'c', ils: 14.8 };
+    return {
+      bms: supplierIls(bms, false, true) - supplierIls(bms, false, false),
+      kit: supplierIls(kit, false, true) / supplierIls(kit, false, false),
+      motor: supplierIls(motor, false, true) - supplierIls(motor, false, false),
+      landedVat: supplierIls(landed, true, true), rate: FREIGHT_USD_PER_KG,
+    };
+  });
+  check('a BMS from the components supplier ships at the agent rate, $13.5/kg', Math.abs(fr.bms - 0.2 * 13.5 * 3) < 0.01, fr);
+  check('a QS kit with no weight is charged the motor rate, not the components 39%', Math.abs(fr.kit - 1.75) < 0.001, fr);
+  check('a weighed QS motor ships at the QS rate', Math.abs(fr.motor - 16 * fr.rate * 3) < 0.01, fr);
+  check('a landed or local price is never re-charged VAT or freight', fr.landedVat === 14.8, fr);
+}
+{
+  // a per-kilo rate saved on the device before the field left the screen must not win
+  const kept = await p.evaluate(() => {
+    const s = Store.get('settings') || {}; s.freightKg = 11; Store.set('settings', s);
+    init();
+    return FREIGHT_USD_PER_KG;
+  });
+  check('an old saved freight rate no longer overrides the model', kept === 24, kept);
+}
+
 check('none of this went through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
 
 await ctx.close();
