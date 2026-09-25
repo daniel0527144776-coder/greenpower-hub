@@ -1079,7 +1079,7 @@ body { min-height: 100vh; }
         <span style="font-size:11px;color:var(--text-muted);" id="dimPerRowNote"></span>
       </div>
     </div>
-    <div class="form-row"><label>תוספת מארז / BMS (מ"מ)</label>
+    <div class="form-row"><label>תוספת BMS באורך (מ"מ)</label>
       <div style="display:flex;gap:6px;align-items:center;">
         <input type="number" class="form-input" id="dimExtra" value="18" min="0" step="1" oninput="dimExtraTouched = true; calcPackDims()" style="width:80px;">
         <span style="font-size:11px;color:var(--text-muted);" id="dimExtraNote"></span>
@@ -2541,7 +2541,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v349';
+const HUB_BUILD = 'v350';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7545,31 +7545,6 @@ const DIM_CAP = 4;           // holder caps above and below the cell
 //
 // The parallel groups are shaded in alternating bands: cells welded to each other are one
 // band, which is the thing a photo of someone else's pack never tells you.
-// The nickel he holds, at what he paid (2026-08-31). A "hole" is one cell contact, and a
-// pack needs two per cell: one on the top plane, one on the bottom.
-//
-// The striking thing is that every shape costs almost the same per hole — $0.0094 on the
-// 4x3 to $0.0138 on the 1x2 strip — so which plate to use is a question about the shape of
-// the group, never about the price. Some plates are folded double for current, which halves
-// the coverage and doubles the cost per contact; the estimate below is for a single layer.
-const NICKEL_STOCK = [
-  { name: '8×7', holes: 56, qty: 80,  usd: 48 },
-  { name: '6×5', holes: 30, qty: 140, usd: 44 },
-  { name: '4×3', holes: 12, qty: 160, usd: 18 },
-  { name: '1×3', holes: 3,  qty: 300, usd: 9 },
-  { name: '1×2', holes: 2,  qty: 800, usd: 22 },   // 23mm pitch
-];
-const NICKEL_USD_PER_HOLE = NICKEL_STOCK.reduce((a, s) => a + s.usd / s.qty / s.holes, 0) / NICKEL_STOCK.length;
-// The plate whose short side matches the parallel group: a 3P group wants a 1x3, a 4P group
-// the 4x3, and so on. Daniel builds 3P or 4P on the diagonal, which is what the two smallest
-// shapes are for.
-function nickelFor(P) {
-  if (P <= 2) return '1×2';
-  if (P === 3) return '1×3';
-  if (P <= 4) return '4×3';
-  if (P <= 6) return '6×5';
-  return '8×7';
-}
 // The same block seen from the SIDE. Height is the measurement this project has least of, and
 // the one that decides whether a second layer is possible at all — a plan view cannot show it,
 // and every "will it fit" argument ends up there.
@@ -7584,9 +7559,14 @@ function drawPackLayout(o) {
   // which is how the packs measure. The circles still sit at their real offsets.
   const wMM = (cols - 1) * pitch + dia;
   const hMM = (rows - 1) * rowPitch + dia;
+  // The BMS allowance sits at the end of the LONG side (2026-09-25), so it is drawn there as a
+  // box of its own and the labels are the whole block — the same numbers as the size row.
+  const bms = Math.max(0, o.extra || 0), wall = o.wall || 0;
+  const horiz = wMM >= hMM;
+  const totW = wMM + (horiz ? bms : 0), totH = hMM + (horiz ? 0 : bms);
   const PAD = 26;                       // room for the dimension labels
-  const scale = Math.min(1, (340 - PAD * 2) / wMM);
-  const W = Math.round(wMM * scale) + PAD * 2, H = Math.round(hMM * scale) + PAD * 2;
+  const scale = Math.min(1, (340 - PAD * 2) / totW);
+  const W = Math.round(totW * scale) + PAD * 2, H = Math.round(totH * scale) + PAD * 2;
   const r = (dia / 2) * scale;
   let cells = "", n = 0;
   for (let row = 0; row < rows; row++) {
@@ -7606,8 +7586,14 @@ function drawPackLayout(o) {
     `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;">` +
     `<rect x="${PAD - 4}" y="${PAD - 4}" width="${W - PAD * 2 + 8}" height="${H - PAD * 2 + 8}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>` +
     cells +
-    lab(W / 2, H - 8, `${Math.round(wMM + 2 * (o.wall || 0))} מ"מ`) +
-    `<g transform="translate(12,${H / 2}) rotate(-90)">` + lab(0, 0, `${Math.round(hMM + 2 * (o.wall || 0))} מ"מ`) + "</g>" +
+    (bms ? (horiz
+      ? `<rect x="${(PAD + wMM * scale + 2).toFixed(1)}" y="${PAD}" width="${Math.max(1, bms * scale - 2).toFixed(1)}" height="${(hMM * scale).toFixed(1)}" rx="3" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>`
+        + (bms * scale >= 24 ? lab(PAD + wMM * scale + bms * scale / 2, PAD + hMM * scale / 2 + 4, 'BMS')
+          : `<g transform="translate(${(PAD + wMM * scale + bms * scale / 2 + 4).toFixed(1)},${(PAD + hMM * scale / 2).toFixed(1)}) rotate(-90)">` + lab(0, 0, 'BMS') + '</g>')
+      : `<rect x="${PAD}" y="${(PAD + hMM * scale + 2).toFixed(1)}" width="${(wMM * scale).toFixed(1)}" height="${Math.max(1, bms * scale - 2).toFixed(1)}" rx="3" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>`
+        + (bms * scale >= 14 ? lab(PAD + wMM * scale / 2, PAD + hMM * scale + bms * scale / 2 + 4, 'BMS') : '')) : '') +
+    lab(W / 2, H - 8, `${Math.round(totW + 2 * wall)} מ"מ`) +
+    `<g transform="translate(12,${H / 2}) rotate(-90)">` + lab(0, 0, `${Math.round(totH + 2 * wall)} מ"מ`) + "</g>" +
     "</svg>" +
     (layers > 1 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">שכבה אחת מתוך ${layers}</div>` : '');
 }
@@ -7764,7 +7750,8 @@ function calcPackDims() {
   // whenever one layer takes the pack; a second only when it does not, only on a motorcycle
   // or an ATV (a scooter tub is one layer deep), and only when the height takes another
   // standing cell. The layout inside a layer is picked to fit the tray too.
-  const tub = tubOf(dimVehicle);
+  const tubAll = tubOf(dimVehicle);
+  const tub = cellTub(tubAll, extra);
   const standH = c.len + DIM_CAP;
   let layers = 1, cols, rows, layoutKind = 'manual';
   if (tub && !(tub.H && tub.H < standH)) {
@@ -7785,17 +7772,17 @@ function calcPackDims() {
   const stagger = (holder.startsWith('diag') || holder === 'custom') && rows > 1;
   // Outer size of the block: centres span (n-1) pitches, then half a cell each end. Reported
   // long side first, so "א" is always the length.
+  // The BMS sits at the END of the pack, so its allowance is added to the length; the height
+  // is the standing cells and their holders alone (Daniel, 2026-09-25 — it used to be added
+  // to the height, which is why a one-layer pack read 100mm tall).
   const [gA, gB] = gridMM(cols, rows, pitch, rowPitch, c.dia);
-  const L = Math.round(Math.max(gA, gB)), W = Math.round(Math.min(gA, gB));
-  const H = Math.round(layers * (c.len + DIM_CAP) + extra);
+  const L = Math.round(Math.max(gA, gB) + extra), W = Math.round(Math.min(gA, gB));
+  const H = Math.round(layers * (c.len + DIM_CAP));
   const kg = (N * c.g + 500) / 1000;
   // 3.6V nominal per cell, which is what the series table is built on; 3.7 here overstated
   // a 20S pack by 2%.
   const wh = Math.round(S * 3.6 * P * c.ah);
   renderDimVehChip();
-  // Two contacts per cell, priced off his own stock rather than a rule of thumb.
-  const holes = N * 2;
-  const nickelIls = holes * NICKEL_USD_PER_HOLE * 3 * 1.204;
 
   // ---- the answer first: does it go in the vehicle? ----
   // Rebuilt 2026-09-25. The old block was a paragraph where the verdict came fifth, after the
@@ -7818,7 +7805,7 @@ function calcPackDims() {
       if (N <= room) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` — בקיפול ל-${layers} שכבות` : ''}</div>`;
       else {
         head = `<div class="dim-over">⛔ לא נכנס ל-${name} — חורג ב-${N - room} תאים (נכנסים ${room} עם המחזיק הזה${layers > 1 ? ` גם ב-${layers} שכבות` : ''}${counted ? ', נספר' : ''})</div>`;
-        const b = tubBest(dimVehicle, V, c, fmt);
+        const b = tubBest(dimVehicle, V, c, fmt, extra);
         if (b && b.P >= 1) {
           dimBest = b;
           best = `<button class="btn btn-secondary btn-sm dim-best" onclick="applyDimBest()"><span>הכי גדול שנכנס: <bdi dir="ltr">${b.S}S ${b.P}P · ${+(b.P * c.ah).toFixed(1)}Ah</bdi> · ${HOLDER_NAME[b.h]}${b.layers > 1 ? ' · ' + b.layers + ' שכבות' : ''} ←</span></button>`;
@@ -7846,9 +7833,8 @@ function calcPackDims() {
   let html = head + best +
     kv('תצורה', `<bdi dir="ltr">${S}S ${P}P</bdi> · ${N} תאים`) +
     kv('אנרגיה ומשקל', `<bdi dir="ltr">${wh} Wh</bdi> · <bdi dir="ltr">~${kg.toFixed(1)}</bdi> ק"ג`) +
-    kv('בלוק (א×ר×ג)', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
+    kv('בלוק <bdi dir="ltr">(L × W × H)</bdi>', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
     kv('פריסה', layoutText(S, P, layers, cols, rows, gA >= gB, derived)) +
-    kv('ניקל', `${holes} מגעים · <bdi dir="ltr">≈ ₪${nickelIls.toFixed(0)}</bdi> · תבנית <bdi dir="ltr">${nickelFor(P)}</bdi>`) +
     rec;
   // A cell wider than the space it goes in cannot be assembled. The distance to check is the
   // NEAREST NEIGHBOUR, not the row pitch: in a staggered layout the rows nest, so a row pitch of
@@ -7892,6 +7878,10 @@ function layoutText(S, P, layers, cols, rows, colsAlongLength, derived) {
 // ---- the vehicle the estimator is answering for ----------------------------------------
 // The tray, as numbers — L the long side. Read from a STRICT A×B×C for the height and nothing
 // looser: '425×165 + 60×140' (the OX, two rectangles) once had its 60 read as a ceiling.
+// The part of a tray the cells get: the BMS allowance comes off its long side.
+function cellTub(tb, extra) {
+  return tb ? { ...tb, L: Math.max(0, tb.L - (extra || 0)) } : null;
+}
 function tubOf(v) {
   if (!v || !v.tub) return null;
   const s = String(v.tub);
@@ -7918,8 +7908,8 @@ function vehicleByName(name) {
 // The biggest pack the tray takes at this voltage over the three holders he owns — counted
 // numbers (caps) where he counted, geometry elsewhere. Stacks only where stacking is allowed
 // and the height takes a second standing cell.
-function tubBest(v, V, c, fmt) {
-  const tb = tubOf(v);
+function tubBest(v, V, c, fmt, extra) {
+  const tb = cellTub(tubOf(v), extra != null ? extra : dimExtraFor(V));
   if (!tb) return null;
   const S = seriesForV(V);
   const standH = c.len + DIM_CAP;
@@ -7946,6 +7936,12 @@ function applyDimBest() {
   const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
   fillDimBuild(dimVehicle, +document.getElementById('dimV').value, b.P, b.h, b.layers, c);
 }
+// The allowance calcPackDims will use at this voltage: his own number once he typed one.
+function dimExtraFor(V) {
+  const el = document.getElementById('dimExtra');
+  if (dimExtraTouched && el) return Math.max(0, parseFloat(el.value) || 0);
+  return V >= 72 ? 26 : V >= 60 ? 22 : V >= 48 ? 18 : 14;
+}
 function holderForPitch(p) { return p >= 23 ? 'square-23' : p >= 22.5 ? 'diag-a' : 'diag-b'; }
 function fillDimBuild(v, V, P, holder, layers, c) {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = String(val); };
@@ -7956,7 +7952,7 @@ function fillDimBuild(v, V, P, holder, layers, c) {
   dimAhPending = Math.max(5, Math.round(P * c.ah / 5) * 5);
   set('dimHolder', holder);
   // Cells per row: as many as the tray's long side takes, else the S count in one run.
-  const tb = tubOf(v);
+  const tb = cellTub(tubOf(v), dimExtraFor(V));
   const [p] = (DIM_PITCH[fmt] || {})[holder] || [22.5];
   const perLayer = Math.ceil(S * P / (layers || 1));
   const alongL = tb ? Math.floor((tb.L - c.dia - 2 * DIM_WALL) / p) + 1 : 0;
@@ -7982,12 +7978,12 @@ function useVehiclePack(model, volts) {
   let holder = holderForPitch(v.p), layers = 1;
   // A tray he measured decides the build — the table is a guess, his tape is not.
   if (v.mine || !P) {
-    const b = tubBest(v, V, c, fmt);
+    const b = tubBest(v, V, c, fmt, dimExtraFor(V));
     if (b && b.P >= 1) { P = b.P; holder = b.h; layers = b.layers; }
   }
   if (!P) P = 4;
   // Densest holder that takes the build, where the tray is known; else the table's own pitch.
-  const tb = tubOf(v);
+  const tb = cellTub(tubOf(v), dimExtraFor(V));
   if (tb && !v.mine) {
     const N = seriesForV(V) * P;
     const ok = HOLDER_ORDER.find((h) => {
@@ -8006,7 +8002,7 @@ function renderDimVehChip() {
   if (!el) return;
   const v = dimVehicle;
   if (!v) { el.innerHTML = ''; return; }
-  const tb = tubOf(v);
+  const tb = tubOf(v);   // the tray as measured — the BMS share is the calculator's business
   const cur = +(document.getElementById('dimV') || {}).value;
   const vs = [v.s60 ? 60 : 0, v.s72 ? 72 : 0].filter(Boolean);
   if (v.mine) vs.push(60, 72);
@@ -8045,7 +8041,7 @@ function setDimTab(tab) {
 //     column, and "correcting" it produced four more invented numbers, not four fixed ones.
 //
 // WHAT IS STILL REAL and can be relied on: the three bracket pitches (23 / 22.5 / 21.5 — his
-// own stock), the nickel plate prices (a supplier quote in the WhatsApp export), the OEM
+// own stock), the OEM
 // capacities in `oem` (sourced and cited, found independently), and the cell datasheets.
 //
 // Treat every row as a STARTING POINT for a measurement, never as one. The estimator says so
@@ -8494,10 +8490,10 @@ function oldPackFit() {
        parseFloat((document.getElementById('dimPitchAcross') || {}).value) || 21.5]
     : (DIM_PITCH[fmt] || {})[holder] || [c.dia + 1, c.dia + 1];
   const pitch = pair[0], rowPitch = pair[1];
-  // The BMS/wiring/shrink allowance comes off the HEIGHT, the same way calcPackDims adds it.
+  // The BMS allowance comes off the LENGTH, the same way calcPackDims adds it (2026-09-25).
   const V = parseFloat((document.getElementById('opV') || {}).value) || 60;
   const extra = Math.max(0, parseFloat((document.getElementById('dimExtra') || {}).value) || 0);
-  const usableH = H - extra;
+  const usableH = H;
   // A tape measure on an outer case is good to a millimetre or two, and the wall/cap
   // constants are nominal - so a strict compare answers "does not fit" to a pack that plainly
   // does. Measured: the forward estimator rounds a 100.15mm block to 100, and feeding that
@@ -8505,7 +8501,8 @@ function oldPackFit() {
   const TOL = 2;
   // Either way round, like fitCount: on a diagonal bracket turning it can take more cells.
   const grid = (a, b) => [Math.floor((a + TOL - c.dia - 2 * DIM_WALL) / pitch) + 1, Math.floor((b + TOL - c.dia - 2 * DIM_WALL) / rowPitch) + 1];
-  const g1 = grid(L, W), g2 = grid(W, L);
+  const Lc = Math.max(L, W) - extra, Wc = Math.min(L, W);
+  const g1 = grid(Lc, Wc), g2 = grid(Wc, Lc);
   const [cols, rows] = (g2[0] > 0 && g2[1] > 0 && g2[0] * g2[1] > g1[0] * g1[1]) ? g2 : g1;
   const layers = Math.floor((usableH + TOL) / (c.len + DIM_CAP));
   if (cols < 1 || rows < 1 || layers < 1) return { fits: false, cols, rows, layers, V, c, extra };
@@ -8531,7 +8528,7 @@ function calcFromOldPack() {
   }
   out.innerHTML = `נכנסים <b>${r.cols}</b> לאורך × <b>${r.rows}</b> שורות${r.layers > 1 ? ' × <b>' + r.layers + '</b> שכבות' : ''} = <b>${r.N}</b> תאים.<br>
     ב-${r.V}V (${r.S}S): <b>${r.S}S${r.P}P</b> · <b>${r.ah}Ah</b> · ${r.wh}Wh · ~${r.kg} ק"ג${r.spare ? ' · ' + r.spare + ' תאים עודפים' : ''}<br>
-    <span style="font-size:11px;color:var(--text-muted);">כולל ${r.extra}מ"מ למארז/BMS בגובה, ${r.c.label}</span>`;
+    <span style="font-size:11px;color:var(--text-muted);">כולל ${r.extra} מ"מ ל-BMS באורך, ${r.c.label}</span>`;
 }
 // A measurement he took off a real pack, saved against the model. 'measured' is what tells it
 // apart from the 24 AI-estimated rows in the vehicle table - the whole point of saving it.

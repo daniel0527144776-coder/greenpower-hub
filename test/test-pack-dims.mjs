@@ -44,7 +44,7 @@ const read = async (opts) => page.evaluate((o) => {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   set('dimCell', o.cell); set('dimV', o.v); set('dimAh', o.ah);
   set('dimHolder', o.holder); set('dimPerRow', o.perRow);
-  set('dimLayers', o.layers || 1); set('dimExtra', o.extra == null ? 18 : o.extra);
+  if (o.extra != null) { set('dimExtra', o.extra); dimExtraTouched = true; }
   calcPackDims();
   const html = document.getElementById('dimResult').innerHTML;
   const mm = html.match(/(\d+) × (\d+) × (\d+)/);
@@ -55,11 +55,12 @@ const TRAY = [{ id: 1, model: 'מבחן-גדול', l: 400, w: 200, h: 120 }, { i
 const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 
 // 16S4P = 64 cells, 10 per row -> 7 rows, on the 21.5 diagonal (18.62 between rows).
-//   L = 9*21.5 + 21.15 + 3 = 218     W = 6*18.62 + 21.15 + 3 = 136     H = 70.15 + 4 + 22 = 96
+//   L = 9*21.5 + 21.15 + 3 + 22 (BMS at 60V) = 240     W = 6*18.62 + 21.15 + 3 = 136     H = 70.15 + 4 = 74
+// The BMS allowance goes on the LENGTH since 2026-09-25; the height is the standing cells alone.
 // (The two Wellgo catalogue brackets this used — square and honeycomb 21.4 — left the list on
 // 2026-09-25; he does not build on them.)
 const honey = await read({ ...base, holder: 'diag-b' });
-check('16S4P block, 21.5 diagonal: 218 x 136 x 96', honey.L === 218 && honey.W === 136 && honey.H === 96, `${honey.L} x ${honey.W} x ${honey.H}`);
+check('16S4P block, 21.5 diagonal: 240 x 136 x 74', honey.L === 240 && honey.W === 136 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
 check('and it reports 64 cells / 1152 Wh', /64/.test(honey.text) && /1152/.test(honey.text), honey.text.slice(0, 80));
 
 // A square bracket must be WIDER across the rows than a diagonal one: the diagonal nests the
@@ -90,8 +91,8 @@ check('a turned tray still counts as a fit', /מסובב/.test(rotated.text), ro
 // he can override. So this asserts the difference against what the page actually chose,
 // rather than against a literal that goes stale the next time the ladder moves.
 const noExtra = await read({ ...base, holder: 'diag-b', extra: SELFTEST ? 18 : 0 });
-const autoAllowance = honey.H - (70 + 4);
-check('the case/BMS allowance is honoured', noExtra.H === honey.H - autoAllowance, `${noExtra.H} vs ${honey.H} (allowance ${autoAllowance})`);
+check('the BMS allowance goes on the length, not the height', honey.L - noExtra.L === 22 && noExtra.H === honey.H,
+  `L ${honey.L} -> ${noExtra.L}, H ${honey.H} -> ${noExtra.H}`);
 
 // Daniel measured a 72V 30Ah pack he built — 20S6P, 120 cells, twenty to a row — at 390 x
 // 135mm. That is the only ground truth this page has, so it is a test: the diagonal spacing
@@ -160,6 +161,15 @@ check('the drawing has one circle per cell (120)', draw.circles === 120, String(
 // The drawing's labels are the block's OWN size — they once read 473 beside a block of 476,
 // because the picture left the bracket walls out. Counts are said once, in the layout row.
 check('the drawing is labelled with the block size itself', draw.txt.includes(draw.L + ' מ"מ') && draw.txt.includes(draw.W + ' מ"מ'), [draw.txt, draw.L, draw.W]);
+const bmsDraw = await page.evaluate((SELF) => {
+  const run = (x) => { document.getElementById('dimExtra').value = String(x); dimExtraTouched = true; calcPackDims();
+    const m = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/) || [];
+    return { txt: document.getElementById('dimDraw').textContent, L: m[1] }; };
+  if (SELF) window.drawPackLayout = ((f) => (o) => f({ ...o, extra: 0 }))(window.drawPackLayout);
+  return { with26: run(26), with0: run(0) };
+}, SELFTEST);
+check('and draws the BMS at the end of the block, inside its length', /BMS/.test(bmsDraw.with26.txt) && bmsDraw.with26.txt.includes(bmsDraw.with26.L + ' מ"מ'), bmsDraw.with26);
+check('and no BMS box when there is no allowance', !/BMS/.test(bmsDraw.with0.txt), bmsDraw.with0.txt);
 check('and does not repeat the counts', !/תאים בשורה|שורות|עיגול/.test(draw.txt), draw.txt);
 check('the layout is said in S and P', /לאורך 20S · לרוחב 6P/.test(draw.res), draw.res);
 
@@ -270,9 +280,7 @@ const flagged = await page.evaluate(() => {
 check('no row disagrees with itself any more', flagged.length === 0, flagged.join(', '));
 check('and the corrected four are the ones that used to be', /10P|12P/.test(await page.evaluate(() => document.getElementById('vpList').textContent)), 'ok');
 
-// The nickel line prices off his own stock. Every shape costs almost the same per hole, so
-// the number to get right is the COUNT — two contacts per cell — and the plate name is about
-// the shape of the parallel group.
+// The nickel line used to price off his stock.
 const nick = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   set('dimCell', '21700-50e'); set('dimHolder', 'diag-a'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
@@ -280,9 +288,9 @@ const nick = await page.evaluate(() => {
   set('dimAh', 15); calcPackDims();
   return { six, three: document.getElementById('dimResult').textContent };
 });
-check('120 cells means 240 contacts', /240 מגעים/.test(nick.six), nick.six.slice(-90));
-check('and a 6P group wants the 6×5 plate', /תבנית 6×5/.test(nick.six), nick.six.slice(-60));
-check('a 3P group wants the 1×3 strip', /תבנית 1×3/.test(nick.three), nick.three.slice(-60));
+// Removed 2026-09-25 at his word ("כל זה לא מעניין"); asserted absent so it does not creep back.
+check('no nickel line in the result', !/ניקל\s*\d|מגעים|תבנית/.test(nick.six) && !/מגעים|תבנית/.test(nick.three), nick.six.slice(-90));
+check('the size row is labelled in Latin', /\(L × W × H\)/.test(nick.six), nick.six.slice(0, 120));
 
 // The OEM capacity is the tray read backwards, so it has to reach the screen — and where it
 // can be compared directly it must AGREE: Thunder 3 tops out at 72V 40Ah, which is 20S8P,
@@ -389,6 +397,9 @@ const rb = await page.evaluate((SELF) => {
   out.toBuild = hv('dimPane-veh') && !hv('dimPane-build');
   // Talaria: the table's 20S7P does not fit its 381x171 tray. It must say so and offer the
   // biggest that does — which then fits, in a block shorter than the tray.
+  // The rotation is a property of the BRACKET, so it is checked with no BMS at the end of the
+  // tray; with his 26mm allowance on the length the same tray takes 105 (see the next case).
+  document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
   useVehiclePack('Talaria');
   out.talaria7 = res();
   dimAhPending = 50; calcPackDims();

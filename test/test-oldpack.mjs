@@ -103,6 +103,8 @@ const real = await page.evaluate(() => {
   document.getElementById('dimHolder').value = 'custom';
   document.getElementById('dimPitchAlong').value = '19';
   document.getElementById('dimPitchAcross').value = '21.4';
+  // His 390 x 135 is the CELL block itself, so it is read with no BMS allowance on the length.
+  document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
   calcPackDims();
   document.getElementById('opL').value = '390';
   document.getElementById('opW').value = '135';
