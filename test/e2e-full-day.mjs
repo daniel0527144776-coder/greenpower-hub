@@ -229,6 +229,10 @@ const rest = await page.evaluate(async () => {
   document.getElementById('dimHolder').value = 'custom';
   document.getElementById('dimPitchAlong').value = '19';
   document.getElementById('dimPitchAcross').value = '21.4';
+  // His 390 x 135 is the CELL block, so no BMS allowance comes off its length (2026-09-25:
+  // the allowance moved from the height to the length). Set, not inherited — it passed
+  // locally on leftover state and failed on CI's fresh page.
+  document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
   calcPackDims();
   ['opL', 'opW', 'opH'].forEach((id, i) => { document.getElementById(id).value = [390, 135, 100][i]; });
   document.getElementById('opV').value = '72';
