@@ -92,7 +92,7 @@ check('every saved-model id is a string', seeded.length > 0 && seeded.every((t) 
 
 const edit = await page.evaluate(() => {
   const before = window.__err;
-  const row = [...document.querySelectorAll('#dimsList .list-item')][0];
+  const row = [...document.querySelectorAll('#vpList .list-item.mine')][0];
   if (!row) return { none: true };
   const name = row.querySelector('.list-item-title').innerText.trim();
   let threw = null;

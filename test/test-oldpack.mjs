@@ -137,7 +137,7 @@ const saved = await page.evaluate(() => {
   const rows = JSON.parse(localStorage.getItem('gp_dims'));
   document.getElementById('opModel').value = 'דגם חדש לגמרי';
   saveMeasuredPack();
-  return { rows, after: JSON.parse(localStorage.getItem('gp_dims')), list: document.getElementById('dimsList').innerText };
+  return { rows, after: JSON.parse(localStorage.getItem('gp_dims')), list: document.getElementById('vpList').innerText };
 });
 const kaabo = saved.rows.find((d) => d.model === 'Kaabo Wolf King');
 check('a measurement replaces the AI estimate for that model', kaabo && kaabo.l === 390 && kaabo.w === 135, kaabo);

@@ -75,7 +75,7 @@ body { min-height: 100vh; }
 /* Forms */
 .form-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; margin-bottom: 10px; }
 .form-row label { font-size: 13px; color: var(--text); font-weight: 500; }
-.form-input, .form-select { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--card); color: var(--text); font-family: inherit; min-height: 38px; text-align: right; }
+.form-input, .form-select, .form-input-wide { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--card); color: var(--text); font-family: inherit; min-height: 38px; text-align: right; }
 .form-input { width: 110px; text-align: center; direction: ltr; }
 .form-input-wide { width: 100%; text-align: right; direction: rtl; }
 .form-select { width: 150px; }
@@ -181,6 +181,15 @@ body { min-height: 100vh; }
 .page-subtitle { font-size: 12px; color: var(--text-muted); margin: 0; }
 
 /* Info banner */
+.dim-ok { margin:0 0 8px; padding:8px 10px; border-radius:6px; background:rgba(52,211,153,.12); border:1px solid #34d399; color:#34d399; font-size:13px; font-weight:700; }
+.dim-kv { display:flex; justify-content:space-between; gap:10px; padding:6px 2px; border-bottom:1px solid var(--border); font-size:13px; }
+.dim-kv span { color:var(--text-muted); flex:none; }
+.dim-kv b { text-align:left; }
+.dim-card { margin-top:12px; }
+.dim-card > .dim-over:first-child { margin:0 0 8px; font-size:13px; }
+.dim-chip { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:10px; padding:8px 10px; border:1px solid var(--primary); border-radius:8px; font-size:13px; }
+.dim-chip .sup-chip { padding:3px 10px; font-size:12px; }
+.dim-best { margin:0 0 8px; width:100%; }
 .dim-over { margin-top:6px; padding:7px 9px; border-radius:5px; background:rgba(239,68,68,.12); border:1px solid var(--danger); color:var(--danger); font-size:12px; font-weight:600; }
 .dim-rec { margin-top:6px; font-size:11.5px; }
 .dim-holder { white-space:nowrap; margin-inline-end:10px; }
@@ -1005,11 +1014,18 @@ body { min-height: 100vh; }
   </div>
   </div>
   <div id="calctab-dims" style="display:none;">
-<div class="card">
-    <h3 class="card-title">🧮 אומדן מידות חבילה</h3>
+  <!-- Rebuilt 2026-09-25 (Daniel: "מחשבון מידות סוללות חייב להיות יותר טוב"): three tabs instead
+       of four stacked cards, ONE list of vehicles that carries his own measurements, and a result
+       laid out as labelled rows with the answer — does it go in — first. -->
+  <div class="sub-tabs" id="dimTabs">
+    <div class="sub-tab active" data-dimtab="veh" onclick="setDimTab('veh')">🏍️ לפי כלי</div>
+    <div class="sub-tab" data-dimtab="build" onclick="setDimTab('build')">🔢 לפי מתח וקיבולת</div>
+    <div class="sub-tab" data-dimtab="old" onclick="setDimTab('old')">📏 מהסוללה הישנה</div>
+  </div>
+  <div class="card">
     <div class="form-row">
       <label>סוג תא</label>
-      <select class="form-select" id="dimCell" onchange="calcPackDims()">
+      <select class="form-select" id="dimCell" onchange="calcPackDims(); calcFromOldPack()">
         <option value="21700-50e" selected>21700 EVE 50E — 5.0Ah</option>
         <option value="21700-50sg">21700 Tenpower 50SG — 5.0Ah</option>
         <option value="21700-50pl">21700 EVE 50PL — 5.0Ah</option>
@@ -1020,50 +1036,58 @@ body { min-height: 100vh; }
         <option value="18650-25p">18650 EVE 25P — 2.5Ah</option>
       </select>
     </div>
+    <div class="form-row"><label>מחזיק</label>
+      <select class="form-select" id="dimHolder" onchange="calcPackDims(); calcFromOldPack()">
+        <option value="diag-a" selected>אלכסוני 22.5 (ניקל א׳)</option>
+        <option value="diag-b">אלכסוני 21.5 (ניקל ב׳)</option>
+        <option value="square-23">ריבועי 23</option>
+        <option value="custom">מותאם אישית ↓</option>
+      </select>
+    </div>
+    <div class="form-row" id="dimCustomRow" style="display:none;"><label>מרווח: לאורך / בין שורות</label>
+      <div style="display:flex;gap:6px;">
+        <input type="number" class="form-input" id="dimPitchAlong" value="19" min="10" step="0.1" oninput="calcPackDims(); calcFromOldPack()">
+        <input type="number" class="form-input" id="dimPitchAcross" value="21.5" min="10" step="0.1" oninput="calcPackDims(); calcFromOldPack()">
+      </div>
+    </div>
+  </div>
+
+  <div id="dimPane-veh">
+  <div class="card">
+    <p style="font-size:11px;color:var(--warning,#f59e0b);margin:0 0 8px;">⚠ הנתונים כאן מ-AI, לא נמדדו — חוץ ממה שמסומן ✓ נמדד. לחיצה על כלי מחשבת לו חבילה.</p>
+    <input type="text" class="form-input-wide" id="vpSearch" placeholder="🔍 חפש כלי…" oninput="renderVehiclePacks()" style="margin-bottom:10px;">
+    <div id="vpList"></div>
+    <button class="btn btn-secondary btn-block btn-sm" style="margin-top:10px;" onclick="openDimEditor(null)">➕ הוסף מדידה של מגש</button>
+  </div>
+  </div>
+
+  <div id="dimPane-build" hidden>
+  <div class="card">
+    <div id="dimVehChip"></div>
     <div class="form-row"><label>מתח</label>
       <select class="form-select" id="dimV" onchange="calcPackDims()">
         <option value="36">36V</option><option value="48">48V</option><option value="52">52V</option>
         <option value="60" selected>60V</option><option value="72">72V</option><option value="84">84V</option>
       </select>
     </div>
-        <div class="form-row"><label>קיבולת</label>
+    <div class="form-row"><label>קיבולת</label>
       <select class="form-select" id="dimAh" onchange="calcPackDims()"></select>
     </div>
-    <div class="form-row"><label>מחזיק</label>
-      <select class="form-select" id="dimHolder" onchange="calcPackDims()">
-        <option value="diag-a" selected>אלכסוני 22.5 (ניקל א׳)</option>
-        <option value="diag-b">אלכסוני 21.5 (ניקל ב׳)</option>
-        <option value="square-23">ריבועי 23</option>
-        <option value="square">ריבועי 21.4 — ללא מפריד (קטלוג)</option>
-        <option value="honeycomb">כוורת 21.4 — ללא מפריד (קטלוג)</option>
-        <option value="custom">מותאם אישית ↓</option>
-      </select>
-    </div>
-    <div class="form-row" id="dimCustomRow" style="display:none;"><label>מרווח: לאורך / בין שורות</label>
-      <div style="display:flex;gap:6px;">
-        <input type="number" class="form-input" id="dimPitchAlong" value="19" min="10" step="0.1" oninput="calcPackDims()">
-        <input type="number" class="form-input" id="dimPitchAcross" value="21.5" min="10" step="0.1" oninput="calcPackDims()">
-      </div>
-    </div>
-    <div class="form-row"><label>תאים לאורך שורה</label><input type="number" class="form-input" id="dimPerRow" value="10" min="1" step="1" oninput="calcPackDims()"></div>
+    <div class="form-row"><label>תאים בשורה</label><input type="number" class="form-input" id="dimPerRow" value="10" min="1" step="1" oninput="calcPackDims()"></div>
     <div class="form-row"><label>שכבות</label><input type="number" class="form-input" id="dimLayers" value="1" min="1" max="6" step="1" oninput="calcPackDims()"></div>
-        <div class="form-row"><label>תוספת מארז / BMS</label>
+    <div class="form-row"><label>תוספת מארז / BMS (מ"מ)</label>
       <div style="display:flex;gap:6px;align-items:center;">
         <input type="number" class="form-input" id="dimExtra" value="18" min="0" step="1" oninput="dimExtraTouched = true; calcPackDims()" style="width:80px;">
         <span style="font-size:11px;color:var(--text-muted);" id="dimExtraNote"></span>
       </div>
     </div>
-    <div class="info-banner" style="margin-top:8px;"><span>📦</span><div id="dimResult"></div></div>
+    <div id="dimResult" class="dim-card"></div>
     <div id="dimDraw" style="margin-top:10px;overflow-x:auto;"></div>
   </div>
+  </div>
 
+  <div id="dimPane-old" hidden>
   <div class="card">
-    <h3 class="card-title">📏 מהסוללה הישנה — מה נכנס במקום?</h3>
-    <div class="info-banner">
-      <span>📐</span>
-      <div>מדוד את הסוללה הישנה שהלקוח הביא והזן את המידות. החישוב הוא ההפוך של האומדן שלמעלה —
-      אותם מרווחי תושבת, אותם תאים. מה שתשמור כאן נרשם כ<b>נמדד</b> מול דגם הכלי, ומחליף את ההערכות.</div>
-    </div>
     <div class="form-row"><label>מידות הסוללה הישנה (מ"מ)</label>
       <div style="display:flex;gap:6px;">
         <input type="number" class="form-input" id="opL" placeholder="אורך" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;">
@@ -1076,22 +1100,12 @@ body { min-height: 100vh; }
         <option>36</option><option>48</option><option>52</option><option selected>60</option><option>72</option><option>84</option>
       </select>
     </div>
-    <div class="info-banner" style="margin-top:8px;"><span>🔋</span><div id="opResult">הזן מידות כדי לראות מה נכנס.</div></div>
-    <div class="form-row" style="margin-top:10px;"><label>דגם הכלי</label>
+    <div id="opResult" class="dim-card">הזן מידות כדי לראות מה נכנס.</div>
+    <div class="form-row" style="margin-top:12px;"><label>דגם הכלי</label>
       <input class="form-input-wide" id="opModel" placeholder="Kaabo Wolf King / Sur-Ron..." style="width:170px;">
     </div>
     <button class="btn btn-secondary btn-sm" onclick="saveMeasuredPack()">💾 שמור מדידה מול הדגם</button>
   </div>
-  <div class="card">
-    <h3 class="card-title">🏍️ מה נכנס לכל כלי</h3>
-    <p style="font-size:11px;color:var(--warning,#f59e0b);margin:0 0 8px;">⚠ הנתונים כאן מ-AI, לא נמדדו. נקודת פתיחה בלבד — מדוד לפני שאתה בונה. לחיצה ממלאת את המחשבון.</p>
-    <input type="text" class="form-input" id="vpSearch" placeholder="חפש דגם…" oninput="renderVehiclePacks()" style="margin-bottom:10px;">
-    <div id="vpList"></div>
-  </div>
-  <div class="card">
-    <h3 class="card-title">🛴 מידות תא מצבר לפי דגם</h3>
-    <button class="btn btn-primary btn-block btn-sm" style="margin-bottom:10px;" onclick="openDimEditor(null)">➕ הוסף דגם</button>
-    <div id="dimsList"></div>
   </div>
   </div>
 
@@ -2523,7 +2537,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v346';
+const HUB_BUILD = 'v347';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7512,12 +7526,11 @@ const BRACKET_MAX = { 21700: { cols: 15, rows: 10 }, 18650: { cols: 22, rows: 16
 // bracket he can put a caliper on beats a figure back-fitted from one pack, so the bracket
 // wins; the residual is the pack, not the number.
 //
-// Everything below the three is the Wellgo catalogue, kept for a bracket he might buy.
+// The two Wellgo catalogue brackets (square / honeycomb 21.4, no spacer) were removed from the
+// list on 2026-09-25 — he does not build on them. A bracket he might buy goes in "מותאם אישית".
 const DIM_PITCH = {
-  18650: { 'diag-a': [22.5, 19.49], 'diag-b': [21.5, 18.62], 'square-23': [23, 23],
-           square: [20.2, 20.2], honeycomb: [20.2, 17.5] },
-  21700: { 'diag-a': [22.5, 19.49], 'diag-b': [21.5, 18.62], 'square-23': [23, 23],
-           square: [21.4, 21.4], honeycomb: [21.4, 18.53] },
+  18650: { 'diag-a': [22.5, 19.49], 'diag-b': [21.5, 18.62], 'square-23': [23, 23] },
+  21700: { 'diag-a': [22.5, 19.49], 'diag-b': [21.5, 18.62], 'square-23': [23, 23] },
 };
 const DIM_WALL = 1.5;        // bracket edge either side
 const DIM_CAP = 4;           // holder caps above and below the cell
@@ -7637,6 +7650,7 @@ function recommendHolder(fmt, N, L, W, dia) {
 // The capacity list is what the vehicle can actually take, in 5Ah steps — never typed. Above
 // the ceiling the option is still offered and marked, because most of those ceilings are AI
 // estimates and blocking on a guess would stop a build that is genuinely possible.
+let dimAhPending = null;
 function refreshAhOptions() {
   const sel = document.getElementById('dimAh');
   if (!sel) return;
@@ -7648,9 +7662,12 @@ function refreshAhOptions() {
   const maxP = cap ? Math.floor(cap / S) : 20;
   const step = 5;
   const top = Math.max(step * 2, Math.ceil(Math.max(maxP * c.ah, 40) / step) * step + step * 2);
-  const want = parseFloat(sel.value) || 20;
+  // A vehicle sets its capacity before this list is rebuilt for it, and a <select> silently
+  // refuses a value it has no option for — so the wanted value is handed over, not set.
+  const want = dimAhPending != null ? dimAhPending : (parseFloat(sel.value) || 20);
+  dimAhPending = null;
   let html = '';
-  for (let ah = step; ah <= top; ah += step) {
+  for (let ah = step; ah <= Math.max(top, Math.ceil(want / step) * step); ah += step) {
     const P = Math.ceil(ah / c.ah);
     const cells = P * S;
     const over = cap && cells > cap;
@@ -7667,7 +7684,7 @@ function calcPackDims() {
   const key = document.getElementById('dimCell').value;
   const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
   const fmt = key.startsWith('18650') ? 18650 : 21700;
-  const holder = (document.getElementById('dimHolder') || {}).value || 'diag';
+  const holder = (document.getElementById('dimHolder') || {}).value || 'diag-a';
   const customRow = document.getElementById('dimCustomRow');
   if (customRow) customRow.style.display = holder === 'custom' ? '' : 'none';
   const num = (id, d) => { const el = document.getElementById(id); const v = el ? parseFloat(el.value) : NaN; return isNaN(v) ? d : v; };
@@ -7709,7 +7726,7 @@ function calcPackDims() {
   const perLayer = Math.ceil(N / layers);
   const cols = Math.min(perRow, perLayer);
   const rows = Math.ceil(perLayer / cols);
-  const stagger = (holder.startsWith('honeycomb') || holder.startsWith('diag') || holder === 'custom') && rows > 1;
+  const stagger = (holder.startsWith('diag') || holder === 'custom') && rows > 1;
   // Outer size of the block: centres span (n-1) pitches, then half a cell each end.
   const L = Math.round((cols - 1) * pitch + c.dia + 2 * DIM_WALL);
   const W = Math.round((rows - 1) * rowPitch + c.dia + 2 * DIM_WALL);
@@ -7718,108 +7735,227 @@ function calcPackDims() {
   // 3.6V nominal per cell, which is what the series table is built on; 3.7 here overstated
   // a 20S pack by 2%.
   const wh = Math.round(S * 3.6 * P * c.ah);
-  // Does it go in? The saved models carry the tray they have to sit in, so compare against
-  // them instead of leaving the fit to be eyeballed — and allow the block to be TURNED,
-  // because a 300x180 block goes into a 190x310 tray and a naive compare says it does not.
-  const fits = [];
-  for (const d of (getDims() || [])) {
-    const t3 = [+d.l, +d.w, +d.h];
-    if (t3.some((x) => !x)) continue;
-    const b = [L, W, H].slice().sort((a, z) => a - z);
-    const tr = t3.slice().sort((a, z) => a - z);
-    if (b[0] <= tr[0] && b[1] <= tr[1] && b[2] <= tr[2]) fits.push(d.model);
-  }
-  out.innerHTML =
-    `תצורה <strong>${S}S ${P}P</strong> · <strong>${N}</strong> תאים · <strong>${wh} Wh</strong><br>` +
-    `אומדן בלוק: <strong>${L} × ${W} × ${H} מ"מ</strong> (א×ר×ג) · משקל ~<strong>${kg.toFixed(1)} ק"ג</strong><br>` +
-    `<span style="font-size:11px;color:var(--text-muted);">${pitch}/${rowPitch} מ"מ${derived ? ' (משוער)' : ''} · ${layers > 1 ? layers + '×' : ''}${cols} × ${rows}${cols * rows * layers > N ? ' (שורה חלקית)' : ''}</span>` +
-    // Parenthesised: `a + b ? c : d` binds as `(a + b) ? c : d`, which threw the whole
-    // block away and rendered the fit line alone. Caught before it shipped, by reading it.
-    // Only trays with all three measurements can be judged; one with no height is not a "no".
-    ((getDims() || []).some((d) => +d.l && +d.w && +d.h)
-      ? `<br><span style="font-size:11px;">${fits.length ? '✅ נכנס ל: ' + fits.join(', ') : '❌ לא נכנס לאף דגם שמור'}</span>`
-      : ((getDims() || []).length ? '<br><span style="font-size:11px;color:var(--text-muted);">אין דגם שמור עם מידות מלאות להשוואה</span>' : ''));
-  // Against the count for THIS holder where one exists, not the tray's overall ceiling: on an
-  // OX a diagonal holder takes 126 and no holder 140, so a 140-cell build is fine on one and
-  // over on the other. One `max` cannot express that and would pass both.
-  // A cell wider than the space it goes in cannot be assembled. But the distance to check is
-  // the NEAREST NEIGHBOUR, not the row pitch — and in a staggered layout those are different
-  // things: the rows nest into each other, so a row pitch of 19.5mm holds 21.15mm cells
-  // perfectly well because the nearest cell in the next row sits half a pitch sideways.
-  // The first version of this check compared the diameter to the row pitch and condemned
-  // every honeycomb pack ever built, including one already in the vehicle table.
-  const near = stagger ? Math.sqrt((pitch / 2) ** 2 + rowPitch ** 2) : rowPitch;
-  const tight = Math.min(pitch, near);
-  if (c.dia > tight - 0.2) {
-    out.innerHTML += `<br><span style="font-size:11px;color:var(--danger);">⚠ ${c.label} בקוטר ${c.dia} מ"מ לא נכנס — המרחק הקצר ביותר בין מרכזים הוא ${tight.toFixed(1)} מ"מ</span>`;
-  }
-  // The "📐 מעבר לתבנית אחת" line was removed on his instruction, 2026-09-22. BRACKET_MAX is
-  // kept: it is the real sheet size and the next thing that needs it should read it rather
-  // than re-measure a bracket.
+  renderDimVehChip();
   // Two contacts per cell, priced off his own stock rather than a rule of thumb.
   const holes = N * 2;
   const nickelIls = holes * NICKEL_USD_PER_HOLE * 3 * 1.204;
-  out.innerHTML += `<br><span style="font-size:11px;color:var(--text-muted);">ניקל: ${holes} מגעים ≈ ₪${nickelIls.toFixed(0)} · תבנית ${nickelFor(P)}</span>`;
-  // Which holder to reach for. Only meaningful once a vehicle with a tub is chosen — without
-  // one there is nothing for the pack to fit INTO and every holder trivially "fits".
-  // THE HEIGHT IS READ NOW. It was pulled out of the string and dropped for as long as the
-  // tub field has existed, so a 58mm scooter tray and a 170mm motorcycle box produced the
-  // same answer. Daniel's Zero 10X — 455×134×58 against a 70.15mm cell — surfaced it.
-  const tubM = dimVehicle && dimVehicle.tub ? String(dimVehicle.tub).match(/(\d+)\D+(\d+)/) : null;
-  // The height is read from a STRICT A×B×C and nothing looser. Matching any third number in
-  // the string grabbed the 60 out of the Inokim OX tub — '425×165 + 60×140', an L-shaped tray
-  // written as two rectangles — and announced a 60mm ceiling that does not exist, hiding that
-  // row's recommendation behind a too-shallow warning. A tub written any other way has no
-  // declared height, and the gate below stays out of the way instead of inventing one.
-  const tubH = dimVehicle && dimVehicle.tub
-    ? (String(dimVehicle.tub).match(/(\d+)\s*[×x]\s*(\d+)\s*[×x]\s*(\d+)/) || [])[3]
-    : null;
-  if (tubM) {
-    const TL = Math.max(+tubM[1], +tubM[2]), TW = Math.min(+tubM[1], +tubM[2]);
-    const TH = tubH ? +tubH : 0;
-    // A standing cell needs its whole length plus a little for the plate and the sleeve.
-    const standH = c.len + DIM_CAP;
-    if (TH && TH < standH) {
-      // No lying arrangement is offered. He builds with the cells standing on a terminal
-      // (2026-09-23), so a tray shorter than the cell is simply a tray this cell cannot go
-      // in — and the only remedy is a shorter cell, which is what the block below offers.
-      out.innerHTML += `<div class="dim-rec"><b style="color:var(--danger);">${c.label} לא נכנס לאמבטיה הזו</b> — גובה פנוי ${TH} מ"מ, ותא עומד צריך ${Math.round(standH)}.</div>`;
-      out.innerHTML += shallowCellOptions(TL, TW, TH, V, S);
-    } else {
-    const perLayerN = Math.ceil(N / layers);
-    const opts = recommendHolder(fmt, perLayerN, TL, TW, c.dia);
-    const win = opts.find((o) => o.fits);
-    const chip = (o) => `<span class="dim-holder" style="color:${o.fits ? '#34d399' : 'var(--text-muted)'};">${o.fits ? '✓' : '✗'} ${HOLDER_NAME[o.h]}: ${o.n}</span>`;
-    const head = win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]}</b> — נכנסים ${win.n}, נשאר מקום ל-${win.spare} תאים`
-      : `<b style="color:var(--danger);">אף מחזיק לא מכיל ${perLayerN} תאים ב-${TL}×${TW}</b>`;
-    out.innerHTML += `<div class="dim-rec">${head}<br><span style="opacity:.85;">${opts.map(chip).join('')}</span></div>`;
-    }
-  }
-  drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra });
+
+  // ---- the answer first: does it go in the vehicle? ----
+  // Rebuilt 2026-09-25. The old block was a paragraph where the verdict came fifth, after the
+  // pitch written as "23/23 מ"מ". Now: one line that answers, then labelled rows.
+  const tub = tubOf(dimVehicle);
+  const standH = c.len + DIM_CAP;
+  dimBest = null;
+  let head = '', best = '', rec = '';
   if (dimVehicle) {
-    const cap = (dimVehicle.caps && dimVehicle.caps[holder] != null) ? dimVehicle.caps[holder] : dimVehicle.max;
-    if (N > cap) {
-      const how = (dimVehicle.caps && dimVehicle.caps[holder] != null) ? 'עם המחזיק הזה' : 'בתא המצבר';
-      // Loud, and NOT a block. Most of these ceilings are AI estimates; refusing to compute
-      // a pack on the strength of a guess would stop a build that is genuinely possible.
-      // His call: warn hard, let him through.
-      // A tub is not automatically a measurement. Eight rows carry one derived from the
-      // manufacturer's PACK size, which is real but is the battery, not the tray — so the
-      // string says which it is and this reads it rather than assuming.
-      // Three kinds of tub and they must not be flattened. The first version tested for
-      // /נמדד/, which is TRUE inside the words "לא נמדד" — so every derived row would have
-      // announced itself as measured, the precise mislabel the provenance was added to stop.
-      // Test for the negation first.
-      const tubTxt = String(dimVehicle.tub || '');
-      const src = !dimVehicle.tub
-        ? (dimVehicle.src === 'AI' ? 'הערכת AI — לא נמדד' : 'לפי היצרן')
-        : /לא נמדד/.test(tubTxt) ? 'לפי מידות הסוללה — לא נמדד'
-        : /יצרן השלדה/.test(tubTxt) ? 'לפי יצרן השלדה'
-        : /נמדד/.test(tubTxt) ? 'נמדד'
-        : 'לפי היצרן';
-      out.innerHTML += `<div class="dim-over">⛔ ${N} תאים — ${dimVehicle.m} מחזיק ${cap} (${how}, ${src})<div class="dim-over-sub">חורג ב-${N - cap} תאים. מדוד לפני שאתה בונה.</div></div>`;
+    const name = dimVehicle.m;
+    if (tub && tub.H && tub.H < standH) {
+      // No lying arrangement is offered. He builds with the cells standing on a terminal
+      // (2026-09-23), so a tray shorter than the cell is simply a tray this cell cannot go in —
+      // and the only remedy is a shorter cell, which the block below offers.
+      head = `<div class="dim-over">⛔ ${c.label} לא נכנס לאמבטיה הזו — גובה פנוי ${tub.H} מ"מ, ותא עומד צריך ${Math.round(standH)}.</div>`;
+      rec = shallowCellOptions(tub.L, tub.W, tub.H, V, S);
+    } else if (tub) {
+      // Against the count for THIS holder where one exists: on an OX a diagonal holder takes 126
+      // and the square one 140, so a 140-cell build is fine on one and over on the other.
+      const counted = dimVehicle.caps && dimVehicle.caps[holder] != null;
+      const room = (counted ? dimVehicle.caps[holder] : fitCount(tub.L, tub.W, pitch, rowPitch, c.dia)) * layers;
+      if (N <= room) head = `<div class="dim-ok">✅ נכנס ל-${name}</div>`;
+      else {
+        head = `<div class="dim-over">⛔ לא נכנס ל-${name} — חורג ב-${N - room} תאים (נכנסים ${room} עם המחזיק הזה${counted ? ', נספר' : ''})</div>`;
+        const b = tubBest(dimVehicle, V, c, fmt);
+        if (b && b.P >= 1) {
+          dimBest = b;
+          best = `<button class="btn btn-secondary btn-sm dim-best" onclick="applyDimBest()">הכי גדול שנכנס: <bdi dir="ltr">${b.S}S ${b.P}P · ${+(b.P * c.ah).toFixed(1)}Ah</bdi> · ${HOLDER_NAME[b.h]}${b.layers > 1 ? ' · ' + b.layers + ' שכבות' : ''} ←</button>`;
+        }
+      }
+      // Which holder to reach for, densest first — only meaningful with a tray to fit into.
+      const opts = recommendHolder(fmt, Math.ceil(N / layers), tub.L, tub.W, c.dia);
+      const win = opts.find((o) => o.fits);
+      const chip = (o) => `<span class="dim-holder" style="color:${o.fits ? '#34d399' : 'var(--text-muted)'};">${o.fits ? '✓' : '✗'} ${HOLDER_NAME[o.h]}: ${o.n}</span>`;
+      const top = win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]}</b> — נכנסים ${win.n}`
+        : `<b style="color:var(--danger);">אף מחזיק לא מכיל ${Math.ceil(N / layers)} תאים ב-${tub.L}×${tub.W}</b>`;
+      rec = `<div class="dim-rec">${top}<br><span style="opacity:.85;">${opts.map(chip).join('')}</span></div>`;
+    } else if (dimVehicle.max) {
+      // No tray size at all — only the table's ceiling, which is an AI estimate. Loud, and NOT a
+      // block: refusing to compute a pack on the strength of a guess would stop a real build.
+      const cap = (dimVehicle.caps && dimVehicle.caps[holder] != null) ? dimVehicle.caps[holder] : dimVehicle.max;
+      head = N <= cap
+        ? `<div class="dim-ok">✅ ${name}: עד ${cap} תאים (הערכת AI — אין מידות)</div>`
+        : `<div class="dim-over">⛔ ${name} מחזיק ${cap} — חורג ב-${N - cap} תאים (הערכת AI — אין מידות). מדוד לפני שאתה בונה.</div>`;
     }
   }
+  const kv = (k, v) => `<div class="dim-kv"><span>${k}</span><b>${v}</b></div>`;
+  let html = head + best +
+    kv('תצורה', `<bdi dir="ltr">${S}S ${P}P</bdi> · ${N} תאים`) +
+    kv('אנרגיה ומשקל', `<bdi dir="ltr">${wh} Wh</bdi> · <bdi dir="ltr">~${kg.toFixed(1)}</bdi> ק"ג`) +
+    kv('בלוק (א×ר×ג)', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
+    kv('פריסה', `${layers > 1 ? layers + ' שכבות · ' : ''}${cols} בשורה × ${rows} שורות${cols * rows * layers > N ? ' (אחרונה חלקית)' : ''}${derived ? ' · מרווח משוער' : ''}`) +
+    kv('ניקל', `${holes} מגעים · <bdi dir="ltr">≈ ₪${nickelIls.toFixed(0)}</bdi> · תבנית <bdi dir="ltr">${nickelFor(P)}</bdi>`) +
+    rec;
+  // A cell wider than the space it goes in cannot be assembled. The distance to check is the
+  // NEAREST NEIGHBOUR, not the row pitch: in a staggered layout the rows nest, so a row pitch of
+  // 19.5mm holds 21.15mm cells because the nearest cell in the next row sits half a pitch over.
+  const near = stagger ? Math.sqrt((pitch / 2) ** 2 + rowPitch ** 2) : rowPitch;
+  const tight = Math.min(pitch, near);
+  if (c.dia > tight - 0.2) {
+    html += `<div class="dim-over">⚠ ${c.label} בקוטר ${c.dia} מ"מ לא נכנס — המרחק הקצר ביותר בין מרכזים הוא ${tight.toFixed(1)} מ"מ</div>`;
+  }
+  // With no vehicle chosen, check the build against his saved trays — turned either way,
+  // because a 300x180 block goes into a 190x310 tray. Only a tray with all three measurements
+  // can be judged; one with no height is not a "no".
+  if (!dimVehicle) {
+    const full = getDims().filter((d) => +d.l && +d.w && +d.h);
+    const fits = [];
+    for (const d of full) {
+      const b3 = [L, W, H].slice().sort((a, z) => a - z);
+      const t3 = [+d.l, +d.w, +d.h].sort((a, z) => a - z);
+      if (b3[0] <= t3[0] && b3[1] <= t3[1] && b3[2] <= t3[2]) fits.push(d.model);
+    }
+    if (full.length) html += `<div class="dim-rec">${fits.length ? '✅ נכנס ל: ' + fits.join(', ') : '❌ לא נכנס לאף דגם שמור'}</div>`;
+    else if (getDims().length) html += '<div class="dim-rec" style="color:var(--text-muted);">אין דגם שמור עם מידות מלאות להשוואה</div>';
+  }
+  out.innerHTML = html;
+  drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra });
+}
+
+// ---- the vehicle the estimator is answering for ----------------------------------------
+// The tray, as numbers — L the long side. Read from a STRICT A×B×C for the height and nothing
+// looser: '425×165 + 60×140' (the OX, two rectangles) once had its 60 read as a ceiling.
+function tubOf(v) {
+  if (!v || !v.tub) return null;
+  const s = String(v.tub);
+  const m2 = s.match(/(\d+)\D+(\d+)/);
+  if (!m2) return null;
+  const m3 = s.match(/(\d+)\s*[×x]\s*(\d+)\s*[×x]\s*(\d+)/);
+  const a = +(m3 ? m3[1] : m2[1]), b = +(m3 ? m3[2] : m2[2]);
+  return { L: Math.max(a, b), W: Math.min(a, b), H: m3 ? +m3[3] : 0 };
+}
+// His own saved tray for a model, by name. One list now (2026-09-25): a vehicle he measured
+// carries his numbers, and they replace the table's guess wherever the fit is judged.
+function measuredFor(name) {
+  const k = String(name || '').trim().toLowerCase();
+  return getDims().find((d) => String(d.model || '').trim().toLowerCase() === k && +d.l && +d.w) || null;
+}
+function vehicleByName(name) {
+  const v = VEHICLE_PACKS.find((x) => x.m === name);
+  const d = measuredFor(name);
+  if (v) return d ? { ...v, tub: `${d.l}×${d.w}${+d.h ? '×' + d.h : ''} מ"מ (נמדד)`, mine: d } : v;
+  if (!d) return null;
+  return { g: 'המדידות שלי', m: d.model, src: 'נמדד', p: 22.5, s60: 0, p60: 0, s72: 0, p72: 0, max: 0,
+           tub: `${d.l}×${d.w}${+d.h ? '×' + d.h : ''} מ"מ (נמדד)`, mine: d };
+}
+// The biggest pack the tray takes at this voltage over the three holders he owns — counted
+// numbers (caps) where he counted, geometry elsewhere. Stacks only where stacking is allowed
+// and the height takes a second standing cell.
+function tubBest(v, V, c, fmt) {
+  const tb = tubOf(v);
+  if (!tb) return null;
+  const S = seriesForV(V);
+  const standH = c.len + DIM_CAP;
+  let layers = 1;
+  if (tb.H) {
+    if (tb.H < standH) return null;
+    layers = stackAllowed(v) ? Math.max(1, Math.floor(tb.H / standH)) : 1;
+  }
+  let best = null;
+  for (const h of HOLDER_ORDER) {
+    const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
+    if (!p) continue;
+    const n = (v.caps && v.caps[h] != null ? v.caps[h] : fitCount(tb.L, tb.W, p, rp, c.dia)) * layers;
+    if (!best || n > best.n) best = { h, n };
+  }
+  if (!best) return null;
+  return { h: best.h, n: best.n, S, P: Math.floor(best.n / S), layers };
+}
+let dimBest = null;
+function applyDimBest() {
+  const b = dimBest;
+  if (!b || !dimVehicle) return;
+  const key = (document.getElementById('dimCell') || {}).value || '21700-50e';
+  const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
+  fillDimBuild(dimVehicle, +document.getElementById('dimV').value, b.P, b.h, b.layers, c);
+}
+function holderForPitch(p) { return p >= 23 ? 'square-23' : p >= 22.5 ? 'diag-a' : 'diag-b'; }
+function fillDimBuild(v, V, P, holder, layers, c) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = String(val); };
+  const fmt = c.label.startsWith('18650') ? 18650 : 21700;
+  const S = seriesForV(V);
+  set('dimV', V);
+  // Capacity is a list in 5Ah steps; the vehicle's P is for a 5Ah cell.
+  dimAhPending = Math.max(5, Math.round(P * c.ah / 5) * 5);
+  set('dimHolder', holder);
+  set('dimLayers', layers || 1);
+  // Cells per row: as many as the tray's long side takes, else the S count in one run.
+  const tb = tubOf(v);
+  const [p] = (DIM_PITCH[fmt] || {})[holder] || [22.5];
+  const perLayer = Math.ceil(S * P / (layers || 1));
+  const alongL = tb ? Math.floor((tb.L - c.dia - 2 * DIM_WALL) / p) + 1 : 0;
+  set('dimPerRow', alongL > 0 ? Math.min(alongL, perLayer) : Math.min(S, perLayer));
+  calcPackDims();
+}
+// Fills the estimator from a vehicle. 72V is the default because it is what most of these are
+// built at now; a model with no 72V entry falls back to its 60V one.
+//
+// Two bugs lived here until 2026-09-25: the 22.5 holder was set by a key that does not exist
+// ('diag-224'), so the select silently kept whatever was there; and cells-per-row was always
+// the S count, so a Talaria got a 461mm block for a 381mm tray and the page contradicted the
+// card it was opened from.
+function useVehiclePack(model, volts) {
+  const v = vehicleByName(model);
+  dimVehicle = v || null;
+  if (!v) return;
+  const key = (document.getElementById('dimCell') || {}).value || '21700-50e';
+  const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
+  const fmt = key.startsWith('18650') ? 18650 : 21700;
+  let V = volts || (v.s72 ? 72 : v.s60 ? 60 : 72);
+  let P = V === 72 ? v.p72 : v.p60;
+  let holder = holderForPitch(v.p), layers = 1;
+  // A tray he measured decides the build — the table is a guess, his tape is not.
+  if (v.mine || !P) {
+    const b = tubBest(v, V, c, fmt);
+    if (b && b.P >= 1) { P = b.P; holder = b.h; layers = b.layers; }
+  }
+  if (!P) P = 4;
+  // Densest holder that takes the build, where the tray is known; else the table's own pitch.
+  const tb = tubOf(v);
+  if (tb && !v.mine) {
+    const N = seriesForV(V) * P;
+    const ok = HOLDER_ORDER.find((h) => {
+      const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
+      return p && (v.caps && v.caps[h] != null ? v.caps[h] : fitCount(tb.L, tb.W, p, rp, c.dia)) >= N;
+    });
+    if (ok) holder = ok;
+  }
+  fillDimBuild(v, V, P, holder, layers, c);
+  setDimTab('build');
+}
+function clearDimVehicle() { dimVehicle = null; dimBest = null; calcPackDims(); }
+// The vehicle the result is judged against, with its tray and a way to switch voltage or let go.
+function renderDimVehChip() {
+  const el = document.getElementById('dimVehChip');
+  if (!el) return;
+  const v = dimVehicle;
+  if (!v) { el.innerHTML = ''; return; }
+  const tb = tubOf(v);
+  const cur = +(document.getElementById('dimV') || {}).value;
+  const vs = [v.s60 ? 60 : 0, v.s72 ? 72 : 0].filter(Boolean);
+  if (v.mine) vs.push(60, 72);
+  const volts = [...new Set(vs)];
+  const src = v.mine ? '✓ נמדד' : /לא נמדד/.test(v.tub || '') ? 'לפי הסוללה המקורית' : v.tub ? '' : 'הערכת AI';
+  el.innerHTML = `<div class="dim-chip">${vehIcon(v)}<b>${v.m}</b>
+    <span style="color:var(--text-muted);font-size:12px;">${tb ? '<bdi dir="ltr">' + tb.L + '×' + tb.W + (tb.H ? '×' + tb.H : '') + '</bdi> מ"מ' : ''}${src ? ' · ' + src : ''}</span>
+    <span style="margin-inline-start:auto;display:flex;gap:4px;">${volts.map((x) => `<button class="sup-chip${x === cur ? ' on' : ''}" onclick="useVehiclePack(${JSON.stringify(v.m).replace(/"/g, '&quot;')}, ${x})">${x}V</button>`).join('')}
+    <button class="sup-chip" onclick="clearDimVehicle()" title="בלי כלי">✕</button></span></div>`;
+}
+let dimTab = 'veh';
+function setDimTab(tab) {
+  dimTab = tab;
+  document.querySelectorAll('[data-dimtab]').forEach((el) => el.classList.toggle('active', el.dataset.dimtab === tab));
+  ['veh', 'build', 'old'].forEach((k) => { const el = document.getElementById('dimPane-' + k); if (el) el.hidden = k !== tab; });
+  if (tab === 'build') calcPackDims();
+  if (tab === 'old') calcFromOldPack();
+  if (tab === 'veh') renderDims();
 }
 // ⚠ PROVENANCE: THIS TABLE IS AI OUTPUT, NOT MEASUREMENT (Daniel, 2026-08-31: "המידות
 // ששלחתי לך זה מידות ש-AI נתן לי לא מדדתי אותם"). It was written into this file on 2026-08-30
@@ -8035,59 +8171,57 @@ function vehIcon(v) {
     ' stroke-linejoin="round" opacity=".72">' + (VEH_ART[vehType(v)] || '') + '</svg>';
 }
 let dimVehicle = null;
+// ONE list (2026-09-25): the vehicle table and his own saved trays used to be two lists on
+// the same page, and a vehicle he had measured appeared in both with different numbers. A
+// saved tray now sits on its vehicle's card; a tray for a vehicle the table does not know is
+// listed first, under "המדידות שלי".
 function renderVehiclePacks() {
   const box = document.getElementById('vpList');
   if (!box) return;
   const q = ((document.getElementById('vpSearch') || {}).value || '').trim().toLowerCase();
+  const dims = getDims();
+  const known = new Set(VEHICLE_PACKS.map((v) => v.m.trim().toLowerCase()));
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+  const arg = (s) => esc(JSON.stringify(String(s)));
+  const size = (d) => `<bdi dir="ltr">${d.l || '?'}×${d.w || '?'}×${d.h || '?'}</bdi> מ"מ`;
+  const tools = (d) => `<span style="display:flex;gap:4px;flex:none;">
+      <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();openDimEditor('${esc(d.id)}')">✏️</button>
+      <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteDim('${esc(d.id)}')">🗑️</button></span>`;
+  const mineLine = (d) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
+      <span style="font-size:12px;"><span style="color:#34d399;font-weight:700;">${d.measured ? '✓ נמדד' : '✓ שמור'}</span> ${size(d)}${d.notes ? ` <span style="color:var(--text-muted);font-size:11px;">· ${esc(d.notes)}</span>` : ''}</span>${tools(d)}</div>`;
+  let html = '';
+  const own = dims.filter((d) => !known.has(String(d.model || '').trim().toLowerCase())
+    && (!q || String(d.model || '').toLowerCase().includes(q)));
+  if (own.length) {
+    html += '<div style="font-weight:800;color:var(--primary);margin:4px 0 6px;font-size:13px;">המדידות שלי</div>';
+    for (const d of own.slice().sort((a, b) => String(a.model).localeCompare(String(b.model)))) {
+      html += `<div class="list-item mine" onclick="useVehiclePack(${arg(d.model)})" style="cursor:pointer;">
+        <span style="display:flex;align-items:center;gap:8px;">${vehIcon({ g: '', m: '' })}<strong class="list-item-title">${esc(d.model)}</strong></span>
+        ${mineLine(d)}</div>`;
+    }
+  }
   const hit = VEHICLE_PACKS.filter((v) => !q || v.m.toLowerCase().includes(q) || v.g.toLowerCase().includes(q));
-  if (!hit.length) { box.innerHTML = '<div class="empty-state"><div class="empty-state-text">אין דגם כזה</div></div>'; return; }
-  let html = "", group = "";
+  let group = '';
   for (const v of hit) {
     if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
-    const cfg = (s, p) => (s ? `${s}S ${p}P · ${p * CELL_AH_DEFAULT}Ah` : "—");
-    // Counted-per-bracket models say so, because that is the number to build to.
+    const cfg = (s, p) => (s ? `${s}S ${p}P · ${p * CELL_AH_DEFAULT}Ah` : '—');
     // 16S and 20S in the same tray should land within ~15% of each other on cell count.
     const c60 = v.s60 * v.p60, c72 = v.s72 * v.p72;
     const odd = c60 && c72 && Math.max(c60, c72) / Math.min(c60, c72) > 1.15;
-    // Area a max build occupies at this model's pitch: cells x (pitch x row pitch). The
-    // rows nest on a diagonal bracket, so the row spacing is p x 0.866 and the number is
-    // meaningfully smaller than a square layout would give.
-    const areaMM2 = v.max * v.p * (v.p * 0.866);
-    const minCM2 = Math.round(areaMM2 / 100);
-    const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ "square-23": "ריבועי 23", "diag-a": "אלכסוני 22.5", "diag-b": "אלכסוני 21.5" })[k] || k}: ${n}`).join(" · ") : "";
-    html += `<div class="list-item" onclick="useVehiclePack('${v.m}')" style="cursor:pointer;">
+    const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ 'square-23': 'ריבועי 23', 'diag-a': 'אלכסוני 22.5', 'diag-b': 'אלכסוני 21.5' })[k] || k}: ${n}`).join(' · ') : '';
+    const d = dims.find((x) => String(x.model || '').trim().toLowerCase() === v.m.trim().toLowerCase());
+    html += `<div class="list-item${d ? ' mine' : ''}" onclick="useVehiclePack(${arg(v.m)})" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
-        <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong>${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong></span><span style="font-size:11px;color:var(--text-muted);text-align:left;flex:none;">${v.p} מ"מ · עד ${v.max}${v.oem ? ` · מקורי ${v.oem}` : ""}</span>
+        <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong class="list-item-title">${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong></span><span style="font-size:11px;color:var(--text-muted);text-align:left;flex:none;">${v.p} מ"מ · עד ${v.max}${v.oem ? ` · מקורי ${v.oem}` : ''}</span>
       </div>
       <div style="font-size:12px;margin-top:2px;">60V: ${cfg(v.s60, v.p60)} &nbsp;·&nbsp; 72V: ${cfg(v.s72, v.p72)}</div>
-      ${v.pack ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">חבילה ${v.pack} מ"מ</div>` : ""}
-      ${capsTxt ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">נספר: ${capsTxt}</div>` : ""}
-      ${odd ? `<div style="font-size:11px;color:var(--warning,#f59e0b);margin-top:2px;">⚠ שני המתחים חלוקים על גודל האמבטיה (${c60} מול ${c72} תאים) — כדאי לבדוק</div>` : ""}
+      ${v.pack ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">חבילה ${v.pack} מ"מ</div>` : ''}
+      ${capsTxt ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">נספר: ${capsTxt}</div>` : ''}
+      ${odd ? `<div style="font-size:11px;color:var(--warning,#f59e0b);margin-top:2px;">⚠ שני המתחים חלוקים על גודל האמבטיה (${c60} מול ${c72} תאים) — כדאי לבדוק</div>` : ''}
+      ${d ? mineLine(d) : ''}
     </div>`;
   }
-  box.innerHTML = html;
-}
-// Fills the estimator from a vehicle. 72V is the default because it is what most of these
-// are built at now; a model with no 72V entry falls back to its 60V one.
-function useVehiclePack(model) {
-  const v = VEHICLE_PACKS.find((x) => x.m === model);
-  dimVehicle = v || null;
-  if (!v) return;
-  const use72 = !!v.s72;
-  const S = use72 ? v.s72 : v.s60, P = use72 ? v.p72 : v.p60;
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = String(val); };
-  set('dimV', use72 ? 72 : 60);
-  set('dimAh', P * CELL_AH_DEFAULT);
-  // The vehicle table records the pitch it was measured at, so match the holder to it
-  // instead of leaving whatever was selected before. 23 -> square+spacer, 22.5 -> honeycomb
-  // with spacer; both are in the bracket catalogue at exactly those numbers.
-  set('dimHolder', v.p >= 23 ? 'square-23' : 'diag-224');
-  // Cells per row: the long axis of a scooter tray takes the S count in one run on almost
-  // every one of these, which is how they are actually laid out.
-  set('dimPerRow', S);
-  set('dimLayers', 1);
-  calcPackDims();
-  document.getElementById('dimResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  box.innerHTML = html || '<div class="empty-state"><div class="empty-state-text">אין דגם כזה</div></div>';
 }
 
 // ============================================================
@@ -8367,38 +8501,25 @@ function seedOxTub() {
 function renderDims() {
   seedOxTub();
   renderVehiclePacks();
-  const dims = getDims();
-  const list = document.getElementById('dimsList');
-  if (dims.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛴</div><div class="empty-state-text">אין דגמים שמורים. הוסף דגם עם מידות תא המצבר.</div></div>'; return; }
-  list.innerHTML = dims.slice().sort((a, b) => (a.model || '').localeCompare(b.model || '')).map(d => `
-    <div class="list-item">
-      <div class="list-item-header">
-        <div class="list-item-title">${d.model} ${d.measured ? '<span style="font-size:10px;color:#34d399;font-weight:700;">✓ נמדד</span>' : '<span style="font-size:10px;color:var(--text-muted);">הערכה</span>'}</div>
-        <div class="list-item-value">${d.l || '?'}×${d.w || '?'}×${d.h || '?'} מ"מ</div>
-      </div>
-      ${d.notes ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">📝 ${d.notes}</div>` : ''}
-      <div class="btn-group" style="margin-top:8px;">
-        <button class="btn btn-sm btn-secondary" onclick="openDimEditor('${d.id}')">✏️ ערוך</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteDim('${d.id}')">🗑️</button>
-      </div>
-    </div>`).join('');
 }
 function openDimEditor(id) {
   const dims = getDims();
   const d = (id ? dims.find(x => String(x.id) === String(id)) : null) || { model: '', l: '', w: '', h: '', notes: '' };
   const body = `
-    <div class="form-row"><label>דגם קורקינט</label><input class="form-input-wide" id="dimModel" value="${d.model || ''}" placeholder="Kaabo / OXO / Dualtron..." style="width:170px;"></div>
+    <div class="form-row"><label>דגם הכלי</label><input class="form-input-wide" id="dimModel" value="${d.model || ''}" placeholder="Kaabo / OXO / Dualtron..." style="width:170px;"></div>
     <div class="form-row"><label>אורך (מ"מ)</label><input type="number" class="form-input" id="dimL" value="${d.l || ''}"></div>
     <div class="form-row"><label>רוחב (מ"מ)</label><input type="number" class="form-input" id="dimW" value="${d.w || ''}"></div>
     <div class="form-row"><label>גובה (מ"מ)</label><input type="number" class="form-input" id="dimH" value="${d.h || ''}"></div>
     <div class="form-row"><label>הערות</label><input class="form-input-wide" id="dimNotes" value="${d.notes || ''}" placeholder="מתח מקורי, מקס' Ah, סוג מחבר" style="width:170px;"></div>`;
-  openModal(id ? 'עריכת דגם' : 'דגם חדש', body,
+  openModal(id ? 'עריכת מדידה' : 'מדידה חדשה של מגש', body,
     `<button class="btn btn-primary" onclick="saveDim('${id || ''}')">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
 }
 function saveDim(id) {
   const model = document.getElementById('dimModel').value.trim();
   if (!model) { alert('הזן שם דגם'); return; }
   const rec = { model, l: document.getElementById('dimL').value, w: document.getElementById('dimW').value, h: document.getElementById('dimH').value, notes: document.getElementById('dimNotes').value };
+  // A tray he types in with its sizes is his measurement — the only kind that belongs here now.
+  if (+rec.l && +rec.w) rec.measured = true;
   const dims = getDims();
   if (id) { const i = dims.findIndex(x => String(x.id) === String(id)); if (i >= 0) dims[i] = { ...dims[i], ...rec }; }
   else { dims.push({ id: 'd' + Date.now(), ...rec }); }

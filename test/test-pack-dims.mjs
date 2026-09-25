@@ -54,28 +54,27 @@ const read = async (opts) => page.evaluate((o) => {
 const TRAY = [{ id: 1, model: 'מבחן-גדול', l: 400, w: 200, h: 120 }, { id: 2, model: 'מבחן-קטן', l: 150, w: 90, h: 80 }];
 const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 
-// 16S4P = 64 cells, 10 per row -> 7 rows, honeycomb 21.5mm pitch.
-//   L = 9*21.5 + 21 + 2*1.5 + 21.5/2 = 227
-//   W = 6*(21.5*0.866) + 21 + 3 = 135      H = 70 + 4 + 22 = 96
-const honey = await read({ ...base, holder: 'honeycomb' });
-check('16S4P block, honeycomb: 217 x 135 x 96', honey.L === 217 && honey.W === 135 && honey.H === 96, `${honey.L} x ${honey.W} x ${honey.H}`);
+// 16S4P = 64 cells, 10 per row -> 7 rows, on the 21.5 diagonal (18.62 between rows).
+//   L = 9*21.5 + 21.15 + 3 = 218     W = 6*18.62 + 21.15 + 3 = 136     H = 70.15 + 4 + 22 = 96
+// (The two Wellgo catalogue brackets this used — square and honeycomb 21.4 — left the list on
+// 2026-09-25; he does not build on them.)
+const honey = await read({ ...base, holder: 'diag-b' });
+check('16S4P block, 21.5 diagonal: 218 x 136 x 96', honey.L === 218 && honey.W === 136 && honey.H === 96, `${honey.L} x ${honey.W} x ${honey.H}`);
 check('and it reports 64 cells / 1152 Wh', /64/.test(honey.text) && /1152/.test(honey.text), honey.text.slice(0, 80));
 
-// Square at the same pitch must be WIDER across the rows and shorter along them: the stagger
-// costs half a pitch in length and saves 13.4% of every row gap.
-const square = await read({ ...base, holder: 'square' });
-check('square is wider across rows than honeycomb', square.W > honey.W, `${square.W} vs ${honey.W}`);
-check('square and honeycomb share the along-row pitch, so the same length', square.L === honey.L, `${square.L} vs ${honey.L}`);
-check('the saving is the sin60 one, ~13%', Math.abs((square.W - 24) * 0.866 - (honey.W - 24)) <= 1.5, `${square.W} -> ${honey.W}`);
-
-// The catalogue's four pitches must actually reach the arithmetic.
-const sqSp = await read({ ...base, holder: 'square-23' });
-check('the 23mm square bracket is wider than the 21.5 one', sqSp.L > square.L, `${sqSp.L} vs ${square.L}`);
-const cell18 = await read({ ...base, cell: '18650-25p', holder: 'honeycomb' });
-check('18650 is a different pitch and a shorter cell', cell18.L < honey.L && cell18.H < honey.H, `${cell18.L}x${cell18.H} vs ${honey.L}x${honey.H}`);
+// A square bracket must be WIDER across the rows than a diagonal one: the diagonal nests the
+// rows at pitch x sin60, which is the 13% the diagonal exists for.
+const diagA = await read({ ...base, holder: 'diag-a' });
+const square = await read({ ...base, holder: 'square-23' });
+check('square is wider across rows than the diagonal', square.W > diagA.W, `${square.W} vs ${diagA.W}`);
+check('the diagonal row spacing is the sin60 one', Math.abs((diagA.W - 24.15) - 6 * 22.5 * 0.866) <= 1.5, String(diagA.W));
+check('the 22.5 diagonal is 1mm a cell longer than the 21.5 one', Math.abs((diagA.L - honey.L) - 9) <= 1, `${diagA.L} vs ${honey.L}`);
+check('the 23mm square bracket is longer than the 21.5 one', square.L > honey.L, `${square.L} vs ${honey.L}`);
+const cell18 = await read({ ...base, cell: '18650-25p', holder: 'diag-b' });
+check('18650 is a shorter cell', cell18.H < honey.H, `${cell18.H} vs ${honey.H}`);
 
 // Two layers: half the footprint, double the height.
-const two = await read({ ...base, holder: 'honeycomb', layers: 2 });
+const two = await read({ ...base, holder: 'diag-b', layers: 2 });
 check('two layers halve the rows and stack the height', two.W < honey.W && two.H > honey.H, `${two.W}/${two.H} vs ${honey.W}/${honey.H}`);
 
 // The fit check is the point of the page. 227x135x92 goes in the 400x200x120 tray and not in
@@ -86,13 +85,13 @@ check('does not claim the small tray', !/מבחן-קטן/.test(honey.text), hone
 // check above, so the first version of this measured a 166mm-tall block against a 150mm tray
 // and failed on its own leftover state. A test that carries state between cases is testing
 // the order it was written in.
-const rotated = await read({ ...base, holder: 'honeycomb', models: [{ id: 3, model: 'מסובב', l: 100, w: 240, h: 150 }] });
+const rotated = await read({ ...base, holder: 'diag-b', models: [{ id: 3, model: 'מסובב', l: 100, w: 240, h: 150 }] });
 check('a turned tray still counts as a fit', /מסובב/.test(rotated.text), rotated.text.slice(-90));
 
 // The allowance is derived from the VOLTAGE now — 14 / 18 / 22 / 26 — and is still an input
 // he can override. So this asserts the difference against what the page actually chose,
 // rather than against a literal that goes stale the next time the ladder moves.
-const noExtra = await read({ ...base, holder: 'honeycomb', extra: SELFTEST ? 18 : 0 });
+const noExtra = await read({ ...base, holder: 'diag-b', extra: SELFTEST ? 18 : 0 });
 const autoAllowance = honey.H - (70 + 4);
 check('the case/BMS allowance is honoured', noExtra.H === honey.H - autoAllowance, `${noExtra.H} vs ${honey.H} (allowance ${autoAllowance})`);
 
@@ -192,6 +191,7 @@ check('the seeded AI OX row is removed, his own rows are kept',
 // The fit line judges only trays with all three measurements. A saved tray with no height
 // used to produce "doesn't fit any saved model" for every pack — a verdict nothing measured.
 const fitMsg = await page.evaluate((SELF) => {
+  clearDimVehicle();   // with a vehicle chosen the verdict is about that vehicle instead
   const say = (dims) => {
     localStorage.setItem('gp_dims', JSON.stringify(dims));
     const r = document.getElementById('dimResult');
@@ -220,7 +220,8 @@ const clear = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
   const run = (cell, holder) => { set('dimCell', cell); set('dimHolder', holder); set('dimV', 72); set('dimAh', 20); calcPackDims();
     return document.getElementById('dimResult').textContent; };
-  return { sgTight: run('21700-50sg', 'square'), eOk: run('21700-50e', 'square'),
+  clearDimVehicle();
+  return { sgTight: run('21700-50sg', 'diag-b'), eOk: run('21700-50e', 'diag-b'),
            honey: run('21700-50e', 'diag-b') };
 });
 check('a 21.35mm 50SG is flagged in a 21.5mm bracket', /לא נכנס/.test(clear.sgTight), clear.sgTight.slice(-80));
@@ -234,7 +235,7 @@ check('and a honeycomb row pitch under the diameter is fine', !/לא נכנס/.t
 // instead of on screen. BRACKET_MAX itself is deliberately kept: it is the real sheet size.
 const pieces = await page.evaluate(() => {
   const set = (id, v) => { document.getElementById(id).value = String(v); };
-  set('dimCell', '21700-50e'); set('dimHolder', 'square'); set('dimV', 72); set('dimAh', 60); set('dimPerRow', 20); calcPackDims();
+  set('dimCell', '21700-50e'); set('dimHolder', 'square-23'); set('dimV', 72); set('dimAh', 60); set('dimPerRow', 20); calcPackDims();
   const big = document.getElementById('dimResult').textContent;
   set('dimAh', 10); set('dimPerRow', 10); calcPackDims();
   return { big, small: document.getElementById('dimResult').textContent };
@@ -361,6 +362,61 @@ const cat18 = await page.evaluate(() => {
 });
 check('the catalogue carries 18650 scooter packs', cat18.n >= 20, cat18);
 check('each priced above its cost, with a trade price between', cat18.ok, cat18);
+
+// ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
+const rb = await page.evaluate((SELF) => {
+  if (SELF) {
+    // the two bugs this replaced: a holder key that does not exist, and no way out of a
+    // build that does not fit
+    window.holderForPitch = () => 'diag-224';
+    window.tubBest = () => null;
+  }
+  const out = {};
+  const hv = (id) => !!document.getElementById(id).hidden;
+  const res = () => document.getElementById('dimResult').innerText;
+  out.opts = [...document.getElementById('dimHolder').options].map((o) => o.value);
+  setDimTab('veh');
+  out.vehFirst = !hv('dimPane-veh') && hv('dimPane-build');
+  // Enduro: 22.5mm, no tray size — the holder must be the 22.5 diagonal, not left as it was
+  document.getElementById('dimHolder').value = 'square-23';
+  useVehiclePack('Enduro');
+  out.enduroHolder = document.getElementById('dimHolder').value;
+  out.toBuild = hv('dimPane-veh') && !hv('dimPane-build');
+  // Talaria: the table's 20S7P does not fit its 381x171 tray. It must say so and offer the
+  // biggest that does — which then fits, in a block shorter than the tray.
+  useVehiclePack('Talaria');
+  out.talaria = res();
+  out.hasBest = !!document.querySelector('#dimResult .dim-best');
+  if (out.hasBest) applyDimBest();
+  out.after = res();
+  out.afterL = +((document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/) || [])[1] || 0);
+  // one list: his tray on its vehicle's card, and a tray for an unknown vehicle listed first
+  localStorage.setItem('gp_dims', JSON.stringify([
+    { id: 'dz', model: 'Zero 10X', l: 455, w: 134, h: 58, measured: true },
+    { id: 'dk', model: 'Kugoo G2', l: 400, w: 150, h: 80, measured: true }]));
+  setDimTab('veh');
+  const cards = [...document.querySelectorAll('#vpList .list-item')];
+  out.zeroMine = cards.some((c) => /Zero 10X/.test(c.innerText) && /נמדד/.test(c.innerText) && /455/.test(c.innerText));
+  out.kugooFirst = /Kugoo G2/.test((cards[0] || {}).innerText || '');
+  out.oneList = !document.getElementById('dimsList');
+  useVehiclePack('Kugoo G2');
+  out.kugoo = res();
+  out.kugooMine = !!(dimVehicle && dimVehicle.mine);
+  clearDimVehicle();
+  localStorage.setItem('gp_dims', '[]');
+  return out;
+}, SELFTEST);
+check('only his three holders and a custom one are offered', JSON.stringify(rb.opts) === JSON.stringify(['diag-a', 'diag-b', 'square-23', 'custom']), rb.opts);
+check('the calculator opens on the vehicle list', rb.vehFirst, rb.vehFirst);
+check('a 22.5mm vehicle gets the 22.5 diagonal', rb.enduroHolder === 'diag-a', rb.enduroHolder);
+check('picking a vehicle shows its result', rb.toBuild, rb.toBuild);
+check('a build that does not fit its tray says so first', /^⛔ לא נכנס ל-Talaria/.test(rb.talaria.trim()), rb.talaria.slice(0, 80));
+check('and offers the biggest that does', rb.hasBest, rb.hasBest);
+check('which then fits, in a block shorter than the tray', /^✅ נכנס ל-Talaria/.test(rb.after.trim()) && rb.afterL > 0 && rb.afterL <= 381, [rb.after.slice(0, 40), rb.afterL]);
+check('his tray sits on its vehicle\'s card, marked measured', rb.zeroMine, rb.zeroMine);
+check('a tray for a vehicle not in the table is listed first', rb.kugooFirst, rb.kugooFirst);
+check('there is one list, not two', rb.oneList, rb.oneList);
+check('picking his own tray judges the build against it', rb.kugooMine && /✅ נכנס ל-Kugoo G2/.test(rb.kugoo), rb.kugoo.slice(0, 60));
 
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
