@@ -218,6 +218,30 @@ console.log('5. every mapped catalogue name still exists');
   check('an old saved freight rate no longer overrides the model', kept === 24, kept);
 }
 
+// ---- his cost follows where he buys cells: sea / air / local (2026-09-25) ----
+{
+  const rt = await p.evaluate(() => {
+    Store.set('supplier_prices', [
+      { who: 'Vapcell', cat: 'Vapcell · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 6.43 },
+      { who: 'Vapcell', cat: 'Vapcell · 21700 · ✈️ אווירי', name: 'EVE 50E — CLASSIC · 21700', ils: 9.65 },
+      { who: 'LaBatteria', cat: 'LaBatteria · 21700', name: 'EVE 21700 50E', ils: 14.8 },
+    ]);
+    const it = PRICING.find((x) => /^סוללות/.test(x.cat) && /CLASSIC/.test(x.cat) && !/18650/.test(x.cat));
+    const out = {};
+    for (const r of ['sea', 'air', 'local']) { setCellRoute(r); out[r] = { cell: routeCellCost('50E'), pl: routeCellCost('50PL'), cost: productCost(it) }; }
+    setCellRoute('air'); navigateTo('supplier'); setSupWho(SUP_WHOS.indexOf('Vapcell')); toggleSupCat(0);
+    const lines = document.querySelectorAll('#supplierList .sup-line').length;
+    const bold = (document.querySelector('#supplierList .sup-rt.on') || {}).textContent || '';
+    setCellRoute('sea');
+    return { out, lines, bold, calcRows: supplierRows().filter((r) => r.who === 'מחשבון תיקונים').length };
+  });
+  check('each route gives its own cell cost', rt.out.sea.cell === 6.43 && rt.out.air.cell === 9.65 && rt.out.local.cell === 14.8, rt.out);
+  check('a cell the route does not carry falls back to the sea cost', rt.out.local.pl === rt.out.sea.pl, rt.out);
+  check('and a pack cost moves with the route', rt.out.sea.cost < rt.out.air.cost && rt.out.air.cost < rt.out.local.cost, rt.out);
+  check('a cell with a sea and an air price is ONE row, the chosen route in bold', rt.lines === 1 && /9\.65/.test(rt.bold), rt);
+  check('the repair calculator is no longer listed as a supplier', rt.calcRows === 0, rt);
+}
+
 check('none of this went through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
 
 await ctx.close();

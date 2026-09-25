@@ -329,6 +329,16 @@ check('the 18650 builds read the current cell cost, not a typed one',
   JSON.stringify(shallow.prices) === JSON.stringify(shallow.want) && shallow.want.every(([, v]) => v > 0), shallow);
 check('and a shallow tray still gets a priced 18650 option', /EVE 26V[\s\S]*מחיר ₪/.test(shallow.html), shallow.html.slice(0, 160));
 
+// ---- 18650 scooter packs in the hub catalogue (hub only) ----
+const cat18 = await page.evaluate(() => {
+  addShallowCatalogRows();
+  const rows = PRICING.filter((x) => /^סוללות קורקינטים 18650/.test(x.cat));
+  return { n: rows.length, ok: rows.every((x) => x.retail > 0 && x.b2b > 0 && x.b2b < x.retail && productCost(x) > 0 && productCost(x) < x.b2b),
+    sample: rows.slice(0, 2).map((x) => x.cat + ' ' + x.name + ' ₪' + x.retail) };
+});
+check('the catalogue carries 18650 scooter packs', cat18.n >= 20, cat18);
+check('each priced above its cost, with a trade price between', cat18.ok, cat18);
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();

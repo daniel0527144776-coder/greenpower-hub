@@ -369,6 +369,18 @@ body { min-height: 100vh; }
   .fin-mrow { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 4px; font-size: 12.5px; padding: 8px 2px; border-bottom: 1px solid var(--border); cursor: pointer; align-items: baseline; }
   .fin-mhead { cursor: default; font-size: 11px; color: var(--text-muted); padding-top: 0; }
   .fin-open { padding: 0 6px 10px; background: var(--bg); border-radius: var(--radius-sm); }
+  .sup-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .sup-lbl { font-size: 12px; color: var(--text-muted); margin-inline-end: 2px; }
+  .sup-chip { background: var(--bg); color: var(--text); border: 1px solid var(--border-strong); border-radius: 999px; padding: 5px 12px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .sup-chip.on { background: var(--primary); color: #0f172a; border-color: var(--primary); font-weight: 700; }
+  .sup-note { font-size: 11.5px; color: var(--text-muted); margin: 2px 2px 8px; }
+  .sup-who { font-size: 15px; font-weight: 700; margin: 16px 2px 2px; }
+  .sup-cat { cursor: pointer; user-select: none; font-weight: 700; color: var(--primary); font-size: 13px; padding: 9px 2px; border-bottom: 1px solid var(--border); }
+  .sup-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .sup-src { font-size: 10.5px; color: var(--text-muted); }
+  .sup-price { display: flex; gap: 10px; align-items: center; white-space: nowrap; }
+  .sup-rt { font-size: 12px; color: var(--text-muted); }
+  .sup-rt.on { font-size: 14px; font-weight: 700; color: var(--primary); }
   .inv-sub { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--primary); margin: 10px 2px 6px; padding-bottom: 3px; border-bottom: 1px dashed var(--border-strong); }
   .inv-sub span:last-child { font-weight: 400; font-size: 11px; color: var(--text-muted); }
   .wt-name-link { color: inherit; text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 3px; }
@@ -1139,21 +1151,20 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">🔒 עלויות ספקים</h2>
   </div>
-  <div class="info-banner"><span>💡</span><div>המחיר הוא <b>העלות הסופית עד אליך</b>: כולל שילוח ומע"מ, בלי מכס.</div></div>
-  <div class="info-banner"><span>🔒</span><div style="font-size:11px;">מחירוני הספקים נשמרים <b>בחשבון שלך</b> ולא בקובץ האתר — קובץ ה-HTML מוגש לכל מי שיודע את הכתובת. <b>עלויות התאים ו-BMS כן נשארו בקובץ</b> כי מחשבון התיקונים מחשב מהן.</div></div>
+  <!-- Rebuilt 2026-09-25 (Daniel: "תוכן כפול וחלק לא נצרך"): one line of explanation instead of
+       two banners, suppliers as buttons instead of a dropdown plus a category dropdown plus
+       open/close-all, the cell route that decides HIS cost at the top, and each cell once. -->
   <div class="card">
-    <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש רכיב (תא / BMS / מטען / ניקל...)" style="width:100%;margin-bottom:10px;" oninput="renderSupplier()">
-    <select class="form-select" id="supWho" style="width:100%;margin-bottom:8px;" onchange="renderSupplier()"></select>
-    <select class="form-select" id="supCat" style="width:100%;margin-bottom:8px;" onchange="renderSupplier()"></select>
-    <div class="btn-group" style="margin-bottom:10px;">
-      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="supExpandAll(true)">⊕ פתח הכל</button>
-      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="supExpandAll(false)">⊖ סגור הכל</button>
-    </div>
-    <div class="btn-group" style="margin-bottom:10px;">
+    <div id="supRoute" class="sup-row"></div>
+    <div id="supRouteNote" class="sup-note"></div>
+    <div id="supWhoChips" class="sup-row"></div>
+    <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש (תא / BMS / מטען / ניקל…)" style="width:100%;margin-bottom:6px;" oninput="renderSupplier()">
+    <div class="sup-note">כל מחיר הוא העלות הסופית עד אליך — כולל שילוח ומע"מ, בלי מכס.</div>
+    <div id="supplierList"></div>
+    <div class="btn-group" style="margin-top:12px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openSupplierAdd()">➕ הוסף פריט</button>
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openSupplierImport()">📥 ייבוא מחירון</button>
     </div>
-    <div id="supplierList"></div>
   </div>
 </section>
 
@@ -2517,7 +2528,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v341';
+const HUB_BUILD = 'v343';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2866,7 +2877,10 @@ function loadPhoto(input, type) {
 
 function recalc() {
   const cellKey = document.getElementById('cellType').value;
-  const cellPrice = CELL_PRICES[cellKey];
+  // "עלות לי" follows the route; the QUOTE marks up CELL_PRICES_QUOTED further down.
+  const RC_CODE = { '21700-50e': '50E', '21700-50sg': '50SG', '21700-50pl': '50PL', '18650-25p': '25P' };
+  const routedCalc = RC_CODE[cellKey] && typeof routeCellCost === 'function' ? routeCellCost(RC_CODE[cellKey]) : null;
+  const cellPrice = routedCalc != null ? routedCalc : CELL_PRICES[cellKey];
   const cellGrams = CELL_WEIGHTS[cellKey];
   const age = document.getElementById('age').value;
   const config = calcConfig();
@@ -4155,6 +4169,38 @@ function fmtIls(n) { return n >= 20 ? '₪' + Math.round(n) : '₪' + n.toFixed(
 //   * anything Daniel adds himself, from the synced 'supplier_costs' key
 // A row priced in USD gets the rate and VAT applied; a row already in ₪ does not, or the
 // VAT would be charged twice.
+// WHERE HE BUYS HIS CELLS decides what a cell costs him (Daniel, 2026-09-25: "שהעלות שלי
+// תשתנה לפי ימי, אוויר ומקומי"). Sea is the cost model (the June import); air is the
+// distributor's air price and local is a local supplier's price — both from the synced
+// supplier list, never baked (this file is public). A cell the chosen route does not carry
+// falls back to the sea cost, and the page says so. Selling prices do not move with it — this
+// is his cost, the thing margins are measured against.
+const CELL_ROUTES = [['sea', '🚢 ימי'], ['air', '✈️ אווירי'], ['local', '🏪 מקומי']];
+function cellRoute() { const r = (Store.get('settings') || {}).cellRoute; return CELL_ROUTES.some(([k]) => k === r) ? r : 'sea'; }
+function setCellRoute(r) {
+  const s = Store.get('settings') || {};
+  s.cellRoute = r;
+  Store.set('settings', s);
+  renderSupplier();
+  if (document.getElementById('page-catalog') && document.getElementById('page-catalog').classList.contains('active')) renderCatalog();
+}
+const CELL_CODE_SEA = { '50E': 'EVE 50E', '50SG': 'Tenpower 50SG', '50PL': 'EVE 50PL (Tabless)', '40P': 'EVE 40P', '35V': 'EVE 35V', '25P': 'EVE 25P', '26V': 'EVE 26V' };
+const cellWords = (x) => String(x || '').toLowerCase().split(/[\s\-·—()\/,|]+/);
+// The landed cost of one cell by its model code, on a route; null when that route has no row.
+function routeCellCostOn(code, route) {
+  if (route === 'sea') { const k = CELL_CODE_SEA[code]; return k && CELL_UNIT_COST[k] != null ? CELL_UNIT_COST[k] : null; }
+  const c = code.toLowerCase();
+  const rows = Store.get('supplier_prices') || [];
+  const hit = rows.find((r) => r.ils != null && cellWords(r.name).includes(c)
+    && (route === 'air' ? /אווירי/.test(r.cat || '') : /מקומי|LaBatteria/i.test((r.cat || '') + ' ' + (r.who || ''))));
+  return hit ? Number(hit.ils) : null;
+}
+// What a cell costs HIM now, on the route he chose; the sea cost where that route has none.
+function routeCellCost(code) {
+  const r = cellRoute();
+  const v = r === 'sea' ? null : routeCellCostOn(code, r);
+  return v != null ? v : routeCellCostOn(code, 'sea');
+}
 function supplierRows() {
   const rows = [];
   // kg / frUsd / on are carried through: this projection used to list five fields, so a
@@ -4166,7 +4212,10 @@ function supplierRows() {
   // under near-identical category names, so the screen showed what looked like the same
   // board twice at two prices. They are a different thing — the ₪ figures the repair
   // calculator computes from — and the label now says so.
-  Object.keys(BMS_PRICES).forEach((brand) => {
+  // (The repair calculator's own BMS table used to be listed here as a supplier called
+  // "מחשבון תיקונים" — 33 rows beside the real boards. Removed 2026-09-25: it is the
+  // calculator's price, not something bought. BMS_PRICES itself is untouched.)
+  if (false) Object.keys(BMS_PRICES).forEach((brand) => {
     Object.keys(BMS_PRICES[brand]).forEach((amps) => {
       rows.push({ who: 'מחשבון תיקונים', cat: 'עלות BMS ' + (BMS_BRAND_LABEL[brand] || brand.toUpperCase()) + ' (במחשבון)', name: amps + 'A', ils: BMS_PRICES[brand][amps], landed: true });
     });
@@ -4255,90 +4304,74 @@ function supplierIls(r, vat, freight) {
   }
   return vat ? v * (1 + SUPPLIER_VAT) : v;
 }
+let SUP_WHO = '', SUP_WHOS = [];
+function setSupWho(i) { SUP_WHO = SUP_WHOS[i] || ''; supOpenCats = new Set(); renderSupplier(); }
 function renderSupplier() {
   const el = document.getElementById('supplierList');
   if (!el) return;
   const q = (document.getElementById('supQ') ? document.getElementById('supQ').value : '').trim().toLowerCase();
-  // One number per item: what it costs him delivered — freight and import VAT in, customs out
-  // (Daniel, 2026-09-25: "עלות כולל הכל עד שמגיע אלי… כי לפעמים אין מכס"). No switches.
-  const vat = true, freight = true;
-  const all = supplierRows();
+  const route = cellRoute();
 
-  // supplier dropdown, rebuilt from the data so a new supplier appears by itself
-  const whoSel = document.getElementById('supWho');
-  if (whoSel) {
-    const whos = [...new Set(all.map((r) => r.who))];
-    const cur = whoSel.value;
-    const opts = '<option value="">כל הספקים</option>' +
-      whos.map((w) => `<option value="${w}"${w === cur ? ' selected' : ''}>${w}</option>`).join('');
-    if (whoSel.innerHTML !== opts) whoSel.innerHTML = opts;
-    if (cur) whoSel.value = cur;
+  // where he buys cells — this is what his cost is measured on everywhere in the hub
+  const rc = document.getElementById('supRoute');
+  if (rc) rc.innerHTML = '<span class="sup-lbl">העלות שלי לפי:</span>'
+    + CELL_ROUTES.map(([k, l]) => `<button class="sup-chip${k === route ? ' on' : ''}" onclick="setCellRoute('${k}')">${l}</button>`).join('');
+  const rn = document.getElementById('supRouteNote');
+  if (rn) {
+    const missing = route === 'sea' ? [] : ['50E', '50SG', '50PL', '25P', '26V'].filter((c) => routeCellCostOn(c, route) == null);
+    rn.textContent = missing.length ? 'אין מחיר ' + (route === 'air' ? 'אווירי' : 'מקומי') + ' ל-' + missing.join(', ') + ' — להם העלות נשארת לפי ימי.' : '';
+    rn.hidden = !missing.length;
   }
-  const who = whoSel ? whoSel.value : '';
 
-  // Category dropdown, rebuilt from whatever the supplier filter left — picking a supplier
-  // and then being offered another supplier's categories is how you end up with an empty
-  // list and no idea why.
-  const catSel = document.getElementById('supCat');
-  const inScope = all.filter((r) => !who || r.who === who);
-  if (catSel) {
-    const cats = [...new Set(inScope.map((r) => r.cat))];
-    const cur = catSel.value;
-    const opts = '<option value="">כל הקטגוריות</option>' +
-      cats.map((c) => `<option value="${c}"${c === cur ? ' selected' : ''}>${c}</option>`).join('');
-    if (catSel.innerHTML !== opts) catSel.innerHTML = opts;
-    catSel.value = cats.includes(cur) ? cur : '';
+  // One row per cell: a distributor's sea and air prices for the same cell are two prices on
+  // one row, not two rows in two categories.
+  const merged = [], byKey = new Map();
+  for (const r of supplierRows()) {
+    const m = String(r.cat || '').match(/^(.*?)\s·\s(🚢 ימי|✈️ אווירי)$/);
+    if (!m) { merged.push(r); continue; }
+    const key = r.who + '|' + m[1] + '|' + r.name;
+    let row = byKey.get(key);
+    if (!row) { row = { ...r, cat: m[1], routes: {} }; byKey.set(key, row); merged.push(row); }
+    row.routes[/ימי/.test(m[2]) ? 'sea' : 'air'] = r;
   }
-  const cat = catSel ? catSel.value : '';
+  SUP_WHOS = [...new Set(merged.map((r) => r.who))];
+  if (SUP_WHO && !SUP_WHOS.includes(SUP_WHO)) SUP_WHO = '';
+  const wc = document.getElementById('supWhoChips');
+  if (wc) wc.innerHTML = `<button class="sup-chip${!SUP_WHO ? ' on' : ''}" onclick="setSupWho(-1)">הכל</button>`
+    + SUP_WHOS.map((w, i) => `<button class="sup-chip${w === SUP_WHO ? ' on' : ''}" onclick="setSupWho(${i})">${w}</button>`).join('');
 
-  const rows = inScope.filter((r) => (!cat || r.cat === cat) &&
-    (!q || (r.who + ' ' + r.cat + ' ' + r.name).toLowerCase().includes(q)));
+  const rows = merged.filter((r) => (!SUP_WHO || r.who === SUP_WHO)
+    && (!q || (r.who + ' ' + r.cat + ' ' + r.name).toLowerCase().includes(q)));
   if (!rows.length) {
-    // Distinguish "your filter matched nothing" from "no list has been imported yet" —
-    // an empty page with a magnifying glass would look broken after the move to storage.
-    const noneImported = !(Store.get('supplier_prices') || []).length && !q && !who;
+    const noneImported = !(Store.get('supplier_prices') || []).length && !q;
     el.innerHTML = noneImported
-      ? '<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">מחירוני הספקים עדיין לא יובאו.<br>לחץ <b>📥 ייבוא מחירון</b> ובחר את הקובץ <b>supplier-costs-import.json</b>.<br><span style="font-size:11px;color:var(--text-muted);">הוא מכיל את התאים (21700 / 18650 · ימי / אווירי) ואת מחירון הספק הראשי. עלויות ה-BMS מוצגות גם בלי ייבוא.</span></div></div>'
+      ? '<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">מחירוני הספקים עדיין לא יובאו.<br>לחץ <b>📥 ייבוא מחירון</b> ובחר את הקובץ <b>supplier-costs-import.json</b>.</div></div>'
       : '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא רכיב</div></div>';
     return;
   }
-
-  // Collapsed by default: 183 rows across 25 categories was a single scroll with no way
-  // to see what the categories even were. Closed, the whole list fits on one phone screen
-  // as a menu. A search or a chosen category opens everything, because then the filter —
-  // not the fold — is what decides what you are looking at.
+  const strip = (r) => (String(r.cat || '').startsWith(r.who + ' · ') ? r.cat.slice(r.who.length + 3) : (r.cat || 'כללי'));
+  // Grouped supplier → category, each category folded; a search opens everything it found.
   const groups = new Map();
-  rows.forEach((r) => { if (!groups.has(r.cat)) groups.set(r.cat, []); groups.get(r.cat).push(r); });
+  rows.forEach((r) => { const k = r.who + '|' + strip(r); if (!groups.has(k)) groups.set(k, { who: r.who, cat: strip(r), list: [] }); groups.get(k).list.push(r); });
   supCatKeys = [...groups.keys()];
-  const forceOpen = !!q || !!cat;
-
-  let html = '';
-  supCatKeys.forEach((c, i) => {
-    const list = groups.get(c);
-    const open = forceOpen || supOpenCats.has(c);
-    // Say exactly which of the two add-ons are in the number — "כולל מע"מ" alone was
-    // ambiguous once freight became a separate, switchable term.
-    const note = '';
-    html += `<div onclick="toggleSupCat(${i})" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;color:var(--primary);font-size:13px;margin:12px 0 4px;border-bottom:2px solid var(--primary);padding-bottom:3px;">
-      <span>${open ? '▾' : '▸'} ${who && c.startsWith(who + ' · ') ? c.slice(who.length + 3) : c}</span>
-      <span style="font-weight:400;font-size:11px;color:var(--text-muted);white-space:nowrap;">${note}</span></div>`;
-    // No category total (removed 2026-09-25, Daniel: "לא רלוונטי"). Adding up one of every
-    // item in a category answers nothing — the landed cost of each PRODUCT is on its own row.
+  const SRC_COLOUR = { 'חשבונית': '#10b981' };
+  let html = '', lastWho = null;
+  supCatKeys.forEach((k, i) => {
+    const g = groups.get(k);
+    if (!SUP_WHO && g.who !== lastWho) { html += `<div class="sup-who">${g.who}</div>`; lastWho = g.who; }
+    const open = !!q || supOpenCats.has(k);
+    html += `<div class="sup-cat" onclick="toggleSupCat(${i})"><span>${open ? '▾' : '◂'} ${g.cat}</span></div>`;
     if (!open) return;
-    list.forEach((r) => {
-      const usd = '';   // the delivered ₪ only (2026-09-25); the $ quote stays in the data and in the editor
-      // WHERE THE PRICE CAME FROM, on the row. Three sources were merged into one list and
-      // the same DKD display appeared at $34, $36, $45, $55 and $63 — every figure true about
-      // something, and together an answer to nothing (Daniel: "זה עושה בלגן"). The list is one
-      // row per product now; this says which source won, so the number can be argued with.
-      const SRC_COLOUR = { 'חשבונית': '#10b981', 'ציטוט': 'var(--text-muted)' };
-      const stale = r.src && r.src.includes('ישן');
-      const est = r.src && r.src.includes('מחירון');
-      const src = r.src ? `<span style="font-size:10px;padding:1px 5px;border-radius:4px;white-space:nowrap;color:${stale ? '#f59e0b' : est ? '#f59e0b' : (SRC_COLOUR[r.src] || 'var(--text-muted)')};border:1px solid currentColor;opacity:.85;">${r.src}${r.on && !stale ? ' ' + r.on.slice(0, 7) : ''}</span>` : '';
+    g.list.forEach((r) => {
+      const warn = r.src && (r.src.includes('ישן') || r.src.includes('מחירון'));
+      const src = r.src ? `<span class="sup-src" style="color:${warn ? '#f59e0b' : (SRC_COLOUR[r.src] || 'var(--text-muted)')};">${r.src}${r.on ? ' ' + String(r.on).slice(0, 7) : ''}</span>` : '';
+      const price = r.routes
+        ? [['sea', '🚢'], ['air', '✈️']].filter(([rt]) => r.routes[rt]).map(([rt, ic]) =>
+            `<span class="sup-rt${route === rt ? ' on' : ''}">${ic} ${fmtIls(supplierIls(r.routes[rt], true, true))}</span>`).join(' ')
+        : `<span class="sup-rt on">${fmtIls(supplierIls(r, true, true))}</span>`;
       const del = r.custom ? `<span onclick="event.stopPropagation();removeSupplierRow(${r.idx})" style="color:#ef4444;cursor:pointer;">🗑️</span>` : '';
-      html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;">
-        <span>${r.name}${r.custom ? ' <span style="font-size:10px;color:var(--text-muted);">(שלי)</span>' : ''}</span>
-        <span style="display:flex;gap:12px;white-space:nowrap;align-items:center;">${src}${usd}<span style="font-weight:700;color:var(--primary);min-width:52px;text-align:left;">${fmtIls(supplierIls(r, vat, freight))}</span>${del}</span></div>`;
+      html += `<div class="sup-line"><div><div>${r.name}${r.custom ? ' <span class="sup-src">(שלי)</span>' : ''}</div>${src}</div>
+        <div class="sup-price">${price}${del}</div></div>`;
     });
   });
   el.innerHTML = html;
@@ -4659,6 +4692,41 @@ const SHALLOW_CELLS = [
   { key: '18650-25p', label: 'EVE 25P', price: CELL_UNIT_COST['EVE 25P'], tier: 'ADVANCED', tierRe: /ADVANCED/ },
 ];
 
+// Scooter packs on 18650, for the models only an 18650 fits (Daniel, 2026-09-25: in the hub
+// only, not on the site). Same cells and margins as the shallow-tray option — EVE 26V at the
+// CLASSIC margin, 25P at the ADVANCED one — at 6/8/10/12 cells in parallel. The PRICE is set
+// on the sea cost so it does not jump with the route; the COST shown follows the route.
+function shallowCatalogRows() {
+  const out = [];
+  if (typeof livePricedRow !== 'function') return out;
+  const RATE = { CLASSIC: 0.80, ADVANCED: 0.75 };
+  for (const V of [36, 48, 52, 60, 72]) {
+    const S = seriesForV(V);
+    for (const sc of SHALLOW_CELLS) {
+      const cd = (typeof DIM_CELLS !== 'undefined') ? DIM_CELLS[sc.key] : null;
+      if (!cd) continue;
+      const code = sc.key === '18650-26v' ? '26V' : '25P';
+      const ref = livePricedRow(V, sc.tierRe);
+      if (!ref) continue;
+      for (const P of [6, 8, 10, 12]) {
+        const Ah = Math.round(P * cd.ah * 10) / 10;
+        const name = V + 'V ' + Ah + 'Ah';
+        const cost = estimateBatteryCost({ name, cat: 'סוללות · סדרת ' + sc.tier }, false, { price: routeCellCostOn(code, 'sea'), ah: cd.ah });
+        if (cost == null) continue;
+        const retail = Math.round(cost / (1 - ref.margin) / 50) * 50;
+        out.push({ cat: 'סוללות קורקינטים 18650 - ' + V + 'V ' + sc.tier, name: name + ' · ' + S + 'S' + P + 'P ' + sc.label,
+          retail, b2b: Math.round(retail * RATE[sc.tier] / 10) * 10, cell18650: code, cellAh: cd.ah });
+      }
+    }
+  }
+  return out;
+}
+let SHALLOW_ROWS_ADDED = false;
+function addShallowCatalogRows() {
+  if (SHALLOW_ROWS_ADDED || typeof PRICING === 'undefined') return;
+  SHALLOW_ROWS_ADDED = true;
+  for (const r of shallowCatalogRows()) PRICING.push(r);
+}
 function shallowCellOptions(TL, TW, TH, V, S) {
   if (typeof DIM_CELLS === "undefined" || typeof fitCount !== "function") return "";
   const rows = [];
@@ -4676,7 +4744,8 @@ function shallowCellOptions(TL, TW, TH, V, S) {
     const Ah = Math.round(P * cd.ah * 10) / 10;
     // Cost the real pack, then borrow the margin the catalogue already earns on that tier.
     const fake = { name: V + "V " + Ah + "Ah", cat: "סוללות · סדרת " + sc.tier };
-    const cost = estimateBatteryCost(fake, false, { price: sc.price, ah: cd.ah });
+    const cellCost = routeCellCost(sc.key === '18650-26v' ? '26V' : '25P') ?? sc.price;
+    const cost = estimateBatteryCost(fake, false, { price: cellCost, ah: cd.ah });
     if (cost == null) continue;
     const ref = livePricedRow(V, sc.tierRe);
     const price = ref ? Math.round(cost / (1 - ref.margin) / 50) * 50 : null;
@@ -4731,8 +4800,13 @@ function estimateBatteryCost(it, b2b = false, cell = null) {
   // Must stay identical to packCost() in generate-battery-products.mjs.
   const powerTool = /כלי עבודה/.test(it.cat);
   // 3-tier landed cell cost (2026-07): PRO=EVE 50PL, ADVANCED=Tenpower 50SG, CLASSIC=EVE 50E
-  const cellPrice = cell ? cell.price : (powerTool ? 4.51
-    : /PRO/.test(it.cat) ? 10.66 : /ADVANCED/.test(it.cat) ? 7.77 : 6.43);
+  const seaCell = powerTool ? 4.51
+    : /PRO/.test(it.cat) ? 10.66 : /ADVANCED/.test(it.cat) ? 7.77 : 6.43;
+  // The route he buys on (routeCellCost) — sea is exactly the literal above, which is what
+  // sync-prices compares against the generator; it runs without the route helpers defined.
+  const code = powerTool ? '25P' : /PRO/.test(it.cat) ? '50PL' : /ADVANCED/.test(it.cat) ? '50SG' : '50E';
+  const routed = (!cell && typeof routeCellCost === 'function') ? routeCellCost(code) : null;
+  const cellPrice = cell ? cell.price : (routed != null ? routed : seaCell);
   const cellAh = cell ? cell.ah : (powerTool ? 2.5 : 5);     // 18650 25P vs 21700 ~5.0Ah
   const S = seriesForV(V);   // MUST match packCost() — sync-prices verifies it every run
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
@@ -4784,8 +4858,11 @@ function batteryCostParts(it, b2b = false) {
   if (!m) return null;
   const V = +m[1], Ah = +m[2];
   const powerTool = /כלי עבודה/.test(it.cat);
-  const cellPrice = powerTool ? 4.51
+  const seaCellP = powerTool ? 4.51
     : /PRO/.test(it.cat) ? 10.66 : /ADVANCED/.test(it.cat) ? 7.77 : 6.43;
+  const codeP = powerTool ? '25P' : /PRO/.test(it.cat) ? '50PL' : /ADVANCED/.test(it.cat) ? '50SG' : '50E';
+  const routedP = typeof routeCellCost === 'function' ? routeCellCost(codeP) : null;
+  const cellPrice = routedP != null ? routedP : seaCellP;
   const cellAh = powerTool ? 2.5 : 5;
   const S = seriesForV(V);
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
@@ -4934,6 +5011,7 @@ function productCost(it, b2b = false) {
   const costs = getCosts();
   const k = catKey(it);
   if (costs[k] != null) return costs[k];                 // manual override (exact)
+  if (it.cell18650) return estimateBatteryCost(it, b2b, { price: routeCellCost(it.cell18650), ah: it.cellAh });
   if (/סוללות/.test(it.cat)) {
     const est = estimateBatteryCost(it, b2b);             // batteries: estimate from cells
     if (est != null) return est;
@@ -5049,6 +5127,7 @@ function homePriceSearch() {
 }
 
 function renderCatalog() {
+  addShallowCatalogRows();   // idempotent — also run from init()
   const sel = document.getElementById('catalogCat');
   if (sel && sel.options.length === 0) {
     const cats = [...new Set(PRICING.map(c => c.cat))];
@@ -9536,6 +9615,8 @@ function tuckNotes() {
 
 
 function init() {
+  // 18650 scooter packs join the hub catalogue (priced from the catalogue's own margins)
+  addShallowCatalogRows();
   // The help text used to name the catalog size. It was typed by hand and went stale —
   // "283 המוצרים" against a catalog of 784 — then derived, and now simply gone: a total
   // nobody acts on is not worth keeping correct. Same for every other page counter.
