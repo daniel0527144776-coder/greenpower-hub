@@ -155,6 +155,40 @@ console.log('5. every mapped catalogue name still exists');
   check('and the map is not empty, which would pass the check above vacuously', n > 10, n);
 }
 
+// ---- QS as he sells it: controllers by company, motors by type, kits, two displays ----
+{
+  const tidy = await p.evaluate(() => {
+    const s = Store.get('settings') || {}; delete s.qsTidy20260925; Store.set('settings', s);
+    Store.set('supplier_prices', [
+      { who: 'QS Motor', cat: 'QS Motor · בקרים', name: 'Sabvoton SVMC72150 + BT', usd: 215 },
+      { who: 'QS Motor', cat: 'QS Motor · בקרים', name: 'Far Driver ND72450', usd: 115 },
+      { who: 'QS Motor', cat: 'QS Motor · בקרים', name: 'מודול Bluetooth לבקר', usd: 11 },
+      { who: 'QS Motor', cat: 'QS Motor · מנועים', name: 'QS138 3000W 70H', usd: 180 },
+      { who: 'QS Motor', cat: 'QS Motor · מנועים', name: 'QS205 3000W V3', usd: 216.6 },
+      { who: 'QS Motor', cat: 'QS Motor · מנועים', name: 'סטטור QS205 3000W 4T', usd: 107 },
+      { who: 'QS Motor', cat: 'QS Motor · מנועי קורקינט', name: 'QS212 10" 2000W', usd: 95.8 },
+      { who: 'QS Motor', cat: 'QS Motor · צגים', name: 'צג H6', usd: 85 },
+      { who: 'QS Motor', cat: 'QS Motor · צגים', name: 'צג CT22', usd: 45.5 },
+      { who: 'QS Motor', cat: 'QS Motor · אביזרים', name: 'ידית גז', usd: 18 },
+      { who: 'QS Motor · קטלוג', cat: 'QS Motor · מחירון אתר · ערכות המרה', name: 'QSD165B-35 + ND72680', usd: 509.29 },
+      { who: 'QS Motor · קטלוג', cat: 'QS Motor · מחירון אתר · בלמים', name: 'בלם', usd: 30 },
+      { who: 'Vapcell', cat: 'Vapcell · 21700', name: 'EVE 50E', ils: 6.43 },
+    ]);
+    tidyQsSupplierOnce();
+    const out = Store.get('supplier_prices');
+    const qs = out.filter((r) => /^QS/.test(r.who));
+    return { who: [...new Set(qs.map((r) => r.who))], cats: Object.fromEntries(qs.map((r) => [r.name, r.cat.replace('QS Motor · ', '')])),
+      kit: (qs.find((r) => /QSD165B/.test(r.name)) || {}).usd, other: out.some((r) => r.who === 'Vapcell') };
+  });
+  check('one QS supplier, not two', tidy.who.length === 1 && tidy.who[0] === 'QS Motor', tidy.who);
+  check('controllers by company', tidy.cats['Sabvoton SVMC72150 + BT'] === 'בקרים — Sabvoton' && tidy.cats['Far Driver ND72450'] === 'בקרים — Far Driver', tidy.cats);
+  check('motors by type', /Mid Drive/.test(tidy.cats['QS138 3000W 70H'] || '') && /Hub/.test(tidy.cats['QS205 3000W V3'] || '') && tidy.cats['QS212 10" 2000W'] === 'מנועי קורקינט', tidy.cats);
+  check('a ready kit from the website list stays, at list −35%', tidy.kit === Math.round(509.29 * 0.65 * 100) / 100, tidy.kit);
+  check('the two displays the site sells stay; other displays, accessories, a stator and the BT module go',
+    tidy.cats['צג H6'] === 'צגים' && !('צג CT22' in tidy.cats) && !('ידית גז' in tidy.cats) && !('סטטור QS205 3000W 4T' in tidy.cats) && !('מודול Bluetooth לבקר' in tidy.cats) && !('בלם' in tidy.cats), tidy.cats);
+  check('other suppliers are untouched', tidy.other, tidy.other);
+}
+
 check('none of this went through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
 
 await ctx.close();
