@@ -171,17 +171,45 @@ const stag = await page.evaluate(() => {
 check('diagonal rows are offset from each other', stag.diagFirstTwoRows, JSON.stringify(stag));
 check('square rows are not', stag.squareFirstTwoRows, JSON.stringify(stag));
 
-// The OX tub is seeded once and never re-seeded — a default that comes back after you delete
-// it is the DEFAULT_REPLIES trap.
-const seeded = await page.evaluate(() => {
+// The OX is in the vehicle list already, so the saved-trays list no longer gets a copy
+// (Daniel, 2026-09-25), and the copy seeded earlier is removed — but ONLY that one: a tray he
+// measured and saved himself, even under the same model name, is never touched.
+const seeded = await page.evaluate((SELF) => {
+  const aiOx = { id: 'dox', model: 'Inokim OX', l: 425, w: 165, h: 0, notes: 'שוקת כפולה — מ-AI, לא נמדד' };
+  const mine = { id: 'dmine', model: 'Inokim OX', l: 420, w: 160, h: 70, notes: 'מדדתי', measured: true };
+  const other = { id: 'dz', model: 'Zero 10X', l: 300, w: 150, h: 60 };
   localStorage.removeItem('gp_dims_seed_ox'); localStorage.setItem('gp_dims', '[]');
-  seedOxTub(); const first = (JSON.parse(localStorage.getItem('gp_dims')) || []).length;
-  localStorage.setItem('gp_dims', '[]'); seedOxTub();
-  const second = (JSON.parse(localStorage.getItem('gp_dims')) || []).length;
-  return { first, second };
-});
-check('the OX tub seeds once', seeded.first === 1, JSON.stringify(seeded));
-check('and does not come back after deletion', seeded.second === 0, JSON.stringify(seeded));
+  if (SELF) window.seedOxTub = () => {};           // the old seeded row stays
+  seedOxTub(); const fresh = (JSON.parse(localStorage.getItem('gp_dims')) || []).length;
+  localStorage.setItem('gp_dims', JSON.stringify([aiOx, mine, other])); seedOxTub();
+  const after = (JSON.parse(localStorage.getItem('gp_dims')) || []).map((d) => d.id);
+  return { fresh, after };
+}, SELFTEST);
+check('a fresh hub gets no OX copy in the saved trays', seeded.fresh === 0, JSON.stringify(seeded));
+check('the seeded AI OX row is removed, his own rows are kept',
+  JSON.stringify(seeded.after) === JSON.stringify(['dmine', 'dz']), JSON.stringify(seeded));
+
+// The fit line judges only trays with all three measurements. A saved tray with no height
+// used to produce "doesn't fit any saved model" for every pack — a verdict nothing measured.
+const fitMsg = await page.evaluate((SELF) => {
+  const say = (dims) => {
+    localStorage.setItem('gp_dims', JSON.stringify(dims));
+    const r = document.getElementById('dimResult');
+    calcPackDims();
+    return r ? r.innerText : '';
+  };
+  const noH = say([{ id: 'a', model: 'X', l: 400, w: 200, h: SELF ? 5 : 0 }]);
+  const full = say([{ id: 'b', model: 'Y', l: 1, w: 1, h: 1 }]);
+  localStorage.setItem('gp_dims', '[]');   // later cases read the fit line too
+  return { noH, full };
+}, SELFTEST);
+check('a tray with no height is not judged as "does not fit"',
+  !/לא נכנס לאף דגם שמור/.test(fitMsg.noH) && /אין דגם שמור עם מידות מלאות/.test(fitMsg.noH), fitMsg.noH.slice(-120));
+check('a tray with full dims still gets a verdict', /לא נכנס לאף דגם שמור|נכנס ל:/.test(fitMsg.full), fitMsg.full.slice(-120));
+
+// The vehicle cards carry no "minimum area" line any more (approved 2026-09-25).
+const cards = await page.evaluate(() => { renderVehiclePacks(); return (document.getElementById('calctab-dims') || document.body).innerText; });
+check('no "minimum area" line on the vehicle cards', !/שטח מינימלי/.test(cards), '');
 
 // Real datasheet dimensions, not the format name. The 50SG is 21.35mm across against the 50E
 // and 50PL at 21.15, and in a 21.5mm no-spacer bracket that is 0.05mm of clearance — it does
@@ -308,14 +336,9 @@ check('and they are not the same battery bay', bomb.max[0] === 84 && bomb.max[4]
 const prov = await page.evaluate(() => {
   renderVehiclePacks();
   const card = [...document.querySelectorAll('#calctab-dims p')].map(e => e.textContent).join(' ');
-  // Seed fresh: an earlier case in this file deliberately clears the list to prove the seed
-  // does not come back, so reading it as-is here would test that case's leftovers.
-  localStorage.removeItem('gp_dims_seed_ox'); localStorage.setItem('gp_dims', '[]'); seedOxTub();
-  const seeded = JSON.parse(localStorage.getItem('gp_dims') || '[]');
-  return { card, ox: (seeded.find(d => /Inokim OX/.test(d.model)) || {}).notes || '' };
+  return { card };
 });
 check('the page says the vehicle data is AI, not measured', /מ-AI, לא נמדדו/.test(prov.card), prov.card.slice(0, 90));
-check('and the seeded OX tub says it too', /לא נמדד/.test(prov.ox), prov.ox.slice(0, 70));
 
 // ---- shallow trays: the 18650 option is costed on the CURRENT cell cost ----
 // Until 2026-09-25 these carried the March figures typed in by hand, while the margin they

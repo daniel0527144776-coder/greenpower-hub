@@ -59,7 +59,7 @@ page.on('pageerror', (e) => errs.push(String(e).split('\n')[0]));
 page.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss().catch(() => {}); });
 await page.goto('http://localhost:4344/index.html', { waitUntil: 'load' });
 await page.waitForFunction(() => typeof window.navigateTo === 'function', null, { timeout: 30000 });
-await page.evaluate(() => { const o = document.getElementById('loginOverlay'); if (o) o.style.display = 'none'; init(); });
+await page.evaluate(() => { const o = document.getElementById('loginOverlay'); if (o) o.style.display = 'none'; init(); window.__realOpenDim = window.openDimEditor; });
 
 // SELFTEST puts the ORIGINAL bugs back, one per area, so the real assertions go red.
 if (SELFTEST) {
@@ -78,8 +78,17 @@ if (SELFTEST) {
 // ---------------------------------------------------------------- 1. the saved-models editor
 await page.evaluate(() => navigateTo('calcs'));
 await page.waitForTimeout(400);
-const seeded = await page.evaluate(() => (JSON.parse(localStorage.getItem('gp_dims') || '[]')).map((d) => typeof d.id));
-check('every seeded saved-model id is a string', seeded.length > 0 && seeded.every((t) => t === 'string'), seeded);
+// The OX row is no longer seeded (2026-09-25), so the row is made the way he makes one: the
+// editor's own save. The property is the same — whatever writes a saved model writes a string id.
+const seeded = await page.evaluate(() => {
+  localStorage.setItem('gp_dims', '[]');
+  window.__realOpenDim();          // the real editor, also under --selftest
+  document.getElementById('dimModel').value = 'Test Tray';
+  document.getElementById('dimL').value = '400'; document.getElementById('dimW').value = '150'; document.getElementById('dimH').value = '70';
+  saveDim();
+  return (JSON.parse(localStorage.getItem('gp_dims') || '[]')).map((d) => typeof d.id);
+});
+check('every saved-model id is a string', seeded.length > 0 && seeded.every((t) => t === 'string'), seeded);
 
 const edit = await page.evaluate(() => {
   const before = window.__err;
@@ -91,7 +100,7 @@ const edit = await page.evaluate(() => {
   const m = document.getElementById('modalBackdrop');
   return { name, threw, opened: !!m && getComputedStyle(m).display !== 'none', prefilled: (document.getElementById('dimModel') || {}).value };
 });
-check('editing the auto-seeded row opens its editor', edit.opened === true, edit);
+check('editing a saved row opens its editor', edit.opened === true, edit);
 check('and prefills the model it belongs to', !!edit.prefilled, edit.prefilled);
 await page.evaluate(() => { try { closeModal(); } catch (e) { /* none open */ } });
 

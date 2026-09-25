@@ -1055,7 +1055,6 @@ body { min-height: 100vh; }
     </div>
     <div class="info-banner" style="margin-top:8px;"><span>📦</span><div id="dimResult"></div></div>
     <div id="dimDraw" style="margin-top:10px;overflow-x:auto;"></div>
-    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">מרווח = מרחק בין מרכזי תאים. באלכסוני השורות מקוננות, ולכן צפוף יותר.</p>
   </div>
 
   <div class="card">
@@ -1077,7 +1076,6 @@ body { min-height: 100vh; }
         <option>36</option><option>48</option><option>52</option><option selected>60</option><option>72</option><option>84</option>
       </select>
     </div>
-    <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">סוג התא והתושבת נלקחים מהאומדן שלמעלה.</p>
     <div class="info-banner" style="margin-top:8px;"><span>🔋</span><div id="opResult">הזן מידות כדי לראות מה נכנס.</div></div>
     <div class="form-row" style="margin-top:10px;"><label>דגם הכלי</label>
       <input class="form-input-wide" id="opModel" placeholder="Kaabo Wolf King / Sur-Ron..." style="width:170px;">
@@ -1092,7 +1090,6 @@ body { min-height: 100vh; }
   </div>
   <div class="card">
     <h3 class="card-title">🛴 מידות תא מצבר לפי דגם</h3>
-    <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;">מאגר מידות תא הסוללה בקורקינטים נפוצים. מדוד פעם אחת — ושמור לכל הפעמים הבאות.</p>
     <button class="btn btn-primary btn-block btn-sm" style="margin-bottom:10px;" onclick="openDimEditor(null)">➕ הוסף דגם</button>
     <div id="dimsList"></div>
   </div>
@@ -2528,7 +2525,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v344';
+const HUB_BUILD = 'v345';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7733,9 +7730,10 @@ function calcPackDims() {
     `<span style="font-size:11px;color:var(--text-muted);">${pitch}/${rowPitch} מ"מ${derived ? ' (משוער)' : ''} · ${layers > 1 ? layers + '×' : ''}${cols} × ${rows}${cols * rows * layers > N ? ' (שורה חלקית)' : ''}</span>` +
     // Parenthesised: `a + b ? c : d` binds as `(a + b) ? c : d`, which threw the whole
     // block away and rendered the fit line alone. Caught before it shipped, by reading it.
-    ((getDims() || []).length
+    // Only trays with all three measurements can be judged; one with no height is not a "no".
+    ((getDims() || []).some((d) => +d.l && +d.w && +d.h)
       ? `<br><span style="font-size:11px;">${fits.length ? '✅ נכנס ל: ' + fits.join(', ') : '❌ לא נכנס לאף דגם שמור'}</span>`
-      : '');
+      : ((getDims() || []).length ? '<br><span style="font-size:11px;color:var(--text-muted);">אין דגם שמור עם מידות מלאות להשוואה</span>' : ''));
   // Against the count for THIS holder where one exists, not the tray's overall ceiling: on an
   // OX a diagonal holder takes 126 and no holder 140, so a 140-cell build is fine on one and
   // over on the other. One `max` cannot express that and would pass both.
@@ -8057,7 +8055,7 @@ function renderVehiclePacks() {
         <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong>${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong></span><span style="font-size:11px;color:var(--text-muted);text-align:left;flex:none;">${v.p} מ"מ · עד ${v.max}${v.oem ? ` · מקורי ${v.oem}` : ""}</span>
       </div>
       <div style="font-size:12px;margin-top:2px;">60V: ${cfg(v.s60, v.p60)} &nbsp;·&nbsp; 72V: ${cfg(v.s72, v.p72)}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${v.pack ? `חבילה ${v.pack} מ"מ · ` : ""}שטח מינימלי ${minCM2} סמ״ר</div>
+      ${v.pack ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">חבילה ${v.pack} מ"מ</div>` : ""}
       ${capsTxt ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">נספר: ${capsTxt}</div>` : ""}
       ${odd ? `<div style="font-size:11px;color:var(--warning,#f59e0b);margin-top:2px;">⚠ שני המתחים חלוקים על גודל האמבטיה (${c60} מול ${c72} תאים) — כדאי לבדוק</div>` : ""}
     </div>`;
@@ -8346,22 +8344,16 @@ function saveMeasuredPack() {
 }
 
 function getDims() { return Store.get('dims') || []; }
-// The Inokim OX tub, seeded once from the measurement Daniel sent (2026-08-30). Guarded by
-// its own flag rather than by "is it already there": re-adding a model he deleted is the
-// DEFAULT_REPLIES trap — a default that keeps coming back is worse than no default.
-//
-// Height is left at 0 on purpose. He measured the floor of the tub, not its depth, and the
-// fit check skips any model with a missing dimension rather than pretending the pack clears
-// a lid nobody measured. Fill it in from the editor and the check starts working.
+// The OX tub used to be seeded into the saved trays (2026-08-30), height 0, from an AI estimate.
+// The OX is already in the vehicle list above with the same AI note, so the saved-trays list
+// no longer gets a copy of it (Daniel approved, 2026-09-25) — and the copy seeded earlier is
+// removed. A row he measured and saved himself is never touched: only the seeded AI one, which
+// carries no height and the seed's own note.
 function seedOxTub() {
   try {
-    if (localStorage.getItem('gp_dims_seed_ox')) return;
-    localStorage.setItem('gp_dims_seed_ox', '1');
     const dims = getDims();
-    if (dims.some((d) => /Inokim OX\b/i.test(d.model || ''))) return;
-    dims.push({ id: 'd' + Date.now(), model: 'Inokim OX', l: 425, w: 165, h: 0,
-      notes: '⚠ מ-AI, לא נמדד. אמבטיה בשני חלקים: רחב 425×165 + צר 60×140 מ"מ, גובה לא ידוע. 140 / 136 / 126 תאים לפי סוג התושבת — כל המספרים האלה טעונים אימות עם סרט מדידה.' });
-    Store.set('dims', dims);
+    const keep = dims.filter((d) => !(/Inokim OX\b/i.test(d.model || '') && !d.measured && !(+d.h) && /מ-AI, לא נמדד/.test(d.notes || '')));
+    if (keep.length !== dims.length) Store.set('dims', keep);
   } catch (e) { /* private mode, or storage refused — the page still works without it */ }
 }
 function renderDims() {
