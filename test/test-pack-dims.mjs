@@ -278,15 +278,15 @@ check('and the 23mm square block is larger in area than either diagonal', nickel
 // cells, and every consistent row drops P by one or two going up in voltage. Four rows carry
 // the SAME P for both, which makes the 60V build 25% smaller in the same box — the shape of a
 // number copied across rather than recalculated. They are flagged on the row, not corrected.
-const flagged = await page.evaluate(() => {
-  renderVehiclePacks();
-  const rows = [...document.querySelectorAll('#vpList .list-item')];
-  return rows.filter(r => /חלוקים על גודל/.test(r.textContent)).map(r => r.querySelector('strong').textContent.replace(/s*⚠s*/, '').trim());
-});
+// (Read off the table itself since 2026-09-27 — the cards no longer print the builds.)
+const flagged = await page.evaluate(() => VEHICLE_PACKS.filter((v) => {
+  const c60 = v.s60 * v.p60, c72 = v.s72 * v.p72;
+  return c60 && c72 && Math.max(c60, c72) / Math.min(c60, c72) > 1.15;
+}).map((v) => v.m));
 // Corrected on 2026-08-31, so nothing should be flagged now — and the check stays, because
 // its job is the NEXT row someone adds, not the four that have been fixed.
 check('no row disagrees with itself any more', flagged.length === 0, flagged.join(', '));
-check('and the corrected four are the ones that used to be', /10P|12P/.test(await page.evaluate(() => document.getElementById('vpList').textContent)), 'ok');
+check('and the corrected four are the ones that used to be', await page.evaluate(() => ['Nami Blast', 'Teverun'].every((m) => { const v = VEHICLE_PACKS.find((x) => x.m === m); return v && v.p60 > v.p72; })), 'ok');
 
 // The nickel line used to price off his stock.
 const nick = await page.evaluate(() => {
@@ -303,12 +303,12 @@ check('the battery size has its own row', /גודל סוללה\s*\d+ × \d+ × \
 // The OEM capacity is the tray read backwards, so it has to reach the screen — and where it
 // can be compared directly it must AGREE: Thunder 3 tops out at 72V 40Ah, which is 20S8P,
 // which is the row.
+// It is shown after the tap now, on the vehicle bar, beside the build it corroborates.
 const oem = await page.evaluate(() => {
-  renderVehiclePacks();
-  const rows = [...document.querySelectorAll('#vpList .list-item')];
-  const txt = (m) => (rows.find(r => r.textContent.includes(m)) || {}).textContent || '';
-  return { count: rows.filter(r => /מקורי/.test(r.textContent)).length,
-           thunder: txt('Thunder'), blade: txt('Blade GT') };
+  const read = (m, V) => { useVehiclePack(m, V); return document.getElementById('dimVehChip').innerText + ' ' + document.getElementById('dimResult').innerText; };
+  const out = { count: VEHICLE_PACKS.filter((v) => v.oem).length, thunder: read('Thunder 2/3', 72), blade: read('Blade GT', 60) };
+  clearDimVehicle();
+  return out;
 });
 check('twenty rows carry an OEM capacity', oem.count >= 20, String(oem.count));
 check('Thunder 3: OEM 40Ah and the row is 20S8P', /מקורי 72V 40Ah/.test(oem.thunder) && /20S 8P/.test(oem.thunder), oem.thunder.slice(0,110));
@@ -488,21 +488,29 @@ check('and the drawing still has one circle per cell', turn.circles === 140, tur
 
 // ---- the most a tray takes, per voltage and per nickel (2026-09-27) ----
 const mx = await page.evaluate((SELF) => {
-  if (SELF) window.maxPFor = () => 0;
+  if (SELF) {
+    window.maxPFor = () => 0;
+    // the old page: the cell and nickel card showed above the list too
+    const orig = window.setDimTab; window.setDimTab = (tab) => { orig(tab); document.getElementById('dimShared').hidden = false; };
+  }
   document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
   navigateTo('calcs'); setCalcTab('dims');
-  useVehiclePack('Talaria', 72);
-  const res = document.getElementById('dimResult').innerText;
   setDimTab('veh');
+  const sharedOnList = !document.getElementById('dimShared').hidden;
   const card = [...document.querySelectorAll('#vpList .list-item')].find((c) => /Talaria/.test(c.innerText));
   const cardTxt = card ? card.innerText : '';
+  useVehiclePack('Talaria', 72);
+  const res = document.getElementById('dimResult').innerText;
+  const sharedAfter = !document.getElementById('dimShared').hidden;
   clearDimVehicle();
-  return { res, cardTxt };
+  return { res, cardTxt, sharedOnList, sharedAfter };
 }, SELFTEST);
 // Talaria 381 x 171, no BMS allowance, 21.5 nickel: seven across, twenty along — 20S7P at 72V.
 check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: 20S7P · 35Ah/.test(mx.res), mx.res.slice(0, 400));
 check('and each nickel says how much it takes', /ניקל א׳ \(22\.5\) — (עד 20S\d+P|לא נכנס)/.test(mx.res), mx.res.slice(-260));
-check('the vehicle card carries the maximum too', /מקסימום \(EVE 50E\): 60V: 16S\d+P · \d+Ah · 72V: 20S7P · 35Ah/.test(mx.cardTxt), mx.cardTxt.slice(0, 300));
+// The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
+check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /381×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
+check('the cell and nickel are chosen after the tap, not above the list', !mx.sharedOnList && mx.sharedAfter, [mx.sharedOnList, mx.sharedAfter]);
 
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {

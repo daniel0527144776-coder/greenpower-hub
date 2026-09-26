@@ -1025,10 +1025,12 @@ body { min-height: 100vh; }
     <div class="sub-tab" data-dimtab="build" onclick="setDimTab('build')">🔢 לפי מתח וקיבולת</div>
     <div class="sub-tab" data-dimtab="old" onclick="setDimTab('old')">📏 מהסוללה הישנה</div>
   </div>
-  <div class="card">
+  <!-- Hidden on the vehicle list (2026-09-27, Daniel: "שאני ילחץ ואז יבחר מתח וסוג תא כדי שלא
+       יהיה עמוס"): the list is picked first, the cell and nickel after. -->
+  <div class="card" id="dimShared" hidden>
     <div class="form-row dim-wide">
       <label>סוג תא</label>
-      <select class="form-select" id="dimCell" onchange="calcPackDims(); calcFromOldPack(); renderVehiclePacks()">
+      <select class="form-select" id="dimCell" onchange="calcPackDims(); calcFromOldPack()">
         <option value="21700-50e" selected>21700 EVE 50E — 5.0Ah</option>
         <option value="21700-50sg">21700 Tenpower 50SG — 5.0Ah</option>
         <option value="21700-50pl">21700 EVE 50PL — 5.0Ah</option>
@@ -2539,7 +2541,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v356';
+const HUB_BUILD = 'v357';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -8174,7 +8176,8 @@ function renderDimVehChip() {
   const v = dimVehicle;
   if (!v) { el.innerHTML = ''; return; }
   const tb = tubOf(v);   // the tray as measured — the BMS share is the calculator's business
-  const src = v.mine ? '✓ נמדד' : /לא נמדד/.test(v.tub || '') ? 'לפי הסוללה המקורית' : v.tub ? '' : 'הערכת AI';
+  const src = (v.mine ? '✓ נמדד' : /לא נמדד/.test(v.tub || '') ? 'לפי הסוללה המקורית' : v.tub ? '' : 'הערכת AI')
+    + (v.oem ? (v.tub || v.mine ? ' · ' : ' · ') + 'מקורי <bdi dir="ltr">' + v.oem + '</bdi>' : '');
   el.innerHTML = `<div class="dim-chip">${vehIcon(v)}<b>${v.m}</b>
     <span style="color:var(--text-muted);font-size:12px;">${tb ? '<bdi dir="ltr">' + tb.L + '×' + tb.W + (tb.H ? '×' + tb.H : '') + '</bdi> מ"מ' + (tb.H ? '' : ' · גובה לא ידוע') : ''}${src ? ' · ' + src : ''}</span>
     <span style="margin-inline-start:auto;"><button class="sup-chip" onclick="clearDimVehicle()" title="בלי כלי">✕</button></span></div>`;
@@ -8184,6 +8187,8 @@ function setDimTab(tab) {
   dimTab = tab;
   document.querySelectorAll('[data-dimtab]').forEach((el) => el.classList.toggle('active', el.dataset.dimtab === tab));
   ['veh', 'build', 'old'].forEach((k) => { const el = document.getElementById('dimPane-' + k); if (el) el.hidden = k !== tab; });
+  const shared = document.getElementById('dimShared');
+  if (shared) shared.hidden = tab === 'veh';
   if (tab === 'build') calcPackDims();
   if (tab === 'old') calcFromOldPack();
   if (tab === 'veh') renderDims();
@@ -8409,23 +8414,6 @@ let dimVehicle = null;
 // the same page, and a vehicle he had measured appeared in both with different numbers. A
 // saved tray now sits on its vehicle's card; a tray for a vehicle the table does not know is
 // listed first, under "המדידות שלי".
-// The most a tray takes, per voltage, with the cell chosen above and the best nickel for it — on
-// the card, so the list answers "how big can this vehicle go" before anything is clicked. Only
-// where a tray size exists; the AI build lines above are what the other cards have.
-function cardMax(v, d) {
-  const key = (document.getElementById('dimCell') || {}).value || '21700-50e';
-  const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
-  const fmt = key.startsWith('18650') ? 18650 : 21700;
-  const vv = d ? { ...v, tub: `${d.l}×${d.w}${+d.h ? '×' + d.h : ''} מ"מ (נמדד)`, mine: d } : v;
-  const tub = cellTub(tubOf(vv), dimExtraFor(72));
-  if (!tub) return '';
-  const part = (V) => {
-    let best = 0;
-    for (const h of HOLDER_ORDER) best = Math.max(best, maxPFor(vv, tub, fmt, h, V, c));
-    return `${V}V: ${best ? seriesForV(V) + 'S' + best + 'P · ' + (+(best * c.ah).toFixed(1)) + 'Ah' : '—'}`;
-  };
-  return `<div style="font-size:12px;margin-top:2px;color:#34d399;">מקסימום (${c.label.replace(/^\d+ /, '')}): <bdi dir="ltr">${part(60)} · ${part(72)}</bdi></div>`;
-}
 function renderVehiclePacks() {
   const box = document.getElementById('vpList');
   if (!box) return;
@@ -8448,28 +8436,23 @@ function renderVehiclePacks() {
     for (const d of own.slice().sort((a, b) => String(a.model).localeCompare(String(b.model)))) {
       html += `<div class="list-item mine" onclick="useVehiclePack(${arg(d.model)})" style="cursor:pointer;">
         <span style="display:flex;align-items:center;gap:8px;">${vehIcon({ g: '', m: '' })}<strong class="list-item-title">${esc(d.model)}</strong></span>
-        ${mineLine(d)}${cardMax({ g: 'המדידות שלי', m: d.model, p: 22.5 }, d)}</div>`;
+        ${mineLine(d)}</div>`;
     }
   }
   const hit = VEHICLE_PACKS.filter((v) => !q || v.m.toLowerCase().includes(q) || v.g.toLowerCase().includes(q));
   let group = '';
   for (const v of hit) {
     if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
-    const cfg = (s, p) => (s ? `${s}S ${p}P · ${p * CELL_AH_DEFAULT}Ah` : '—');
-    // 16S and 20S in the same tray should land within ~15% of each other on cell count.
-    const c60 = v.s60 * v.p60, c72 = v.s72 * v.p72;
-    const odd = c60 && c72 && Math.max(c60, c72) / Math.min(c60, c72) > 1.15;
-    const capsTxt = v.caps ? Object.entries(v.caps).map(([k, n]) => `${({ 'square-23': 'ריבועי 23', 'diag-a': 'אלכסוני 22.5', 'diag-b': 'אלכסוני 21.5' })[k] || k}: ${n}`).join(' · ') : '';
+    // The card is the vehicle and its tray, nothing more (2026-09-27: "כדי שלא יהיה עמוס"). The
+    // builds, the maximum per voltage, the OEM pack and the counted holders all come after the
+    // tap, where the cell and the nickel have been chosen and the numbers mean something.
     const d = dims.find((x) => String(x.model || '').trim().toLowerCase() === v.m.trim().toLowerCase());
+    const tb = !d ? tubOf(v) : null;
+    const tray = tb ? `<bdi dir="ltr">${tb.L}×${tb.W}${tb.H ? '×' + tb.H : ''}</bdi> מ"מ` : '<span style="opacity:.7;">אין מידות</span>';
     html += `<div class="list-item${d ? ' mine' : ''}" onclick="useVehiclePack(${arg(v.m)})" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
-        <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong class="list-item-title">${v.m}${odd ? ' <span style="color:var(--warning,#f59e0b);font-size:11px;">⚠</span>' : ''}</strong></span><span style="font-size:11px;color:var(--text-muted);text-align:left;flex:none;">${v.p} מ"מ · עד ${v.max}${v.oem ? ` · מקורי ${v.oem}` : ''}</span>
+        <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong class="list-item-title">${v.m}</strong></span>${d ? '' : `<span style="font-size:11px;color:var(--text-muted);flex:none;">${tray}</span>`}
       </div>
-      <div style="font-size:12px;margin-top:2px;">60V: ${cfg(v.s60, v.p60)} &nbsp;·&nbsp; 72V: ${cfg(v.s72, v.p72)}</div>
-      ${v.pack ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">חבילה ${v.pack} מ"מ</div>` : ''}
-      ${capsTxt ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">נספר: ${capsTxt}</div>` : ''}
-      ${cardMax(v, d)}
-      ${odd ? `<div style="font-size:11px;color:var(--warning,#f59e0b);margin-top:2px;">⚠ שני המתחים חלוקים על גודל האמבטיה (${c60} מול ${c72} תאים) — כדאי לבדוק</div>` : ''}
       ${d ? mineLine(d) : ''}
     </div>`;
   }
