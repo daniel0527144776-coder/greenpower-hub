@@ -1,0 +1,16 @@
+[
+ { "model": "Inokim OX", "file": "inokim-ox.webp", "raw": "inokim-ox.png", "checked": "2026-09-27", "source": "falconpev.com.sg", "url": "https://cdn.shopify.com/s/files/1/0908/0796/products/OX-2.png" },
+ { "model": "Zero 10X", "file": "zero-10x.webp", "raw": "zero-10x.png", "checked": "2026-09-27", "source": "zeroelectricscooter.com", "url": "https://cdn.shopify.com/s/files/1/1809/7915/products/zero10xlimitedmed.png" },
+ { "model": "Zero 11X", "file": "zero-11x.webp", "raw": "zero-11x.jpg", "checked": "2026-09-27", "source": "zeroelectricscooter.com", "url": "https://cdn.shopify.com/s/files/1/1809/7915/products/Zero-11X-Electric-Scooter_15a2cbde-974c-4ba9-92a7-f9e34318c3d7.jpg" },
+ { "model": "Mantis King", "file": "mantis-king.webp", "raw": "mantis-king.jpg", "checked": "2026-09-27", "source": "kaabousa.com", "url": "https://cdn.shopify.com/s/files/1/0466/8227/6001/files/Mantis_King_GT_Black-260706.jpg" },
+ { "model": "Thunder 2/3", "file": "thunder.webp", "raw": "thunder.jpg", "checked": "2026-09-27", "source": "minimotorsusa.com", "url": "https://cdn.shopify.com/s/files/1/0018/7616/4681/files/DT-Thunder-3-Image-1.jpg" },
+ { "model": "DT Storm", "file": "dt-storm.webp", "raw": "dt-storm.jpg", "checked": "2026-09-27", "source": "minimotorsusa.com", "url": "https://cdn.shopify.com/s/files/1/0018/7616/4681/files/DT-New-Storm-Image-1.jpg" },
+
+ { "model": "Inokim OXO", "raw": "inokim-oxo.jpg", "checked": "", "note": "NetFree placeholder on 2026-09-27 — awaiting approval", "url": "https://cdn.shopify.com/s/files/1/0870/8993/8748/files/carbon_01_d41db245-891a-4963-9d03-15ebaf02147a.jpg" },
+ { "model": "Nami Burn-E", "raw": "nami-burn-e.jpg", "checked": "", "note": "NetFree placeholder on 2026-09-27 — awaiting approval", "url": "https://cdn.shopify.com/s/files/1/0020/6077/9589/files/Burne2award_df7e38e4-7965-4ed5-bdba-d9810bde882f.jpg" },
+ { "model": "Nami Klima", "raw": "nami-klima.jpg", "checked": "", "note": "NetFree placeholder on 2026-09-27 — awaiting approval", "url": "https://cdn.shopify.com/s/files/1/0020/6077/9589/files/NAMIKLIMAaward_9bf2fee3-6312-4921-b5bd-9782c4ce66b0.jpg" },
+ { "model": "Wolf Warrior", "raw": "wolf-warrior.jpg", "checked": "", "note": "NetFree placeholder on 2026-09-27 — awaiting approval", "url": "https://cdn.shopify.com/s/files/1/0466/8227/6001/files/kaabo_warrio-11_max_high_performance_dual_motor_electric_scooter-260702-black.jpg" },
+ { "model": "Wolf King GTR", "raw": "wolf-king-gtr.jpg", "checked": "", "note": "NetFree placeholder on 2026-09-27 — awaiting approval", "url": "https://cdn.shopify.com/s/files/1/0466/8227/6001/files/Wolf_Warrior_GTR-260706.jpg" },
+ { "model": "Blade GT", "raw": "blade-gt.webp", "checked": "", "note": "NetFree placeholder on 2026-09-27 — awaiting approval", "url": "https://cdn.shopify.com/s/files/1/2476/0976/files/1_32cb7a07-5ca1-4627-bc03-f285bea41143.webp" },
+ { "model": "Teverun", "raw": "teverun.jpg", "checked": "", "note": "NetFree placeholder on 2026-09-27 — awaiting approval", "url": "https://cdn.shopify.com/s/files/1/2476/0976/files/1_6.jpg" }
+]

@@ -318,25 +318,32 @@ check('Blade GT: OEM 35Ah and the row is 16S7P', /מקורי 60V 35Ah/.test(oem.
 // one: an <img> here would look perfect on this machine and arrive as the filter's grey
 // placeholder on the phone the hub is actually used on — HTTP 200, valid JPEG magic bytes,
 // a picture of nothing. That failure is invisible to every other check in this file.
-const art = await page.evaluate(() => {
+const art = await page.evaluate((SELF) => {
+  // --selftest empties the baked photos: the page with no bake behind it
+  if (SELF && typeof VEH_PHOTOS !== 'undefined') for (const k of Object.keys(VEH_PHOTOS)) delete VEH_PHOTOS[k];
   renderVehiclePacks();
   const list = document.getElementById('vpList');
   const rows = [...list.querySelectorAll('.list-item')];
   const kinds = new Set(VEHICLE_PACKS.map((v) => vehType(v)));
+  const imgs = [...list.querySelectorAll('img')];
   return {
     rows: rows.length,
-    svgs: list.querySelectorAll('svg').length,
-    imgs: list.querySelectorAll('img').length,
+    svgs: list.querySelectorAll('svg').length + imgs.length,
+    imgs: imgs.filter((i) => !/^data:image\//.test(i.getAttribute('src') || '')).length,
+    photos: imgs.length,
+    photoOnOx: !!rows.find((r) => ((r.querySelector('.list-item-title') || {}).textContent || '').trim() === 'Inokim OX' && r.querySelector('img')),
     kinds: [...kinds].sort().join(),
     inked: [...list.querySelectorAll('svg')].every((s) => s.querySelector('circle, path, rect')),
   };
-});
-check('every vehicle row carries a drawing', art.svgs === art.rows && art.rows > 25, art.svgs + '/' + art.rows);
+}, SELFTEST);
+check('every vehicle row carries a photo or a drawing', art.svgs === art.rows && art.rows > 25, art.svgs + '/' + art.rows);
+// The photos he chose (2026-09-27) are baked in; a model with none keeps its drawing.
+check('the baked vehicle photos reach the list', art.photos >= 6 && art.photoOnOx, [art.photos, art.photoOnOx]);
 check('and none of them is empty', art.inked, 'ok');
 // A vehType that quietly answered "scooter" for everything would still pass the count above
 // and give 29 identical pictures — which is worse than no picture, because it looks right.
 check('all four vehicle kinds are drawn', art.kinds === 'bomber,emoto,moto,scooter', art.kinds);
-check('nothing in the list fetches an image', art.imgs === 0, String(art.imgs));
+check('nothing in the list fetches an image — every photo is inline', art.imgs === 0, String(art.imgs));
 
 // The Bomber is a frame family whose versions differ by 3.5x in what they hold, so one row
 // called "Bomber" was a wrong answer wearing the shape of a right one.

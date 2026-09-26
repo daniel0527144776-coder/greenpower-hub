@@ -225,6 +225,11 @@ jobs:
       - name: The baked editor matches stickers.html
         run: node tools/inline-sticker-editor.mjs --check
 
+      # The vehicle photos are baked in as data-URIs from vehicle-photos/ — a stale bake is a
+      # red build rather than a missing picture.
+      - name: The baked vehicle photos match vehicle-photos/
+        run: node tools/bake-vehicle-photos.mjs --check
+
       # The phone has no browser, so opening the editor as its own page opened a block
       # screen instead. What is asserted is that the top-level document never changes.
       - name: Sticker — the editor opens without leaving the app
