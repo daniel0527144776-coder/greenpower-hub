@@ -133,7 +133,14 @@ const heights = await page.evaluate(() => {
   // Zero 11X at 60V: the 18650 stands in its 70mm tray and sixteen rows reach along it. At 72V
   // twenty rows are 375mm against a 360mm tray, so there it must say the LENGTH is short.
   const read60 = (name) => { useVehiclePack(name, 60); calcPackDims(); return document.getElementById('dimResult').innerHTML; };
-  return { shallow: read('Zero 10X'), mid: read60('Zero 11X'), mid72: read('Zero 11X'), deep: read('Nami Klima'), compound: read('Inokim OX') };
+  // A 71mm tray of his own (not on the riser list): an 18650 stands, a 21700 does not.
+  localStorage.setItem('gp_dims', JSON.stringify([
+    { id: 'd71', model: 'מגש 71 ארוך', l: 470, w: 150, h: 71, measured: true },
+    { id: 'd71s', model: 'מגש 71 קצר', l: 340, w: 150, h: 71, measured: true }]));
+  const out = { shallow: read('Mantis King'), mid: read60('מגש 71 ארוך'), mid72: (() => { useVehiclePack('מגש 71 קצר', 72); calcPackDims(); return document.getElementById('dimResult').innerHTML; })(),
+    deep: read('Nami Klima'), compound: read('Inokim OX'), riserZero: read('Zero 10X') };
+  localStorage.setItem('gp_dims', '[]');
+  return out;
 });
 check('a shallow tray refuses the cell outright', /לא נכנס לאמבטיה/.test(heights.shallow),
   heights.shallow.replace(/<[^>]*>/g, '').slice(0, 90));
@@ -145,8 +152,12 @@ check('a deep enough tray is left alone', !/לא נכנס לאמבטיה/.test(h
   heights.deep.replace(/<[^>]*>/g, '').slice(0, 90));
 // '425×165 + 60×140' is two rectangles, not L×W×H. Reading a loose third number out of it
 // invented a 60mm ceiling and hid this row's recommendation — it shipped that way for one run.
-check('a compound tub has no height read from it', !/לא נכנס לאמבטיה/.test(heights.compound),
+// On his riser list a shallow tray is a riser of known height, not a refusal (2026-09-27: the
+// OX is 65mm, "חייב להשים מגביה") — planned on the footprint, and told how tall the riser is.
+check('a riser vehicle is not refused for its height', !/לא נכנס לאמבטיה/.test(heights.compound) && !/לא נכנס לאמבטיה/.test(heights.riserZero),
   heights.compound.replace(/<[^>]*>/g, '').slice(0, 90));
+check('and it says how tall the riser must be', /צריך מגביה של לפחות 10 מ"מ/.test(heights.compound.replace(/<[^>]*>/g, '')) && /צריך מגביה של לפחות 17 מ"מ/.test(heights.riserZero.replace(/<[^>]*>/g, '')),
+  heights.compound.replace(/<[^>]*>/g, '').slice(0, 260));
 
 // ---- 4c. the 18650 offer that comes with a shallow tray ----
 // An 18650 is 65mm against the 21700's 70.15, so it stands where the 21700 cannot — and where
@@ -158,7 +169,7 @@ check('and names both cells where one fits', /EVE 26V/.test(heights.mid) && /EVE
 // The margin is read off the live price list. When that lookup fails the page says so instead
 // of inventing a number — which is honest, and was also the bug: the field is retail, not
 // price, so every reference row read undefined.
-// The Zero 10X is 58mm: nothing stands in it, so the block says that instead of pricing.
+// The Mantis King's 57mm (not on the riser list): nothing stands in it, so the block says that.
 check('where the 18650 stands but the string does not reach, it says the length', /לא נכנס לאורך המגש/.test(heights.mid72) && !/לא עומד/.test(heights.mid72),
   heights.mid72.replace(/<[^>]*>/g, '').slice(-140));
 check('and says so when no cell stands at all', /גם תא 18650 לא עומד/.test(heights.shallow),

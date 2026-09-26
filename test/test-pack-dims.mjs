@@ -457,14 +457,17 @@ const th = await page.evaluate((SELF) => {
   useVehiclePack('Nami Klima');   // 463x139x75, measured: a one-layer pack of 74 stands in it
   if (SELF) document.querySelectorAll('#dimResult .dim-kv').forEach((r) => { if (/גודל אמבטיה/.test(r.innerText)) r.remove(); });
   const known = res();
-  useVehiclePack('Inokim OX');    // two rectangles, no height on record
+  // A tray of his saved with no height (the OX has one since 2026-09-27: 65mm).
+  localStorage.setItem('gp_dims', JSON.stringify([{ id: 'dnh', model: 'בלי גובה', l: 400, w: 150, h: 0, measured: true }]));
+  useVehiclePack('בלי גובה');
   const unknown = res();
   const chip = document.getElementById('dimVehChip').innerText;
+  localStorage.setItem('gp_dims', '[]');
   clearDimVehicle();
   return { known, unknown, chip, none: res() };
 }, SELFTEST);
 check('the tray has its own size row, height included', /גודל אמבטיה\s*463 × 139 × 75 מ"מ/.test(th.known) && /גודל סוללה/.test(th.known), th.known.slice(0, 200));
-check('an unknown height is written ? and said to be unchecked', /גודל אמבטיה\s*425 × 165 × \? מ"מ · גובה לא ידוע, לא נבדק/.test(th.unknown) && /גובה לא ידוע/.test(th.chip), [th.unknown.slice(0, 160), th.chip]);
+check('an unknown height is written ? and said to be unchecked', /גודל אמבטיה\s*400 × 150 × \? מ"מ · גובה לא ידוע, לא נבדק/.test(th.unknown) && /גובה לא ידוע/.test(th.chip), [th.unknown.slice(0, 160), th.chip]);
 check('and with no vehicle there is no tray row', !/גודל אמבטיה/.test(th.none), th.none.slice(0, 120));
 
 // ---- the diagonal bracket both ways round (2026-09-27) ----

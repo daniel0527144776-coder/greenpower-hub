@@ -519,10 +519,16 @@ body { min-height: 100vh; }
         <div class="quick-card-desc">כניסה · יציאה · שעות</div>
       </div>
 
-      <div class="quick-card" onclick="navigateTo('calcs')">
+      <div class="quick-card" onclick="navigateTo('dims')">
         <span class="quick-card-icon">📐</span>
+        <div class="quick-card-title">מידות סוללה</div>
+        <div class="quick-card-desc">לפי כלי · מדבקה לעובד</div>
+      </div>
+
+      <div class="quick-card" onclick="navigateTo('calcs')">
+        <span class="quick-card-icon">🧰</span>
         <div class="quick-card-title">מחשבונים</div>
-        <div class="quick-card-desc">טווח נסיעה · מידות סוללה</div>
+        <div class="quick-card-desc">טווח · טעינה · מהירות</div>
       </div>
 
       <div class="quick-card" onclick="navigateTo('diag')">
@@ -972,7 +978,6 @@ body { min-height: 100vh; }
     <div class="sub-tab" data-calctab="speed" onclick="setCalcTab('speed')">🏁 מהירות</div>
     <div class="sub-tab" data-calctab="cost" onclick="setCalcTab('cost')">💰 חיסכון</div>
     <div class="sub-tab" data-calctab="upgrade" onclick="setCalcTab('upgrade')">⬆️ שדרוג מתח</div>
-    <div class="sub-tab" data-calctab="dims" onclick="setCalcTab('dims')">📐 מידות סוללה</div>
   </div>
   <div id="calctab-range">
 <div class="card">
@@ -1016,7 +1021,63 @@ body { min-height: 100vh; }
     <strong>הערה:</strong> הטווח משוער ותלוי בתנאי שטח, רוח, טמפרטורה ומצב הסוללה. החישוב בוצע לפי 85% מהאנרגיה התיאורטית (פקטור בטיחות BMS).
   </div>
   </div>
-  <div id="calctab-dims" style="display:none;">
+  <div id="calctab-charge" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="chAh" value="40" min="1" oninput="calcCharge()"></div>
+      <div class="form-row"><label>זרם מטען (A)</label><input type="number" class="form-input" id="chA" value="5" min="0.1" step="0.5" oninput="calcCharge()"></div>
+      <div class="form-row"><label>אחוז נוכחי (%)</label><input type="number" class="form-input" id="chPct" value="10" min="0" max="99" oninput="calcCharge()"></div>
+      <div id="chResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="calctab-health" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>טווח מקורי (ק"מ)</label><input type="number" class="form-input" id="heOrig" value="60" min="1" oninput="calcHealth()"></div>
+      <div class="form-row"><label>טווח נוכחי (ק"מ)</label><input type="number" class="form-input" id="heCurr" value="40" min="0" oninput="calcHealth()"></div>
+      <div class="form-row"><label>גיל הסוללה (שנים)</label><input type="number" class="form-input" id="heAge" value="2" min="0" step="0.5" oninput="calcHealth()"></div>
+      <div id="heResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="calctab-speed" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>מתח (V)</label><input type="number" class="form-input" id="spV" value="48" min="1" oninput="calcSpeed()"></div>
+      <div class="form-row"><label>הספק מנוע (W)</label><input type="number" class="form-input" id="spW" value="1000" min="1" step="100" oninput="calcSpeed()"></div>
+      <div class="form-row"><label>קוטר גלגל (אינץ')</label><input type="number" class="form-input" id="spWheel" value="20" min="1" step="0.5" oninput="calcSpeed()"></div>
+      <div class="form-row"><label>משקל רוכב (ק"ג)</label><input type="number" class="form-input" id="spKg" value="75" min="20" oninput="calcSpeed()"></div>
+      <div id="spResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="calctab-cost" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>מתח (V)</label><input type="number" class="form-input" id="coV" value="72" min="1" oninput="calcCost()"></div>
+      <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="coAh" value="40" min="1" oninput="calcCost()"></div>
+      <div class="form-row"><label>ק"מ ביום</label><input type="number" class="form-input" id="coKm" value="30" min="1" oninput="calcCost()"></div>
+      <div id="coResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <div id="calctab-upgrade" style="display:none;">
+    <div class="card">
+      <div class="form-row"><label>מתח נוכחי (V)</label><input type="number" class="form-input" id="upFrom" value="48" min="1" oninput="calcUpgrade()"></div>
+      <div class="form-row"><label>מתח מבוקש (V)</label><input type="number" class="form-input" id="upTo" value="60" min="1" oninput="calcUpgrade()"></div>
+      <div class="form-row"><label>קיבולת נוכחית (Ah)</label><input type="number" class="form-input" id="upAh" value="20" min="1" oninput="calcUpgrade()"></div>
+      <div class="form-row"><label>הספק מנוע (W)</label><input type="number" class="form-input" id="upW" value="1000" min="1" step="100" oninput="calcUpgrade()"></div>
+      <div id="upResult" style="margin-top:10px;"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BATTERY DIMENSIONS — its own page since 2026-09-27 ============ -->
+<!-- Daniel: "תשים את מידות הסוללה בטאב נפרד". It had grown into a tool of its own (vehicle list,
+     build, old pack, a label for the worker) living as the seventh tab of a strip of small
+     calculators. -->
+<section id="page-dims" class="page">
+  <div class="page-header">
+    <h2 class="page-title">📐 מידות סוללה</h2>
+  </div>
+  <div id="calctab-dims">
   <!-- Rebuilt 2026-09-25 (Daniel: "מחשבון מידות סוללות חייב להיות יותר טוב"): three tabs instead
        of four stacked cards, ONE list of vehicles that carries his own measurements, and a result
        laid out as labelled rows with the answer — does it go in — first. -->
@@ -1113,52 +1174,6 @@ body { min-height: 100vh; }
   </div>
   </div>
 
-  <div id="calctab-charge" style="display:none;">
-    <div class="card">
-      <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="chAh" value="40" min="1" oninput="calcCharge()"></div>
-      <div class="form-row"><label>זרם מטען (A)</label><input type="number" class="form-input" id="chA" value="5" min="0.1" step="0.5" oninput="calcCharge()"></div>
-      <div class="form-row"><label>אחוז נוכחי (%)</label><input type="number" class="form-input" id="chPct" value="10" min="0" max="99" oninput="calcCharge()"></div>
-      <div id="chResult" style="margin-top:10px;"></div>
-    </div>
-  </div>
-
-  <div id="calctab-health" style="display:none;">
-    <div class="card">
-      <div class="form-row"><label>טווח מקורי (ק"מ)</label><input type="number" class="form-input" id="heOrig" value="60" min="1" oninput="calcHealth()"></div>
-      <div class="form-row"><label>טווח נוכחי (ק"מ)</label><input type="number" class="form-input" id="heCurr" value="40" min="0" oninput="calcHealth()"></div>
-      <div class="form-row"><label>גיל הסוללה (שנים)</label><input type="number" class="form-input" id="heAge" value="2" min="0" step="0.5" oninput="calcHealth()"></div>
-      <div id="heResult" style="margin-top:10px;"></div>
-    </div>
-  </div>
-
-  <div id="calctab-speed" style="display:none;">
-    <div class="card">
-      <div class="form-row"><label>מתח (V)</label><input type="number" class="form-input" id="spV" value="48" min="1" oninput="calcSpeed()"></div>
-      <div class="form-row"><label>הספק מנוע (W)</label><input type="number" class="form-input" id="spW" value="1000" min="1" step="100" oninput="calcSpeed()"></div>
-      <div class="form-row"><label>קוטר גלגל (אינץ')</label><input type="number" class="form-input" id="spWheel" value="20" min="1" step="0.5" oninput="calcSpeed()"></div>
-      <div class="form-row"><label>משקל רוכב (ק"ג)</label><input type="number" class="form-input" id="spKg" value="75" min="20" oninput="calcSpeed()"></div>
-      <div id="spResult" style="margin-top:10px;"></div>
-    </div>
-  </div>
-
-  <div id="calctab-cost" style="display:none;">
-    <div class="card">
-      <div class="form-row"><label>מתח (V)</label><input type="number" class="form-input" id="coV" value="72" min="1" oninput="calcCost()"></div>
-      <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="coAh" value="40" min="1" oninput="calcCost()"></div>
-      <div class="form-row"><label>ק"מ ביום</label><input type="number" class="form-input" id="coKm" value="30" min="1" oninput="calcCost()"></div>
-      <div id="coResult" style="margin-top:10px;"></div>
-    </div>
-  </div>
-
-  <div id="calctab-upgrade" style="display:none;">
-    <div class="card">
-      <div class="form-row"><label>מתח נוכחי (V)</label><input type="number" class="form-input" id="upFrom" value="48" min="1" oninput="calcUpgrade()"></div>
-      <div class="form-row"><label>מתח מבוקש (V)</label><input type="number" class="form-input" id="upTo" value="60" min="1" oninput="calcUpgrade()"></div>
-      <div class="form-row"><label>קיבולת נוכחית (Ah)</label><input type="number" class="form-input" id="upAh" value="20" min="1" oninput="calcUpgrade()"></div>
-      <div class="form-row"><label>הספק מנוע (W)</label><input type="number" class="form-input" id="upW" value="1000" min="1" step="100" oninput="calcUpgrade()"></div>
-      <div id="upResult" style="margin-top:10px;"></div>
-    </div>
-  </div>
 </section>
 
 <!-- ============ SUPPLIER PRICE LIST PAGE ============ -->
@@ -2342,16 +2357,16 @@ function navigateTo(page) {
   // 'pricelist' is the old repairs page; it now IS the catalog. Kept as an alias so
   // any saved link, quick-card or habit still lands somewhere sensible.
   if (page === 'pricelist') return navigateTo('catalog');
-  // 'range' and 'dims' were separate pages until 2026-07-30; both are the same
-  // calculators page now. Kept as aliases so saved links and habits still land.
-  if (page === 'range' || page === 'dims') return navigateTo('calcs');
-  if (page === 'calcs') { calcRange(); calcPackDims(); calcFromOldPack(); renderDims(); }
+  // 'range' was a separate page until 2026-07-30; kept as an alias so saved links still land.
+  // 'dims' was folded into the calculators then, and became its own page again 2026-09-27.
+  if (page === 'range') return navigateTo('calcs');
+  if (page === 'calcs') { calcRange(); }
   if (page === 'catalog') renderCatalog();
   if (page === 'finances') renderFinances();
   if (page === 'worktime') renderWorktime();
   if (page === 'worker') renderWorkerPage();
   if (page === 'orders') renderOrders();
-  if (page === 'dims') { calcPackDims(); renderDims(); }
+  if (page === 'dims') { calcPackDims(); calcFromOldPack(); setDimTab(dimTab); }
   if (page === 'bizdocs') renderBizDocs();
   if (page === 'stickers') openStickerEditor();
   if (page === 'stickerlog') renderStickerLog();
@@ -2541,7 +2556,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v357';
+const HUB_BUILD = 'v358';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4505,10 +4520,12 @@ function removeSupplierRow(i) {
 // Driven by the tab list itself, so adding a calculator is one markup block and one entry
 // here — the old version named each panel twice and would silently show nothing for a tab
 // somebody forgot to add to the if-chain.
-const CALC_TABS = { range: () => calcRange(), dims: () => { calcPackDims(); renderDims(); },
+const CALC_TABS = { range: () => calcRange(),
   charge: () => calcCharge(), health: () => calcHealth(), speed: () => calcSpeed(),
   cost: () => calcCost(), upgrade: () => calcUpgrade() };
 function setCalcTab(tab) {
+  // Battery dimensions is its own page now; the old tab name still takes you there.
+  if (tab === 'dims') return navigateTo('dims');
   if (!CALC_TABS[tab]) return;
   document.querySelectorAll('[data-calctab]').forEach(el =>
     el.classList.toggle('active', el.dataset.calctab === tab));
@@ -7684,8 +7701,12 @@ function holderTakes(v, tub, fmt, h, S, P, c, maxLayers) {
 // The biggest P a holder takes in this tray at this voltage, his way (0 when nothing fits).
 // Used to say, per nickel and per voltage, how much goes in (Daniel, 2026-09-27: "תכתוב מה
 // הקיבולת המקסימלית שנכנסת לכל אמבטיה לפי הדגם של התא ולפי המתח… לפי הניקל שאני בוחר").
+// A vehicle on his riser list is built WITH a riser: a tray too shallow for a standing cell is
+// not a refusal there, it is a riser of known height (2026-09-27, the OX: 65mm, "חייב להשים מגביה").
+// 'Riser' or 'חובה הגבהה' — NOT a bare 'הגבהה', which also matches the other group, 'ללא הגבהה'.
+function needsRiser(v) { return !!v && /Riser|חובה הגבהה/.test(v.g || ''); }
 function maxPFor(v, tub, fmt, h, V, c) {
-  if (!tub || (tub.H && tub.H < c.len + DIM_CAP)) return 0;
+  if (!tub || (tub.H && tub.H < c.len + DIM_CAP && !needsRiser(v))) return 0;
   const S = seriesForV(V), ml = maxLayersFor(v, tub, c);
   for (let P = 40; P >= 1; P--) if (holderTakes(v, tub, fmt, h, S, P, c, ml)) return P;
   return 0;
@@ -7775,7 +7796,8 @@ function calcPackDims() {
   const standH = c.len + DIM_CAP;
   let layers = 1, lay = groupLayout(S, P, 1, Infinity), fitsTray = null;
   const maxLayers = maxLayersFor(dimVehicle, tub, c);
-  if (tub && !(tub.H && tub.H < standH)) {
+  const riser = !!(tub && tub.H && tub.H < standH && needsRiser(dimVehicle));
+  if (tub && (!(tub.H && tub.H < standH) || riser)) {
     layers = layersFor(tub, S, P, maxLayers, pitch, rowPitch, c.dia) || 1;
     lay = hisFit(tub, S, P, layers, pitch, rowPitch, c.dia);
     fitsTray = lay.fits;
@@ -7800,7 +7822,7 @@ function calcPackDims() {
   let head = '', best = '', rec = '';
   if (dimVehicle) {
     const name = dimVehicle.m;
-    if (tub && tub.H && tub.H < standH) {
+    if (tub && tub.H && tub.H < standH && !riser) {
       // No lying arrangement is offered. He builds with the cells standing on a terminal
       // (2026-09-23), so a tray shorter than the cell is simply a tray this cell cannot go in —
       // and the only remedy is a shorter cell, which the block below offers.
@@ -7857,7 +7879,7 @@ function calcPackDims() {
     // The tray beside it, in the same shape, so the two read against each other. A height nobody
     // measured is written as '?' and said — the height was not checked (2026-09-26/27).
     (dimVehicle && tub && (DIM_PITCH[fmt] || {})[holder] ? kv('מקסימום באמבטיה', [60, 72].concat([48, 52, 84].includes(V) ? [V] : []).map((vv) => { const mp = maxPFor(dimVehicle, tub, fmt, holder, vv, c); return `<bdi dir="ltr">${vv}V: ${mp ? seriesForV(vv) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah' : '—'}</bdi>`; }).join('<br>')) : '') +
-    (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ${tubAll.H ? '' : ' · גובה לא ידוע, לא נבדק'}`) : '') +
+    (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ${tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` : '') : ' · גובה לא ידוע, לא נבדק'}`) : '') +
     kv('פריסה', layoutText(S, P, layers, cols, rows, derived)) +
     rec;
   // A cell wider than the space it goes in cannot be assembled. The distance to check is the
@@ -8083,7 +8105,7 @@ function vehicleByName(name) {
 function tubBest(v, V, c, fmt, extra) {
   const tb = cellTub(tubOf(v), extra != null ? extra : dimExtraFor(V));
   if (!tb) return null;
-  if (tb.H && tb.H < c.len + DIM_CAP) return null;
+  if (tb.H && tb.H < c.len + DIM_CAP && !needsRiser(v)) return null;
   const S = seriesForV(V);
   const maxL = maxLayersFor(v, tb, c);
   let best = null;
@@ -8331,7 +8353,9 @@ const VEHICLE_PACKS = [
   // enough to plan with and not close enough to cut a bracket to. Where he has counted, his
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', src: 'AI', p: 21.5, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
-    tub: '425×165 + 60×140 מ"מ', caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
+    // Height 65mm, Daniel 2026-09-27: "גובה אמבטיה 65 מ"מ חייב להשים מגביה". The narrow 60×140 part
+    // stays in the note; the calculator plans on the main rectangle.
+    tub: '425×165×65 מ"מ + צר 60×140', caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 21.5, s60: 16, p60: 4, s72: 20, p72: 3, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 72, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' ,
     tub: '455×134×58 מ"מ פנימי (נמדד 22.9.2026) · רדוד — אף תא לא עומד בו' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' ,
