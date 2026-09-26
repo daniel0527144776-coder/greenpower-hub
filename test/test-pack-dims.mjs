@@ -62,7 +62,9 @@ const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 // 2026-09-25; he does not build on them.)
 const honey = await read({ ...base, holder: 'diag-b' });
 check('16S4P block, 21.5 diagonal: 325 x 89 x 74', honey.L === 325 && honey.W === 89 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
-check('and it reports 64 cells / 1152 Wh', /64/.test(honey.text) && /1152/.test(honey.text), honey.text.slice(0, 80));
+check('and it reports 64 cells', /64 תאים/.test(honey.text), honey.text.slice(0, 80));
+// Energy and weight were taken off the result on 2026-09-26 at his word; asserted absent.
+check('no energy or weight line', !/Wh|ק"ג|אנרגיה/.test(honey.text), honey.text.slice(0, 120));
 
 // A square bracket must be LONGER than a diagonal one: the diagonal nests the rows at
 // pitch x sin60 along the length, which is the 13% the diagonal exists for.
@@ -444,6 +446,22 @@ const one = await page.evaluate((SELF) => {
 check('the voltage is not offered twice', one.chipVolts === 0, one.chipVolts);
 check('changing the voltage refills the vehicle\'s build at that voltage', one.ah60 === '60', one.ah60);
 check('the capacity list is wide enough to read without opening it', one.w >= 220, one.w);
+
+// ---- the tray height is said, not only used (2026-09-26) ----
+const th = await page.evaluate((SELF) => {
+  const res = () => document.getElementById('dimResult').innerText;
+  useVehiclePack('Nami Klima');   // 463x139x75, measured: a one-layer pack of 74 stands in it
+  if (SELF) document.querySelectorAll('#dimResult .dim-kv').forEach((r) => { if (/גובה אמבטיה/.test(r.innerText)) r.remove(); });
+  const known = res();
+  useVehiclePack('Inokim OX');    // two rectangles, no height on record
+  const unknown = res();
+  const chip = document.getElementById('dimVehChip').innerText;
+  clearDimVehicle();
+  return { known, unknown, chip, none: res() };
+}, SELFTEST);
+check('a measured tray height is shown against the block', /גובה אמבטיה\s*75 מ"מ · החבילה 74/.test(th.known), th.known.slice(0, 200));
+check('an unknown one says the height was not checked', /גובה אמבטיה\s*לא ידוע — הגובה לא נבדק/.test(th.unknown) && /גובה לא ידוע/.test(th.chip), [th.unknown.slice(0, 160), th.chip]);
+check('and with no vehicle there is no tray height to show', !/גובה אמבטיה/.test(th.none), th.none.slice(0, 120));
 
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {

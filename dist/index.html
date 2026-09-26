@@ -2539,7 +2539,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v353';
+const HUB_BUILD = 'v354';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7759,10 +7759,6 @@ function calcPackDims() {
   const acrossMM = (cols - 1) * pitch + c.dia + 2 * DIM_WALL;
   const L = Math.round(alongMM + extra), W = Math.round(acrossMM);
   const H = Math.round(layers * (c.len + DIM_CAP));
-  const kg = (N * c.g + 500) / 1000;
-  // 3.6V nominal per cell, which is what the series table is built on; 3.7 here overstated
-  // a 20S pack by 2%.
-  const wh = Math.round(S * 3.6 * P * c.ah);
   renderDimVehChip();
 
   // ---- the answer first: does it go in the vehicle? ----
@@ -7817,8 +7813,8 @@ function calcPackDims() {
   const kv = (k, v) => `<div class="dim-kv"><span>${k}</span><b>${v}</b></div>`;
   let html = head + best +
     kv('תצורה', `<bdi dir="ltr">${S}S ${P}P</bdi> · ${N} תאים`) +
-    kv('אנרגיה ומשקל', `<bdi dir="ltr">${wh} Wh</bdi> · <bdi dir="ltr">~${kg.toFixed(1)}</bdi> ק"ג`) +
     kv('בלוק <bdi dir="ltr">(L × W × H)</bdi>', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
+    (dimVehicle && tubAll ? kv('גובה אמבטיה', tubAll.H ? `${tubAll.H} מ"מ${tubAll.H >= H ? ` · החבילה ${H}` : ` · החבילה ${H} — לא נכנסת`}` : 'לא ידוע — הגובה לא נבדק') : '') +
     kv('פריסה', layoutText(S, P, layers, cols, rows, derived)) +
     rec;
   // A cell wider than the space it goes in cannot be assembled. The distance to check is the
@@ -8136,7 +8132,7 @@ function renderDimVehChip() {
   const tb = tubOf(v);   // the tray as measured — the BMS share is the calculator's business
   const src = v.mine ? '✓ נמדד' : /לא נמדד/.test(v.tub || '') ? 'לפי הסוללה המקורית' : v.tub ? '' : 'הערכת AI';
   el.innerHTML = `<div class="dim-chip">${vehIcon(v)}<b>${v.m}</b>
-    <span style="color:var(--text-muted);font-size:12px;">${tb ? '<bdi dir="ltr">' + tb.L + '×' + tb.W + (tb.H ? '×' + tb.H : '') + '</bdi> מ"מ' : ''}${src ? ' · ' + src : ''}</span>
+    <span style="color:var(--text-muted);font-size:12px;">${tb ? '<bdi dir="ltr">' + tb.L + '×' + tb.W + (tb.H ? '×' + tb.H : '') + '</bdi> מ"מ' + (tb.H ? '' : ' · גובה לא ידוע') : ''}${src ? ' · ' + src : ''}</span>
     <span style="margin-inline-start:auto;"><button class="sup-chip" onclick="clearDimVehicle()" title="בלי כלי">✕</button></span></div>`;
 }
 let dimTab = 'veh';
@@ -8653,7 +8649,7 @@ function calcFromOldPack() {
     return;
   }
   out.innerHTML = `נכנסים <b>${r.cols}</b> לאורך × <b>${r.rows}</b> שורות${r.layers > 1 ? ' × <b>' + r.layers + '</b> שכבות' : ''} = <b>${r.N}</b> תאים.<br>
-    ב-${r.V}V (${r.S}S): <b>${r.S}S${r.P}P</b> · <b>${r.ah}Ah</b> · ${r.wh}Wh · ~${r.kg} ק"ג${r.spare ? ' · ' + r.spare + ' תאים עודפים' : ''}<br>
+    ב-${r.V}V (${r.S}S): <b>${r.S}S${r.P}P</b> · <b>${r.ah}Ah</b>${r.spare ? ' · ' + r.spare + ' תאים עודפים' : ''}<br>
     <span style="font-size:11px;color:var(--text-muted);">כולל ${r.extra} מ"מ ל-BMS באורך, ${r.c.label}</span>`;
 }
 // A measurement he took off a real pack, saved against the model. 'measured' is what tells it
