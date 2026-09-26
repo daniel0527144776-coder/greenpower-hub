@@ -99,19 +99,24 @@ check('a scooter tub is never folded', /⛔/.test(stack.scooter) && !/בקיפו
 const rec = await page.evaluate(() => {
   // The OX is the one row with a measured tub, so the recommendation has something real to
   // fit into rather than an estimate.
-  useVehiclePack('Inokim OX');
+  // Talaria, 20S7P, no BMS allowance: seven across 171mm and twenty rows along 381mm go in on
+  // the 21.5 nickel only — the 22.5 is 394mm long and the square 461.
+  document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
+  useVehiclePack('Talaria');
   calcPackDims();
   const html = document.getElementById('dimResult').innerHTML;
   const order = HOLDER_ORDER.slice();
-  return { html, order };
+  // and the OX: his count is a ceiling, not a layout — 8P cannot go across its 165mm
+  useVehiclePack('Inokim OX', 60);
+  const ox = document.getElementById('dimResult').innerText;
+  return { html, order, ox };
 });
 check('the densest holder is tried first', rec.order[0] === 'diag-b', rec.order.join(','));
 check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), rec.html.slice(0, 80).replace(/<[^>]*>/g, ''));
 // Densest FIRST is only right if it also has to fit: a recommendation that ignores whether the
 // pack goes in is just the first item of a list.
-// 140 cells in the OX: he counted 126 on the 21.5 nickel, 136 on the 22.5 and 140 on the square.
-// Densest FIRST is only right if it also has to fit — so the recommendation is the square.
-check('and it only recommends one that fits', /מומלץ: ריבועי 23/.test(rec.html), rec.html.replace(/<[^>]*>/g, '').slice(-120));
+check('and it only recommends one that fits', /מומלץ: ניקל ב׳/.test(rec.html) && /✗[^·]*ניקל א׳/.test(rec.html.replace(/<[^>]*>/g, '')), rec.html.replace(/<[^>]*>/g, '').slice(-120));
+check('a counted tray is still judged by the layout, not the count alone', !/^✅/.test(rec.ox.trim()), rec.ox.slice(0, 90));
 
 // ---- 4b. the tray HEIGHT, which was stored and never read until 2026-09-22 ----
 // A 21700 is 70.15mm long. A tray shallower than that cannot take a standing cell, and the

@@ -182,6 +182,9 @@ body { min-height: 100vh; }
 
 /* Info banner */
 .dim-ok { margin:0 0 8px; padding:8px 10px; border-radius:6px; background:rgba(52,211,153,.12); border:1px solid #34d399; color:#34d399; font-size:13px; font-weight:700; }
+/* A 150px select cut "40Ah · 8P · 128 תאים" off mid-word; these rows give the list the width. */
+.dim-wide { grid-template-columns: auto 1fr; }
+.dim-wide .form-select { width: 100%; }
 .dim-kv { display:flex; justify-content:space-between; gap:10px; padding:6px 2px; border-bottom:1px solid var(--border); font-size:13px; }
 .dim-kv span { color:var(--text-muted); flex:none; }
 .dim-kv b { text-align:left; }
@@ -1023,7 +1026,7 @@ body { min-height: 100vh; }
     <div class="sub-tab" data-dimtab="old" onclick="setDimTab('old')">📏 מהסוללה הישנה</div>
   </div>
   <div class="card">
-    <div class="form-row">
+    <div class="form-row dim-wide">
       <label>סוג תא</label>
       <select class="form-select" id="dimCell" onchange="calcPackDims(); calcFromOldPack()">
         <option value="21700-50e" selected>21700 EVE 50E — 5.0Ah</option>
@@ -1036,7 +1039,7 @@ body { min-height: 100vh; }
         <option value="18650-25p">18650 EVE 25P — 2.5Ah</option>
       </select>
     </div>
-    <div class="form-row"><label>מחזיק</label>
+    <div class="form-row dim-wide"><label>מחזיק</label>
       <select class="form-select" id="dimHolder" onchange="calcPackDims(); calcFromOldPack()">
         <option value="diag-a" selected>אלכסוני 22.5 (ניקל א׳)</option>
         <option value="diag-b">אלכסוני 21.5 (ניקל ב׳)</option>
@@ -1065,12 +1068,12 @@ body { min-height: 100vh; }
   <div class="card">
     <div id="dimVehChip"></div>
     <div class="form-row"><label>מתח</label>
-      <select class="form-select" id="dimV" onchange="calcPackDims()">
+      <select class="form-select" id="dimV" onchange="onDimVoltage()">
         <option value="36">36V</option><option value="48">48V</option><option value="52">52V</option>
         <option value="60" selected>60V</option><option value="72">72V</option><option value="84">84V</option>
       </select>
     </div>
-    <div class="form-row"><label>קיבולת</label>
+    <div class="form-row dim-wide"><label>קיבולת</label>
       <select class="form-select" id="dimAh" onchange="calcPackDims()"></select>
     </div>
     <div class="form-row"><label>תוספת BMS באורך (מ"מ)</label>
@@ -2536,7 +2539,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v352';
+const HUB_BUILD = 'v353';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7650,12 +7653,14 @@ function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia) {
 // "the densest that fits", so the recommendation is the first one that gets the pack in.
 const HOLDER_ORDER = ['diag-b', 'diag-a', 'square-23'];
 const HOLDER_NAME = { 'diag-b': 'ניקל ב׳ (21.5)', 'diag-a': 'ניקל א׳ (22.5)', 'square-23': 'ריבועי 23' };
-// A holder takes the build if it goes in his way within the layers the vehicle allows — or,
-// where he COUNTED that holder in this tray (the OX), if his count covers it.
+// A holder takes the build if it goes in his way within the layers the vehicle allows. Where he
+// COUNTED that holder in this tray (the OX), his count is a ceiling on top of that, not a
+// substitute for it: on 2026-09-26 the OX showed "✅ נכנס" beside a 650mm block in a 425mm tray,
+// because 128 cells were under the count while 8P could not go across 165mm at all.
 function holderTakes(v, tub, fmt, h, S, P, c, maxLayers) {
   const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
   if (!p) return 0;
-  if (v && v.caps && v.caps[h] != null) return S * P <= v.caps[h] ? 1 : 0;
+  if (v && v.caps && v.caps[h] != null && S * P > v.caps[h]) return 0;
   return layersFor(tub, S, P, maxLayers, p, rp, c.dia);
 }
 function maxLayersFor(v, tub, c) {
@@ -7776,7 +7781,8 @@ function calcPackDims() {
     } else if (tub) {
       // Where he COUNTED this holder in this tray (the OX), his count decides; elsewhere his method.
       const counted = dimVehicle.caps && dimVehicle.caps[holder] != null;
-      const ok = counted ? N <= dimVehicle.caps[holder] : fitsTray;
+      const overCount = counted && N > dimVehicle.caps[holder];
+      const ok = !overCount && fitsTray;
       if (ok) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` — בקיפול ל-${layers} שכבות` : ''}</div>`;
       else {
         // Say WHY in his terms: how many series groups the length takes, against how many he needs.
@@ -7784,7 +7790,7 @@ function calcPackDims() {
         const g = Math.ceil(P / Math.max(1, across));
         const rowsFit = Math.max(0, Math.floor((tub.L - c.dia - 2 * DIM_WALL) / rowPitch) + 1);
         const sFit = Math.floor(rowsFit / g) * Math.max(1, maxLayers);
-        const why = counted ? `חורג ב-${N - dimVehicle.caps[holder]} תאים (נכנסים ${dimVehicle.caps[holder]} עם המחזיק הזה, נספר)`
+        const why = overCount ? `חורג ב-${N - dimVehicle.caps[holder]} תאים (נכנסים ${dimVehicle.caps[holder]} עם המחזיק הזה, נספר)`
           : across < 1 ? 'המגש צר מדי לתא אחד'
           : `לאורך נכנסות <bdi dir="ltr">${sFit}S</bdi> מתוך <bdi dir="ltr">${S}S</bdi>${g > 1 ? ` (כל קבוצה ${g} שורות)` : ''}${maxLayers > 1 ? ` גם ב-${maxLayers} שכבות` : ''}`;
         head = `<div class="dim-over">⛔ לא נכנס ל-${name} — ${why}</div>`;
@@ -8043,7 +8049,7 @@ function tubBest(v, V, c, fmt, extra) {
     for (let P = 40; P >= 1; P--) {
       const l = holderTakes(v, tb, fmt, h, S, P, c, maxL);
       if (!l) continue;
-      if (!best || P > best.P) best = { h, S, P, n: S * P, layers: v && v.caps && v.caps[h] != null ? 1 : l };
+      if (!best || P > best.P) best = { h, S, P, n: S * P, layers: l };
       break;
     }
   }
@@ -8110,6 +8116,16 @@ function useVehiclePack(model, volts) {
   fillDimBuild(v, V, P, holder, layers, c);
   setDimTab('build');
 }
+// The voltage field is the one voltage control (the 60V/72V buttons beside the vehicle were a
+// second copy of it). With a vehicle chosen, changing it refills that vehicle's build at the new
+// voltage — the table's own build at 60 or 72, or the biggest his measured tray takes at any
+// voltage; otherwise it only recomputes.
+function onDimVoltage() {
+  const V = +(document.getElementById('dimV') || {}).value;
+  const v = dimVehicle;
+  if (v && (v.mine || (V === 72 && v.s72) || (V === 60 && v.s60))) { useVehiclePack(v.m, V); return; }
+  calcPackDims();
+}
 function clearDimVehicle() { dimVehicle = null; dimBest = null; calcPackDims(); }
 // The vehicle the result is judged against, with its tray and a way to switch voltage or let go.
 function renderDimVehChip() {
@@ -8118,15 +8134,10 @@ function renderDimVehChip() {
   const v = dimVehicle;
   if (!v) { el.innerHTML = ''; return; }
   const tb = tubOf(v);   // the tray as measured — the BMS share is the calculator's business
-  const cur = +(document.getElementById('dimV') || {}).value;
-  const vs = [v.s60 ? 60 : 0, v.s72 ? 72 : 0].filter(Boolean);
-  if (v.mine) vs.push(60, 72);
-  const volts = [...new Set(vs)];
   const src = v.mine ? '✓ נמדד' : /לא נמדד/.test(v.tub || '') ? 'לפי הסוללה המקורית' : v.tub ? '' : 'הערכת AI';
   el.innerHTML = `<div class="dim-chip">${vehIcon(v)}<b>${v.m}</b>
     <span style="color:var(--text-muted);font-size:12px;">${tb ? '<bdi dir="ltr">' + tb.L + '×' + tb.W + (tb.H ? '×' + tb.H : '') + '</bdi> מ"מ' : ''}${src ? ' · ' + src : ''}</span>
-    <span style="margin-inline-start:auto;display:flex;gap:4px;">${volts.map((x) => `<button class="sup-chip${x === cur ? ' on' : ''}" onclick="useVehiclePack(${JSON.stringify(v.m).replace(/"/g, '&quot;')}, ${x})">${x}V</button>`).join('')}
-    <button class="sup-chip" onclick="clearDimVehicle()" title="בלי כלי">✕</button></span></div>`;
+    <span style="margin-inline-start:auto;"><button class="sup-chip" onclick="clearDimVehicle()" title="בלי כלי">✕</button></span></div>`;
 }
 let dimTab = 'veh';
 function setDimTab(tab) {

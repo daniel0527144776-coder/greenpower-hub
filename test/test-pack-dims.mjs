@@ -426,6 +426,25 @@ check('on the phone it goes to the Bluetooth printer as TSPL', !!lbl.sent && lbl
 check('with no printer chosen it says so and sends nothing', !lbl.sentNoMac && /לא נבחרה מדפסת/.test(lbl.notice), lbl.notice.slice(0, 80));
 check('on the PC it opens a print page the size of the label', /@page\{size:100mm 50mm/.test(lbl.pc) && /data:image\/png/.test(lbl.pc), lbl.pc.slice(0, 90));
 
+// ---- one voltage control, and lists wide enough to read (2026-09-26) ----
+// Daniel: "יש כאן פעמיים את המתח" — the 60V/72V buttons beside the vehicle duplicated the voltage
+// field. The field is the control now, and changing it refills the vehicle's build at that
+// voltage. And "תרחיב את השורה של הקיבולת" — the 150px list cut its own text mid-word.
+const one = await page.evaluate((SELF) => {
+  if (SELF) window.onDimVoltage = () => calcPackDims();   // the field that only recomputed
+  navigateTo('calcs'); setCalcTab('dims'); setDimTab('build');   // measured on screen, so it must be on screen
+  useVehiclePack('Nami Burn-E');                          // 72V: 20S10P = 50Ah
+  const chipVolts = [...document.querySelectorAll('#dimVehChip button')].filter((b) => /V$/.test(b.textContent.trim())).length;
+  const v = document.getElementById('dimV'); v.value = '60'; v.dispatchEvent(new Event('change'));
+  const ah60 = document.getElementById('dimAh').value;    // 60V: 16S12P = 60Ah
+  const sel = document.getElementById('dimAh');
+  clearDimVehicle();
+  return { chipVolts, ah60, w: sel.clientWidth };
+}, SELFTEST);
+check('the voltage is not offered twice', one.chipVolts === 0, one.chipVolts);
+check('changing the voltage refills the vehicle\'s build at that voltage', one.ah60 === '60', one.ah60);
+check('the capacity list is wide enough to read without opening it', one.w >= 220, one.w);
+
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {
   if (SELF) {
