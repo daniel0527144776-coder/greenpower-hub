@@ -1028,7 +1028,7 @@ body { min-height: 100vh; }
   <div class="card">
     <div class="form-row dim-wide">
       <label>סוג תא</label>
-      <select class="form-select" id="dimCell" onchange="calcPackDims(); calcFromOldPack()">
+      <select class="form-select" id="dimCell" onchange="calcPackDims(); calcFromOldPack(); renderVehiclePacks()">
         <option value="21700-50e" selected>21700 EVE 50E — 5.0Ah</option>
         <option value="21700-50sg">21700 Tenpower 50SG — 5.0Ah</option>
         <option value="21700-50pl">21700 EVE 50PL — 5.0Ah</option>
@@ -1073,7 +1073,7 @@ body { min-height: 100vh; }
         <option value="60" selected>60V</option><option value="72">72V</option><option value="84">84V</option>
       </select>
     </div>
-    <div class="form-row dim-wide"><label>קיבולת</label>
+    <div class="form-row"><label>קיבולת</label>
       <select class="form-select" id="dimAh" onchange="calcPackDims()"></select>
     </div>
     <div class="form-row"><label>תוספת BMS באורך (מ"מ)</label>
@@ -2539,7 +2539,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v355';
+const HUB_BUILD = 'v356';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7601,8 +7601,6 @@ function drawPackLayout(o) {
     `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;">` +
     `<rect x="${PAD - 4}" y="${PAD - 4}" width="${W - PAD * 2 + 8}" height="${H - PAD * 2 + 8}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>` +
     cells + bmsBox +
-    lab(W / 2, H - 8, `${Math.round(lenMM + bms + 2 * wall)} מ"מ`) +
-    `<g transform="translate(12,${H / 2}) rotate(-90)">` + lab(0, 0, `${Math.round(widMM + 2 * wall)} מ"מ`) + "</g>" +
     "</svg>" +
     (layers > 1 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">שכבה אחת מתוך ${layers}</div>` : '');
 }
@@ -7680,6 +7678,15 @@ function holderTakes(v, tub, fmt, h, S, P, c, maxLayers) {
   if (!p) return 0;
   if (v && v.caps && v.caps[h] != null && S * P > v.caps[h]) return 0;
   return layersFor(tub, S, P, maxLayers, p, rp, c.dia);
+}
+// The biggest P a holder takes in this tray at this voltage, his way (0 when nothing fits).
+// Used to say, per nickel and per voltage, how much goes in (Daniel, 2026-09-27: "תכתוב מה
+// הקיבולת המקסימלית שנכנסת לכל אמבטיה לפי הדגם של התא ולפי המתח… לפי הניקל שאני בוחר").
+function maxPFor(v, tub, fmt, h, V, c) {
+  if (!tub || (tub.H && tub.H < c.len + DIM_CAP)) return 0;
+  const S = seriesForV(V), ml = maxLayersFor(v, tub, c);
+  for (let P = 40; P >= 1; P--) if (holderTakes(v, tub, fmt, h, S, P, c, ml)) return P;
+  return 0;
 }
 function maxLayersFor(v, tub, c) {
   const standH = c.len + DIM_CAP;
@@ -7827,8 +7834,11 @@ function calcPackDims() {
       // Which holder to reach for, densest first: the first one that takes this build.
       const hs = HOLDER_ORDER.map((h) => ({ h, fits: !!holderTakes(dimVehicle, tub, fmt, h, S, P, c, maxLayers) }));
       const win = hs.find((o) => o.fits);
-      const mark = (o) => `<span class="dim-holder" style="color:${o.fits ? '#34d399' : 'var(--text-muted)'};">${o.fits ? '✓' : '✗'} ${HOLDER_NAME[o.h]}</span>`;
-      rec = `<div class="dim-rec">${win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]}</b>` : '<b style="color:var(--danger);">אף מחזיק לא מכיל את החבילה במגש הזה</b>'}${hs.filter((o) => o !== win).map((o) => ' · ' + mark(o)).join('')}</div>`;
+      // Each nickel with the most it takes here at this voltage, so the choice of nickel says
+      // what it buys; the one selected is bold.
+      const most = (h) => { const mp = maxPFor(dimVehicle, tub, fmt, h, V, c); return mp ? `עד <bdi dir="ltr">${S}S${mp}P · ${+(mp * c.ah).toFixed(1)}Ah</bdi>` : 'לא נכנס'; };
+      const mark = (o) => `<span class="dim-holder" style="color:${o.fits ? '#34d399' : 'var(--text-muted)'};${o.h === holder ? 'font-weight:700;' : ''}">${o.fits ? '✓' : '✗'} ${HOLDER_NAME[o.h]} — ${most(o.h)}</span>`;
+      rec = `<div class="dim-rec">${win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]} — ${most(win.h)}</b>` : '<b style="color:var(--danger);">אף מחזיק לא מכיל את החבילה במגש הזה</b>'}${hs.filter((o) => o !== win).map((o) => '<br>' + mark(o)).join('')}</div>`;
     } else if (dimVehicle.max) {
       // No tray size at all — only the table's ceiling, which is an AI estimate. Loud, and NOT a
       // block: refusing to compute a pack on the strength of a guess would stop a real build.
@@ -7844,6 +7854,7 @@ function calcPackDims() {
     kv('גודל סוללה', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
     // The tray beside it, in the same shape, so the two read against each other. A height nobody
     // measured is written as '?' and said — the height was not checked (2026-09-26/27).
+    (dimVehicle && tub && (DIM_PITCH[fmt] || {})[holder] ? kv('מקסימום באמבטיה', [60, 72].concat([48, 52, 84].includes(V) ? [V] : []).map((vv) => { const mp = maxPFor(dimVehicle, tub, fmt, holder, vv, c); return `<bdi dir="ltr">${vv}V: ${mp ? seriesForV(vv) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah' : '—'}</bdi>`; }).join('<br>')) : '') +
     (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ${tubAll.H ? '' : ' · גובה לא ידוע, לא נבדק'}`) : '') +
     kv('פריסה', layoutText(S, P, layers, cols, rows, derived)) +
     rec;
@@ -8398,6 +8409,23 @@ let dimVehicle = null;
 // the same page, and a vehicle he had measured appeared in both with different numbers. A
 // saved tray now sits on its vehicle's card; a tray for a vehicle the table does not know is
 // listed first, under "המדידות שלי".
+// The most a tray takes, per voltage, with the cell chosen above and the best nickel for it — on
+// the card, so the list answers "how big can this vehicle go" before anything is clicked. Only
+// where a tray size exists; the AI build lines above are what the other cards have.
+function cardMax(v, d) {
+  const key = (document.getElementById('dimCell') || {}).value || '21700-50e';
+  const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
+  const fmt = key.startsWith('18650') ? 18650 : 21700;
+  const vv = d ? { ...v, tub: `${d.l}×${d.w}${+d.h ? '×' + d.h : ''} מ"מ (נמדד)`, mine: d } : v;
+  const tub = cellTub(tubOf(vv), dimExtraFor(72));
+  if (!tub) return '';
+  const part = (V) => {
+    let best = 0;
+    for (const h of HOLDER_ORDER) best = Math.max(best, maxPFor(vv, tub, fmt, h, V, c));
+    return `${V}V: ${best ? seriesForV(V) + 'S' + best + 'P · ' + (+(best * c.ah).toFixed(1)) + 'Ah' : '—'}`;
+  };
+  return `<div style="font-size:12px;margin-top:2px;color:#34d399;">מקסימום (${c.label.replace(/^\d+ /, '')}): <bdi dir="ltr">${part(60)} · ${part(72)}</bdi></div>`;
+}
 function renderVehiclePacks() {
   const box = document.getElementById('vpList');
   if (!box) return;
@@ -8420,7 +8448,7 @@ function renderVehiclePacks() {
     for (const d of own.slice().sort((a, b) => String(a.model).localeCompare(String(b.model)))) {
       html += `<div class="list-item mine" onclick="useVehiclePack(${arg(d.model)})" style="cursor:pointer;">
         <span style="display:flex;align-items:center;gap:8px;">${vehIcon({ g: '', m: '' })}<strong class="list-item-title">${esc(d.model)}</strong></span>
-        ${mineLine(d)}</div>`;
+        ${mineLine(d)}${cardMax({ g: 'המדידות שלי', m: d.model, p: 22.5 }, d)}</div>`;
     }
   }
   const hit = VEHICLE_PACKS.filter((v) => !q || v.m.toLowerCase().includes(q) || v.g.toLowerCase().includes(q));
@@ -8440,6 +8468,7 @@ function renderVehiclePacks() {
       <div style="font-size:12px;margin-top:2px;">60V: ${cfg(v.s60, v.p60)} &nbsp;·&nbsp; 72V: ${cfg(v.s72, v.p72)}</div>
       ${v.pack ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">חבילה ${v.pack} מ"מ</div>` : ''}
       ${capsTxt ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">נספר: ${capsTxt}</div>` : ''}
+      ${cardMax(v, d)}
       ${odd ? `<div style="font-size:11px;color:var(--warning,#f59e0b);margin-top:2px;">⚠ שני המתחים חלוקים על גודל האמבטיה (${c60} מול ${c72} תאים) — כדאי לבדוק</div>` : ''}
       ${d ? mineLine(d) : ''}
     </div>`;

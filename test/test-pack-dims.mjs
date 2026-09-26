@@ -163,7 +163,9 @@ const draw = await page.evaluate(() => {
 check('the drawing has one circle per cell (120)', draw.circles === 120, String(draw.circles));
 // The drawing's labels are the block's OWN size — they once read 473 beside a block of 476,
 // because the picture left the bracket walls out. Counts are said once, in the layout row.
-check('the drawing is labelled with the block size itself', draw.txt.includes(draw.L + ' מ"מ') && draw.txt.includes(draw.W + ' מ"מ'), [draw.txt, draw.L, draw.W]);
+// The sizes are said once, in the rows above; the drawing carries none (2026-09-27, Daniel:
+// "למה המידות כתובות כפול?").
+check('the drawing does not repeat the sizes', !/מ"מ/.test(draw.txt), draw.txt);
 const bmsDraw = await page.evaluate((SELF) => {
   const run = (x) => { document.getElementById('dimExtra').value = String(x); dimExtraTouched = true; calcPackDims();
     const m = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/) || [];
@@ -171,7 +173,7 @@ const bmsDraw = await page.evaluate((SELF) => {
   if (SELF) window.drawPackLayout = ((f) => (o) => f({ ...o, extra: 0 }))(window.drawPackLayout);
   return { with26: run(26), with0: run(0) };
 }, SELFTEST);
-check('and draws the BMS at the end of the block, inside its length', /BMS/.test(bmsDraw.with26.txt) && bmsDraw.with26.txt.includes(bmsDraw.with26.L + ' מ"מ'), bmsDraw.with26);
+check('and draws the BMS at the end of the block', /BMS/.test(bmsDraw.with26.txt), bmsDraw.with26);
 check('and no BMS box when there is no allowance', !/BMS/.test(bmsDraw.with0.txt), bmsDraw.with0.txt);
 check('and does not repeat the counts', !/תאים בשורה|שורות|עיגול/.test(draw.txt), draw.txt);
 check('the layout is said his way: the group across, the series along', /רוחב 6P · אורך 20S/.test(draw.res), draw.res);
@@ -445,7 +447,9 @@ const one = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('the voltage is not offered twice', one.chipVolts === 0, one.chipVolts);
 check('changing the voltage refills the vehicle\'s build at that voltage', one.ah60 === '60', one.ah60);
-check('the capacity list is wide enough to read without opening it', one.w >= 220, one.w);
+// It says "40Ah" and nothing else now, so an ordinary width reads it whole — the full-row width
+// it had for one release was, in his words, just very wide.
+check('the capacity list is an ordinary width again', one.w > 60 && one.w <= 200, one.w);
 
 // ---- the tray height is said, not only used (2026-09-26) ----
 const th = await page.evaluate((SELF) => {
@@ -481,6 +485,24 @@ const turn = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('seven across the Nami Klima: 20S7P goes in with the bracket turned', /^✅ נכנס ל-Nami Klima/.test(turn.r.trim()) && /רוחב 7P · אורך 20S/.test(turn.r), turn.r.slice(0, 160));
 check('and the drawing still has one circle per cell', turn.circles === 140, turn.circles);
+
+// ---- the most a tray takes, per voltage and per nickel (2026-09-27) ----
+const mx = await page.evaluate((SELF) => {
+  if (SELF) window.maxPFor = () => 0;
+  document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
+  navigateTo('calcs'); setCalcTab('dims');
+  useVehiclePack('Talaria', 72);
+  const res = document.getElementById('dimResult').innerText;
+  setDimTab('veh');
+  const card = [...document.querySelectorAll('#vpList .list-item')].find((c) => /Talaria/.test(c.innerText));
+  const cardTxt = card ? card.innerText : '';
+  clearDimVehicle();
+  return { res, cardTxt };
+}, SELFTEST);
+// Talaria 381 x 171, no BMS allowance, 21.5 nickel: seven across, twenty along — 20S7P at 72V.
+check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: 20S7P · 35Ah/.test(mx.res), mx.res.slice(0, 400));
+check('and each nickel says how much it takes', /ניקל א׳ \(22\.5\) — (עד 20S\d+P|לא נכנס)/.test(mx.res), mx.res.slice(-260));
+check('the vehicle card carries the maximum too', /מקסימום \(EVE 50E\): 60V: 16S\d+P · \d+Ah · 72V: 20S7P · 35Ah/.test(mx.cardTxt), mx.cardTxt.slice(0, 300));
 
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {
