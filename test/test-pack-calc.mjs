@@ -52,7 +52,7 @@ const cap = await page.evaluate(() => {
   return { tag: el.tagName, opts: [...el.options].slice(0, 4).map((o) => o.textContent.trim()), n: el.options.length };
 });
 check('capacity is a dropdown, not a free field', cap.tag === 'SELECT', cap.tag);
-check('in 5Ah steps, each naming its P and cell count', /^5Ah · \d+P · \d+ תאים/.test(cap.opts[0] || ''), cap.opts[0] || '');
+check('in 5Ah steps, the capacity alone', /^5Ah$/.test(cap.opts[0] || ''), cap.opts[0] || '');
 check('and it offers a real range', cap.n >= 8, String(cap.n));
 
 // ---- 2. the BMS allowance follows the voltage until he overrides it ----
@@ -91,7 +91,7 @@ const stack = await page.evaluate((SELF) => {
 check('there is no layers field to type into', !stack.field, stack.field);
 check('a pack that fits one layer is not folded', /✅/.test(stack.moto40) && !/שכבות/.test(stack.moto40), stack.moto40.slice(0, 90));
 check('one that does not is folded, and the page says so', /בקיפול ל-2 שכבות/.test(stack.moto50), stack.moto50.slice(0, 90));
-check('and the layout names the S per layer', /2 שכבות, בכל שכבה 10S/.test(stack.moto50), stack.moto50.slice(0, 260));
+check('and the layout names the S per layer', /אורך 10S · 2 שכבות/.test(stack.moto50), stack.moto50.slice(0, 260));
 check('a tall motorcycle frame stacks as far as its height allows', /שכבות/.test(stack.fc1), stack.fc1.slice(0, 90));
 check('a scooter tub is never folded', /⛔/.test(stack.scooter) && !/בקיפול/.test(stack.scooter), stack.scooter.slice(0, 90));
 
@@ -106,8 +106,11 @@ const rec = await page.evaluate(() => {
   calcPackDims();
   const html = document.getElementById('dimResult').innerHTML;
   const order = HOLDER_ORDER.slice();
-  // and the OX: his count is a ceiling, not a layout — 8P cannot go across its 165mm
-  useVehiclePack('Inokim OX', 60);
+  // and the OX: his count is a ceiling, not a layout. 20S7P on the square holder is exactly the
+  // 140 he counted — and twenty rows at 23mm are 461mm against 425 less the BMS.
+  document.getElementById('dimExtra').value = '26';
+  useVehiclePack('Inokim OX', 72);
+  document.getElementById('dimHolder').value = 'square-23'; calcPackDims();
   const ox = document.getElementById('dimResult').innerText;
   return { html, order, ox };
 });
@@ -116,7 +119,7 @@ check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), 
 // Densest FIRST is only right if it also has to fit: a recommendation that ignores whether the
 // pack goes in is just the first item of a list.
 check('and it only recommends one that fits', /מומלץ: ניקל ב׳/.test(rec.html) && /✗[^·]*ניקל א׳/.test(rec.html.replace(/<[^>]*>/g, '')), rec.html.replace(/<[^>]*>/g, '').slice(-120));
-check('a counted tray is still judged by the layout, not the count alone', !/^✅/.test(rec.ox.trim()), rec.ox.slice(0, 90));
+check('a counted tray is still judged by the layout, not the count alone', /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.ox), rec.ox.slice(0, 90));
 
 // ---- 4b. the tray HEIGHT, which was stored and never read until 2026-09-22 ----
 // A 21700 is 70.15mm long. A tray shallower than that cannot take a standing cell, and the

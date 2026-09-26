@@ -2539,7 +2539,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v354';
+const HUB_BUILD = 'v355';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7565,29 +7565,34 @@ function drawPackLayout(o) {
   // bracket across the pack's width — a parallel group — and the series climbs left to right.
   // The BMS allowance sits at the end of the length, drawn as a box of its own, and the labels
   // are the whole block: the same numbers as the size row.
-  const lenMM = (rows - 1) * rowPitch + dia;
-  const widMM = (cols - 1) * pitch + dia;
+  // Orientation B (the bracket's straight rows along the length) puts the half-pitch offset on
+  // the length and the nested step across; A the other way round.
+  const B = o.orient === 'B';
+  const aStep = B ? pitch : rowPitch, cStep = B ? rowPitch : pitch;
+  const lenMM = (rows - 1) * aStep + dia;
+  const widMM = (cols - 1) * cStep + dia;
   const bms = Math.max(0, o.extra || 0), wall = o.wall || 0;
-  const drawH = widMM + (stagger ? pitch / 2 : 0);
+  const drawL = lenMM + (B && stagger ? pitch / 2 : 0);
+  const drawH = widMM + (!B && stagger ? pitch / 2 : 0);
   const PAD = 26;
-  const scale = Math.min(1, (340 - PAD * 2) / (lenMM + bms));
-  const W = Math.round((lenMM + bms) * scale) + PAD * 2, H = Math.round(drawH * scale) + PAD * 2;
+  const scale = Math.min(1, (340 - PAD * 2) / (drawL + bms));
+  const W = Math.round((drawL + bms) * scale) + PAD * 2, H = Math.round(drawH * scale) + PAD * 2;
   const r = (dia / 2) * scale;
   const perLayer = Math.ceil(N / (layers || 1));
   let cells = "", n = 0;
   for (let row = 0; row < rows; row++) {
-    const off = stagger && row % 2 ? pitch / 2 : 0;
     for (let col = 0; col < cols; col++) {
       if (n >= perLayer) break;
-      const cx = PAD + (row * rowPitch + dia / 2) * scale;
-      const cy = PAD + (off + col * pitch + dia / 2) * scale;
+      const offA = !B && stagger && row % 2 ? pitch / 2 : 0, offB = B && stagger && col % 2 ? pitch / 2 : 0;
+      const cx = PAD + (row * aStep + offB + dia / 2) * scale;
+      const cy = PAD + (col * cStep + offA + dia / 2) * scale;
       const band = P > 1 ? Math.floor(n / P) % 2 : 0;
       cells += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${band ? "var(--primary)" : "var(--bg-card, #1e293b)"}" fill-opacity="${band ? 0.35 : 0.9}" stroke="var(--primary)" stroke-width="1"/>`;
       n++;
     }
   }
   const lab = (x, y, s) => `<text x="${x}" y="${y}" fill="var(--text-muted)" font-size="11" text-anchor="middle">${s}</text>`;
-  const bx = PAD + lenMM * scale + 2, bw = Math.max(1, bms * scale - 2), bh = drawH * scale;
+  const bx = PAD + drawL * scale + 2, bw = Math.max(1, bms * scale - 2), bh = drawH * scale;
   const bmsBox = !bms ? '' :
     `<rect x="${bx.toFixed(1)}" y="${PAD}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>` +
     (bw >= 24 ? lab(bx + bw / 2, PAD + bh / 2 + 4, 'BMS')
@@ -7636,12 +7641,25 @@ function groupLayout(S, P, layers, acrossMax) {
 }
 // Does this build go in the tray, his way, in this many layers? Tray L is the long side,
 // already less the BMS at its end (cellTub).
+//
+// TWO WAYS ROUND (2026-09-27). A diagonal bracket can lie with its straight rows ACROSS the tray
+// (A: a group is a straight row, 21.5 apart; the groups climb at the nested 18.62) or ALONG it
+// (B: a group is a zigzag across, 18.62 a step; the groups climb at 21.5). His own numbers need
+// both: the 390 x 135 pack he measured is A (6 across at 22.5, 20 along at 19.49), and his Nami
+// Klima note "21×7 בניקל ב׳" is B — seven across 139mm only fit at 18.62 a step. A alone told
+// him the Klima takes six. A is tried first, as the pack he measured was built.
 function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
-  const across = acrossFit(tub.W, pitch, dia);
-  const lay = groupLayout(S, P, layers, across);
-  const acrossMM = (lay.inRow - 1) * pitch + dia + 2 * DIM_WALL;
-  const alongMM = (lay.rowsAlong - 1) * rowPitch + dia + 2 * DIM_WALL;
-  return { ...lay, fits: across >= 1 && acrossMM <= tub.W + 0.5 && alongMM <= tub.L + 0.5 };
+  let first = null;
+  for (const [orient, cStep, aStep] of [['A', pitch, rowPitch], ['B', rowPitch, pitch]]) {
+    const across = acrossFit(tub.W, cStep, dia);
+    const lay = groupLayout(S, P, layers, across);
+    const acrossMM = (lay.inRow - 1) * cStep + dia + 2 * DIM_WALL;
+    const alongMM = (lay.rowsAlong - 1) * aStep + dia + 2 * DIM_WALL;
+    const r = { ...lay, orient, fits: across >= 1 && acrossMM <= tub.W + 0.5 && alongMM <= tub.L + 0.5 };
+    if (r.fits) return r;
+    if (!first) first = r;
+  }
+  return first;
 }
 // The fewest layers that take the build (1 if none do — the verdict then says why).
 function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia) {
@@ -7692,7 +7710,9 @@ function refreshAhOptions() {
     const P = Math.ceil(ah / c.ah);
     const cells = P * S;
     const over = cap && cells > cap;
-    html += `<option value="${ah}"${Math.abs(ah - want) < 0.01 ? ' selected' : ''}>${ah}Ah · ${P}P · ${cells} תאים${over ? ' ⚠ מעבר למקסימום' : ''}</option>`;
+    // Only the capacity (2026-09-27): P and the cell count are in the result right under it,
+    // and a capacity over the vehicle's ceiling is flagged there too, loudly.
+    html += `<option value="${ah}"${Math.abs(ah - want) < 0.01 ? ' selected' : ''}>${ah}Ah</option>`;
   }
   sel.innerHTML = html;
   if (!sel.value) sel.value = String(want);
@@ -7752,11 +7772,14 @@ function calcPackDims() {
     fitsTray = lay.fits;
   }
   const cols = lay.inRow, rows = lay.rowsAlong;
-  const stagger = (holder.startsWith('diag') || holder === 'custom') && rows > 1;
+  const orient = lay.orient || 'A';
+  const isDiag = holder.startsWith('diag') || holder === 'custom';
+  const stagger = isDiag && (orient === 'B' ? cols > 1 : rows > 1);
   // The block: L runs along the series (the BMS sits at its end, so its allowance is added
   // there), W is across the groups, H is the standing cells and their holders alone.
-  const alongMM = (rows - 1) * rowPitch + c.dia + 2 * DIM_WALL;
-  const acrossMM = (cols - 1) * pitch + c.dia + 2 * DIM_WALL;
+  const aStep = orient === 'B' ? pitch : rowPitch, cStep = orient === 'B' ? rowPitch : pitch;
+  const alongMM = (rows - 1) * aStep + c.dia + 2 * DIM_WALL;
+  const acrossMM = (cols - 1) * cStep + c.dia + 2 * DIM_WALL;
   const L = Math.round(alongMM + extra), W = Math.round(acrossMM);
   const H = Math.round(layers * (c.len + DIM_CAP));
   renderDimVehChip();
@@ -7782,10 +7805,15 @@ function calcPackDims() {
       if (ok) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` — בקיפול ל-${layers} שכבות` : ''}</div>`;
       else {
         // Say WHY in his terms: how many series groups the length takes, against how many he needs.
-        const across = acrossFit(tub.W, pitch, c.dia);
-        const g = Math.ceil(P / Math.max(1, across));
-        const rowsFit = Math.max(0, Math.floor((tub.L - c.dia - 2 * DIM_WALL) / rowPitch) + 1);
-        const sFit = Math.floor(rowsFit / g) * Math.max(1, maxLayers);
+        let across = 0, g = 1, sFit = 0;
+        for (const [cs, as] of [[pitch, rowPitch], [rowPitch, pitch]]) {
+          const ac = acrossFit(tub.W, cs, c.dia);
+          const gg = Math.ceil(P / Math.max(1, ac));
+          const rf = Math.max(0, Math.floor((tub.L - c.dia - 2 * DIM_WALL) / as) + 1);
+          const sf = Math.floor(rf / gg) * Math.max(1, maxLayers);
+          if (ac >= 1 && sf > sFit) { sFit = sf; g = gg; across = ac; }
+          if (!across) across = ac;
+        }
         const why = overCount ? `חורג ב-${N - dimVehicle.caps[holder]} תאים (נכנסים ${dimVehicle.caps[holder]} עם המחזיק הזה, נספר)`
           : across < 1 ? 'המגש צר מדי לתא אחד'
           : `לאורך נכנסות <bdi dir="ltr">${sFit}S</bdi> מתוך <bdi dir="ltr">${S}S</bdi>${g > 1 ? ` (כל קבוצה ${g} שורות)` : ''}${maxLayers > 1 ? ` גם ב-${maxLayers} שכבות` : ''}`;
@@ -7813,8 +7841,10 @@ function calcPackDims() {
   const kv = (k, v) => `<div class="dim-kv"><span>${k}</span><b>${v}</b></div>`;
   let html = head + best +
     kv('תצורה', `<bdi dir="ltr">${S}S ${P}P</bdi> · ${N} תאים`) +
-    kv('בלוק <bdi dir="ltr">(L × W × H)</bdi>', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
-    (dimVehicle && tubAll ? kv('גובה אמבטיה', tubAll.H ? `${tubAll.H} מ"מ${tubAll.H >= H ? ` · החבילה ${H}` : ` · החבילה ${H} — לא נכנסת`}` : 'לא ידוע — הגובה לא נבדק') : '') +
+    kv('גודל סוללה', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
+    // The tray beside it, in the same shape, so the two read against each other. A height nobody
+    // measured is written as '?' and said — the height was not checked (2026-09-26/27).
+    (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ${tubAll.H ? '' : ' · גובה לא ידוע, לא נבדק'}`) : '') +
     kv('פריסה', layoutText(S, P, layers, cols, rows, derived)) +
     rec;
   // A cell wider than the space it goes in cannot be assembled. The distance to check is the
@@ -7840,8 +7870,8 @@ function calcPackDims() {
     else if (getDims().length) html += '<div class="dim-rec" style="color:var(--text-muted);">אין דגם שמור עם מידות מלאות להשוואה</div>';
   }
   out.innerHTML = html;
-  drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra, wall: DIM_WALL });
-  dimLast = { S, P, N, layers, cols, rows, pitch, rowPitch, dia: c.dia, stagger, extra, L, W, H,
+  drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra, wall: DIM_WALL, orient });
+  dimLast = { S, P, N, layers, cols, rows, pitch, rowPitch, dia: c.dia, stagger, extra, L, W, H, orient,
     cell: c.label, holder: (DIM_PITCH[fmt] || {})[holder] ? HOLDER_NAME[holder] : 'מותאם אישית',
     vehicle: dimVehicle ? dimVehicle.m : '' };
 }
@@ -7871,6 +7901,9 @@ function packLabelCanvas() {
     for (const w of String(str).split(' ').filter(Boolean)) {
       const heb = /[\u0590-\u05FF]/.test(w);
       const last = runs[runs.length - 1];
+      // The separator stands alone: glued to the Latin run after it, it landed on the far side
+      // of that run ("· Nami Klima" printed with the dot at the left edge of the label).
+      if (w === '·') { runs.push({ t: w, heb: true }); continue; }
       if (!heb && last && !last.heb) last.t += ' ' + w; else runs.push({ t: w, heb });
     }
     const sp = x.measureText(' ').width;
@@ -7895,13 +7928,15 @@ function packLabelCanvas() {
   x.font = 'bold 34px Heebo, Arial, sans-serif';
   const sPer = Math.ceil(d.S / d.layers);
   const g = Math.ceil(d.P / d.cols);
-  rtlText('לרוחב ' + d.P + 'P' + (g > 1 ? ' · ' + g + ' שורות לקבוצה' : '') + ' · לאורך ' + sPer + 'S'
+  rtlText('רוחב ' + d.P + 'P' + (g > 1 ? ' (' + g + ' שורות)' : '') + ' · אורך ' + sPer + 'S'
     + (d.layers > 1 ? ' · ' + d.layers + ' שכבות' : '') + ' · ' + d.holder, R, 100);
 
   // the drawing: along the length, one group per column, the BMS box at the end
   const top = 150, bottom = 530, avW = R - LEFT - 40, avH = bottom - top;
-  const lenMM = (d.rows - 1) * d.rowPitch + d.dia;
-  const widMM = (d.cols - 1) * d.pitch + d.dia + (d.stagger ? d.pitch / 2 : 0);
+  const B = d.orient === 'B';
+  const aStep = B ? d.pitch : d.rowPitch, cStep = B ? d.rowPitch : d.pitch;
+  const lenMM = (d.rows - 1) * aStep + d.dia + (B && d.stagger ? d.pitch / 2 : 0);
+  const widMM = (d.cols - 1) * cStep + d.dia + (!B && d.stagger ? d.pitch / 2 : 0);
   const bms = d.extra || 0;
   const sc = Math.min(avW / (lenMM + bms), avH / widMM);
   const x0 = LEFT + 30, y0 = top;
@@ -7910,12 +7945,12 @@ function packLabelCanvas() {
   const firstX = [];
   x.lineWidth = 3;
   for (let row = 0; row < d.rows; row++) {
-    const off = d.stagger && row % 2 ? d.pitch / 2 : 0;
     for (let col = 0; col < d.cols; col++) {
       if (n >= perLayer) break;
       const grp = Math.floor(n / d.P);
-      const cx = x0 + (row * d.rowPitch + d.dia / 2) * sc;
-      const cy = y0 + (off + col * d.pitch + d.dia / 2) * sc;
+      const offA = !B && d.stagger && row % 2 ? d.pitch / 2 : 0, offB = B && d.stagger && col % 2 ? d.pitch / 2 : 0;
+      const cx = x0 + (row * aStep + offB + d.dia / 2) * sc;
+      const cy = y0 + (col * cStep + offA + d.dia / 2) * sc;
       x.beginPath(); x.arc(cx, cy, Math.max(2, d.dia / 2 * sc - 2), 0, Math.PI * 2);
       if (grp % 2) x.fill(); else x.stroke();
       if (firstX[grp] == null) firstX[grp] = cx;
@@ -7924,7 +7959,7 @@ function packLabelCanvas() {
   }
   // group numbers above the columns — every one when there is room, else every other
   x.direction = 'ltr'; x.textAlign = 'center';
-  const colGap = d.rowPitch * sc * g;
+  const colGap = aStep * sc * g;
   const step = colGap >= 30 ? 1 : colGap >= 15 ? 2 : 5;
   x.font = 'bold ' + Math.max(18, Math.min(28, Math.round(colGap * 0.9))) + 'px Arial, sans-serif';
   firstX.forEach((gx, i) => { if (i % step === 0 || i === firstX.length - 1) x.fillText(String(i + 1), gx, top - 12); });
@@ -7944,7 +7979,7 @@ function packLabelCanvas() {
 
   // footer: the block's size, and how the layers split the string
   x.font = 'bold 30px Heebo, Arial, sans-serif';
-  rtlText('בלוק ' + d.L + '×' + d.W + '×' + d.H + ' מ״מ'
+  rtlText('גודל סוללה ' + d.L + '×' + d.W + '×' + d.H + ' מ״מ'
     + (d.layers > 1 ? ' · שכבה 1: קבוצות 1–' + sPer + ' · שכבה 2: קבוצות ' + (sPer + 1) + '–' + d.S : ''), R, 576);
   return cv;
 }
@@ -7995,11 +8030,9 @@ function layoutText(S, P, layers, cols, rows, derived) {
   const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
   const sPer = Math.ceil(S / layers);
   const g = Math.ceil(P / cols);
-  const pre = layers > 1 ? `${layers} שכבות, בכל שכבה ${iso(sPer + 'S')} · ` : '';
-  const body = g <= 1
-    ? `לרוחב ${iso(P + 'P')} · לאורך ${iso(sPer + 'S')}`
-    : `לרוחב ${cols} תאים · כל קבוצת ${iso(P + 'P')} ב-${g} שורות · לאורך ${iso(sPer + 'S')} (${rows} שורות)`;
-  return pre + body + (derived ? ' · מרווח משוער' : '');
+  // Short (2026-09-27: "שיהיה כתוב תמציתי יותר"): רוחב = the group, אורך = the string per layer.
+  return `רוחב ${iso(P + 'P')}${g > 1 ? ` (${g} שורות)` : ''} · אורך ${iso(sPer + 'S')}${layers > 1 ? ` · ${layers} שכבות` : ''}`
+    + (derived ? ' · מרווח משוער' : '');
 }
 // ---- the vehicle the estimator is answering for ----------------------------------------
 // The tray, as numbers — L the long side. Read from a STRICT A×B×C for the height and nothing

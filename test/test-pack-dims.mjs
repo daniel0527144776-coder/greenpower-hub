@@ -174,7 +174,7 @@ const bmsDraw = await page.evaluate((SELF) => {
 check('and draws the BMS at the end of the block, inside its length', /BMS/.test(bmsDraw.with26.txt) && bmsDraw.with26.txt.includes(bmsDraw.with26.L + ' מ"מ'), bmsDraw.with26);
 check('and no BMS box when there is no allowance', !/BMS/.test(bmsDraw.with0.txt), bmsDraw.with0.txt);
 check('and does not repeat the counts', !/תאים בשורה|שורות|עיגול/.test(draw.txt), draw.txt);
-check('the layout is said his way: the group across, the series along', /לרוחב 6P · לאורך 20S/.test(draw.res), draw.res);
+check('the layout is said his way: the group across, the series along', /רוחב 6P · אורך 20S/.test(draw.res), draw.res);
 
 
 // A staggered layout must actually be drawn staggered, or the picture lies about the shape.
@@ -296,7 +296,7 @@ const nick = await page.evaluate(() => {
 });
 // Removed 2026-09-25 at his word ("כל זה לא מעניין"); asserted absent so it does not creep back.
 check('no nickel line in the result', !/ניקל\s*\d|מגעים|תבנית/.test(nick.six) && !/מגעים|תבנית/.test(nick.three), nick.six.slice(-90));
-check('the size row is labelled in Latin', /\(L × W × H\)/.test(nick.six), nick.six.slice(0, 120));
+check('the battery size has its own row', /גודל סוללה\s*\d+ × \d+ × \d+/.test(nick.six), nick.six.slice(0, 120));
 
 // The OEM capacity is the tray read backwards, so it has to reach the screen — and where it
 // can be compared directly it must AGREE: Thunder 3 tops out at 72V 40Ah, which is 20S8P,
@@ -391,7 +391,7 @@ const hw = await page.evaluate((SELF) => {
   clearDimVehicle();
   return { txt, n: circles.length };
 }, SELFTEST);
-check('a group too wide for the tray takes two rows, and says so', /כל קבוצת 10P ב-2 שורות/.test(hw.txt), hw.txt.slice(0, 260));
+check('a group too wide for the tray takes two rows, and says so', /רוחב 10P \(2 שורות\)/.test(hw.txt), hw.txt.slice(0, 260));
 
 // ---- the build on a label for the worker (2026-09-25) ----
 // 100 x 50mm at 300dpi is 1181 x 590 dots: one canvas pixel per printer dot, like the battery
@@ -451,7 +451,7 @@ check('the capacity list is wide enough to read without opening it', one.w >= 22
 const th = await page.evaluate((SELF) => {
   const res = () => document.getElementById('dimResult').innerText;
   useVehiclePack('Nami Klima');   // 463x139x75, measured: a one-layer pack of 74 stands in it
-  if (SELF) document.querySelectorAll('#dimResult .dim-kv').forEach((r) => { if (/גובה אמבטיה/.test(r.innerText)) r.remove(); });
+  if (SELF) document.querySelectorAll('#dimResult .dim-kv').forEach((r) => { if (/גודל אמבטיה/.test(r.innerText)) r.remove(); });
   const known = res();
   useVehiclePack('Inokim OX');    // two rectangles, no height on record
   const unknown = res();
@@ -459,9 +459,28 @@ const th = await page.evaluate((SELF) => {
   clearDimVehicle();
   return { known, unknown, chip, none: res() };
 }, SELFTEST);
-check('a measured tray height is shown against the block', /גובה אמבטיה\s*75 מ"מ · החבילה 74/.test(th.known), th.known.slice(0, 200));
-check('an unknown one says the height was not checked', /גובה אמבטיה\s*לא ידוע — הגובה לא נבדק/.test(th.unknown) && /גובה לא ידוע/.test(th.chip), [th.unknown.slice(0, 160), th.chip]);
-check('and with no vehicle there is no tray height to show', !/גובה אמבטיה/.test(th.none), th.none.slice(0, 120));
+check('the tray has its own size row, height included', /גודל אמבטיה\s*463 × 139 × 75 מ"מ/.test(th.known) && /גודל סוללה/.test(th.known), th.known.slice(0, 200));
+check('an unknown height is written ? and said to be unchecked', /גודל אמבטיה\s*425 × 165 × \? מ"מ · גובה לא ידוע, לא נבדק/.test(th.unknown) && /גובה לא ידוע/.test(th.chip), [th.unknown.slice(0, 160), th.chip]);
+check('and with no vehicle there is no tray row', !/גודל אמבטיה/.test(th.none), th.none.slice(0, 120));
+
+// ---- the diagonal bracket both ways round (2026-09-27) ----
+// His Nami Klima note: "21×7 בניקל ב׳" in a 463 x 139 tray. Seven across 139mm fit only with the
+// bracket's straight rows ALONG the tray (18.62 a step across); straight rows across take six.
+// --selftest restores the one-way fit, which told him the Klima takes six.
+const turn = await page.evaluate((SELF) => {
+  if (SELF) window.hisFit = (tub, S, P, layers, pitch, rowPitch, dia) => {
+    const across = acrossFit(tub.W, pitch, dia); const lay = groupLayout(S, P, layers, across);
+    const aMM = (lay.inRow - 1) * pitch + dia + 2 * DIM_WALL, lMM = (lay.rowsAlong - 1) * rowPitch + dia + 2 * DIM_WALL;
+    return { ...lay, orient: 'A', fits: across >= 1 && aMM <= tub.W + 0.5 && lMM <= tub.L + 0.5 };
+  };
+  useVehiclePack('Nami Klima', 72); dimAhPending = 35; calcPackDims();
+  const r = document.getElementById('dimResult').innerText;
+  const circles = document.querySelectorAll('#dimDraw circle').length;
+  clearDimVehicle();
+  return { r, circles };
+}, SELFTEST);
+check('seven across the Nami Klima: 20S7P goes in with the bracket turned', /^✅ נכנס ל-Nami Klima/.test(turn.r.trim()) && /רוחב 7P · אורך 20S/.test(turn.r), turn.r.slice(0, 160));
+check('and the drawing still has one circle per cell', turn.circles === 140, turn.circles);
 
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {
@@ -519,7 +538,7 @@ check('a 22.5mm vehicle gets the 22.5 diagonal', rb.enduroHolder === 'diag-a', r
 check('picking a vehicle shows its result', rb.toBuild, rb.toBuild);
 // 20S7P = 140 in a 381x171 tray: 17 x 8 = 136 one way round, 7 x 20 = 140 the other. The
 // one-way count said no; the pack goes in, the way his own 390x135 pack is built.
-check('the bracket may be turned: Talaria takes its 140 cells', /^✅ נכנס ל-Talaria/.test(rb.talaria7.trim()) && /לרוחב 7P|לאורך 7P/.test(rb.talaria7), rb.talaria7.slice(0, 120));
+check('the bracket may be turned: Talaria takes its 140 cells', /^✅ נכנס ל-Talaria/.test(rb.talaria7.trim()) && /רוחב 7P/.test(rb.talaria7), rb.talaria7.slice(0, 120));
 check('a build that does not fit its tray says so first', /^⛔ לא נכנס ל-Talaria/.test(rb.talaria.trim()), rb.talaria.slice(0, 80));
 check('and offers the biggest that does', rb.hasBest, rb.hasBest);
 check('which then fits, in a block shorter than the tray', /^✅ נכנס ל-Talaria/.test(rb.after.trim()) && rb.afterL > 0 && rb.afterL <= 381, [rb.after.slice(0, 40), rb.afterL]);
