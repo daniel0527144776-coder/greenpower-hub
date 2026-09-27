@@ -25,7 +25,32 @@ for (const e of manifest) {
   const raw = path.join(SRC, e.raw);
   if (!fs.existsSync(raw)) { console.log('missing: ' + e.raw); continue; }
   // 128 x 88 is twice the 64 x 44 the card shows, on white, whole vehicle in frame.
-  await sharp(raw).resize(128, 88, { fit: 'contain', background: '#ffffff' }).flatten({ background: '#ffffff' })
+  // whiteout [w, h]: fractions of the image, from the top-left corner, painted white — the award
+  // badges the shops print beside the scooter read as a stain at 64px (Nami Burn-E and Klima).
+  // Painted, not cropped: a crop that clears the badges takes the front wheel with it.
+  // crop [x, y, w, h]: fractions of the image to keep — AliExpress photos carry a seller's logo,
+  // a frame or a sale banner around the vehicle.
+  // Crop first, then whiteout — the whiteout fractions are of the CROPPED picture.
+  let buf = await sharp(raw).png().toBuffer();
+  if (e.crop) {
+    const md = await sharp(buf).metadata();
+    const [x, y, w, h] = e.crop.map((f, i) => Math.round(f * (i % 2 ? md.height : md.width)));
+    buf = await sharp(buf).extract({ left: x, top: y, width: w, height: h }).png().toBuffer();
+  }
+  if (e.whiteout) {
+    // [w, h] from the top-left corner, or a list of [x, y, w, h] rectangles — a logo tucked under
+    // a handlebar needs two small patches, not one corner that takes the handlebar too.
+    const md = await sharp(buf).metadata();
+    const rects = Array.isArray(e.whiteout[0]) ? e.whiteout : [[0, 0, e.whiteout[0], e.whiteout[1]]];
+    const layers = [];
+    for (const [fx, fy, fw, fh] of rects) {
+      const w = Math.max(1, Math.round(md.width * fw)), h = Math.max(1, Math.round(md.height * fh));
+      const patch = await sharp({ create: { width: w, height: h, channels: 3, background: '#ffffff' } }).png().toBuffer();
+      layers.push({ input: patch, left: Math.round(md.width * fx), top: Math.round(md.height * fy) });
+    }
+    buf = await sharp(buf).composite(layers).png().toBuffer();
+  }
+  await sharp(buf).resize(128, 88, { fit: 'contain', background: '#ffffff' }).flatten({ background: '#ffffff' })
     .webp({ quality: 72 }).toFile(path.join(DIR, e.file));
   console.log('made ' + e.file + ' (' + fs.statSync(path.join(DIR, e.file)).size + ' bytes)');
 }

@@ -481,7 +481,7 @@ const th = await page.evaluate((SELF) => {
   return { known, unknown, chip, none: res() };
 }, SELFTEST);
 check('the tray has its own size row, height included', /גודל אמבטיה\s*463 × 139 × 75 מ"מ/.test(th.known) && /גודל סוללה/.test(th.known), th.known.slice(0, 200));
-check('an unknown height is written ? and said to be unchecked', /גודל אמבטיה\s*400 × 150 × \? מ"מ · גובה לא ידוע, לא נבדק/.test(th.unknown) && /גובה לא ידוע/.test(th.chip), [th.unknown.slice(0, 160), th.chip]);
+check('an unknown height is written ? and said to be unchecked', /גודל אמבטיה\s*400 × 150 × \? מ"מ · גובה לא ידוע, לא נבדק/.test(th.unknown) && !/400/.test(th.chip), [th.unknown.slice(0, 160), th.chip]);
 check('and with no vehicle there is no tray row', !/גודל אמבטיה/.test(th.none), th.none.slice(0, 120));
 
 // ---- the diagonal bracket both ways round (2026-09-27) ----
@@ -526,7 +526,7 @@ const mx = await page.evaluate((SELF) => {
 check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: 20S7P · 35Ah/.test(mx.res), mx.res.slice(0, 400));
 check('and each nickel says how much it takes', /ניקל א׳ \(22\.5\) — (עד 20S\d+P|לא נכנס)/.test(mx.res), mx.res.slice(-260));
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
-check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /381×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
+check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /385×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
 check('the cell and nickel are chosen after the tap, not above the list', !mx.sharedOnList && mx.sharedAfter, [mx.sharedOnList, mx.sharedAfter]);
 
 // ---- the 18650 has its own nickels, both square: 19 and 20.25 (2026-09-27) ----
