@@ -2556,7 +2556,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v369';
+const HUB_BUILD = 'v370';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7919,7 +7919,8 @@ function calcPackDims() {
     (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ${tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` : '') : ' · גובה לא ידוע, לא נבדק'}`) : '') +
     (dimVehicle && tub && (DIM_PITCH[fmt] || {})[holder] ? kv('מקסימום באמבטיה', [60, 72].concat([48, 52, 84].includes(V) ? [V] : []).map((vv) => { const mp = maxPFor(dimVehicle, tub, fmt, holder, vv, c); return `<bdi dir="ltr">${vv}V: ${mp ? seriesForV(vv) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah' : '—'}</bdi>`; }).join('<br>')) : '') +
     kv('פריסה', layoutText(S, P, layers, cols, rows, derived)) +
-    rec;
+    rec +
+    (isBomber(dimVehicle) ? bomberLyingHtml(dimVehicle, c, pitch, rowPitch, V, N, holder) : '');
   // A cell wider than the space it goes in cannot be assembled. The distance to check is the
   // NEAREST NEIGHBOUR, not the row pitch: in a staggered layout the rows nest, so a row pitch of
   // 19.5mm holds 21.15mm cells because the nearest cell in the next row sits half a pitch over.
@@ -8112,6 +8113,58 @@ function layoutText(S, P, layers, cols, rows, derived) {
   return `רוחב ${iso(P + 'P')}${g > 1 ? ` (${g} שורות)` : ''} · אורך ${iso(sPer + 'S')}${layers > 1 ? ` · ${layers} שכבות` : ''}`
     + (derived ? ' · מרווח משוער' : '');
 }
+// ---- cells LYING, for the Bombers (2026-09-27, Daniel: "כן, לבומברים בלבד") ----------------
+// A Bomber is not built like a scooter. The cells lie on their side ACROSS the frame, in stacks
+// side by side (two in his Plus), and the pack is cut to the triangle of the frame — so the side
+// of the frame is the floor plan and its width decides how many stacks. The standing estimate
+// above cannot say that.
+//
+// The triangle is a guess on a rectangle: BOMBER_FILL is what his Plus actually took of its own
+// bounding box (150 of 17 x 10 = 170 on the 23 square). One build, so it is said as an estimate.
+const BOMBER_FILL = 150 / 170;
+function isBomber(v) { return !!v && /Bomber/i.test(v.m || ''); }
+function bomberSide(v) {
+  if (!v) return null;
+  if (!v.mine && v.side) return v.side;
+  const tb = tubOf(v);
+  if (!tb || !tb.H) return null;
+  const d = [tb.L, tb.W, tb.H].sort((a, z) => a - z);
+  // The narrow side is the width across the frame; the other two are the side it is cut to.
+  return { L: d[2], H: d[1], across: d[0] };
+}
+function bomberLying(side, c, pitch, rowPitch) {
+  const stackW = c.len + DIM_CAP;
+  const stacks = Math.max(0, Math.floor((side.across - 2 * DIM_WALL) / stackW));
+  const inL = side.L - 2 * DIM_WALL - c.dia, inH = side.H - 2 * DIM_WALL - c.dia;
+  const cols = inL < 0 ? 0 : Math.floor(inL / pitch + 1e-9) + 1;
+  const rows = inH < 0 ? 0 : Math.floor(inH / rowPitch + 1e-9) + 1;
+  // A diagonal nickel shifts every other row half a pitch; that row loses its last cell unless
+  // the length has half a pitch to spare.
+  const stagger = rowPitch < pitch - 0.01;
+  const short = stagger && inL - (cols - 1) * pitch < pitch / 2 ? Math.floor(rows / 2) : 0;
+  const rect = Math.max(0, cols * rows - short);
+  const perSide = Math.round(rect * BOMBER_FILL);
+  return { stacks, stackW, cols, rows, rect, perSide, n: perSide * stacks };
+}
+function bomberLyingHtml(v, c, pitch, rowPitch, V, N, holder) {
+  const side = bomberSide(v);
+  if (!side) return `<div class="dim-rec"><b>🛏️ תאים שוכבים:</b> אין מידות צד לשלדה הזו — מדוד אורך, גובה ורוחב, ושמור ב"הוסף מדידה של מגש".</div>`;
+  const r = bomberLying(side, c, pitch, rowPitch);
+  const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
+  const head = `<b>🛏️ תאים שוכבים (כמו שבונים בבומבר)</b><br>צד ${iso(side.L + ' × ' + side.H)} מ"מ · רוחב שלדה ${iso(side.across)} מ"מ`;
+  if (!r.stacks) return `<div class="dim-rec">${head}<br><span style="color:var(--danger);">רוחב ${side.across} מ"מ צר מתא שוכב — צריך לפחות ${Math.ceil(r.stackW + 2 * DIM_WALL)}</span></div>`;
+  const S = seriesForV(V);
+  const P = Math.floor(r.n / S);
+  const fits = N <= r.n;
+  const built = v.side && !v.mine
+    ? `<br>נבנה במעבדה: ${r.stacks} ערימות · ${side.rows} שורות · ${side.widest} בשורה הרחבה · כ-${side.perSide} בצד` : '';
+  return `<div class="dim-rec">${head}${built}
+    <br>${r.stacks === 1 ? 'ערימה אחת' : r.stacks + ' ערימות'} · ${HOLDER_NAME[holder] || 'מותאם אישית'} · בצד ${r.rows} שורות × ${r.cols} = ${r.rect} במלבן, כ-${r.perSide} בצורת משולש
+    <br><b>סה"כ כ-${r.n} תאים → ${iso(V + 'V: ' + S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah')}</b>
+    <br><span style="color:${fits ? '#34d399' : 'var(--danger)'};">${fits ? '✅' : '⛔'} החבילה שבחרת (${N} תאים) ${fits ? 'נכנסת' : 'גדולה מדי'} בשכיבה</span>
+${v.side && !v.mine && v.side.holder && holder !== v.side.holder ? `<br><span style="color:var(--warning,#f59e0b);">⚠ מידות הצד נגזרו מהבנייה ב${HOLDER_NAME[v.side.holder]} — בניקל אחר זה חישוב, לא נבדק</span>` : ''}
+    <br><span style="color:var(--text-muted);font-size:11px;">הערכה: צורת המשולש לפי ה-Plus שנבנה (${Math.round(BOMBER_FILL * 100)}% מהמלבן)</span></div>`;
+}
 // ---- the vehicle the estimator is answering for ----------------------------------------
 // The tray, as numbers — L the long side. Read from a STRICT A×B×C for the height and nothing
 // looser: '425×165 + 60×140' (the OX, two rectangles) once had its 60 read as a ceiling.
@@ -8220,6 +8273,8 @@ function useVehiclePack(model, volts) {
     const ok = holdersFor(fmt).find((h) => holderTakes(v, tb, fmt, h, seriesForV(V), P, c, maxLayersFor(v, tb, c)));
     if (ok) holder = ok;
   }
+  // A frame whose side was counted off his own build opens on that build's nickel (the Bomber Plus, 23).
+  if (fmt === 21700 && v.side && v.side.holder && !v.mine) holder = v.side.holder;
   fillDimBuild(v, V, P, holder, layers, c);
   setDimTab('build');
 }
@@ -8389,7 +8444,13 @@ const VEHICLE_PACKS = [
   // Built in the lab (Daniel, 2026-09-27): 72V 75Ah, 20S15P, with a JK BMS on TOP of the pack —
   // so on this frame the BMS allowance goes on the height, not the length (bmsTop).
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber Plus 15kW', src: 'יצרן', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 15, max: 300,
-    oem: '72V 75Ah', oemSrc: 'theebikemotorkit — שלדת Plus', built: '72V 75Ah · 20S15P · JK', bmsTop: true },
+    oem: '72V 75Ah', oemSrc: 'theebikemotorkit — שלדת Plus', built: '72V 75Ah · 20S15P · JK', bmsTop: true,
+    // The SIDE of that pack, counted from his photos (20250212_150819, 2026-09-27): cells lying
+    // across the frame in 2 stacks, 10 rows, 17 in the widest, about 150 a side — 2 x 150 = 300,
+    // which is his 20S15P. At the 23 square nickel that bounding box is 393 x 232 and the width
+    // across is 2 stacks of a 70mm cell with its caps. A pack that went in is a FLOOR for the
+    // frame, not the frame (see the note above VEHICLE_PACKS).
+    side: { L: 393, H: 232, across: 152, rows: 10, widest: 17, perSide: 150, stacks: 2, holder: 'square-23' } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' ,
     tub: '420×155×65 מ"מ — לפי מידות הסוללה המקורית (boardstore), לא נמדד' },
   // The OX is NOT the OXO. Its tub is two rectangles — 425x165 wide plus 60x140 narrow —

@@ -662,6 +662,26 @@ check('a tray for a vehicle not in the table is listed first', rb.kugooFirst, rb
 check('there is one list, not two', rb.oneList, rb.oneList);
 check('picking his own tray judges the build against it', rb.kugooMine && /✅ נכנס ל-Kugoo G2/.test(rb.kugoo), rb.kugoo.slice(0, 60));
 
+// ---- cells lying, for the Bombers (2026-09-27) ----
+// The one thing the lying estimate is fitted to is his own Bomber Plus: 2 stacks of ~150 on the
+// 23 square = 300 = 20S15P. If the geometry or the fill drifts, that build stops coming back.
+const lying = await page.evaluate((SELF) => {
+  // --selftest: a frame 100mm across takes one stack, not two, so 300 must not come back.
+  const res = (m, V, h) => {
+    useVehiclePack(m, V);
+    if (h) { document.getElementById('dimHolder').value = h; calcPackDims(); }
+    return document.getElementById('dimResult').textContent;
+  };
+  const r = SELF ? bomberLying({ L: 393, H: 232, across: 100 }, DIM_CELLS['21700-50e'], 23, 23)
+    : bomberLying(bomberSide(vehicleByName('Bomber Plus 15kW')), DIM_CELLS['21700-50e'], 23, 23);
+  return { r, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1 48V', 60),
+           surron: res('Sur-Ron', 72) };
+}, SELFTEST);
+check('his Bomber Plus comes back as 2 stacks of 150 = 300 cells', lying.r.stacks === 2 && lying.r.perSide === 150 && lying.r.n === 300, lying.r);
+check('which at 72V is his 20S15P', /20S15P · 75Ah/.test(lying.plus), lying.plus.slice(-260));
+check('a Bomber frame too narrow for a lying cell says so', /צר מתא שוכב/.test(lying.fc1), lying.fc1.slice(-160));
+check('the lying section is for Bombers only', /תאים שוכבים/.test(lying.plus) && !/תאים שוכבים/.test(lying.surron), lying.surron.slice(-80));
+
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
 await browser.close();
