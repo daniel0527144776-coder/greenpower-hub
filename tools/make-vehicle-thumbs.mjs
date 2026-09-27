@@ -22,7 +22,8 @@ if (!SRC) { console.error('usage: node tools/make-vehicle-thumbs.mjs <folder of 
 const manifest = JSON.parse(fs.readFileSync(path.join(DIR, 'manifest.json'), 'utf8'));
 for (const e of manifest) {
   if (!e.checked) { console.log('skip (not checked by eye): ' + e.model); continue; }
-  const raw = path.join(SRC, e.raw);
+  // A photo of HIS OWN build sits on this PC (rawPath, absolute) rather than in the download folder.
+  const raw = e.rawPath || path.join(SRC, e.raw);
   if (!fs.existsSync(raw)) { console.log('missing: ' + e.raw); continue; }
   // 128 x 88 is twice the 64 x 44 the card shows, on white, whole vehicle in frame.
   // whiteout [w, h]: fractions of the image, from the top-left corner, painted white — the award
