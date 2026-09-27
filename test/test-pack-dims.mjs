@@ -577,6 +577,26 @@ check('and its 20S15P is the build filled in', /20S 15P · 300 תאים/.test(to
 // box sits at the end of the drawing
 check('the BMS allowance goes on the height there, not the length', /גודל סוללה\s*\d+ × \d+ × 100/.test(top.res) && !top.box && /מעל/.test(top.label), [top.res.slice(0, 160), top.box, top.label]);
 
+// ---- tapping a vehicle photo opens it large (2026-09-27) ----
+const zoom = await page.evaluate(async (SELF) => {
+  if (SELF && typeof VEH_PHOTOS_LG !== 'undefined') for (const k of Object.keys(VEH_PHOTOS_LG)) delete VEH_PHOTOS_LG[k];
+  navigateTo('dims'); setDimTab('veh');
+  const img = [...document.querySelectorAll('#vpList img.veh-photo')].find((i) => i.dataset.model === 'Inokim OX');
+  if (!img) return { none: true };
+  img.click();
+  const o = document.getElementById('vehPhotoView');
+  const big = o && o.querySelector('img');
+  await new Promise((r) => (big && !big.complete ? big.addEventListener('load', r, { once: true }) : r()));
+  const out = { open: !!o && !o.hidden, w: big ? big.naturalWidth : 0, name: o ? o.innerText.trim() : '',
+    stayed: !document.getElementById('dimPane-veh').hidden };
+  o.click();
+  out.closed = o.hidden;
+  return out;
+}, SELFTEST);
+check('tapping a vehicle photo opens it large', zoom.open && zoom.w >= 400 && zoom.name === 'Inokim OX', zoom);
+check('and does not also pick the vehicle', zoom.stayed === true, zoom);
+check('and a tap closes it', zoom.closed === true, zoom);
+
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {
   if (SELF) {

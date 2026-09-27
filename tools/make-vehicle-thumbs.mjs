@@ -52,5 +52,10 @@ for (const e of manifest) {
   }
   await sharp(buf).resize(128, 88, { fit: 'contain', background: '#ffffff' }).flatten({ background: '#ffffff' })
     .webp({ quality: 72 }).toFile(path.join(DIR, e.file));
-  console.log('made ' + e.file + ' (' + fs.statSync(path.join(DIR, e.file)).size + ' bytes)');
+  // And a large one, shown when the thumbnail is tapped (Daniel, 2026-09-27: "כל פעם שלוחצים על
+  // התמונה של הכלי זה נפתח בגדול") — a 128px thumbnail blown up is a blur.
+  const lg = e.file.replace(/\.webp$/, '.lg.webp');
+  await sharp(buf).resize(480, 330, { fit: 'contain', background: '#ffffff' }).flatten({ background: '#ffffff' })
+    .webp({ quality: 66 }).toFile(path.join(DIR, lg));
+  console.log('made ' + e.file + ' (' + fs.statSync(path.join(DIR, e.file)).size + ' bytes) + ' + lg + ' (' + fs.statSync(path.join(DIR, lg)).size + ')');
 }
