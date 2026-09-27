@@ -2556,7 +2556,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v366';
+const HUB_BUILD = 'v367';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5035,6 +5035,11 @@ function setBmsPick(i, name) {
   const it = PRICING[i], picks = getBmsPicks();
   if (name) picks[catKey(it)] = name; else delete picks[catKey(it)];
   Store.set('bms_pick', picks);
+  // The cost field follows the board too, unless he typed his own cost. It used to keep the
+  // number the window opened with, so the breakdown said ₪883 while the profit was worked out
+  // on ₪915 — the voltage-band board instead of the one he had just picked (2026-09-27).
+  const inp = document.getElementById('costInput');
+  if (inp && getCosts()[catKey(it)] == null) { const c = productCost(it); if (c != null) inp.value = c; }
   updateCostProfit(i);
   const box = document.getElementById('costBreakdown');
   if (box) box.innerHTML = costBreakdownHtml(it);

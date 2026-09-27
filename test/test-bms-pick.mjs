@@ -153,6 +153,23 @@ check('a JK doubles rather than trebles',
 check('the 13S DALY is, under DALY',
   labels(byPack.small).includes('DALY') && all(byPack.small).some((o) => /DALY 13S/.test(o)), byPack.small);
 
+// Picking a board in the cost window moves the "עלות לי" field too (2026-09-27). It used to keep
+// the number the window opened with, so the breakdown said one cost and the profit was worked out
+// on another — the voltage-band board instead of the one just picked.
+const field = await page.evaluate(() => {
+  localStorage.removeItem('gp_bms_pick'); localStorage.removeItem('gp_costs');
+  const i = PRICING.findIndex((x) => /^סוללות אופניים - 48V CLASSIC/.test(x.cat) && /^48V 20Ah/.test(x.name));
+  openCostEditor(i);
+  const before = +document.getElementById('costInput').value;
+  setBmsPick(i, 'DALY 13S 48V 60A');
+  const after = +document.getElementById('costInput').value;
+  const est = productCost(PRICING[i]);
+  try { closeModal(); } catch (e) { /* none */ }
+  localStorage.removeItem('gp_bms_pick');
+  return { before, after, est };
+});
+check('picking a board moves the cost field to the cost with that board', field.after === field.est && field.after !== field.before, field);
+
 if (SELFTEST) console.log('\n[selftest] pickedBms was forced to null;\n[selftest] the checks about a pick changing the cost must have gone red.');
 check('no page errors', errs.length === 0, errs);
 check('no native dialogs (invisible in the WebView)', dialogs.length === 0, dialogs);
