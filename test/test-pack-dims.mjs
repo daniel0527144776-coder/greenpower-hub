@@ -242,11 +242,18 @@ const clear = await page.evaluate(() => {
   const run = (cell, holder) => { set('dimCell', cell); set('dimHolder', holder); set('dimV', 72); set('dimAh', 20); calcPackDims();
     return document.getElementById('dimResult').textContent; };
   clearDimVehicle();
-  return { sgTight: run('21700-50sg', 'diag-b'), eOk: run('21700-50e', 'diag-b'),
-           honey: run('21700-50e', 'diag-b') };
+  // a 21.4 bracket (custom — the no-spacer one): 0.05mm for the 50SG, 0.25 for the 50E
+  const c214 = (cell) => { set('dimPitchAlong', 21.4); set('dimPitchAcross', 21.4); return run(cell, 'custom'); };
+  const out = { sgTight: c214('21700-50sg'), eOk: c214('21700-50e'), honey: run('21700-50e', 'diag-b'),
+    sg215: run('21700-50sg', 'diag-b'), c185: run('18650-25p', 'diag-185') };
+  set('dimCell', '21700-50e');
+  return out;
 });
-check('a 21.35mm 50SG is flagged in a 21.5mm bracket', /לא נכנס/.test(clear.sgTight), clear.sgTight.slice(-80));
+check('a 21.35mm 50SG is flagged in a 21.4mm bracket', /לא נכנס/.test(clear.sgTight), clear.sgTight.slice(-80));
 check('a 21.15mm 50E in the same bracket is not', !/לא נכנס/.test(clear.eOk), clear.eOk.slice(-80));
+// 0.15mm of clearance is a bracket that is built, not a warning: the 50SG in the 21.5 nickel,
+// and an 18.35mm 18650 in his 18.5 diagonal.
+check('0.15mm of clearance is not flagged (50SG on 21.5, 18650 on 18.5)', !/לא נכנס/.test(clear.sg215) && !/לא נכנס/.test(clear.c185), [clear.sg215.slice(-60), clear.c185.slice(-60)]);
 check('and a honeycomb row pitch under the diameter is fine', !/לא נכנס/.test(clear.honey), clear.honey.slice(-80));
 
 // One 21700 bracket is 10x15 holes, and a bigger block is two pieces butted together. The page
@@ -521,6 +528,36 @@ check('and each nickel says how much it takes', /ניקל א׳ \(22\.5\) — (ע
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
 check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /381×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
 check('the cell and nickel are chosen after the tap, not above the list', !mx.sharedOnList && mx.sharedAfter, [mx.sharedOnList, mx.sharedAfter]);
+
+// ---- the 18650 has its own nickels, both square: 19 and 20.25 (2026-09-27) ----
+// They carried the 21700 pitches until then, so every 18650 build came out a size too big.
+const n18 = await page.evaluate((SELF) => {
+  if (SELF) window.refreshHolderOptions = () => {};    // the list that never followed the cell
+  clearDimVehicle();
+  const cell = document.getElementById('dimCell'), hold = document.getElementById('dimHolder');
+  cell.value = '18650-25p'; calcPackDims();
+  const opts18 = [...hold.options].map((o) => o.value);
+  document.getElementById('dimExtra').value = '22'; dimExtraTouched = true;
+  document.getElementById('dimV').value = '60'; dimAhPending = 10; calcPackDims();   // 16S4P
+  const res = document.getElementById('dimResult').innerText;
+  cell.value = '21700-50e'; calcPackDims();
+  const opts21 = [...hold.options].map((o) => o.value);
+  return { opts18, opts21, res };
+}, SELFTEST);
+check('choosing 18650 offers his three 18650 nickels', JSON.stringify(n18.opts18) === JSON.stringify(['diag-185', 'sq-19', 'sq-2025', 'custom']), n18.opts18);
+check('and 21700 gets its own three back', JSON.stringify(n18.opts21) === JSON.stringify(['diag-a', 'diag-b', 'square-23', 'custom']), n18.opts21);
+// 16S4P on the 18.5 diagonal: four across = 3 x 18.5 + 18.35 + 3 = 77; sixteen rows along at
+// 16.02 = 15 x 16.02 + 21.35 + 22 (BMS at 60V) = 284.
+check('an 18650 block is measured on the 18650 nickel', /גודל סוללה\s*284 × 77 × 69/.test(n18.res) && !/משוער/.test(n18.res), n18.res.slice(0, 200));
+
+// ---- the tray size sits directly under the battery size (2026-09-27) ----
+const order = await page.evaluate(() => {
+  useVehiclePack('Nami Klima', 72);
+  const keys = [...document.querySelectorAll('#dimResult .dim-kv span')].map((s) => s.textContent.trim());
+  clearDimVehicle();
+  return keys;
+});
+check('the tray size is the row right under the battery size', order.indexOf('גודל אמבטיה') === order.indexOf('גודל סוללה') + 1, order);
 
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {

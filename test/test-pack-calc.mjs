@@ -105,7 +105,7 @@ const rec = await page.evaluate(() => {
   useVehiclePack('Talaria');
   calcPackDims();
   const html = document.getElementById('dimResult').innerHTML;
-  const order = HOLDER_ORDER.slice();
+  const order = holdersFor(21700).slice();
   // and the OX: his count is a ceiling, not a layout. 20S7P on the square holder is exactly the
   // 140 he counted — and twenty rows at 23mm are 461mm against 425 less the BMS.
   document.getElementById('dimExtra').value = '26';

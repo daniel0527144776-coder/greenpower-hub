@@ -2556,7 +2556,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v359';
+const HUB_BUILD = 'v360';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4761,11 +4761,13 @@ function shallowCellOptions(TL, TW, TH, V, S) {
     // sideways arrangement to fall back on.
     if (TH < cd.len + DIM_CAP) continue;
     stands = true;
-    const pair = (DIM_PITCH[18650] || {})["diag-b"] || [21.5, 18.62];
-    const p = pair[0], rp = pair[1];
-    // The biggest P that goes in his way: the group across the narrow side, S along the length.
+    // The biggest P that goes in his way on either of his 18650 nickels: the group across the
+    // narrow side, S along the length.
     let P = 0;
-    for (let q = 40; q >= 1; q--) if (hisFit({ L: TL, W: TW, H: TH }, S, q, 1, p, rp, cd.dia).fits) { P = q; break; }
+    for (const h of holdersFor(18650)) {
+      const [p, rp] = DIM_PITCH[18650][h];
+      for (let q = 40; q > P; q--) if (hisFit({ L: TL, W: TW, H: TH }, S, q, 1, p, rp, cd.dia).fits) { P = q; break; }
+    }
     if (P < 1) continue;
     const Ah = Math.round(P * cd.ah * 10) / 10;
     // Cost the real pack, then borrow the margin the catalogue already earns on that tier.
@@ -7558,7 +7560,10 @@ const BRACKET_MAX = { 21700: { cols: 15, rows: 10 }, 18650: { cols: 22, rows: 16
 // The two Wellgo catalogue brackets (square / honeycomb 21.4, no spacer) were removed from the
 // list on 2026-09-25 — he does not build on them. A bracket he might buy goes in "מותאם אישית".
 const DIM_PITCH = {
-  18650: { 'diag-a': [22.5, 19.49], 'diag-b': [21.5, 18.62], 'square-23': [23, 23] },
+  // 18650: his own nickels, both SQUARE (Daniel, 2026-09-27: "הניקל של 18650 זה 19mm או 20.25").
+  // They used to carry the 21700 pitches, so every 18650 build came out a size too big.
+  // And a DIAGONAL 18.5 ("יש גם אלכסוני 18.5"): rows nest at 18.5 x 0.866 = 16.02.
+  18650: { 'diag-185': [18.5, 16.02], 'sq-19': [19, 19], 'sq-2025': [20.25, 20.25] },
   21700: { 'diag-a': [22.5, 19.49], 'diag-b': [21.5, 18.62], 'square-23': [23, 23] },
 };
 const DIM_WALL = 1.5;        // bracket edge either side
@@ -7686,8 +7691,28 @@ function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia) {
 
 // Densest first: 21.5 gives the narrowest block, then 22.5, then the square 23. He asked for
 // "the densest that fits", so the recommendation is the first one that gets the pack in.
-const HOLDER_ORDER = ['diag-b', 'diag-a', 'square-23'];
-const HOLDER_NAME = { 'diag-b': 'ניקל ב׳ (21.5)', 'diag-a': 'ניקל א׳ (22.5)', 'square-23': 'ריבועי 23' };
+// Per cell size: a holder is made for one cell and the list must follow the cell chosen.
+// Densest first — the recommendation takes the first that fits.
+const HOLDERS_BY_FMT = { 21700: ['diag-b', 'diag-a', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
+// The order the list shows them in, which is the order he knows them by.
+const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
+const HOLDER_ORDER = HOLDERS_BY_FMT[21700];
+function holdersFor(fmt) { return HOLDERS_BY_FMT[fmt] || HOLDER_ORDER; }
+const HOLDER_NAME = { 'diag-b': 'ניקל ב׳ (21.5)', 'diag-a': 'ניקל א׳ (22.5)', 'square-23': 'ריבועי 23',
+  'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
+const HOLDER_LABEL = { 'diag-a': 'אלכסוני 22.5 (ניקל א׳)', 'diag-b': 'אלכסוני 21.5 (ניקל ב׳)', 'square-23': 'ריבועי 23',
+  'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
+// Rebuilds the holder list for the cell size, keeping the choice when it is still valid.
+function refreshHolderOptions(fmt) {
+  const sel = document.getElementById('dimHolder');
+  if (!sel) return;
+  const want = (HOLDERS_SHOWN[fmt] || HOLDERS_SHOWN[21700]).concat(['custom']);
+  const have = [...sel.options].map((o) => o.value);
+  if (have.join() === want.join()) return;
+  const cur = sel.value;
+  sel.innerHTML = want.map((h) => `<option value="${h}">${h === 'custom' ? 'מותאם אישית ↓' : HOLDER_LABEL[h]}</option>`).join('');
+  sel.value = want.includes(cur) ? cur : (fmt === 18650 ? 'diag-185' : 'diag-a');
+}
 // A holder takes the build if it goes in his way within the layers the vehicle allows. Where he
 // COUNTED that holder in this tray (the OX), his count is a ceiling on top of that, not a
 // substitute for it: on 2026-09-26 the OX showed "✅ נכנס" beside a 650mm block in a 425mm tray,
@@ -7755,6 +7780,7 @@ function calcPackDims() {
   const key = document.getElementById('dimCell').value;
   const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
   const fmt = key.startsWith('18650') ? 18650 : 21700;
+  refreshHolderOptions(fmt);
   const holder = (document.getElementById('dimHolder') || {}).value || 'diag-a';
   const customRow = document.getElementById('dimCustomRow');
   if (customRow) customRow.style.display = holder === 'custom' ? '' : 'none';
@@ -7764,7 +7790,9 @@ function calcPackDims() {
     : (DIM_PITCH[fmt] || {})[holder] || [c.dia + 1, c.dia + 1];
     const [pitch, rowPitch] = pair;
   // 18650 + a diagonal holder is the one combination running on numbers nobody measured.
-  const derived = fmt === 18650 && (holder.startsWith('diag'));
+  // 18650 on a diagonal used to borrow the 21700 pitches and was marked estimated; since
+  // 2026-09-27 the 18650 has its own nickels (18.5 diagonal, 19 and 20.25 square), measured by him.
+  const derived = false;
   const V = parseFloat(document.getElementById('dimV').value);
   const Ah = parseFloat(document.getElementById('dimAh').value) || c.ah;
   // The BMS, its wiring and the shrink take room, and how much depends on the pack — a 20S
@@ -7856,7 +7884,7 @@ function calcPackDims() {
         }
       }
       // Which holder to reach for, densest first: the first one that takes this build.
-      const hs = HOLDER_ORDER.map((h) => ({ h, fits: !!holderTakes(dimVehicle, tub, fmt, h, S, P, c, maxLayers) }));
+      const hs = holdersFor(fmt).map((h) => ({ h, fits: !!holderTakes(dimVehicle, tub, fmt, h, S, P, c, maxLayers) }));
       const win = hs.find((o) => o.fits);
       // Each nickel with the most it takes here at this voltage, so the choice of nickel says
       // what it buys; the one selected is bold.
@@ -7878,8 +7906,8 @@ function calcPackDims() {
     kv('גודל סוללה', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
     // The tray beside it, in the same shape, so the two read against each other. A height nobody
     // measured is written as '?' and said — the height was not checked (2026-09-26/27).
-    (dimVehicle && tub && (DIM_PITCH[fmt] || {})[holder] ? kv('מקסימום באמבטיה', [60, 72].concat([48, 52, 84].includes(V) ? [V] : []).map((vv) => { const mp = maxPFor(dimVehicle, tub, fmt, holder, vv, c); return `<bdi dir="ltr">${vv}V: ${mp ? seriesForV(vv) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah' : '—'}</bdi>`; }).join('<br>')) : '') +
     (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ${tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` : '') : ' · גובה לא ידוע, לא נבדק'}`) : '') +
+    (dimVehicle && tub && (DIM_PITCH[fmt] || {})[holder] ? kv('מקסימום באמבטיה', [60, 72].concat([48, 52, 84].includes(V) ? [V] : []).map((vv) => { const mp = maxPFor(dimVehicle, tub, fmt, holder, vv, c); return `<bdi dir="ltr">${vv}V: ${mp ? seriesForV(vv) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah' : '—'}</bdi>`; }).join('<br>')) : '') +
     kv('פריסה', layoutText(S, P, layers, cols, rows, derived)) +
     rec;
   // A cell wider than the space it goes in cannot be assembled. The distance to check is the
@@ -7887,7 +7915,10 @@ function calcPackDims() {
   // 19.5mm holds 21.15mm cells because the nearest cell in the next row sits half a pitch over.
   const near = stagger ? Math.sqrt((pitch / 2) ** 2 + rowPitch ** 2) : rowPitch;
   const tight = Math.min(pitch, near);
-  if (c.dia > tight - 0.2) {
+  // 0.1mm of margin (2026-09-27). It was 0.2, which condemned his own 18.5 bracket for an 18.35mm
+  // 18650 — 0.15mm, the clearance real brackets are built to. What it exists to catch is the
+  // 50SG (21.35) in a 21.4 bracket: 0.05mm, and that is still flagged.
+  if (c.dia > tight - 0.1) {
     html += `<div class="dim-over">⚠ ${c.label} בקוטר ${c.dia} מ"מ לא נכנס — המרחק הקצר ביותר בין מרכזים הוא ${tight.toFixed(1)} מ"מ</div>`;
   }
   // With no vehicle chosen, check the build against his saved trays — turned either way,
@@ -8109,7 +8140,7 @@ function tubBest(v, V, c, fmt, extra) {
   const S = seriesForV(V);
   const maxL = maxLayersFor(v, tb, c);
   let best = null;
-  for (const h of HOLDER_ORDER) {
+  for (const h of holdersFor(fmt)) {
     for (let P = 40; P >= 1; P--) {
       const l = holderTakes(v, tb, fmt, h, S, P, c, maxL);
       if (!l) continue;
@@ -8160,7 +8191,7 @@ function useVehiclePack(model, volts) {
   const fmt = key.startsWith('18650') ? 18650 : 21700;
   let V = volts || (v.s72 ? 72 : v.s60 ? 60 : 72);
   let P = V === 72 ? v.p72 : v.p60;
-  let holder = holderForPitch(v.p), layers = 1;
+  let holder = fmt === 18650 ? holdersFor(18650)[0] : holderForPitch(v.p), layers = 1;
   // A tray he measured decides the build — the table is a guess, his tape is not. With no
   // voltage asked for, the highest one at which his tray takes anything.
   if ((v.mine || !P) && !volts) {
@@ -8174,7 +8205,7 @@ function useVehiclePack(model, volts) {
   // Densest holder that takes the build, where the tray is known; else the table's own pitch.
   const tb = cellTub(tubOf(v), dimExtraFor(V));
   if (tb && !v.mine) {
-    const ok = HOLDER_ORDER.find((h) => holderTakes(v, tb, fmt, h, seriesForV(V), P, c, maxLayersFor(v, tb, c)));
+    const ok = holdersFor(fmt).find((h) => holderTakes(v, tb, fmt, h, seriesForV(V), P, c, maxLayersFor(v, tb, c)));
     if (ok) holder = ok;
   }
   fillDimBuild(v, V, P, holder, layers, c);
@@ -8680,6 +8711,7 @@ function oldPackFit() {
   const key = (document.getElementById('dimCell') || {}).value || '21700-50e';
   const c = DIM_CELLS[key] || DIM_CELLS['21700-50e'];
   const fmt = key.startsWith('18650') ? 18650 : 21700;
+  refreshHolderOptions(fmt);
   const holder = (document.getElementById('dimHolder') || {}).value || 'diag';
   const pair = holder === 'custom'
     ? [parseFloat((document.getElementById('dimPitchAlong') || {}).value) || 19,
