@@ -1139,7 +1139,7 @@ body { min-height: 100vh; }
     <div class="form-row"><label>קיבולת</label>
       <select class="form-select" id="dimAh" onchange="calcPackDims()"></select>
     </div>
-    <div class="form-row"><label>תוספת BMS באורך (מ"מ)</label>
+    <div class="form-row"><label id="dimExtraLabel">תוספת BMS באורך (מ"מ)</label>
       <div style="display:flex;gap:6px;align-items:center;">
         <input type="number" class="form-input" id="dimExtra" value="18" min="0" step="1" oninput="dimExtraTouched = true; calcPackDims()" style="width:80px;">
         <span style="font-size:11px;color:var(--text-muted);" id="dimExtraNote"></span>
@@ -2556,7 +2556,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v362';
+const HUB_BUILD = 'v363';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7820,7 +7820,10 @@ function calcPackDims() {
   // that take it — a second only on a motorcycle or ATV, and only when the height takes another
   // standing cell. Without a tray: one layer, each group in one row.
   const tubAll = tubOf(dimVehicle);
-  const tub = cellTub(tubAll, extra);
+  // Where the BMS sits: at the end of the pack (the default), or on top of it on a frame that
+  // carries it there (the Bomber Plus, 2026-09-27).
+  const bmsTop = !!(dimVehicle && dimVehicle.bmsTop);
+  const tub = bmsTop ? (tubAll && tubAll.H ? { ...tubAll, H: Math.max(0, tubAll.H - extra) } : tubAll) : cellTub(tubAll, extra);
   const standH = c.len + DIM_CAP;
   let layers = 1, lay = groupLayout(S, P, 1, Infinity), fitsTray = null;
   const maxLayers = maxLayersFor(dimVehicle, tub, c);
@@ -7839,8 +7842,8 @@ function calcPackDims() {
   const aStep = orient === 'B' ? pitch : rowPitch, cStep = orient === 'B' ? rowPitch : pitch;
   const alongMM = (rows - 1) * aStep + c.dia + 2 * DIM_WALL;
   const acrossMM = (cols - 1) * cStep + c.dia + 2 * DIM_WALL;
-  const L = Math.round(alongMM + extra), W = Math.round(acrossMM);
-  const H = Math.round(layers * (c.len + DIM_CAP));
+  const L = Math.round(alongMM + (bmsTop ? 0 : extra)), W = Math.round(acrossMM);
+  const H = Math.round(layers * (c.len + DIM_CAP) + (bmsTop ? extra : 0));
   renderDimVehChip();
 
   // ---- the answer first: does it go in the vehicle? ----
@@ -7895,9 +7898,11 @@ function calcPackDims() {
       // No tray size at all — only the table's ceiling, which is an AI estimate. Loud, and NOT a
       // block: refusing to compute a pack on the strength of a guess would stop a real build.
       const cap = (dimVehicle.caps && dimVehicle.caps[holder] != null) ? dimVehicle.caps[holder] : dimVehicle.max;
+      // Where the ceiling comes from: his own build, the frame maker, or an AI guess — said, not assumed.
+      const whence = dimVehicle.built ? 'נבנה במעבדה' : dimVehicle.src === 'AI' ? 'הערכת AI' : 'לפי היצרן';
       head = N <= cap
-        ? `<div class="dim-ok">✅ ${name}: עד ${cap} תאים (הערכת AI — אין מידות)</div>`
-        : `<div class="dim-over">⛔ ${name} מחזיק ${cap} — חורג ב-${N - cap} תאים (הערכת AI — אין מידות). מדוד לפני שאתה בונה.</div>`;
+        ? `<div class="dim-ok">✅ ${name}: עד ${cap} תאים (${whence} — אין מידות)</div>`
+        : `<div class="dim-over">⛔ ${name} מחזיק ${cap} — חורג ב-${N - cap} תאים (${whence} — אין מידות). מדוד לפני שאתה בונה.</div>`;
     }
   }
   const kv = (k, v) => `<div class="dim-kv"><span>${k}</span><b>${v}</b></div>`;
@@ -7936,8 +7941,10 @@ function calcPackDims() {
     else if (getDims().length) html += '<div class="dim-rec" style="color:var(--text-muted);">אין דגם שמור עם מידות מלאות להשוואה</div>';
   }
   out.innerHTML = html;
-  drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra, wall: DIM_WALL, orient });
-  dimLast = { S, P, N, layers, cols, rows, pitch, rowPitch, dia: c.dia, stagger, extra, L, W, H, orient,
+  drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra: bmsTop ? 0 : extra, wall: DIM_WALL, orient });
+  const lbl = document.getElementById('dimExtraLabel');
+  if (lbl) lbl.textContent = bmsTop ? 'תוספת BMS מעל החבילה (מ"מ)' : 'תוספת BMS באורך (מ"מ)';
+  dimLast = { S, P, N, layers, cols, rows, pitch, rowPitch, dia: c.dia, stagger, extra: bmsTop ? 0 : extra, L, W, H, orient,
     cell: c.label, holder: (DIM_PITCH[fmt] || {})[holder] ? HOLDER_NAME[holder] : 'מותאם אישית',
     vehicle: dimVehicle ? dimVehicle.m : '' };
 }
@@ -8229,7 +8236,8 @@ function renderDimVehChip() {
   const v = dimVehicle;
   if (!v) { el.innerHTML = ''; return; }
   const src = [v.mine ? '✓ נמדד' : /לא נמדד/.test(v.tub || '') ? 'לפי הסוללה המקורית' : v.tub ? '' : 'הערכת AI',
-    v.oem ? 'מקורי <bdi dir="ltr">' + v.oem + '</bdi>' : ''].filter(Boolean).join(' · ');
+    v.oem ? 'מקורי <bdi dir="ltr">' + v.oem + '</bdi>' : '',
+    v.built ? 'נבנה במעבדה: <bdi dir="ltr">' + v.built + '</bdi>' : ''].filter(Boolean).join(' · ');
   el.innerHTML = `<div class="dim-chip">${vehIcon(v)}<b>${v.m}</b>
     <!-- The tray size is NOT repeated here (2026-09-27): it is the "גודל אמבטיה" row of the result. -->
     <span style="color:var(--text-muted);font-size:12px;">${src}</span>
@@ -8373,8 +8381,10 @@ const VEHICLE_PACKS = [
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber 72V מלא', src: 'יצרן', p: 21.5, s60: 16, p60: 11, s72: 20, p72: 9, max: 180,
     oem: '72V 45Ah', oemSrc: 'risunmotor — אופניים מוכנים', pack: '425×250×78 (לא מלבני)', packSrc: 'risunmotor' ,
     tub: '425×250×78 מ"מ — לפי מידות הסוללה המקורית (risunmotor), לא נמדד' },
+  // Built in the lab (Daniel, 2026-09-27): 72V 75Ah, 20S15P, with a JK BMS on TOP of the pack —
+  // so on this frame the BMS allowance goes on the height, not the length (bmsTop).
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber Plus 15kW', src: 'יצרן', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 15, max: 300,
-    oem: '72V 75Ah', oemSrc: 'theebikemotorkit — שלדת Plus' },
+    oem: '72V 75Ah', oemSrc: 'theebikemotorkit — שלדת Plus', built: '72V 75Ah · 20S15P · JK', bmsTop: true },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' ,
     tub: '420×155×65 מ"מ — לפי מידות הסוללה המקורית (boardstore), לא נמדד' },
   // The OX is NOT the OXO. Its tub is two rectangles — 425x165 wide plus 60x140 narrow —

@@ -559,6 +559,24 @@ const order = await page.evaluate(() => {
 });
 check('the tray size is the row right under the battery size', order.indexOf('גודל אמבטיה') === order.indexOf('גודל סוללה') + 1, order);
 
+// ---- the Bomber Plus carries its BMS on top (2026-09-27: 72V 75Ah 20S15P, JK BMS on top) ----
+const top = await page.evaluate((SELF) => {
+  document.getElementById('dimExtra').value = '26'; dimExtraTouched = true;
+  if (SELF) VEHICLE_PACKS.find((v) => v.m === 'Bomber Plus 15kW').bmsTop = false;
+  useVehiclePack('Bomber Plus 15kW', 72);
+  const res = document.getElementById('dimResult').innerText;
+  const chip = document.getElementById('dimVehChip').innerText;
+  const box = /BMS/.test(document.getElementById('dimDraw').textContent);
+  const label = document.getElementById('dimExtraLabel').textContent;
+  clearDimVehicle();
+  return { res, chip, box, label };
+}, SELFTEST);
+check('his Bomber Plus build is on the vehicle bar', /נבנה במעבדה: 72V 75Ah · 20S15P · JK/.test(top.chip), top.chip);
+check('and its 20S15P is the build filled in', /20S 15P · 300 תאים/.test(top.res), top.res.slice(0, 80));
+// one layer of 21700 is 74 tall; with the BMS on top the block is 74 + 26 = 100, and no BMS
+// box sits at the end of the drawing
+check('the BMS allowance goes on the height there, not the length', /גודל סוללה\s*\d+ × \d+ × 100/.test(top.res) && !top.box && /מעל/.test(top.label), [top.res.slice(0, 160), top.box, top.label]);
+
 // ---- the rebuild of 2026-09-25: three tabs, one list, the answer first ----
 const rb = await page.evaluate((SELF) => {
   if (SELF) {
