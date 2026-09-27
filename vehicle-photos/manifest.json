@@ -138,5 +138,71 @@
    0.9,
    0.66
   ]
+ },
+ {
+  "model": "Enduro",
+  "file": "enduro.webp",
+  "raw": "enduro-r1.jpg",
+  "checked": "2026-09-27",
+  "source": "aliexpress",
+  "url": "https://ae-pic-a1.aliexpress-media.com/kf/S18ac115036ce48629330cd338cda3897U.jpg"
+ },
+ {
+  "model": "Bomber רגיל 3-12kW",
+  "file": "bomber.webp",
+  "raw": "bomber-a.jpg",
+  "checked": "2026-09-27",
+  "source": "aliexpress",
+  "url": "https://ae-pic-a1.aliexpress-media.com/kf/Saf50c7554c014a7eb05798d6e4b2b540x.jpg"
+ },
+ {
+  "model": "Bomber 72V מלא",
+  "file": "bomber.webp",
+  "raw": "bomber-a.jpg",
+  "checked": "2026-09-27",
+  "source": "aliexpress",
+  "url": "https://ae-pic-a1.aliexpress-media.com/kf/Saf50c7554c014a7eb05798d6e4b2b540x.jpg"
+ },
+ {
+  "model": "Bomber Plus 15kW",
+  "file": "bomber-plus.webp",
+  "raw": "bomber-plus.jpg",
+  "checked": "2026-09-27",
+  "source": "aliexpress",
+  "url": "https://ae-pic-a1.aliexpress-media.com/kf/S15bc9a9f156b49109efa14dfa9a9bd9aN.jpg"
+ },
+ {
+  "model": "Bomber FC-1 48V",
+  "file": "bomber-fc1.webp",
+  "raw": "bomber-c.jpg",
+  "checked": "2026-09-27",
+  "source": "aliexpress",
+  "url": "https://ae-pic-a1.aliexpress-media.com/kf/Sd53eb4d2d45848e7882781cbdf4b08b4o.jpg",
+  "note": "A Stealth-Bomber-type bike standing in for the FC-1: the FC-1 photos are on risunmotor.com/.co.uk, senopower.com and conhismotor.com, blocked by NetFree on 2026-09-27",
+  "whiteout": [
+   [
+    0,
+    0,
+    1,
+    0.17
+   ]
+  ]
+ },
+ {
+  "model": "Bomber FC-1 72V",
+  "file": "bomber-fc1.webp",
+  "raw": "bomber-c.jpg",
+  "checked": "2026-09-27",
+  "source": "aliexpress",
+  "url": "https://ae-pic-a1.aliexpress-media.com/kf/Sd53eb4d2d45848e7882781cbdf4b08b4o.jpg",
+  "note": "A Stealth-Bomber-type bike standing in for the FC-1: the FC-1 photos are on risunmotor.com/.co.uk, senopower.com and conhismotor.com, blocked by NetFree on 2026-09-27",
+  "whiteout": [
+   [
+    0,
+    0,
+    1,
+    0.17
+   ]
+  ]
  }
 ]
