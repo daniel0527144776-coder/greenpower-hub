@@ -674,13 +674,31 @@ const lying = await page.evaluate((SELF) => {
   };
   const r = SELF ? bomberLying({ L: 393, H: 232, across: 100 }, DIM_CELLS['21700-50e'], 23, 23)
     : bomberLying(bomberSide(vehicleByName('Bomber Plus 15kW')), DIM_CELLS['21700-50e'], 23, 23);
+  // --selftest: read the maker's table instead of his measurement, which the check must catch.
+  const regName = 'Bomber רגיל 3-12kW';
+  const regTub = SELF ? tubOf({ tub: '355×120×185' }) : tubOf(vehicleByName(regName));
   return { r, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1 48V', 60),
-           surron: res('Sur-Ron', 72) };
+           surron: res('Sur-Ron', 72), regular: res(regName, 72), regTub,
+           plusTub: tubOf(vehicleByName('Bomber Plus 15kW')),
+           plusHtml: (res('Bomber Plus 15kW', 72, 'square-23'), document.getElementById('dimResult').innerHTML) };
 }, SELFTEST);
 check('his Bomber Plus comes back as 2 stacks of 150 = 300 cells', lying.r.stacks === 2 && lying.r.perSide === 150 && lying.r.n === 300, lying.r);
 check('which at 72V is his 20S15P', /20S15P · 75Ah/.test(lying.plus), lying.plus.slice(-260));
 check('a Bomber frame too narrow for a lying cell says so', /צר מתא שוכב/.test(lying.fc1), lying.fc1.slice(-160));
 check('the lying section is for Bombers only', /תאים שוכבים/.test(lying.plus) && !/תאים שוכבים/.test(lying.surron), lying.surron.slice(-80));
+// 2026-09-27: his Plus's 152 is two stacks' thickness standing proud of a 115 frame body into
+// the covers — calling it the frame's width was wrong. A frame read off its tray keeps the word.
+check('the Plus calls its 152 the pack\'s thickness, confirmed, not the frame\'s width',
+  /הסוללה שנבנתה \(מידות מאושרות\)/.test(lying.plus) && /עובי/.test(lying.plus) && !/רוחב שלדה/.test(lying.plus), lying.plus.slice(0, 160));
+check('a Bomber read off its tray still names the frame\'s width', /רוחב שלדה/.test(lying.regular), lying.regular.slice(0, 160));
+check('the regular Bomber reads his 2021 measurement (360×125×190), not the maker\'s table',
+  lying.regTub && lying.regTub.L === 360 && lying.regTub.W === 125 && lying.regTub.H === 190, lying.regTub);
+// The frame is shown, but NOT as a tub: judged standing, 370×200×150 said his own 20S15P does
+// not fit the frame it is in. So no tub, no verdict against his build, and the drawing is text.
+check('the Plus shows its frame from the maker\'s drawing, numbers isolated',
+  /השלדה — שרטוט היצרן/.test(lying.plus) && /<bdi dir="ltr">370×200<\/bdi>/.test(lying.plusHtml), lying.plusHtml.slice(0, 200));
+check('and is not judged against it standing (no "does not fit" on his own build)',
+  !lying.plusTub && !/לא נכנס ל-Bomber Plus/.test(lying.plus), [lying.plusTub, lying.plus.slice(0, 80)]);
 
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 

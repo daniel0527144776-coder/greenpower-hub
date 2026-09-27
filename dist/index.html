@@ -2556,7 +2556,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v371';
+const HUB_BUILD = 'v372';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -8151,7 +8151,13 @@ function bomberLyingHtml(v, c, pitch, rowPitch, V, N, holder) {
   if (!side) return `<div class="dim-rec"><b>🛏️ תאים שוכבים:</b> אין מידות צד לשלדה הזו — מדוד אורך, גובה ורוחב, ושמור ב"הוסף מדידה של מגש".</div>`;
   const r = bomberLying(side, c, pitch, rowPitch);
   const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
-  const head = `<b>🛏️ תאים שוכבים (כמו שבונים בבומבר)</b><br>צד ${iso(side.L + ' × ' + side.H)} מ"מ · רוחב שלדה ${iso(side.across)} מ"מ`;
+  // A built pack's side is the PACK, not the frame: its 152 on the Plus is the thickness of two
+  // stacks, standing proud of a 115 frame body into the covers — so it is not called the frame's width.
+  const ownPack = v.side && !v.mine;
+  const head = `<b>🛏️ תאים שוכבים (כמו שבונים בבומבר)</b><br>${ownPack ? 'הסוללה שנבנתה' + (v.side.confirmed ? ' (מידות מאושרות)' : '') + ': ' : ''}צד ${iso(side.L + ' × ' + side.H)} מ"מ · ${ownPack ? 'עובי' : 'רוחב שלדה'} ${iso(side.across)} מ"מ`
+    // Every "370×200" / "250/180/140/420" is isolated: × between two numbers in an RTL line is
+    // resolved as RTL and prints 200×370 (the same neutral-character trap as "Grade A+").
+    + (v.frame ? `<br><span style="color:var(--text-muted);font-size:12px;">🔩 השלדה — ${v.frame.replace(/\d+(?:[×/]\d+)+/g, iso)}</span>` : '');
   if (!r.stacks) return `<div class="dim-rec">${head}<br><span style="color:var(--danger);">רוחב ${side.across} מ"מ צר מתא שוכב — צריך לפחות ${Math.ceil(r.stackW + 2 * DIM_WALL)}</span></div>`;
   const S = seriesForV(V);
   const P = Math.floor(r.n / S);
@@ -8436,8 +8442,13 @@ const VEHICLE_PACKS = [
     oem: '48V 43.5Ah', oemSrc: 'risunmotor FC-1 48V', tub: '280×75×150 מ"מ (יצרן השלדה)' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber FC-1 72V', src: 'מחושב', p: 21.5, s60: 16, p60: 7, s72: 20, p72: 5, max: 119,
     tub: '370×150×70 מ"מ (יצרן השלדה, risunmotor FC-1 72V) · חלל לא מלבני — המספר הוא מלבן חוסם' },
+  // Measured by Daniel in 2021 ('מידות למסגרות אינדורו.docx', דגם 1, in תמונות/סוללות/מארזים ושילדות).
+  // He confirmed 2026-09-27 that every model in that file is a Bomber, and this is the one whose
+  // numbers are this frame's: 5mm over the maker's table (355×120×185) on all three sides. The
+  // side is not a rectangle — full height for 290mm, then 70mm sloping down to 150 at the end.
+  // S/P/max above are still the computation from the maker's figure; 5mm moves none of them.
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber רגיל 3-12kW', src: 'מחושב', p: 21.5, s60: 16, p60: 9, s72: 20, p72: 7, max: 144,
-    tub: '355×120×185 מ"מ (14\" × 4.7\" × 7.3\")', packSrc: 'theebikemotorkit — טבלת מידות' },
+    tub: '360×125×190 מ"מ (נמדד במעבדה, 2021) · הצד משופע בקצה (290 בגובה מלא, ואז עד 150)', packSrc: 'theebikemotorkit — טבלת מידות' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber 72V מלא', src: 'יצרן', p: 21.5, s60: 16, p60: 11, s72: 20, p72: 9, max: 180,
     oem: '72V 45Ah', oemSrc: 'risunmotor — אופניים מוכנים', pack: '425×250×78 (לא מלבני)', packSrc: 'risunmotor' ,
     tub: '425×250×78 מ"מ — לפי מידות הסוללה המקורית (risunmotor), לא נמדד' },
@@ -8448,9 +8459,18 @@ const VEHICLE_PACKS = [
     // The SIDE of that pack, counted from his photos (20250212_150819, 2026-09-27): cells lying
     // across the frame in 2 stacks, 10 rows, 17 in the widest, about 150 a side — 2 x 150 = 300,
     // which is his 20S15P. At the 23 square nickel that bounding box is 393 x 232 and the width
-    // across is 2 stacks of a 70mm cell with its caps. A pack that went in is a FLOOR for the
-    // frame, not the frame (see the note above VEHICLE_PACKS).
-    side: { L: 393, H: 232, across: 152, rows: 10, widest: 17, perSide: 150, stacks: 2, holder: 'square-23' } },
+    // across is 2 stacks of a 70mm cell with its caps — Daniel confirmed all three, 2026-09-27.
+    // A pack that went in is a FLOOR for the frame, not the frame (see the note above VEHICLE_PACKS).
+    //
+    // The frame itself (Daniel identified it 2026-09-27 from the maker's drawing he had saved,
+    // תמונות/סוללות/מארזים ושילדות/אינדורו/דגם 2): body 115 wide, the covers bulge to 150 at the
+    // centre — so the 152 pack stands proud of the tubes into the covers. The drawing's inscribed
+    // rectangle is 370×200; the bay itself runs 450 on its long diagonal and 265 across, edges
+    // 250/180/140/420. The pack's 393×232 sits between the two, as a hexagon would.
+    // `frame`, NOT `tub`: a tub is judged with the cells STANDING, and 370×200×150 standing says
+    // his own 20S15P does not fit the frame it is in. It is shown in the lying section instead.
+    frame: 'שרטוט היצרן: מלבן פנימי 370×200, החלל עד 450 באורך ו-265 ברוחב (צלעות 250/180/140/420) · גוף השלדה 115, המכסים 150 במרכז',
+    side: { L: 393, H: 232, across: 152, rows: 10, widest: 17, perSide: 150, stacks: 2, holder: 'square-23', confirmed: true } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' ,
     tub: '420×155×65 מ"מ — לפי מידות הסוללה המקורית (boardstore), לא נמדד' },
   // The OX is NOT the OXO. Its tub is two rectangles — 425x165 wide plus 60x140 narrow —
