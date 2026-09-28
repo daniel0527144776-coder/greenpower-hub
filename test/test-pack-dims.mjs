@@ -361,8 +361,9 @@ const bomb = await page.evaluate(() => {
   return { n: rows.length,
            max: VEHICLE_PACKS.filter((v) => /Bomber/.test(v.m)).map((v) => v.max).sort((a, b) => a - b) };
 });
-check('the Bomber is listed as five frames', bomb.n === 5, String(bomb.n));
-check('and they are not the same battery bay', bomb.max[0] === 84 && bomb.max[4] === 300, bomb.max.join('/'));
+// THREE models (Daniel, 2026-09-28: "יש בסך הכל 3 דגמים") — the regular, the FC-1 and the Plus.
+check('the Bomber is listed as its three models', bomb.n === 3, String(bomb.n));
+check('and they are not the same battery bay', bomb.max[0] === 144 && bomb.max[2] === 300, bomb.max.join('/'));
 
 // The provenance warning is the most important thing on this page. The table reads like
 // measurements and is not — it came from another model — so the page has to say so where the
@@ -587,10 +588,13 @@ const zoom = await page.evaluate(async (SELF) => {
   const o = document.getElementById('vehPhotoView');
   const big = o && o.querySelector('img');
   await new Promise((r) => (big && !big.complete ? big.addEventListener('load', r, { once: true }) : r()));
-  const out = { open: !!o && !o.hidden, w: big ? big.naturalWidth : 0, name: o ? o.innerText.trim() : '',
+  // What is ON SCREEN, not the hidden attribute: an inline display:flex beats [hidden], and a
+  // check of `o.hidden` passed while the photo stayed up (2026-09-28).
+  const shown = (el) => !!el && el.checkVisibility();
+  const out = { open: shown(o), w: big ? big.naturalWidth : 0, name: o ? o.innerText.trim() : '',
     stayed: !document.getElementById('dimPane-veh').hidden };
-  o.click();
-  out.closed = o.hidden;
+  if (SELF) o.hidden = true; else o.click();   // --selftest closes it the old way, which leaves it up
+  out.closed = !shown(o);
   return out;
 }, SELFTEST);
 check('tapping a vehicle photo opens it large', zoom.open && zoom.w >= 400 && zoom.name === 'Inokim OX', zoom);
@@ -672,27 +676,45 @@ const lying = await page.evaluate((SELF) => {
     if (h) { document.getElementById('dimHolder').value = h; calcPackDims(); }
     return document.getElementById('dimResult').textContent;
   };
-  const r = SELF ? bomberLying({ L: 393, H: 232, across: 100 }, DIM_CELLS['21700-50e'], 23, 23)
+  const r = SELF ? bomberLying({ L: 393, H: 255, across: 100 }, DIM_CELLS['21700-50e'], 23, 23)
     : bomberLying(bomberSide(vehicleByName('Bomber Plus 15kW')), DIM_CELLS['21700-50e'], 23, 23);
   // --selftest: read the maker's table instead of his measurement, which the check must catch.
   const regName = 'Bomber רגיל 3-12kW';
   const regTub = SELF ? tubOf({ tub: '355×120×185' }) : tubOf(vehicleByName(regName));
-  return { r, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1 48V', 60),
+  // A frame too narrow for a lying 21700 (no row is, since the FC-1 was measured at 90): a stand-in.
+  const narrow = bomberLyingHtml({ m: 'Bomber test', tub: '280×75×150 מ"מ' }, DIM_CELLS['21700-50e'], 21.5, 18.62, 72, 100, 'diag-b');
+  const regHtml = (res('Bomber רגיל 3-12kW', 72), document.getElementById('dimResult').innerHTML);
+  // --selftest: drop a row from his blue 20S17P, which the drawing must then show short of 170.
+  if (SELF) VEHICLE_PACKS.find((v) => v.m === 'Bomber רגיל 3-12kW').builds[0].stacks[0].rows.pop();
+  const blue = (res('Bomber רגיל 3-12kW', 72), document.querySelector('#dimResult .bomber-build'));
+  const blueSvg = blue && blue.querySelector('svg.bomber-build-svg');
+  const builds = document.querySelectorAll('#dimResult .bomber-build').length;
+  return { r, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1', 72), narrow, regHtml,
+           blue: blue ? blue.textContent : '', blueCells: blueSvg ? blueSvg.querySelectorAll('circle').length : 0, builds,
            surron: res('Sur-Ron', 72), regular: res(regName, 72), regTub,
            plusTub: tubOf(vehicleByName('Bomber Plus 15kW')),
            plusHtml: (res('Bomber Plus 15kW', 72, 'square-23'), document.getElementById('dimResult').innerHTML) };
 }, SELFTEST);
 check('his Bomber Plus comes back as 2 stacks of 150 = 300 cells', lying.r.stacks === 2 && lying.r.perSide === 150 && lying.r.n === 300, lying.r);
 check('which at 72V is his 20S15P', /20S15P · 75Ah/.test(lying.plus), lying.plus.slice(-260));
-check('a Bomber frame too narrow for a lying cell says so', /צר מתא שוכב/.test(lying.fc1), lying.fc1.slice(-160));
+check('a Bomber frame too narrow for a lying cell says so', /צר מתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
+check('the FC-1 (90 across, his tape) takes one lying stack', /ערימה אחת/.test(lying.fc1) && !/צר מתא שוכב/.test(lying.fc1), lying.fc1.slice(0, 200));
+// The build sheet (2026-09-28: "ציור סכמה של הסוללות שבניתי"): every cell of his blue 20S17P
+// drawn, 170 a side, from his own table — and all three of his builds under the regular Bomber.
+check('the regular Bomber shows his three builds', lying.builds === 3, String(lying.builds));
+check('his blue 20S17P is drawn cell by cell, 170 a side', lying.blueCells === 170 && /ערימה 1 — 170 תאים/.test(lying.blue), [lying.blueCells, lying.blue.slice(0, 120)]);
+check('the gold one is marked a draft, and the unphotographed stack is the rest of 260', /טיוטה/.test(lying.regHtml) && /כ-88 תאים \(260 פחות 172\)/.test(lying.regHtml), lying.regHtml.slice(0, 80));
 check('the lying section is for Bombers only', /תאים שוכבים/.test(lying.plus) && !/תאים שוכבים/.test(lying.surron), lying.surron.slice(-80));
 // 2026-09-27: his Plus's 152 is two stacks' thickness standing proud of a 115 frame body into
 // the covers — calling it the frame's width was wrong. A frame read off its tray keeps the word.
 check('the Plus calls its 152 the pack\'s thickness, confirmed, not the frame\'s width',
   /הסוללה שנבנתה \(מידות מאושרות\)/.test(lying.plus) && /עובי/.test(lying.plus) && !/רוחב שלדה/.test(lying.plus), lying.plus.slice(0, 160));
-check('a Bomber read off its tray still names the frame\'s width', /רוחב שלדה/.test(lying.regular), lying.regular.slice(0, 160));
-check('the regular Bomber reads his 2021 measurement (360×125×190), not the maker\'s table',
-  lying.regTub && lying.regTub.L === 360 && lying.regTub.W === 125 && lying.regTub.H === 190, lying.regTub);
+check('a Bomber read off its tray still names the frame\'s width', /רוחב שלדה/.test(lying.fc1), lying.fc1.slice(0, 160));
+check('the regular Bomber says its side is what his builds proved', /לפי הבניות שנכנסו/.test(lying.regular) && /רוחב \(עם המכסים\)/.test(lying.regular), lying.regular.slice(0, 160));
+// 360×125×190 was the 2021 tape; the builds that went in prove 364 × 192 (19 columns and 10 rows
+// of 19, with the bracket). The maker's 355×120×185 is under both.
+check('the regular Bomber reads what his builds prove (364×125×192), not the maker\'s table',
+  lying.regTub && lying.regTub.L === 364 && lying.regTub.W === 125 && lying.regTub.H === 192, lying.regTub);
 // The frame is shown, but NOT as a tub: judged standing, 370×200×150 said his own 20S15P does
 // not fit the frame it is in. So no tub, no verdict against his build, and the drawing is text.
 check('the Plus shows its frame from the maker\'s drawing, numbers isolated',

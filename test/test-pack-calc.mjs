@@ -84,7 +84,7 @@ const stack = await page.evaluate((SELF) => {
     field: !!document.getElementById('dimLayers'),
     moto40: r('אופנוע שליחויות 72V', 35),    // 20S7P: seven across a 170mm tray, twenty rows along
     moto50: r('אופנוע שליחויות 72V', 50),    // 200 cells: two layers, the box is 170mm deep
-    fc1: r('Bomber FC-1 48V', 50),            // 280x75 floor, 150mm deep: stacks
+    fc1: r('Bomber FC-1', 50),                // 410x90 floor, 200mm deep: stacks
     scooter: r('Inokim OX', 50),              // 200 cells in a scooter tub: never stacked
   };
 }, SELFTEST);

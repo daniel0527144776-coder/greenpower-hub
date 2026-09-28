@@ -149,60 +149,35 @@
  },
  {
   "model": "Bomber רגיל 3-12kW",
-  "file": "bomber.webp",
-  "raw": "bomber-a.jpg",
-  "checked": "2026-09-27",
-  "source": "aliexpress",
-  "url": "https://ae-pic-a1.aliexpress-media.com/kf/Saf50c7554c014a7eb05798d6e4b2b540x.jpg"
+  "file": "bomber-m1.webp",
+  "raw": "IMG-20211030-WA0057.jpg",
+  "rawPath": "C:/Users/מחול/Desktop/אינדורו/דגם 1/IMG-20211030-WA0057.jpg",
+  "checked": "2026-09-28",
+  "source": "his own photo (דגם 1 folder), 30.10.2021",
+  "note": "דגם 1 — the regular Stealth Bomber, white; replaced the AliExpress stand-in"
  },
  {
-  "model": "Bomber 72V מלא",
-  "file": "bomber.webp",
-  "raw": "bomber-a.jpg",
-  "checked": "2026-09-27",
-  "source": "aliexpress",
-  "url": "https://ae-pic-a1.aliexpress-media.com/kf/Saf50c7554c014a7eb05798d6e4b2b540x.jpg"
+  "model": "Bomber FC-1",
+  "file": "bomber-fc1.webp",
+  "raw": "IMG-20220429-WA0017.jpg",
+  "rawPath": "C:/Users/מחול/Desktop/אינדורו/דגם 3/IMG-20220429-WA0017.jpg",
+  "checked": "2026-09-28",
+  "source": "his own photo (דגם 3 folder), 29.4.2022",
+  "note": "דגם 3 — FC-1, the long rectangular pack in the frame"
  },
  {
   "model": "Bomber Plus 15kW",
-  "file": "bomber-plus.webp",
-  "raw": "bomber-plus.jpg",
-  "checked": "2026-09-27",
-  "source": "aliexpress",
-  "url": "https://ae-pic-a1.aliexpress-media.com/kf/S15bc9a9f156b49109efa14dfa9a9bd9aN.jpg"
- },
- {
-  "model": "Bomber FC-1 48V",
-  "file": "bomber-fc1.webp",
-  "raw": "bomber-c.jpg",
-  "checked": "2026-09-27",
-  "source": "aliexpress",
-  "url": "https://ae-pic-a1.aliexpress-media.com/kf/Sd53eb4d2d45848e7882781cbdf4b08b4o.jpg",
-  "note": "A Stealth-Bomber-type bike standing in for the FC-1: the FC-1 photos are on risunmotor.com/.co.uk, senopower.com and conhismotor.com, blocked by NetFree on 2026-09-27",
-  "whiteout": [
-   [
-    0,
-    0,
-    1,
-    0.17
-   ]
-  ]
- },
- {
-  "model": "Bomber FC-1 72V",
-  "file": "bomber-fc1.webp",
-  "raw": "bomber-c.jpg",
-  "checked": "2026-09-27",
-  "source": "aliexpress",
-  "url": "https://ae-pic-a1.aliexpress-media.com/kf/Sd53eb4d2d45848e7882781cbdf4b08b4o.jpg",
-  "note": "A Stealth-Bomber-type bike standing in for the FC-1: the FC-1 photos are on risunmotor.com/.co.uk, senopower.com and conhismotor.com, blocked by NetFree on 2026-09-27",
-  "whiteout": [
-   [
-    0,
-    0,
-    1,
-    0.17
-   ]
+  "file": "bomber-m2.webp",
+  "raw": "20211031_220031.jpg",
+  "rawPath": "C:/Users/מחול/Desktop/אינדורו/דגם 2/20211031_220031.jpg",
+  "checked": "2026-09-28",
+  "source": "his own photo (דגם 2 folder), 31.10.2021",
+  "note": "דגם 2 — the Plus, orange Ninja",
+  "crop": [
+   0.08,
+   0,
+   0.84,
+   1
   ]
  },
  {

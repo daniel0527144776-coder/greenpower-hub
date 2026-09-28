@@ -205,6 +205,10 @@ jobs:
       - name: Sticker — history survives sync
         run: node test/test-sticker-sync.mjs
 
+      # The site's films in a frame: loaded only when the tab is opened, never on every start.
+      - name: Films tab — the frame waits for the tab
+        run: node test/test-films-tab.mjs
+
       # A printed spec that overstates the pack is a warranty problem, not a cosmetic one.
       - name: Sticker — printed current never exceeds the BMS
         run: node test/test-sticker-specs.mjs
