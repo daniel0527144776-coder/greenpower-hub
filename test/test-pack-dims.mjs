@@ -363,7 +363,7 @@ const bomb = await page.evaluate(() => {
 });
 // THREE models (Daniel, 2026-09-28: "יש בסך הכל 3 דגמים") — the regular, the FC-1 and the Plus.
 check('the Bomber is listed as its three models', bomb.n === 3, String(bomb.n));
-check('and they are not the same battery bay', bomb.max[0] === 144 && bomb.max[2] === 300, bomb.max.join('/'));
+check('and they are not the same battery bay', bomb.max[0] === 144 && bomb.max[2] === 330, bomb.max.join('/'));
 
 // The provenance warning is the most important thing on this page. The table reads like
 // measurements and is not — it came from another model — so the page has to say so where the
@@ -560,7 +560,7 @@ const order = await page.evaluate(() => {
 });
 check('the tray size is the row right under the battery size', order.indexOf('גודל אמבטיה') === order.indexOf('גודל סוללה') + 1, order);
 
-// ---- the Bomber Plus carries its BMS on top (2026-09-27: 72V 75Ah 20S15P, JK BMS on top) ----
+// ---- the Bomber Plus carries its BMS on top (2026-09-27; it is 22S15P, 2026-09-28) ----
 const top = await page.evaluate((SELF) => {
   document.getElementById('dimExtra').value = '26'; dimExtraTouched = true;
   if (SELF) VEHICLE_PACKS.find((v) => v.m === 'Bomber Plus 15kW').bmsTop = false;
@@ -572,8 +572,9 @@ const top = await page.evaluate((SELF) => {
   clearDimVehicle();
   return { res, chip, box, label };
 }, SELFTEST);
-check('his Bomber Plus build is on the vehicle bar', /נבנה במעבדה: 72V 75Ah · 20S15P · JK/.test(top.chip), top.chip);
-check('and its 20S15P is the build filled in', /20S 15P · 300 תאים/.test(top.res), top.res.slice(0, 80));
+check('his Bomber Plus build is on the vehicle bar', /נבנה במעבדה: 22S15P · 75Ah · JK/.test(top.chip), top.chip);
+// At 72V the frame is filled with the build he named for next time: 20S16P, 320 of its 330 places.
+check('and at 72V the build filled in is his next one, 20S16P', /20S 16P · 320 תאים/.test(top.res), top.res.slice(0, 80));
 // one layer of 21700 is 74 tall; with the BMS on top the block is 74 + 26 = 100, and no BMS
 // box sits at the end of the drawing
 check('the BMS allowance goes on the height there, not the length', /גודל סוללה\s*\d+ × \d+ × 100/.test(top.res) && !top.box && /מעל/.test(top.label), [top.res.slice(0, 160), top.box, top.label]);
@@ -667,10 +668,10 @@ check('there is one list, not two', rb.oneList, rb.oneList);
 check('picking his own tray judges the build against it', rb.kugooMine && /✅ נכנס ל-Kugoo G2/.test(rb.kugoo), rb.kugoo.slice(0, 60));
 
 // ---- cells lying, for the Bombers (2026-09-27) ----
-// The one thing the lying estimate is fitted to is his own Bomber Plus: 2 stacks of ~150 on the
-// 23 square = 300 = 20S15P. If the geometry or the fill drifts, that build stops coming back.
+// The one thing the lying estimate is fitted to is his own Bomber Plus: 2 stacks of 165 on the
+// 23 square = 330 = 22S15P. If the geometry or the fill drifts, that build stops coming back.
 const lying = await page.evaluate((SELF) => {
-  // --selftest: a frame 100mm across takes one stack, not two, so 300 must not come back.
+  // --selftest: a frame 100mm across takes one stack, not two, so 330 must not come back.
   const res = (m, V, h) => {
     useVehiclePack(m, V);
     if (h) { document.getElementById('dimHolder').value = h; calcPackDims(); }
@@ -695,8 +696,10 @@ const lying = await page.evaluate((SELF) => {
            plusTub: tubOf(vehicleByName('Bomber Plus 15kW')),
            plusHtml: (res('Bomber Plus 15kW', 72, 'square-23'), document.getElementById('dimResult').innerHTML) };
 }, SELFTEST);
-check('his Bomber Plus comes back as 2 stacks of 150 = 300 cells', lying.r.stacks === 2 && lying.r.perSide === 150 && lying.r.n === 300, lying.r);
-check('which at 72V is his 20S15P', /20S15P · 75Ah/.test(lying.plus), lying.plus.slice(-260));
+check('his Bomber Plus comes back as 2 stacks of 165 = 330 cells', lying.r.stacks === 2 && lying.r.perSide === 165 && lying.r.n === 330, lying.r);
+check('which at 72V is 20S16P, 80Ah (his next build)', /20S16P · 80Ah/.test(lying.plus), lying.plus.slice(-260));
+// His own rows (16,16,17×5,16,13,11,8 = 165), drawn — the build sheet for the Plus.
+check('the Plus build sheet draws his 165 a side', /ערימה 1 — 165 תאים/.test(lying.plus) && /16, 16, 17, 17, 17, 17, 17, 16, 13, 11, 8/.test(lying.plus), lying.plus.slice(-300));
 check('a Bomber frame too narrow for a lying cell says so', /צר מתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
 check('the FC-1 (90 across, his tape) takes one lying stack', /ערימה אחת/.test(lying.fc1) && !/צר מתא שוכב/.test(lying.fc1), lying.fc1.slice(0, 200));
 // The build sheet (2026-09-28: "ציור סכמה של הסוללות שבניתי"): every cell of his blue 20S17P
@@ -718,7 +721,7 @@ check('the regular Bomber says its side is what his builds proved', /לפי הב
 // of 19, with the bracket). The maker's 355×120×185 is under both.
 check('the regular Bomber reads what his builds prove (364×125×192), not the maker\'s table',
   lying.regTub && lying.regTub.L === 364 && lying.regTub.W === 125 && lying.regTub.H === 192, lying.regTub);
-// The frame is shown, but NOT as a tub: judged standing, 370×200×150 said his own 20S15P does
+// The frame is shown, but NOT as a tub: judged standing, 370×200×150 said his own build does
 // not fit the frame it is in. So no tub, no verdict against his build, and the drawing is text.
 check('the Plus shows its frame from the maker\'s drawing, numbers isolated',
   /השלדה — שרטוט היצרן/.test(lying.plus) && /<bdi dir="ltr">370×200<\/bdi>/.test(lying.plusHtml), lying.plusHtml.slice(0, 200));

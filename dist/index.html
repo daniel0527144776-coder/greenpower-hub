@@ -482,11 +482,8 @@ body { min-height: 100vh; }
        income ledger, the expense ledger and wages. Two "רווח נטו" for the same month, one
        of them wrong. It belongs where the full picture is (Daniel, 2026-08-02). -->
 
-  <div class="card" style="padding:12px;">
-    <input type="search" id="homePrice" class="form-input-wide" style="width:100%;"
-           placeholder="🔎 מחיר מהיר — 72V 30 · מטען · BMS" oninput="homePriceSearch()" autocomplete="off">
-    <div id="homePriceOut" style="margin-top:8px;"></div>
-  </div>
+  <!-- The "מחיר מהיר" box stood here from 2026-09-01 and was removed at his request on
+       2026-09-28 ("תוריד מחיר מהיר"). A price is looked up in the catalogue's own search. -->
 
   <!-- Quick actions -->
   <div class="card">
@@ -2589,7 +2586,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v374';
+const HUB_BUILD = 'v375';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5156,47 +5153,6 @@ function topicOf(cat) {
   const hit = CATALOG_TOPICS.find((x) => x.re.test(cat || ''));
   return hit ? hit.title : CATALOG_TOPIC_REST;
 }
-// Checking a price is the thing he does most in this app (his answer, 2026-09-01) and it cost
-// four presses: home, catalogue, open a category, read. One now.
-//
-// Both prices at once, because the next question after "how much" is always "and for a shop".
-// It reads PRICING, so it can never disagree with the catalogue page.
-function homePriceSearch() {
-  const el = document.getElementById('homePrice');
-  const out = document.getElementById('homePriceOut');
-  if (!el || !out) return;
-  const q = (el.value || '').trim().toLowerCase();
-  if (q.length < 2) { out.innerHTML = ''; return; }
-  // Every word must appear, so "72 30" finds 72V 30Ah without caring about order or units —
-  // which is how a size actually gets said out loud, and typed with one hand.
-  const words = q.split(/\s+/).filter(Boolean);
-  const hit = PRICING.filter((it) => {
-    const hay = ((it.name || '') + ' ' + (it.cat || '')).toLowerCase();
-    return words.every((w) => hay.includes(w));
-  });
-  if (!hit.length) {
-    out.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:4px 2px;">אין תוצאה — נסה 72V 30 או מטען</div>';
-    return;
-  }
-  const money = (v) => (typeof v === 'number' ? shek(v) : (v || '—'));
-  const rows = hit.slice(0, 6).map((it) => {
-    // A lab service and a battery are different kinds of answer; the icon says which.
-    const svc = /שירותי מעבדה|שירותים נוספים/.test(it.cat || '');
-    return '<div class="price-item" style="padding:6px 2px;">'
-      + '<div class="price-item-name"><span style="font-size:13px;">' + it.name + '</span>'
-      + '<div style="font-size:10.5px;color:var(--text-light);">' + (svc ? '🔧 ' : '') + it.cat + '</div></div>'
-      + '<div></div>'
-      + '<div class="price-item-final" style="text-align:left;white-space:nowrap;">' + money(it.retail)
-      + '<div style="font-size:11px;color:var(--text-muted);font-weight:400;">עסקי ' + money(it.b2b) + '</div></div>'
-      + '</div>';
-  }).join('');
-  const more = hit.length > 6
-    ? '<div style="font-size:11px;color:var(--text-muted);padding:4px 2px;">ועוד ' + (hit.length - 6)
-      + ' — <span onclick="navigateTo(\'catalog\')" style="color:var(--primary);cursor:pointer;">פתח מחירון</span></div>'
-    : '';
-  out.innerHTML = rows + more;
-}
-
 // Where he buys his cells decides "עלות לי" on every battery row — so the choice sits here, with
 // the margin it moves, and only while the cost is shown.
 function renderCatRoute() {
@@ -8153,10 +8109,10 @@ function layoutText(S, P, layers, cols, rows, derived) {
 // above cannot say that.
 //
 // The triangle is a guess on a rectangle: BOMBER_FILL is what his Plus actually took of its own
-// bounding box (150 of 17 x 11 = 187 on the 23 square — eleven rows, Daniel 2026-09-28; it was
-// 150/170 while the photo was read as ten). A frame with its own figure carries `fill`: the
+// bounding box (165 of 17 x 11 = 187 on the 23 square — his own row counts, Daniel 2026-09-28;
+// it was 150/170 while the pack was taken for a 20S15P read off a photo as ten rows). A frame with its own figure carries `fill`: the
 // FC-1's bay is a plain rectangle (1), the regular Bomber's is what his 20S17P took (170 of 190).
-const BOMBER_FILL = 150 / 187;
+const BOMBER_FILL = 165 / 187;
 function isBomber(v) { return !!v && /Bomber/i.test(v.m || ''); }
 function bomberSide(v) {
   if (!v) return null;
@@ -8584,25 +8540,30 @@ const VEHICLE_PACKS = [
         note: 'ערימה אחת: 20 עמודות, כל עמודה קבוצה אחת של 10',
         stacks: [{ name: 'ערימה אחת', rows: [[0, 20], [0, 20], [0, 20], [0, 20], [0, 20], [0, 20], [0, 20], [0, 20], [0, 20], [0, 20]] }] },
     ] },
-  // דגם 2 — the Plus (his orange 'Ninja'). Built in the lab (Daniel, 2026-09-27): 72V 75Ah,
-  // 20S15P, with a JK BMS on TOP of the pack — so on this frame the BMS allowance goes on the
-  // height, not the length (bmsTop).
-  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber Plus 15kW', src: 'יצרן', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 15, max: 300,
+  // דגם 2 — the Plus (his orange 'Ninja'). Built in the lab: 75Ah, JK BMS on TOP of the pack — so on
+  // this frame the BMS allowance goes on the height, not the length (bmsTop).
+  // It is **22S15P, 330 cells** (Daniel, 2026-09-28, from his own row counts) — not the 20S15P this
+  // row said for a day: 11 rows a side of 16,16,17,17,17,17,17,16,13,11,8 = 165, 11 groups of 15 in
+  // each stack, both stacks the same shape. 22S is ~81V nominal, so for a 72V build in the same
+  // frame he said "the next one is 20S16P": 320 cells, 80Ah, 5 places a side left empty. p72/p60
+  // and max below are that: the same 330 places at 20S and 16S.
+  { g: 'אופנועי שטח (E-Moto)', m: 'Bomber Plus 15kW', src: 'יצרן', p: 21.5, s60: 16, p60: 20, s72: 20, p72: 16, max: 330,
     model: 2, hubOnly: true,
-    oem: '72V 75Ah', oemSrc: 'theebikemotorkit — שלדת Plus', built: '72V 75Ah · 20S15P · JK', bmsTop: true,
-    // The SIDE of that pack: cells lying across the frame in 2 stacks of 150 — 2 x 150 = 300, his
-    // 20S15P, 10 groups in each stack, both stacks the same shape (Daniel, 2026-09-28). ELEVEN
-    // rows, not ten (Daniel, 2026-09-28; the straightened photo shows ten row lines): at the 23
-    // square that is 255 high (10 × 23 + 21 + the bracket), not the 232 written here the day before. The length, 393, rests on
-    // a widest row of 17 that was read off the same angled photo and is not re-checked.
-    // A pack that went in is a FLOOR for the frame, not the frame (see the note above VEHICLE_PACKS).
+    oem: '72V 75Ah', oemSrc: 'theebikemotorkit — שלדת Plus', built: '22S15P · 75Ah · JK', bmsTop: true,
+    // The SIDE of that pack: cells lying across the frame in 2 stacks of 165. ELEVEN rows (the
+    // straightened photo shows ten row lines): at the 23 square that is 255 high (10 × 23 + 21 +
+    // the bracket), and the widest row, 17, is 393 long. A pack that went in is a FLOOR for the
+    // frame, not the frame (see the note above VEHICLE_PACKS).
     builds: [
-      { label: 'Plus — 20S15P · 21700', date: '2.2025', cell: 21700, holder: 'square-23', sp: '20S15P', total: 300, status: 'draft',
-        // Not counted from the photos on purpose (2026-09-28): the pack is built from blocks set half
-        // a row apart, and the top rows are under kapton and wires — a count would be a guess, and a
-        // wrong build sheet is worse than an empty one. He will write the blocks.
-        note: '11 שורות, 150 בכל צד, 10 קבוצות בכל ערימה, שתי הערימות באותה צורה. בנויה ממגושים שמוזזים חצי שורה זה מזה — הציור מחכה למגושים ממנו',
-        stacks: [{ name: 'כל צד', rows: null }, { name: 'ערימה 2 (זהה)', same: 0 }] },
+      // His numbers and his shape (2026-09-28): rows from the bottom as he wrote them; the short rows
+      // are cut on the left at the top (the steps in the photo with the BMS), the bottom two and the
+      // top four each miss one cell on the right. Two stacks, the same shape.
+      { label: 'Plus — 22S15P', date: '2.2025', cell: 21700, holder: 'square-23', sp: '22S15P', total: 330, status: 'confirmed',
+        note: '11 שורות, 165 בכל צד, 11 קבוצות של 15 בכל ערימה, שתי הערימות באותה צורה. לבנייה הבאה ב-72V: 20S16P באותה צורה — 320 תאים, 80Ah, 5 מקומות ריקים בכל צד',
+        stacks: [
+          { name: 'ערימה 1', rows: [[0, 16], [0, 16], [0, 17], [0, 17], [0, 17], [0, 17], [0, 17], [0, 16], [3, 13], [5, 11], [8, 8]] },
+          { name: 'ערימה 2 (זהה)', same: 0 },
+        ] },
     ],
     //
     // The frame itself (Daniel identified it 2026-09-27 from the maker's drawing he had saved,
@@ -8611,9 +8572,9 @@ const VEHICLE_PACKS = [
     // rectangle is 370×200; the bay itself runs 450 on its long diagonal and 265 across, edges
     // 250/180/140/420. The pack's 393×232 sits between the two, as a hexagon would.
     // `frame`, NOT `tub`: a tub is judged with the cells STANDING, and 370×200×150 standing says
-    // his own 20S15P does not fit the frame it is in. It is shown in the lying section instead.
+    // his own build does not fit the frame it is in. It is shown in the lying section instead.
     frame: 'שרטוט היצרן: מלבן פנימי 370×200, החלל עד 450 באורך ו-265 ברוחב (צלעות 250/180/140/420) · גוף השלדה 115, המכסים 150 במרכז',
-    side: { L: 393, H: 255, across: 152, rows: 11, widest: 17, perSide: 150, stacks: 2, holder: 'square-23', confirmed: true } },
+    side: { L: 393, H: 255, across: 152, rows: 11, widest: 17, perSide: 165, stacks: 2, holder: 'square-23', confirmed: true } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' ,
     tub: '420×155×65 מ"מ — לפי מידות הסוללה המקורית (boardstore), לא נמדד' },
   // The OX is NOT the OXO. Its tub is two rectangles — 425x165 wide plus 60x140 narrow —
@@ -8717,7 +8678,7 @@ function showVehPhoto(model) {
     document.body.appendChild(o);
   }
   // A pack he built for this vehicle, from his own photo, goes underneath (2026-09-27: the Bomber
-  // Plus, 72V 75Ah 20S15P with a JK BMS on top).
+  // Plus, 22S15P with a JK BMS on top).
   const build = typeof VEH_BUILD_PHOTOS !== 'undefined' && VEH_BUILD_PHOTOS[model];
   o.innerHTML = '<img alt="" style="max-width:100%;max-height:' + (build ? '38' : '75') + 'vh;border-radius:10px;background:#fff;">'
     + '<div style="color:#fff;font-weight:700;margin-top:10px;font-size:16px;"></div>'

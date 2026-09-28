@@ -38,32 +38,22 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(200);
 
-// ---- 1. a price in one keystroke ----
-// His most common action, and it cost four presses.
+// ---- 1. the home page's price box is gone ----
+// It was added 2026-09-01 ("checking a price is what I do most") and removed at his request on
+// 2026-09-28 ("תוריד מחיר מהיר"). A price is found in the catalogue's search; this checks the box
+// did not come back with a copy of the old search, and that the catalogue still answers.
 const price = await page.evaluate(() => {
-  const el = document.getElementById('homePrice');
-  if (!el) return null;
-  el.value = '72V 30';
-  homePriceSearch();
-  const out = document.getElementById('homePriceOut');
-  return { text: out.innerText, rows: out.querySelectorAll('.price-item').length, hasB2B: /עסקי/.test(out.innerText) };
+  const gone = !document.getElementById('homePrice') && typeof homePriceSearch === 'undefined';
+  navigateTo('catalog');
+  const el = document.getElementById('catalogSearch');
+  el.value = '72v 30ah';
+  renderCatalog();
+  const found = /72V 30Ah/.test(document.getElementById('catalogList').innerText);
+  el.value = ''; renderCatalog(); navigateTo('home');
+  return { gone, found };
 });
-check('the home page has a price box', !!price, price ? 'ok' : 'missing');
-if (price) {
-  check('typing a size finds packs', price.rows > 0, String(price.rows));
-  check('and shows the trade price beside the retail one', price.hasB2B, price.text.slice(0, 60));
-  const words = await page.evaluate(() => {
-    const el = document.getElementById('homePrice');
-    // Reversed: the same pack, said the other way round. (An earlier version of this check
-    // used 'BMS 30', which matches nothing because no BMS row carries a 30 — the test example
-    // was wrong, not the search.)
-    el.value = '30 72';
-    homePriceSearch();
-    return document.getElementById('homePriceOut').querySelectorAll('.price-item').length;
-  });
-  // Word-order independence is the point: a size gets said out loud in any order.
-  check('word order does not matter', words > 0, String(words));
-}
+check('the home page has no quick-price box (his call, 2026-09-28)', price.gone, price);
+check('the catalogue search still finds a size', price.found, price);
 
 // ---- 2. a build takes cells off the shelf ----
 const stock = await page.evaluate(() => {
