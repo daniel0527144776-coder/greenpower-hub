@@ -2589,7 +2589,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v373';
+const HUB_BUILD = 'v374';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -8556,15 +8556,19 @@ const VEHICLE_PACKS = [
           { name: 'ערימה 1', rows: [[0, 19], [0, 19], [0, 19], [0, 19], [0, 18], [0, 17], [0, 17], [0, 16], [0, 14], [0, 12]] },
           { name: 'ערימה 2 (זהה)', same: 0 },
         ] },
-      { label: 'הסוללה הזהובה — 20S13P', date: '1.2022', cell: 18650, holder: 'sq-19', sp: '20S13P', total: 260, status: 'draft',
-        note: 'הצד שצולם נספר מהתמונה המיושרת: 19 עמודות, 10 שורות. 260 פחות הצד הזה = הערימה השנייה, שלא צולמה',
+      // 20S17P, not 20S13P (Daniel, 2026-09-28, after seeing the photographed side counted: 10
+      // rows, 18-19 at the bottom, 172). Two equal stacks, so 170 a side — the count is 2 over,
+      // and which two is not known: it stays a draft until he checks it against the pack.
+      { label: 'הסוללה הזהובה — 20S17P', date: '1.2022', cell: 18650, holder: 'sq-19', sp: '20S17P', total: 340, status: 'draft',
+        note: 'שתי ערימות שוות. הצד שצולם נספר מהתמונה המיושרת: 172 — שניים יותר מ-170, אז שני תאים בספירה לא נכונים',
         stacks: [
-          { name: 'הצד שצולם', rows: [[1, 18], [0, 19], [0, 19], [0, 19], [0, 19], [0, 19], [0, 19], [3, 16], [6, 13], [8, 11]] },
-          { name: 'הערימה השנייה', rest: true },
+          { name: 'ערימה 1 (הצד שצולם)', rows: [[1, 18], [0, 19], [0, 19], [0, 19], [0, 19], [0, 19], [0, 19], [3, 16], [6, 13], [8, 11]] },
+          { name: 'ערימה 2 (זהה)', same: 0 },
         ] },
-      { label: 'הסוללה הירוקה', date: '5.2021', cell: 18650, holder: 'sq-19', sp: '', total: 0, status: 'draft',
-        note: 'נראית כמלבן של 14 × 10. התצורה (S ו-P) עוד לא נמסרה',
-        stacks: [{ name: 'הצד שצולם', rows: [[0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14]] }] },
+      // 20S7P, one stack (Daniel, 2026-09-28) — 140, which is exactly the 14 × 10 the photo shows.
+      { label: 'הסוללה הירוקה — 20S7P', date: '5.2021', cell: 18650, holder: 'sq-19', sp: '20S7P', total: 140, status: 'confirmed',
+        note: 'ערימה אחת: 14 עמודות × 10 שורות = 140',
+        stacks: [{ name: 'ערימה אחת', rows: [[0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14], [0, 14]] }] },
     ] },
   // דגם 3 — the FC-1 (his folder דגם 3: the bare frame measured with a tape 12.2021, and a long
   // rectangular pack 4.2022). 410 long × 200 high × 90 across (Daniel, 2026-09-28: "ה-9 זה הרוחב";
@@ -8594,7 +8598,10 @@ const VEHICLE_PACKS = [
     // A pack that went in is a FLOOR for the frame, not the frame (see the note above VEHICLE_PACKS).
     builds: [
       { label: 'Plus — 20S15P · 21700', date: '2.2025', cell: 21700, holder: 'square-23', sp: '20S15P', total: 300, status: 'draft',
-        note: '11 שורות, 150 בכל צד, 10 קבוצות בכל ערימה, שתי הערימות באותה צורה. כמה תאים בכל שורה — עוד לא נספר (התמונה בזווית והשורות העליונות מתחת לקפטון)',
+        // Not counted from the photos on purpose (2026-09-28): the pack is built from blocks set half
+        // a row apart, and the top rows are under kapton and wires — a count would be a guess, and a
+        // wrong build sheet is worse than an empty one. He will write the blocks.
+        note: '11 שורות, 150 בכל צד, 10 קבוצות בכל ערימה, שתי הערימות באותה צורה. בנויה ממגושים שמוזזים חצי שורה זה מזה — הציור מחכה למגושים ממנו',
         stacks: [{ name: 'כל צד', rows: null }, { name: 'ערימה 2 (זהה)', same: 0 }] },
     ],
     //

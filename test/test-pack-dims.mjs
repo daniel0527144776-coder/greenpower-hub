@@ -703,7 +703,10 @@ check('the FC-1 (90 across, his tape) takes one lying stack', /ערימה אחת
 // drawn, 170 a side, from his own table — and all three of his builds under the regular Bomber.
 check('the regular Bomber shows his three builds', lying.builds === 3, String(lying.builds));
 check('his blue 20S17P is drawn cell by cell, 170 a side', lying.blueCells === 170 && /ערימה 1 — 170 תאים/.test(lying.blue), [lying.blueCells, lying.blue.slice(0, 120)]);
-check('the gold one is marked a draft, and the unphotographed stack is the rest of 260', /טיוטה/.test(lying.regHtml) && /כ-88 תאים \(260 פחות 172\)/.test(lying.regHtml), lying.regHtml.slice(0, 80));
+// 2026-09-28: the gold one is 20S17P (his correction of 20S13P); its photo count, 172, is 2 over
+// the 170 a side that makes, so it must still say draft. The green one is his 20S7P = 14 × 10.
+check('the gold 20S17P is still marked a draft (its photo count is 172, not 170)', /הסוללה הזהובה — 20S17P/.test(lying.regHtml) && /172 — שניים יותר מ-170/.test(lying.regHtml) && /טיוטה/.test(lying.regHtml), lying.regHtml.slice(0, 80));
+check('the green one is his 20S7P, 140 in one stack', /הסוללה הירוקה — 20S7P/.test(lying.regHtml) && /ערימה אחת — 140 תאים/.test(lying.regHtml), lying.regHtml.slice(0, 80));
 check('the lying section is for Bombers only', /תאים שוכבים/.test(lying.plus) && !/תאים שוכבים/.test(lying.surron), lying.surron.slice(-80));
 // 2026-09-27: his Plus's 152 is two stacks' thickness standing proud of a 115 frame body into
 // the covers — calling it the frame's width was wrong. A frame read off its tray keeps the word.
