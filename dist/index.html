@@ -1106,8 +1106,8 @@ body { min-height: 100vh; }
     </div>
     <div class="form-row dim-wide"><label>מחזיק</label>
       <select class="form-select" id="dimHolder" onchange="calcPackDims(); calcFromOldPack()">
-        <option value="diag-a" selected>אלכסוני 22.5 (ניקל א׳)</option>
-        <option value="diag-b">אלכסוני 21.5 (ניקל ב׳)</option>
+        <option value="diag-a" selected>ניקל א׳ — W 22.7</option>
+        <option value="diag-b">ניקל ב׳ — אלכסוני 22.5</option>
         <option value="square-23">ריבועי 23</option>
         <option value="custom">מותאם אישית ↓</option>
       </select>
@@ -2588,7 +2588,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v379';
+const HUB_BUILD = 'v380';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7534,8 +7534,9 @@ const BRACKET_MAX = { 21700: { cols: 15, rows: 10 }, 18650: { cols: 22, rows: 16
 // 48mm, which is the difference between fitting a scooter tray and not.
 // Cell-centre distances as [along the row, between rows].
 //
-// THE THREE BRACKETS DANIEL OWNS: square at 23mm and two diagonal nickels at 22.5 and 21.5
-// (his figures, 2026-08-31 — they were briefly written 22.4 and 21.4). The keys are
+// THE THREE BRACKETS DANIEL OWNS: square at 23mm, ניקל א׳ (W strip) at 22.7 and ניקל ב׳ (diagonal)
+// at 22.5 — re-measured 2026-10-04; before that they were 22.5 / 21.5 (2026-08-31), and briefly
+// 22.4 / 21.4. The figures below that use 21.5 / 18.62 are from that earlier reading. The keys are
 // deliberately `diag-a` / `diag-b` and NOT the numbers: this measurement has now changed
 // twice, and a key that spells out a millimetre has to be renamed across the vehicle table,
 // the tests and every saved cap each time it does.
@@ -7562,7 +7563,10 @@ const DIM_PITCH = {
   // They used to carry the 21700 pitches, so every 18650 build came out a size too big.
   // And a DIAGONAL 18.5 ("יש גם אלכסוני 18.5"): rows nest at 18.5 x 0.866 = 16.02.
   18650: { 'diag-185': [18.5, 16.02], 'sq-19': [19, 19], 'sq-2025': [20.25, 20.25] },
-  21700: { 'diag-a': [22.5, 19.49], 'diag-b': [21.5, 18.62], 'square-23': [23, 23] },
+  // Re-measured 2026-10-04 (Daniel): ניקל א׳ is the W-shaped strip at 22.7, ניקל ב׳ the diagonal at
+  // 22.5 — both on nesting rows (he chose that for the W too), so each is d x 0.866 between rows.
+  // The keys stay with the NICKELS, not the numbers: the OX's counted 136/126 were counted on them.
+  21700: { 'diag-a': [22.7, 19.66], 'diag-b': [22.5, 19.49], 'square-23': [23, 23] },
 };
 const DIM_WALL = 1.5;        // bracket edge either side
 const DIM_CAP = 4;           // holder caps above and below the cell
@@ -7651,8 +7655,10 @@ function stackAllowed(v) {
 //
 // Across the narrow side the cells sit at the in-row pitch; the rows follow each other along
 // the length at the row pitch (19.49 on the 22.5 diagonal, where the rows nest).
+// The same 0.5mm slack hisFit allows (2026-10-04): his Nami Klima takes six across its 139mm on
+// the square 23 — 139.15 by the walls' nominal 1.5 — and without it the count said five.
 function acrossFit(W, pitch, dia) {
-  return Math.floor((W - dia - 2 * DIM_WALL) / pitch) + 1;
+  return Math.floor((W + 0.5 - dia - 2 * DIM_WALL) / pitch) + 1;
 }
 function groupLayout(S, P, layers, acrossMax) {
   const g = Math.max(1, Math.ceil(P / Math.max(1, acrossMax)));   // bracket rows per group
@@ -7666,7 +7672,7 @@ function groupLayout(S, P, layers, acrossMax) {
 // (A: a group is a straight row, 21.5 apart; the groups climb at the nested 18.62) or ALONG it
 // (B: a group is a zigzag across, 18.62 a step; the groups climb at 21.5). His own numbers need
 // both: the 390 x 135 pack he measured is A (6 across at 22.5, 20 along at 19.49), and his Nami
-// Klima note "21×7 בניקל ב׳" is B — seven across 139mm only fit at 18.62 a step. A alone told
+// Klima note "21×7 בניקל ב׳" (since corrected by him, 2026-10-04: it takes 16S6P on the square 23) is B — seven across 139mm only fit at 18.62 a step. A alone told
 // him the Klima takes six. A is tried first, as the pack he measured was built.
 function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
   let first = null;
@@ -7687,7 +7693,7 @@ function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia) {
   return 0;
 }
 
-// Densest first: 21.5 gives the narrowest block, then 22.5, then the square 23. He asked for
+// Densest first: ניקל ב׳ (22.5) gives the narrowest block, then ניקל א׳ (22.7), then the square 23. He asked for
 // "the densest that fits", so the recommendation is the first one that gets the pack in.
 // Per cell size: a holder is made for one cell and the list must follow the cell chosen.
 // Densest first — the recommendation takes the first that fits.
@@ -7696,9 +7702,9 @@ const HOLDERS_BY_FMT = { 21700: ['diag-b', 'diag-a', 'square-23'], 18650: ['diag
 const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
 const HOLDER_ORDER = HOLDERS_BY_FMT[21700];
 function holdersFor(fmt) { return HOLDERS_BY_FMT[fmt] || HOLDER_ORDER; }
-const HOLDER_NAME = { 'diag-b': 'ניקל ב׳ (21.5)', 'diag-a': 'ניקל א׳ (22.5)', 'square-23': 'ריבועי 23',
+const HOLDER_NAME = { 'diag-b': 'ניקל ב׳ (22.5)', 'diag-a': 'ניקל א׳ W (22.7)', 'square-23': 'ריבועי 23',
   'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
-const HOLDER_LABEL = { 'diag-a': 'אלכסוני 22.5 (ניקל א׳)', 'diag-b': 'אלכסוני 21.5 (ניקל ב׳)', 'square-23': 'ריבועי 23',
+const HOLDER_LABEL = { 'diag-a': 'ניקל א׳ — W 22.7', 'diag-b': 'ניקל ב׳ — אלכסוני 22.5', 'square-23': 'ריבועי 23',
   'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
 // Rebuilds the holder list for the cell size, keeping the choice when it is still valid.
 function refreshHolderOptions(fmt) {
@@ -8286,6 +8292,7 @@ function dimExtraFor(V) {
   if (dimExtraTouched && el) return Math.max(0, parseFloat(el.value) || 0);
   return V >= 72 ? 26 : V >= 60 ? 22 : V >= 48 ? 18 : 14;
 }
+// The table's p is a tag from before the 2026-10-04 re-measure: 22.5 meant ניקל א׳ and 21.5 ניקל ב׳.
 function holderForPitch(p) { return p >= 23 ? 'square-23' : p >= 22.5 ? 'diag-a' : 'diag-b'; }
 function fillDimBuild(v, V, P, holder, layers, c) {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = String(val); };
@@ -8604,7 +8611,7 @@ const VEHICLE_PACKS = [
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', src: 'AI', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, upg: '72V 40Ah', upgSrc: 'fluidfreeride.com', max: 240, oem: '72V 40Ah', oemSrc: 'fluidfreeride' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', src: 'AI', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 8, max: 160, oem: '60V 40Ah', oemSrc: 'maxblinker' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', src: 'AI', p: 21.5, s60: 16, p60: 8, s72: 20, p72: 6, max: 147, oem: '60V 30Ah', oemSrc: 'fluidfreeride',
-    tub: '463×139×75 מ"מ פנימי (נמדד 22.9.2026) · שכבה אחת · 21×7 בניקל ב׳' },
+    tub: '463×139×75 מ"מ פנימי (נמדד 22.9.2026) · שכבה אחת · 16S6P (6×16) בריבועי 23' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', src: 'AI', p: 22.5, s60: 16, p60: 13, s72: 20, p72: 10, upg: '60V 35Ah', upgSrc: 'fluidfreeride.com', max: 208, oem: '60V 35Ah', oemSrc: 'fluidfreeride',
     // The stock 60V 35Ah PACK (ebikescooter, 25.9.2026: 38.8 x 15.5 x 6.5 cm, 9.1kg). Deliberately
     // not a tub: 65mm is the pack, not the tray, and as a tray it would tell him no 21700 stands.
@@ -8737,18 +8744,21 @@ function renderVehiclePacks() {
     }
   }
   const hit = VEHICLE_PACKS.filter((v) => !q || v.m.toLowerCase().includes(q) || v.g.toLowerCase().includes(q));
+  const findMine = (v) => dims.find((x) => String(x.model || '').trim().toLowerCase() === v.m.trim().toLowerCase());
+  const sized = (v) => !!(findMine(v) || tubOf(v) || v.side);
+  // Every vehicle is listed; within each group the ones with sizes come first and the ones
+  // without go to its end (2026-10-04: hidden for an hour, then "למה אני לא רואה את כל הכלים").
+  const groups = [...new Set(hit.map((v) => v.g))];
+  const ordered = groups.flatMap((g) => { const vs = hit.filter((v) => v.g === g); return vs.filter(sized).concat(vs.filter((v) => !sized(v))); });
   let group = '';
-  for (const v of hit) {
+  for (const v of ordered) {
     // The card is the vehicle and its tray, nothing more (2026-09-27: "כדי שלא יהיה עמוס"). The
     // builds, the maximum per voltage, the OEM pack and the counted holders all come after the
     // tap, where the cell and the nickel have been chosen and the numbers mean something.
-    const d = dims.find((x) => String(x.model || '').trim().toLowerCase() === v.m.trim().toLowerCase());
+    const d = findMine(v);
     const tb = !d ? tubOf(v) : null;
     // A frame with no tub but a side he built to (the Plus) shows that side, not "no sizes".
     const sd = !d && !tb && v.side ? v.side : null;
-    // No sizes at all → not listed (2026-10-04, Daniel: "להסתיר"). A search still finds it, so a
-    // vehicle with only the maker's pack is reachable when he asks for it by name.
-    if (!d && !tb && !sd && !q) continue;
     if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
     const ok = tubMeasured(v) ? '<span style="color:#34d399;font-weight:700;">✓ נמדד</span> ' : '';
     const tray = tb ? `${ok}<bdi dir="ltr">${tb.L}×${tb.W}${tb.H ? '×' + tb.H : ''}</bdi> מ"מ`

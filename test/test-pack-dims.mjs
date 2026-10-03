@@ -54,14 +54,14 @@ const read = async (opts) => page.evaluate((o) => {
 const TRAY = [{ id: 1, model: 'מבחן-גדול', l: 400, w: 200, h: 120 }, { id: 2, model: 'מבחן-קטן', l: 150, w: 90, h: 80 }];
 const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 
-// 16S4P = 64 cells, HIS way (2026-09-25): each 4P group across, sixteen rows along, on the 21.5
-// diagonal (18.62 between rows).
-//   L = 15*18.62 + 21.15 + 3 + 22 (BMS at 60V) = 325     W = 3*21.5 + 21.15 + 3 = 89     H = 70.15 + 4 = 74
+// 16S4P = 64 cells, HIS way (2026-09-25): each 4P group across, sixteen rows along, on ניקל ב׳ —
+// the 22.5 diagonal since his re-measure of 2026-10-04 (19.49 between rows; it was 21.5 / 18.62).
+//   L = 15*19.49 + 21.15 + 3 + 22 (BMS at 60V) = 338     W = 3*22.5 + 21.15 + 3 = 92     H = 70.15 + 4 = 74
 // The BMS allowance goes on the LENGTH since 2026-09-25; the height is the standing cells alone.
 // (The two Wellgo catalogue brackets this used — square and honeycomb 21.4 — left the list on
 // 2026-09-25; he does not build on them.)
 const honey = await read({ ...base, holder: 'diag-b' });
-check('16S4P block, 21.5 diagonal: 325 x 89 x 74', honey.L === 325 && honey.W === 89 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
+check('16S4P block, ניקל ב׳ 22.5: 338 x 92 x 74', honey.L === 338 && honey.W === 92 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
 check('and it reports 64 cells', /64 תאים/.test(honey.text), honey.text.slice(0, 80));
 // Energy and weight were taken off the result on 2026-09-26 at his word; asserted absent.
 check('no energy or weight line', !/Wh|ק"ג|אנרגיה/.test(honey.text), honey.text.slice(0, 120));
@@ -71,9 +71,9 @@ check('no energy or weight line', !/Wh|ק"ג|אנרגיה/.test(honey.text), hon
 const diagA = await read({ ...base, holder: 'diag-a' });
 const square = await read({ ...base, holder: 'square-23' });
 check('square is longer along the rows than the diagonal', square.L > diagA.L, `${square.L} vs ${diagA.L}`);
-check('the diagonal row spacing is the sin60 one', Math.abs((diagA.L - 22 - 24.15) - 15 * 22.5 * 0.866) <= 1.5, String(diagA.L));
-check('the 22.5 diagonal is 1mm a cell wider across than the 21.5 one', diagA.W - honey.W === 3, `${diagA.W} vs ${honey.W}`);
-check('the 23mm square bracket is longer than the 21.5 one', square.L > honey.L, `${square.L} vs ${honey.L}`);
+check('the diagonal row spacing is the sin60 one', Math.abs((diagA.L - 22 - 24.15) - 15 * 22.7 * 0.866) <= 1.5, String(diagA.L));
+check('ניקל א׳ (W 22.7) is a little longer than ניקל ב׳ (22.5)', diagA.L - honey.L === 3, `${diagA.L} vs ${honey.L}`);
+check('the 23mm square bracket is longer than ניקל ב׳', square.L > honey.L, `${square.L} vs ${honey.L}`);
 const cell18 = await read({ ...base, cell: '18650-25p', holder: 'diag-b' });
 check('18650 is a shorter cell', cell18.H < honey.H, `${cell18.H} vs ${honey.H}`);
 
@@ -87,7 +87,7 @@ check('does not claim the small tray', !/מבחן-קטן/.test(honey.text), hone
 // check above, so the first version of this measured a 166mm-tall block against a 150mm tray
 // and failed on its own leftover state. A test that carries state between cases is testing
 // the order it was written in.
-const rotated = await read({ ...base, holder: 'diag-b', models: [{ id: 3, model: 'מסובב', l: 100, w: 340, h: 150 }] });
+const rotated = await read({ ...base, holder: 'diag-b', models: [{ id: 3, model: 'מסובב', l: 100, w: 360, h: 150 }] });
 check('a turned tray still counts as a fit', /מסובב/.test(rotated.text), rotated.text.slice(-90));
 
 // The allowance is derived from the VOLTAGE now — 14 / 18 / 22 / 26 — and is still an input
@@ -347,19 +347,29 @@ const art = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('every vehicle row carries a photo or a drawing', art.svgs === art.rows && art.rows >= art.sized && art.sized > 10, art.svgs + '/' + art.rows + '/' + art.sized);
 
-// 2026-10-04 (Daniel): no "אין מידות" rows in the bare list — a search still reaches them; his
-// measured trays carry ✓ נמדד and the table's guesses do not; the Plus shows the side he built to.
+// 2026-10-04 (Daniel): every vehicle is listed — hidden for an hour, then "למה אני לא רואה את כל
+// הכלים" — with the ones that have no sizes at the end of their group; his measured trays carry
+// ✓ נמדד and the table's guesses do not; the Plus shows the side he built to.
 const lst = await page.evaluate(() => {
   const s = document.getElementById('vpSearch');
   const rowText = (name) => { const r = [...document.querySelectorAll('#vpList .list-item')].find((x) => ((x.querySelector('.list-item-title') || {}).textContent || '').trim() === name); return r ? r.textContent : null; };
   s.value = ''; renderVehiclePacks();
-  const out = { none: /אין מידות/.test(document.getElementById('vpList').textContent), zero: rowText('Zero 10X'), talaria: rowText('Talaria'), plus: rowText('Bomber Plus 15kW'), wolfBare: rowText('Wolf Warrior') };
+  const items = [...document.querySelectorAll('#vpList > div')];
+  // per group: once an "אין מידות" card appears, no card with sizes may follow it
+  let late = false, seenNone = false;
+  for (const el of items) {
+    if (!el.classList.contains('list-item')) { seenNone = false; continue; }
+    const none = /אין מידות/.test(el.textContent);
+    if (none) seenNone = true; else if (seenNone) late = true;
+  }
+  const out = { late, count: items.filter((e) => e.classList.contains('list-item')).length, total: VEHICLE_PACKS.length, zero: rowText('Zero 10X'), talaria: rowText('Talaria'), plus: rowText('Bomber Plus 15kW'), wolfBare: rowText('Wolf Warrior') };
   s.value = 'wolf'; renderVehiclePacks(); out.wolfSearch = rowText('Wolf Warrior');
   s.value = ''; renderVehiclePacks();
   return out;
 });
-check('the bare list has no "אין מידות" row', !lst.none && lst.wolfBare == null, [lst.none, lst.wolfBare]);
-check('a search still finds a vehicle with no sizes', lst.wolfSearch != null, String(lst.wolfSearch));
+check('every vehicle is listed, a vehicle with no sizes too', lst.count === lst.total && lst.wolfBare != null, [lst.count, lst.total]);
+check('and in each group the ones with sizes come first', !lst.late, lst.late);
+check('a search finds a vehicle with no sizes', lst.wolfSearch != null, String(lst.wolfSearch));
 check('a measured tray says ✓ נמדד, a table guess does not', /✓ נמדד/.test(lst.zero || '') && !/✓ נמדד/.test(lst.talaria || ''), [lst.zero, lst.talaria]);
 check('the Plus shows the side he built to, measured', /393×\d+×152/.test(lst.plus || '') && /✓ נמדד/.test(lst.plus || ''), String(lst.plus));
 // The photos he chose (2026-09-27) are baked in; a model with none keeps its drawing.
@@ -504,22 +514,28 @@ check('an unknown height is written ? and said to be unchecked', /גודל אמ�
 check('and with no vehicle there is no tray row', !/גודל אמבטיה/.test(th.none), th.none.slice(0, 120));
 
 // ---- the diagonal bracket both ways round (2026-09-27) ----
-// His Nami Klima note: "21×7 בניקל ב׳" in a 463 x 139 tray. Seven across 139mm fit only with the
-// bracket's straight rows ALONG the tray (18.62 a step across); straight rows across take six.
-// --selftest restores the one-way fit, which told him the Klima takes six.
+// A stand-in 500 x 145 tray: seven across 145mm fit only with the bracket's straight rows ALONG it
+// (19.49 a step across on ניקל ב׳); straight rows across need 159. This was the Nami Klima until
+// 2026-10-04, when he corrected that note: the Klima (463 x 139 x 75) takes 16S6P on the square 23.
+// --selftest restores the one-way fit, which says seven do not go in.
 const turn = await page.evaluate((SELF) => {
   if (SELF) window.hisFit = (tub, S, P, layers, pitch, rowPitch, dia) => {
     const across = acrossFit(tub.W, pitch, dia); const lay = groupLayout(S, P, layers, across);
     const aMM = (lay.inRow - 1) * pitch + dia + 2 * DIM_WALL, lMM = (lay.rowsAlong - 1) * rowPitch + dia + 2 * DIM_WALL;
     return { ...lay, orient: 'A', fits: across >= 1 && aMM <= tub.W + 0.5 && lMM <= tub.L + 0.5 };
   };
-  useVehiclePack('Nami Klima', 72); dimAhPending = 35; calcPackDims();
+  VEHICLE_PACKS.push({ g: 'בדיקה', m: 'מגש מבחן', src: 'AI', p: 21.5, s60: 16, p60: 7, s72: 20, p72: 7, max: 140, tub: '500×145×75 מ"מ' });
+  useVehiclePack('מגש מבחן', 72); document.getElementById('dimHolder').value = 'diag-b'; dimAhPending = 35; calcPackDims();
   const r = document.getElementById('dimResult').innerText;
   const circles = document.querySelectorAll('#dimDraw circle').length;
+  clearDimVehicle(); VEHICLE_PACKS.pop();
+  useVehiclePack('Nami Klima', 60); document.getElementById('dimHolder').value = 'square-23'; dimAhPending = 30; calcPackDims();
+  const klima = document.getElementById('dimResult').innerText;
   clearDimVehicle();
-  return { r, circles };
+  return { r, circles, klima };
 }, SELFTEST);
-check('seven across the Nami Klima: 20S7P goes in with the bracket turned', /^✅ נכנס ל-Nami Klima/.test(turn.r.trim()) && /רוחב 7P · אורך 20S/.test(turn.r), turn.r.slice(0, 160));
+check('seven across a 145mm tray: 20S7P goes in with the bracket turned', /^✅ נכנס ל-מגש מבחן/.test(turn.r.trim()) && /רוחב 7P · אורך 20S/.test(turn.r), turn.r.slice(0, 160));
+check('the Nami Klima takes his 16S6P on the square 23', /^✅ נכנס ל-Nami Klima/.test(turn.klima.trim()) && /16S 6P/.test(turn.klima), turn.klima.slice(0, 160));
 check('and the drawing still has one circle per cell', turn.circles === 140, turn.circles);
 
 // ---- the most a tray takes, per voltage and per nickel (2026-09-27) ----
@@ -541,9 +557,10 @@ const mx = await page.evaluate((SELF) => {
   clearDimVehicle();
   return { res, cardTxt, sharedOnList, sharedAfter };
 }, SELFTEST);
-// Talaria 381 x 171, no BMS allowance, 21.5 nickel: seven across, twenty along — 20S7P at 72V.
-check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: 20S7P · 35Ah/.test(mx.res), mx.res.slice(0, 400));
-check('and each nickel says how much it takes', /ניקל א׳ \(22\.5\) — (עד 20S\d+P|לא נכנס)/.test(mx.res), mx.res.slice(-260));
+// Talaria 385 x 171, no BMS allowance: twenty rows go in on neither nickel since the 2026-10-04
+// re-measure (22.5 / 22.7), so 72V has no maximum and 60V has one.
+check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: —/.test(mx.res), mx.res.slice(0, 400));
+check('and each nickel says how much it takes', /ניקל ב׳ \(22\.5\) — (עד 20S\d+P|לא נכנס)/.test(mx.res) && /ניקל א׳ W \(22\.7\)/.test(mx.res), mx.res.slice(-260));
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
 check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /385×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
 check('the cell and nickel are chosen after the tap, not above the list', !mx.sharedOnList && mx.sharedAfter, [mx.sharedOnList, mx.sharedAfter]);
@@ -646,7 +663,7 @@ const rb = await page.evaluate((SELF) => {
   // The rotation is a property of the BRACKET, so it is checked with no BMS at the end of the
   // tray; with his 26mm allowance on the length the same tray takes 105 (see the next case).
   document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
-  useVehiclePack('Talaria');
+  useVehiclePack('Talaria', 60);
   out.talaria7 = res();
   dimAhPending = 50; calcPackDims();
   out.talaria = res();
@@ -674,12 +691,12 @@ check('only his three holders and a custom one are offered', JSON.stringify(rb.o
 check('the calculator opens on the vehicle list', rb.vehFirst, rb.vehFirst);
 check('a 22.5mm vehicle gets the 22.5 diagonal', rb.enduroHolder === 'diag-a', rb.enduroHolder);
 check('picking a vehicle shows its result', rb.toBuild, rb.toBuild);
-// 20S7P = 140 in a 381x171 tray: 17 x 8 = 136 one way round, 7 x 20 = 140 the other. The
-// one-way count said no; the pack goes in, the way his own 390x135 pack is built.
-check('the bracket may be turned: Talaria takes its 140 cells', /^✅ נכנס ל-Talaria/.test(rb.talaria7.trim()) && /רוחב 7P/.test(rb.talaria7), rb.talaria7.slice(0, 120));
+// 16S8P = 128 in a 385x171 tray: eight across straight need 182mm, eight nested across 161 — so
+// it goes in only with the bracket turned, the way his own 390x135 pack is built.
+check('the bracket may be turned: Talaria takes 16S8P', /^✅ נכנס ל-Talaria/.test(rb.talaria7.trim()) && /רוחב 8P/.test(rb.talaria7), rb.talaria7.slice(0, 120));
 check('a build that does not fit its tray says so first', /^⛔ לא נכנס ל-Talaria/.test(rb.talaria.trim()), rb.talaria.slice(0, 80));
 check('and offers the biggest that does', rb.hasBest, rb.hasBest);
-check('which then fits, in a block shorter than the tray', /^✅ נכנס ל-Talaria/.test(rb.after.trim()) && rb.afterL > 0 && rb.afterL <= 381, [rb.after.slice(0, 40), rb.afterL]);
+check('which then fits, in a block shorter than the tray', /^✅ נכנס ל-Talaria/.test(rb.after.trim()) && rb.afterL > 0 && rb.afterL <= 385, [rb.after.slice(0, 40), rb.afterL]);
 check('his tray sits on its vehicle\'s card, marked measured', rb.zeroMine, rb.zeroMine);
 check('a tray for a vehicle not in the table is listed first', rb.kugooFirst, rb.kugooFirst);
 check('there is one list, not two', rb.oneList, rb.oneList);
@@ -723,7 +740,7 @@ const lying = await page.evaluate((SELF) => {
   const gold = shape(svgOf(1));
   res('Bomber Plus 15kW', 72, 'square-23');
   const plusShape = shape(svgOf(0));
-  return { r, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1', 72), narrow, regHtml,
+  return { r, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1', 72, 'diag-b'), narrow, regHtml,
            goldCells: gold.cells, goldCols: gold.cols, plusCells: plusShape.cells, plusRows: plusShape.rows,
            blue: blue ? blue.textContent : '', blueCells: blueSvg ? blueSvg.querySelectorAll('circle').length : 0, builds,
            surron: res('Sur-Ron', 72), regular: res(regName, 72), regTub,
@@ -737,7 +754,7 @@ check('which at 72V is 20S16P, 80Ah (his next build)', /20S16P · 80Ah/.test(lyi
 // row counts, bottom to top, are his.
 check('the Plus build sheet draws his 165 a side', lying.plusRows === '16,16,17,17,17,17,17,16,13,11,8' && lying.plusCells === 165, [lying.plusRows, lying.plusCells]);
 check('a Bomber frame too narrow for a lying cell says so', /צר מדי לתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
-check('the FC-1 (90 across, his tape) fits a 72V build lying', /נכנס עד: 72V 20S9P · 45Ah/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
+check('the FC-1 (90 across, his tape) fits a 72V build lying on ניקל ב׳', /נכנס עד: 72V 20S8P · 40Ah/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
 // The build sheet (2026-09-28: "ציור סכמה של הסוללות שבניתי"): every cell of his blue 20S17P
 // drawn, 170 a side, from his own table — and all three of his builds under the regular Bomber.
 check('the regular Bomber shows his three builds', lying.builds === 3, String(lying.builds));

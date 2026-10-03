@@ -101,12 +101,15 @@ check('a scooter tub is never folded', /⛔/.test(stack.scooter) && !/בקיפו
 const rec = await page.evaluate(() => {
   // The OX is the one row with a measured tub, so the recommendation has something real to
   // fit into rather than an estimate.
-  // Talaria, 20S7P, no BMS allowance: seven across 171mm and twenty rows along 381mm go in on
-  // the 21.5 nickel only — the 22.5 is 394mm long and the square 461.
+  // A stand-in 363 x 171 tray, 16S8P, no BMS allowance: sixteen rows along are 362mm on ניקל ב׳
+  // (22.5) and 365 on ניקל א׳ (22.7), and eight straight across the square 23 are 185 — so ב only.
+  // (It was the Talaria on the 21.5 nickel until his re-measure of 2026-10-04.)
   document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
-  useVehiclePack('Talaria');
+  VEHICLE_PACKS.push({ g: 'בדיקה', m: 'מגש מבחן', src: 'AI', p: 22.5, s60: 16, p60: 8, s72: 20, p72: 8, max: 128, tub: '363×171×140 מ"מ' });
+  useVehiclePack('מגש מבחן', 60);
   calcPackDims();
   const html = document.getElementById('dimResult').innerHTML;
+  clearDimVehicle(); VEHICLE_PACKS.pop();
   const order = holdersFor(21700).slice();
   // and the OX: his count is a ceiling, not a layout. 20S7P on the square holder is exactly the
   // 140 he counted — and twenty rows at 23mm are 461mm against 425 less the BMS.
