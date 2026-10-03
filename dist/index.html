@@ -2588,7 +2588,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v380';
+const HUB_BUILD = 'v381';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7586,7 +7586,9 @@ function drawPackLayout(o) {
   const box = document.getElementById("dimDraw");
   if (!box) return;
   const { cols, rows, pitch, rowPitch, dia, stagger, N, P, layers } = o;
-  if (!cols || !rows) { box.innerHTML = ""; return; }
+  // Not for a Bomber (2026-10-04, his choice): it is built with the cells lying, and its page
+  // already draws the packs he built that way; a standing grid under them was a second picture.
+  if (!cols || !rows || isBomber(dimVehicle)) { box.innerHTML = ""; return; }
   // Drawn ALONG THE LENGTH, the way he builds: each column of circles is one row of the
   // bracket across the pack's width — a parallel group — and the series climbs left to right.
   // The BMS allowance sits at the end of the length, drawn as a box of its own, and the labels
@@ -8195,7 +8197,11 @@ function bomberBuildsHtml(v) {
     return `<div class="bomber-build" style="border-top:1px solid var(--border,#334155);margin-top:6px;padding-top:6px;">`
       // RLM around each separator: without it '20S17P · 18650 · 340' fuses into one left-to-right run
       // and reads '340 · 18650 · 20S17P תאים' (2026-09-28).
-      + `<b>🔋 ${b.label}</b>\u200F · \u200F${iso(String(b.cell))}${b.total ? '\u200F · \u200F' + b.total + ' תאים' : ''}${draft}`
+      // The row's `built` ("22S15P · 75Ah · JK") rides on the build it describes: it left the chip on
+      // 2026-10-04 as a duplicate, and its capacity and BMS are not in the label.
+      + `<b>🔋 ${b.label}</b>\u200F · \u200F${iso(String(b.cell))}${b.total ? '\u200F · \u200F' + b.total + ' תאים' : ''}`
+      + (v.built && b.sp && String(v.built).startsWith(b.sp) ? String(v.built).slice(b.sp.length).split('·').map((t) => t.trim()).filter(Boolean).map((t) => '\u200F · \u200F' + iso(t)).join('') : '')
+      + `${draft}`
       + sides + '</div>';
   }).join('');
 }
@@ -8206,17 +8212,20 @@ function bomberBuildsHtml(v) {
 function bomberLyingHtml(v, c, pitch, rowPitch, V, N, holder) {
   const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
   const side = bomberSide(v);
-  const title = `<b>🏍️ ${v.m}</b>`;
-  if (!side) return `<div class="dim-rec">${title}<br>אין מידות לשלדה הזו — מדוד ושמור ב"הוסף מדידה של מגש".${bomberBuildsHtml(v)}</div>`;
+  // No title: the chip right above it already names the vehicle (2026-10-04, "יש כאן תוכן כפול").
+  if (!side) return `<div class="dim-rec">אין מידות לשלדה הזו — מדוד ושמור ב"הוסף מדידה של מגש".${bomberBuildsHtml(v)}</div>`;
   const r = bomberLying(side, c, pitch, rowPitch, v.mine ? null : v.fill);
-  if (!r.stacks) return `<div class="dim-rec">${title}<br><span style="color:var(--danger);">צר מדי לתא שוכב (${side.across} מ"מ)</span>${bomberBuildsHtml(v)}</div>`;
+  if (!r.stacks) return `<div class="dim-rec"><span style="color:var(--danger);">צר מדי לתא שוכב (${side.across} מ"מ)</span>${bomberBuildsHtml(v)}</div>`;
   const S = seriesForV(V);
   const P = Math.floor(r.n / S);
   const fits = N <= r.n;
   const chosenP = Math.round(N / S);
-  return `<div class="dim-rec">${title}
-    <br>נכנס עד: <b>${iso(V + 'V ' + S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah')}</b>
-    <br><span style="color:${fits ? '#34d399' : 'var(--danger)'};">${fits ? '✅ נכנסת' : '⛔ גדולה מדי'} — ${iso(S + 'S' + chosenP + 'P')}, ${N} תאים</span>
+  const most = `נכנס עד: <b>${iso(V + 'V ' + S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah')}</b>`;
+  // When the chosen pack is exactly the most it takes, one line says both.
+  const fit = fits && chosenP === P
+    ? `<span style="color:#34d399;">✅ נכנסת — ${iso(S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah')}, ${N} תאים · המקסימום</span>`
+    : `${most}<br><span style="color:${fits ? '#34d399' : 'var(--danger)'};">${fits ? '✅ נכנסת' : '⛔ גדולה מדי'} — ${iso(S + 'S' + chosenP + 'P')}, ${N} תאים</span>`;
+  return `<div class="dim-rec">${fit}
     ${bomberBuildsHtml(v)}</div>`;
 }
 // ---- the vehicle the estimator is answering for ----------------------------------------
@@ -8361,9 +8370,11 @@ function renderDimVehChip() {
   if (!el) return;
   const v = dimVehicle;
   if (!v) { el.innerHTML = ''; return; }
-  const src = [v.mine ? '✓ נמדד' : /לא נמדד/.test(v.tub || '') ? 'לפי הסוללה המקורית' : v.tub ? '' : 'הערכת AI',
+  // A measured row says ✓ נמדד here too (2026-10-04: the Plus, his own confirmed side, read
+  // "הערכת AI"), and the build is not repeated where "הסוללות שבנית" draws it below.
+  const src = [v.mine || tubMeasured(v) ? '✓ נמדד' : /לא נמדד/.test(v.tub || '') ? 'לפי הסוללה המקורית' : v.tub ? '' : 'הערכת AI',
     v.oem ? 'מקורי <bdi dir="ltr">' + v.oem + '</bdi>' : '',
-    v.built ? 'נבנה במעבדה: <bdi dir="ltr">' + v.built + '</bdi>' : ''].filter(Boolean).join(' · ');
+    v.built && !(Array.isArray(v.builds) && v.builds.length) ? 'נבנה במעבדה: <bdi dir="ltr">' + v.built + '</bdi>' : ''].filter(Boolean).join(' · ');
   el.innerHTML = `<div class="dim-chip">${vehIcon(v)}<b>${v.m}</b>
     <!-- The tray size is NOT repeated here (2026-09-27): it is the "גודל אמבטיה" row of the result. -->
     <span style="color:var(--text-muted);font-size:12px;">${src}</span>

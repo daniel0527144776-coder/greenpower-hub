@@ -607,9 +607,10 @@ const top = await page.evaluate((SELF) => {
   clearDimVehicle();
   return { res, chip, box, label };
 }, SELFTEST);
-check('his Bomber Plus build is on the vehicle bar', /נבנה במעבדה: 22S15P · 75Ah · JK/.test(top.chip), top.chip);
+// Since 2026-10-04 the build is not repeated on the bar: it is drawn below, with its Ah and BMS.
+check('his Bomber Plus build is shown once, with its Ah and BMS', !/נבנה במעבדה/.test(top.chip) && /Plus — 22S15P[\s\S]*75Ah[\s\S]*JK/.test(top.res), [top.chip, top.res.slice(0, 160)]);
 // At 72V the frame is filled with the build he named for next time: 20S16P, 320 of its 330 places.
-check('and at 72V the build filled in is his next one, 20S16P', /נכנסת — 20S16P, 320 תאים/.test(top.res), top.res.slice(0, 120));
+check('and at 72V the build filled in is his next one, 20S16P', /נכנסת — 20S16P[^,]*, 320 תאים/.test(top.res), top.res.slice(0, 120));
 // The BMS on top still decides where the allowance goes (the label and the drawing say so), though
 // a Bomber's page no longer prints the standing block's size.
 check('the BMS allowance goes on the height there, not the length', !top.box && /מעל/.test(top.label), [top.box, top.label]);
@@ -740,7 +741,9 @@ const lying = await page.evaluate((SELF) => {
   const gold = shape(svgOf(1));
   res('Bomber Plus 15kW', 72, 'square-23');
   const plusShape = shape(svgOf(0));
-  return { r, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1', 72, 'diag-b'), narrow, regHtml,
+  const plusChip = (res('Bomber Plus 15kW', 72, 'square-23'), document.getElementById('dimVehChip').textContent);
+  const plusDraw = document.querySelectorAll('#dimDraw circle').length;
+  return { r, plusChip, plusDraw, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1', 72, 'diag-b'), narrow, regHtml,
            goldCells: gold.cells, goldCols: gold.cols, plusCells: plusShape.cells, plusRows: plusShape.rows,
            blue: blue ? blue.textContent : '', blueCells: blueSvg ? blueSvg.querySelectorAll('circle').length : 0, builds,
            surron: res('Sur-Ron', 72), regular: res(regName, 72), regTub,
@@ -754,7 +757,7 @@ check('which at 72V is 20S16P, 80Ah (his next build)', /20S16P · 80Ah/.test(lyi
 // row counts, bottom to top, are his.
 check('the Plus build sheet draws his 165 a side', lying.plusRows === '16,16,17,17,17,17,17,16,13,11,8' && lying.plusCells === 165, [lying.plusRows, lying.plusCells]);
 check('a Bomber frame too narrow for a lying cell says so', /צר מדי לתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
-check('the FC-1 (90 across, his tape) fits a 72V build lying on ניקל ב׳', /נכנס עד: 72V 20S8P · 40Ah/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
+check('the FC-1 (90 across, his tape) fits a 72V build lying on ניקל ב׳', /נכנס עד: 72V 20S8P · 40Ah|נכנסת — 20S8P · 40Ah, 160 תאים · המקסימום/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
 // The build sheet (2026-09-28: "ציור סכמה של הסוללות שבניתי"): every cell of his blue 20S17P
 // drawn, 170 a side, from his own table — and all three of his builds under the regular Bomber.
 check('the regular Bomber shows his three builds', lying.builds === 3, String(lying.builds));
@@ -763,7 +766,15 @@ check('his blue 20S17P is drawn cell by cell, 170 a side', lying.blueCells === 1
 // the right) — 170, confirmed; the green one is his 20S7P = 14 × 10.
 check('the gold 20S17P is his shape, 170, confirmed', lying.goldCells === 170 && lying.goldCols === '5,7,7,7,8,8,9,9,10,10,10,10,10,10,10,10,10,10,10' && !/טיוטה/.test(lying.regHtml), [lying.goldCells, lying.goldCols]);
 check('the green one is his 20S7P, 140 in one stack', /הסוללה הירוקה — 20S7P\u200F · \u200F18650\u200F · \u200F140 תאים/.test(lying.regular), lying.regular.slice(0, 200));
-check('the lying answer is for Bombers only', /נכנס עד:/.test(lying.plus) && !/נכנס עד:/.test(lying.surron), lying.surron.slice(-80));
+check('the lying answer is for Bombers only', /נכנס עד:|· המקסימום/.test(lying.plus) && !/נכנס עד:|· המקסימום/.test(lying.surron), lying.surron.slice(-80));
+// 2026-10-04 ("יש כאן תוכן כפול"): the chip names the vehicle and the result does not again; the
+// build is drawn below, not also listed in the chip; the chosen pack that IS the most it takes is
+// one line, not two; and the Plus, his own confirmed side, is not called an AI estimate.
+check('the Bomber result does not repeat the vehicle name', !/🏍️ Bomber Plus/.test(lying.plus), lying.plus.slice(0, 80));
+check('the chip does not repeat the build the drawing shows', !/נבנה במעבדה/.test(lying.plusChip), lying.plusChip);
+check('a Bomber page has no standing grid under his builds', lying.plusDraw === 0, lying.plusDraw);
+check('the Plus chip says measured, not AI', /✓ נמדד/.test(lying.plusChip) && !/הערכת AI/.test(lying.plusChip), lying.plusChip);
+check('the most it takes and the chosen pack are one line when they are the same pack', /✅ נכנסת — 20S16P · 80Ah, 320 תאים · המקסימום/.test(lying.plus) && !/נכנס עד:/.test(lying.plus), lying.plus.slice(0, 160));
 // What he asked for (2026-09-28: "מה זה הסיבוך הזה ... תמחק תוכן מיותר"): a Bomber's page is the
 // answer and the drawings — no standing verdict, no tray table, no holder list, no notes.
 check('a Bomber page has none of the standing clutter', !/לא נכנס ל-|גודל אמבטיה|מקסימום באמבטיה|מחזיק|הערכה:|⚠ מידות הצד/.test(lying.regular), lying.regular.slice(0, 200));
