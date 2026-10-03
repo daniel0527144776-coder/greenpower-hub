@@ -2588,7 +2588,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v378';
+const HUB_BUILD = 'v379';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3254,7 +3254,9 @@ function saveJob() {
     jobs: Array.from(state.jobs),
     price: priceNum,
     cost: parseFloat(document.getElementById('costDisplay').textContent.replace(/[^\d]/g, '')),
-    profit: parseFloat(document.getElementById('profitDisplay').textContent.replace(/[^\d]/g, '')),
+    // Keep the sign (2026-10-04): stripping every non-digit turned "₪-5" into a ₪5 PROFIT — a
+    // repair quoted under cost (25.8.2026: ₪200 against ₪205) was booked as money made.
+    profit: parseFloat(document.getElementById('profitDisplay').textContent.replace(/[^\d-]/g, '')),
     hours: parseFloat(document.getElementById('hoursDisplay').textContent),
     bmsBrand: document.getElementById('bmsBrand').value,
     bmsAmps: document.getElementById('bmsAmps').value,

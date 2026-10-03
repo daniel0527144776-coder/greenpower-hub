@@ -184,6 +184,25 @@ check('saving it records the quoted price, not another one', repair.saved && rep
 // 6 for a repair, 12 for a build — the split the whole site states.
 check('and a repair carries the repair warranty', repair.warranty === 6, repair.warranty);
 
+// A repair quoted UNDER cost is a loss, and is saved as one (2026-10-04: "₪-5" was read through
+// a digits-only filter and booked as a ₪5 profit — 25.8.2026, ₪200 against ₪205).
+const loss = await page.evaluate(async (SELF) => {
+  navigateTo('calc');
+  document.getElementById('custName').value = 'לקוח הפסד';
+  document.getElementById('custPhone').value = '0500000778';
+  if (!state.jobs.has('bms')) toggleJob('bms');   // the repair above may have left it on
+  document.getElementById('priceOverride').value = '10';
+  recalc();
+  const shown = document.getElementById('profitDisplay').textContent;
+  if (SELF) document.getElementById('profitDisplay').textContent = shown.replace('-', '');
+  saveJob();
+  await new Promise((r) => setTimeout(r, 400));
+  const n = document.getElementById('noticeBackdrop'); if (n) n.style.display = 'none';
+  const mine = (Store.get('jobs') || []).find((j) => j.customerPhone === '0500000778');
+  return { shown, profit: mine ? mine.profit : null, price: mine ? mine.price : null, cost: mine ? mine.cost : null };
+}, SELFTEST);
+check('a repair quoted under cost is saved as a loss, not a profit', loss.profit != null && loss.profit < 0 && /-/.test(loss.shown), loss);
+
 const landed = await page.evaluate(() => {
   const idx = customerSpendIndex();
   const c = (Store.get('customers') || []).find((x) => x.phone === '0500000777');
