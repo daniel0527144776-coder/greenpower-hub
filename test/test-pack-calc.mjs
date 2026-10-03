@@ -84,7 +84,7 @@ const stack = await page.evaluate((SELF) => {
     field: !!document.getElementById('dimLayers'),
     moto40: r('אופנוע שליחויות 72V', 35),    // 20S7P: seven across a 170mm tray, twenty rows along
     moto50: r('אופנוע שליחויות 72V', 50),    // 200 cells: two layers, the box is 170mm deep
-    fc1: r('Bomber FC-1', 50),                // 410x90 floor, 200mm deep: stacks
+    fc1: r('Bomber FC-1', 50),                // a Bomber: built lying, never stacked standing
     scooter: r('Inokim OX', 50),              // 200 cells in a scooter tub: never stacked
   };
 }, SELFTEST);
@@ -92,7 +92,9 @@ check('there is no layers field to type into', !stack.field, stack.field);
 check('a pack that fits one layer is not folded', /✅/.test(stack.moto40) && !/שכבות/.test(stack.moto40), stack.moto40.slice(0, 90));
 check('one that does not is folded, and the page says so', /בקיפול ל-2 שכבות/.test(stack.moto50), stack.moto50.slice(0, 90));
 check('and the layout names the S per layer', /אורך 10S · 2 שכבות/.test(stack.moto50), stack.moto50.slice(0, 260));
-check('a tall motorcycle frame stacks as far as its height allows', /שכבות/.test(stack.fc1), stack.fc1.slice(0, 90));
+// A Bomber is built with the cells LYING (2026-09-27), and since 2026-09-28 its page is only that
+// answer — a standing fold would be advice for a build nobody does in that frame.
+check('a Bomber is answered lying, not folded standing', /נכנס עד:/.test(stack.fc1) && !/שכבות/.test(stack.fc1), stack.fc1.slice(0, 90));
 check('a scooter tub is never folded', /⛔/.test(stack.scooter) && !/בקיפול/.test(stack.scooter), stack.scooter.slice(0, 90));
 
 // ---- 4. which nickel, and it must be the densest that FITS ----

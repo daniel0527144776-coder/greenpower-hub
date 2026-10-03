@@ -335,6 +335,8 @@ const art = await page.evaluate((SELF) => {
   const imgs = [...list.querySelectorAll('img')];
   return {
     rows: rows.length,
+    // Rows without any size are hidden from the bare list (2026-10-04), so the list is the sized ones.
+    sized: VEHICLE_PACKS.filter((v) => tubOf(v) || v.side).length,
     svgs: list.querySelectorAll('svg').length + imgs.length,
     imgs: imgs.filter((i) => !/^data:image\//.test(i.getAttribute('src') || '')).length,
     photos: imgs.length,
@@ -343,7 +345,23 @@ const art = await page.evaluate((SELF) => {
     inked: [...list.querySelectorAll('svg')].every((s) => s.querySelector('circle, path, rect')),
   };
 }, SELFTEST);
-check('every vehicle row carries a photo or a drawing', art.svgs === art.rows && art.rows > 25, art.svgs + '/' + art.rows);
+check('every vehicle row carries a photo or a drawing', art.svgs === art.rows && art.rows >= art.sized && art.sized > 10, art.svgs + '/' + art.rows + '/' + art.sized);
+
+// 2026-10-04 (Daniel): no "אין מידות" rows in the bare list — a search still reaches them; his
+// measured trays carry ✓ נמדד and the table's guesses do not; the Plus shows the side he built to.
+const lst = await page.evaluate(() => {
+  const s = document.getElementById('vpSearch');
+  const rowText = (name) => { const r = [...document.querySelectorAll('#vpList .list-item')].find((x) => ((x.querySelector('.list-item-title') || {}).textContent || '').trim() === name); return r ? r.textContent : null; };
+  s.value = ''; renderVehiclePacks();
+  const out = { none: /אין מידות/.test(document.getElementById('vpList').textContent), zero: rowText('Zero 10X'), talaria: rowText('Talaria'), plus: rowText('Bomber Plus 15kW'), wolfBare: rowText('Wolf Warrior') };
+  s.value = 'wolf'; renderVehiclePacks(); out.wolfSearch = rowText('Wolf Warrior');
+  s.value = ''; renderVehiclePacks();
+  return out;
+});
+check('the bare list has no "אין מידות" row', !lst.none && lst.wolfBare == null, [lst.none, lst.wolfBare]);
+check('a search still finds a vehicle with no sizes', lst.wolfSearch != null, String(lst.wolfSearch));
+check('a measured tray says ✓ נמדד, a table guess does not', /✓ נמדד/.test(lst.zero || '') && !/✓ נמדד/.test(lst.talaria || ''), [lst.zero, lst.talaria]);
+check('the Plus shows the side he built to, measured', /393×\d+×152/.test(lst.plus || '') && /✓ נמדד/.test(lst.plus || ''), String(lst.plus));
 // The photos he chose (2026-09-27) are baked in; a model with none keeps its drawing.
 check('the baked vehicle photos reach the list', art.photos >= 6 && art.photoOnOx, [art.photos, art.photoOnOx]);
 check('and none of them is empty', art.inked, 'ok');
@@ -574,10 +592,10 @@ const top = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('his Bomber Plus build is on the vehicle bar', /נבנה במעבדה: 22S15P · 75Ah · JK/.test(top.chip), top.chip);
 // At 72V the frame is filled with the build he named for next time: 20S16P, 320 of its 330 places.
-check('and at 72V the build filled in is his next one, 20S16P', /20S 16P · 320 תאים/.test(top.res), top.res.slice(0, 80));
-// one layer of 21700 is 74 tall; with the BMS on top the block is 74 + 26 = 100, and no BMS
-// box sits at the end of the drawing
-check('the BMS allowance goes on the height there, not the length', /גודל סוללה\s*\d+ × \d+ × 100/.test(top.res) && !top.box && /מעל/.test(top.label), [top.res.slice(0, 160), top.box, top.label]);
+check('and at 72V the build filled in is his next one, 20S16P', /נכנסת — 20S16P, 320 תאים/.test(top.res), top.res.slice(0, 120));
+// The BMS on top still decides where the allowance goes (the label and the drawing say so), though
+// a Bomber's page no longer prints the standing block's size.
+check('the BMS allowance goes on the height there, not the length', !top.box && /מעל/.test(top.label), [top.box, top.label]);
 
 // ---- tapping a vehicle photo opens it large (2026-09-27) ----
 const zoom = await page.evaluate(async (SELF) => {
@@ -690,7 +708,23 @@ const lying = await page.evaluate((SELF) => {
   const blue = (res('Bomber רגיל 3-12kW', 72), document.querySelector('#dimResult .bomber-build'));
   const blueSvg = blue && blue.querySelector('svg.bomber-build-svg');
   const builds = document.querySelectorAll('#dimResult .bomber-build').length;
+  // The drawings as data: cells per row (bottom up) and per column, read off the SVG itself.
+  const svgOf = (i) => [...document.querySelectorAll('#dimResult .bomber-build')][i]?.querySelector('svg.bomber-build-svg');
+  const shape = (svg) => {
+    if (!svg) return { cells: 0, rows: '', cols: '' };
+    const cs = [...svg.querySelectorAll('circle')].map((e) => [+e.getAttribute('cx'), +e.getAttribute('cy')]);
+    const key = (v) => Math.round(v);
+    const ys = [...new Set(cs.map(([, y]) => key(y)))].sort((a, b) => b - a);
+    const xs = [...new Set(cs.map(([x]) => key(x)))].sort((a, b) => a - b);
+    return { cells: cs.length, rows: ys.map((y) => cs.filter(([, yy]) => key(yy) === y).length).join(','),
+             cols: xs.map((x) => cs.filter(([xx]) => key(xx) === x).length).join(',') };
+  };
+  res('Bomber רגיל 3-12kW', 72);
+  const gold = shape(svgOf(1));
+  res('Bomber Plus 15kW', 72, 'square-23');
+  const plusShape = shape(svgOf(0));
   return { r, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1', 72), narrow, regHtml,
+           goldCells: gold.cells, goldCols: gold.cols, plusCells: plusShape.cells, plusRows: plusShape.rows,
            blue: blue ? blue.textContent : '', blueCells: blueSvg ? blueSvg.querySelectorAll('circle').length : 0, builds,
            surron: res('Sur-Ron', 72), regular: res(regName, 72), regTub,
            plusTub: tubOf(vehicleByName('Bomber Plus 15kW')),
@@ -699,33 +733,30 @@ const lying = await page.evaluate((SELF) => {
 check('his Bomber Plus comes back as 2 stacks of 165 = 330 cells', lying.r.stacks === 2 && lying.r.perSide === 165 && lying.r.n === 330, lying.r);
 check('which at 72V is 20S16P, 80Ah (his next build)', /20S16P · 80Ah/.test(lying.plus), lying.plus.slice(-260));
 // His own rows (16,16,17×5,16,13,11,8 = 165), drawn — the build sheet for the Plus.
-check('the Plus build sheet draws his 165 a side', /ערימה 1 — 165 תאים/.test(lying.plus) && /16, 16, 17, 17, 17, 17, 17, 16, 13, 11, 8/.test(lying.plus), lying.plus.slice(-300));
-check('a Bomber frame too narrow for a lying cell says so', /צר מתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
-check('the FC-1 (90 across, his tape) takes one lying stack', /ערימה אחת/.test(lying.fc1) && !/צר מתא שוכב/.test(lying.fc1), lying.fc1.slice(0, 200));
+// His own rows (16,16,17×5,16,13,11,8 = 165), drawn — the build sheet for the Plus: the drawing's
+// row counts, bottom to top, are his.
+check('the Plus build sheet draws his 165 a side', lying.plusRows === '16,16,17,17,17,17,17,16,13,11,8' && lying.plusCells === 165, [lying.plusRows, lying.plusCells]);
+check('a Bomber frame too narrow for a lying cell says so', /צר מדי לתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
+check('the FC-1 (90 across, his tape) fits a 72V build lying', /נכנס עד: 72V 20S9P · 45Ah/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
 // The build sheet (2026-09-28: "ציור סכמה של הסוללות שבניתי"): every cell of his blue 20S17P
 // drawn, 170 a side, from his own table — and all three of his builds under the regular Bomber.
 check('the regular Bomber shows his three builds', lying.builds === 3, String(lying.builds));
-check('his blue 20S17P is drawn cell by cell, 170 a side', lying.blueCells === 170 && /ערימה 1 — 170 תאים/.test(lying.blue), [lying.blueCells, lying.blue.slice(0, 120)]);
-// 2026-09-28: the gold one is 20S17P (his correction of 20S13P); its photo count, 172, is 2 over
-// the 170 a side that makes, so it must still say draft. The green one is his 20S7P = 14 × 10.
-check('the gold 20S17P is still marked a draft (its photo count is 172, not 170)', /הסוללה הזהובה — 20S17P/.test(lying.regHtml) && /172 — שניים יותר מ-170/.test(lying.regHtml) && /טיוטה/.test(lying.regHtml), lying.regHtml.slice(0, 80));
-check('the green one is his 20S7P, 140 in one stack', /הסוללה הירוקה — 20S7P/.test(lying.regHtml) && /ערימה אחת — 140 תאים/.test(lying.regHtml), lying.regHtml.slice(0, 80));
-check('the lying section is for Bombers only', /תאים שוכבים/.test(lying.plus) && !/תאים שוכבים/.test(lying.surron), lying.surron.slice(-80));
-// 2026-09-27: his Plus's 152 is two stacks' thickness standing proud of a 115 frame body into
-// the covers — calling it the frame's width was wrong. A frame read off its tray keeps the word.
-check('the Plus calls its 152 the pack\'s thickness, confirmed, not the frame\'s width',
-  /הסוללה שנבנתה \(מידות מאושרות\)/.test(lying.plus) && /עובי/.test(lying.plus) && !/רוחב שלדה/.test(lying.plus), lying.plus.slice(0, 160));
-check('a Bomber read off its tray still names the frame\'s width', /רוחב שלדה/.test(lying.fc1), lying.fc1.slice(0, 160));
-check('the regular Bomber says its side is what his builds proved', /לפי הבניות שנכנסו/.test(lying.regular) && /רוחב \(עם המכסים\)/.test(lying.regular), lying.regular.slice(0, 160));
+check('his blue 20S17P is drawn cell by cell, 170 a side', lying.blueCells === 170 && /הסוללה הכחולה — 20S17P/.test(lying.blue), [lying.blueCells, lying.blue.slice(0, 120)]);
+// 2026-09-28: the gold one is 20S17P in HIS shape (11 of 10, 2 of 9, 2 of 8, 3 of 7, 1 of 5 from
+// the right) — 170, confirmed; the green one is his 20S7P = 14 × 10.
+check('the gold 20S17P is his shape, 170, confirmed', lying.goldCells === 170 && lying.goldCols === '5,7,7,7,8,8,9,9,10,10,10,10,10,10,10,10,10,10,10' && !/טיוטה/.test(lying.regHtml), [lying.goldCells, lying.goldCols]);
+check('the green one is his 20S7P, 140 in one stack', /הסוללה הירוקה — 20S7P\u200F · \u200F18650\u200F · \u200F140 תאים/.test(lying.regular), lying.regular.slice(0, 200));
+check('the lying answer is for Bombers only', /נכנס עד:/.test(lying.plus) && !/נכנס עד:/.test(lying.surron), lying.surron.slice(-80));
+// What he asked for (2026-09-28: "מה זה הסיבוך הזה ... תמחק תוכן מיותר"): a Bomber's page is the
+// answer and the drawings — no standing verdict, no tray table, no holder list, no notes.
+check('a Bomber page has none of the standing clutter', !/לא נכנס ל-|גודל אמבטיה|מקסימום באמבטיה|מחזיק|הערכה:|⚠ מידות הצד/.test(lying.regular), lying.regular.slice(0, 200));
 // 360×125×190 was the 2021 tape; the builds that went in prove 364 × 192 (19 columns and 10 rows
 // of 19, with the bracket). The maker's 355×120×185 is under both.
 check('the regular Bomber reads what his builds prove (364×125×192), not the maker\'s table',
   lying.regTub && lying.regTub.L === 364 && lying.regTub.W === 125 && lying.regTub.H === 192, lying.regTub);
-// The frame is shown, but NOT as a tub: judged standing, 370×200×150 said his own build does
-// not fit the frame it is in. So no tub, no verdict against his build, and the drawing is text.
-check('the Plus shows its frame from the maker\'s drawing, numbers isolated',
-  /השלדה — שרטוט היצרן/.test(lying.plus) && /<bdi dir="ltr">370×200<\/bdi>/.test(lying.plusHtml), lying.plusHtml.slice(0, 200));
-check('and is not judged against it standing (no "does not fit" on his own build)',
+// The frame is NOT a tub: judged standing, 370×200×150 said his own build does not fit the frame
+// it is in. So no tub, and no verdict against his build.
+check('the Plus is not judged against its frame standing (no "does not fit" on his own build)',
   !lying.plusTub && !/לא נכנס ל-Bomber Plus/.test(lying.plus), [lying.plusTub, lying.plus.slice(0, 80)]);
 
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));

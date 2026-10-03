@@ -1156,10 +1156,12 @@ body { min-height: 100vh; }
   <div id="dimPane-old" hidden>
   <div class="card">
     <div class="form-row"><label>מידות הסוללה הישנה (מ"מ)</label>
+      <!-- Each field names itself above the box (2026-10-04): a placeholder is gone the moment a
+           number is typed, and then three equal boxes say nothing about which is which. -->
       <div style="display:flex;gap:6px;">
-        <input type="number" class="form-input" id="opL" placeholder="אורך" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;">
-        <input type="number" class="form-input" id="opW" placeholder="רוחב" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;">
-        <input type="number" class="form-input" id="opH" placeholder="גובה" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;">
+        <label style="display:flex;flex-direction:column;font-size:11px;color:var(--text-muted);">אורך<input type="number" class="form-input" id="opL" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;"></label>
+        <label style="display:flex;flex-direction:column;font-size:11px;color:var(--text-muted);">רוחב<input type="number" class="form-input" id="opW" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;"></label>
+        <label style="display:flex;flex-direction:column;font-size:11px;color:var(--text-muted);">גובה<input type="number" class="form-input" id="opH" min="20" step="1" oninput="calcFromOldPack()" style="width:72px;"></label>
       </div>
     </div>
     <div class="form-row"><label>מתח היעד</label>
@@ -1169,7 +1171,7 @@ body { min-height: 100vh; }
     </div>
     <div id="opResult" class="dim-card">הזן מידות כדי לראות מה נכנס.</div>
     <div class="form-row" style="margin-top:12px;"><label>דגם הכלי</label>
-      <input class="form-input-wide" id="opModel" placeholder="Kaabo Wolf King / Sur-Ron..." style="width:170px;">
+      <input class="form-input-wide" id="opModel" placeholder="למשל Wolf King" style="width:170px;">
     </div>
     <button class="btn btn-secondary btn-sm" onclick="saveMeasuredPack()">💾 שמור מדידה מול הדגם</button>
   </div>
@@ -2586,7 +2588,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v375';
+const HUB_BUILD = 'v377';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7900,7 +7902,8 @@ function calcPackDims() {
     }
   }
   const kv = (k, v) => `<div class="dim-kv"><span>${k}</span><b>${v}</b></div>`;
-  let html = head + best +
+  // A Bomber gets only its lying answer and his builds (2026-09-28) — see bomberLyingHtml.
+  let html = isBomber(dimVehicle) ? bomberLyingHtml(dimVehicle, c, pitch, rowPitch, V, N, holder) : head + best +
     kv('תצורה', `<bdi dir="ltr">${S}S ${P}P</bdi> · ${N} תאים`) +
     kv('גודל סוללה', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
     // The tray beside it, in the same shape, so the two read against each other. A height nobody
@@ -7908,8 +7911,7 @@ function calcPackDims() {
     (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ${tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` : '') : ' · גובה לא ידוע, לא נבדק'}`) : '') +
     (dimVehicle && tub && (DIM_PITCH[fmt] || {})[holder] ? kv('מקסימום באמבטיה', [60, 72].concat([48, 52, 84].includes(V) ? [V] : []).map((vv) => { const mp = maxPFor(dimVehicle, tub, fmt, holder, vv, c); return `<bdi dir="ltr">${vv}V: ${mp ? seriesForV(vv) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah' : '—'}</bdi>`; }).join('<br>')) : '') +
     kv('פריסה', layoutText(S, P, layers, cols, rows, derived)) +
-    rec +
-    (isBomber(dimVehicle) ? bomberLyingHtml(dimVehicle, c, pitch, rowPitch, V, N, holder) : '');
+    rec;
   // A cell wider than the space it goes in cannot be assembled. The distance to check is the
   // NEAREST NEIGHBOUR, not the row pitch: in a staggered layout the rows nest, so a row pitch of
   // 19.5mm holds 21.15mm cells because the nearest cell in the next row sits half a pitch over.
@@ -8168,55 +8170,46 @@ function buildSideSvg(rows, cell, holder, unsure) {
 function bomberBuildsHtml(v) {
   if (!v || !Array.isArray(v.builds) || !v.builds.length) return '';
   const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
-  return v.builds.map((b) => {
-    const badge = b.status === 'confirmed'
-      ? '<span style="color:#34d399;">✓ המספרים שלו</span>'
-      : '<span style="color:var(--warning,#f59e0b);">טיוטה — נספר מתמונה, לאישור</span>';
-    const counted = b.stacks.reduce((t, st) => t + (st.rows ? st.rows.reduce((a, [, n]) => a + n, 0) : 0), 0);
-    const sides = b.stacks.map((st, i) => {
-      if (st.same != null) return `<div style="font-size:12px;color:var(--text-muted);">${st.name}: אותה צורה כמו ${b.stacks[st.same].name}</div>`;
+  // Short on purpose (2026-09-28: "תעשה טקסט קצר וקולע תמחק תוכן מיותר"): a title, the drawing
+  // with the count at each row's end, and one line for the second stack. The notes stay in
+  // VEHICLE_PACKS for whoever reads the code; the page shows the build.
+  return '<div style="margin-top:8px;font-weight:700;">הסוללות שבנית</div>' + v.builds.map((b) => {
+    const draft = b.status === 'confirmed' ? '' : ' · <span style="color:var(--warning,#f59e0b);">טיוטה</span>';
+    const sides = b.stacks.map((st) => {
+      if (st.same != null) return `<div style="font-size:12px;color:var(--text-muted);">+ ערימה שנייה זהה</div>`;
       if (st.rest) {
-        const left = b.total - counted;
-        return `<div style="font-size:12px;color:var(--text-muted);">${st.name}: ${left > 0 ? 'כ-' + left + ' תאים (' + b.total + ' פחות ' + counted + ') — לא צולמה' : 'לא צולמה'}</div>`;
+        const counted = b.stacks.reduce((t, x) => t + (x.rows ? x.rows.reduce((a, [, n]) => a + n, 0) : 0), 0);
+        return b.total > counted ? `<div style="font-size:12px;color:var(--text-muted);">+ ערימה שנייה, כ-${b.total - counted} תאים</div>` : '';
       }
-      if (!st.rows) return `<div style="font-size:12px;color:var(--warning,#f59e0b);">${st.name}: עוד לא נספר שורה-שורה</div>`;
-      const n = st.rows.reduce((a, [, x]) => a + x, 0);
-      return `<div style="font-size:12px;">${st.name} — ${n} תאים · שורות מלמטה: ${iso(st.rows.map(([, x]) => x).join(', '))}</div>`
-        + buildSideSvg(st.rows, b.cell, b.holder, st.unsure);
+      if (!st.rows) return `<div style="font-size:12px;color:var(--warning,#f59e0b);">עוד לא נספר שורה-שורה</div>`;
+      return buildSideSvg(st.rows, b.cell, b.holder, st.unsure);
     }).join('');
-    return `<div class="bomber-build" style="border-top:1px solid var(--border,#334155);margin-top:8px;padding-top:6px;">`
-      + `<b>🔋 ${b.label}</b> · ${iso(String(b.cell))} · ${HOLDER_NAME[b.holder] || ''}${b.total ? ' · ' + b.total + ' תאים' : ''}${b.date ? ' · ' + b.date : ''} · ${badge}`
-      + (b.note ? `<div style="font-size:12px;color:var(--text-muted);">${b.note.replace(/\d+(?:\s*[×x]\s*\d+)+/g, iso)}</div>` : '')
+    return `<div class="bomber-build" style="border-top:1px solid var(--border,#334155);margin-top:6px;padding-top:6px;">`
+      // RLM around each separator: without it '20S17P · 18650 · 340' fuses into one left-to-right run
+      // and reads '340 · 18650 · 20S17P תאים' (2026-09-28).
+      + `<b>🔋 ${b.label}</b>\u200F · \u200F${iso(String(b.cell))}${b.total ? '\u200F · \u200F' + b.total + ' תאים' : ''}${draft}`
       + sides + '</div>';
   }).join('');
 }
+// The whole answer for a Bomber (2026-09-28, his choice "קצר: מה נכנס + הציורים"): what the frame
+// takes lying down, whether the chosen pack goes in, and the packs he built. The standing
+// estimate above it is NOT shown for a Bomber — a Bomber is built lying, and a "⛔ לא נכנס" worked
+// out for standing cells answered a question nobody building one asks.
 function bomberLyingHtml(v, c, pitch, rowPitch, V, N, holder) {
-  const side = bomberSide(v);
-  if (!side) return `<div class="dim-rec"><b>🛏️ תאים שוכבים:</b> אין מידות צד לשלדה הזו — מדוד אורך, גובה ורוחב, ושמור ב"הוסף מדידה של מגש".</div>`;
-  const r = bomberLying(side, c, pitch, rowPitch, v.mine ? null : v.fill);
   const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
-  // A built pack's side is the PACK, not the frame: its 152 on the Plus is the thickness of two
-  // stacks, standing proud of a 115 frame body into the covers — so it is not called the frame's width.
-  // A side that the builds PROVE (the regular Bomber: 364 × 192, two stacks through the covers)
-  // is neither a pack nor a tape measurement, and says which it is.
-  const ownPack = v.side && !v.mine && v.side.perSide;
-  const proven = v.side && !v.mine && v.side.proven;
-  const head = `<b>🛏️ תאים שוכבים (כמו שבונים בבומבר)</b><br>${ownPack ? 'הסוללה שנבנתה' + (v.side.confirmed ? ' (מידות מאושרות)' : '') + ': ' : proven ? 'לפי הבניות שנכנסו: ' : ''}צד ${iso(side.L + ' × ' + side.H)} מ"מ · ${ownPack ? 'עובי' : proven ? 'רוחב (עם המכסים)' : 'רוחב שלדה'} ${iso(side.across)} מ"מ`
-    // Every "370×200" / "250/180/140/420" is isolated: × between two numbers in an RTL line is
-    // resolved as RTL and prints 200×370 (the same neutral-character trap as "Grade A+").
-    + (v.frame ? `<br><span style="color:var(--text-muted);font-size:12px;">🔩 השלדה — ${v.frame.replace(/\d+(?:[×/]\d+)+/g, iso)}</span>` : '');
-  if (!r.stacks) return `<div class="dim-rec">${head}<br><span style="color:var(--danger);">רוחב ${side.across} מ"מ צר מתא שוכב — צריך לפחות ${Math.ceil(r.stackW + 2 * DIM_WALL)}</span>${bomberBuildsHtml(v)}</div>`;
+  const side = bomberSide(v);
+  const title = `<b>🏍️ ${v.m}</b>`;
+  if (!side) return `<div class="dim-rec">${title}<br>אין מידות לשלדה הזו — מדוד ושמור ב"הוסף מדידה של מגש".${bomberBuildsHtml(v)}</div>`;
+  const r = bomberLying(side, c, pitch, rowPitch, v.mine ? null : v.fill);
+  if (!r.stacks) return `<div class="dim-rec">${title}<br><span style="color:var(--danger);">צר מדי לתא שוכב (${side.across} מ"מ)</span>${bomberBuildsHtml(v)}</div>`;
   const S = seriesForV(V);
   const P = Math.floor(r.n / S);
   const fits = N <= r.n;
-  const built = ownPack
-    ? `<br>נבנה במעבדה: ${side.stacks || r.stacks} ערימות · ${side.rows} שורות${side.widest ? ' · ' + side.widest + ' בשורה הרחבה' : ''} · כ-${side.perSide} בצד` : '';
-  return `<div class="dim-rec">${head}${built}
-    <br>${r.stacks === 1 ? 'ערימה אחת' : r.stacks + ' ערימות'} · ${HOLDER_NAME[holder] || 'מותאם אישית'} · בצד ${r.rows} שורות × ${r.cols} = ${r.rect} במלבן${r.fill < 1 ? ', כ-' + r.perSide + ' בצורת השלדה' : ''}
-    <br><b>סה"כ כ-${r.n} תאים → ${iso(V + 'V: ' + S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah')}</b>
-    <br><span style="color:${fits ? '#34d399' : 'var(--danger)'};">${fits ? '✅' : '⛔'} החבילה שבחרת (${N} תאים) ${fits ? 'נכנסת' : 'גדולה מדי'} בשכיבה</span>
-${v.side && !v.mine && v.side.holder && holder !== v.side.holder ? `<br><span style="color:var(--warning,#f59e0b);">⚠ מידות הצד נגזרו מהבנייה ב${HOLDER_NAME[v.side.holder]} — בניקל אחר זה חישוב, לא נבדק</span>` : ''}
-    ${r.fill < 1 ? `<br><span style="color:var(--text-muted);font-size:11px;">הערכה: צורת השלדה ${v.fill != null && !v.mine ? 'לפי מה שנבנה בה' : 'לפי ה-Plus שנבנה'} (${Math.round(r.fill * 100)}% מהמלבן)</span>` : ''}${v.mine ? '' : bomberBuildsHtml(v)}</div>`;
+  const chosenP = Math.round(N / S);
+  return `<div class="dim-rec">${title}
+    <br>נכנס עד: <b>${iso(V + 'V ' + S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah')}</b>
+    <br><span style="color:${fits ? '#34d399' : 'var(--danger)'};">${fits ? '✅ נכנסת' : '⛔ גדולה מדי'} — ${iso(S + 'S' + chosenP + 'P')}, ${N} תאים</span>
+    ${bomberBuildsHtml(v)}</div>`;
 }
 // ---- the vehicle the estimator is answering for ----------------------------------------
 // The tray, as numbers — L the long side. Read from a STRICT A×B×C for the height and nothing
@@ -8233,6 +8226,15 @@ function tubOf(v) {
   const m3 = s.match(/(\d+)\s*[×x]\s*(\d+)\s*[×x]\s*(\d+)/);
   const a = +(m3 ? m3[1] : m2[1]), b = +(m3 ? m3[2] : m2[2]);
   return { L: Math.max(a, b), W: Math.min(a, b), H: m3 ? +m3[3] : 0 };
+}
+// A table row whose tray was measured — by him or a customer — or whose pack side he confirmed.
+// The same reading of the tub text as gen-fit-data (negation first: /נמדד/ matches inside "לא
+// נמדד"), without its hubOnly cut — that one decides what is published, this one what he sees.
+function tubMeasured(v) {
+  if (!v) return false;
+  if (v.side && v.side.confirmed) return true;
+  const t = String(v.tub || '');
+  return !/לא נמדד|יצרן השלדה/.test(t) && /נמדד|לקוח/.test(t);
 }
 // His own saved tray for a model, by name. One list now (2026-09-25): a vehicle he measured
 // carries his numbers, and they replace the table's guess wherever the fit is judged.
@@ -8512,13 +8514,14 @@ const VEHICLE_PACKS = [
           { name: 'ערימה 1', rows: [[0, 19], [0, 19], [0, 19], [0, 19], [0, 18], [0, 17], [0, 17], [0, 16], [0, 14], [0, 12]] },
           { name: 'ערימה 2 (זהה)', same: 0 },
         ] },
-      // 20S17P, not 20S13P (Daniel, 2026-09-28, after seeing the photographed side counted: 10
-      // rows, 18-19 at the bottom, 172). Two equal stacks, so 170 a side — the count is 2 over,
-      // and which two is not known: it stays a draft until he checks it against the pack.
-      { label: 'הסוללה הזהובה — 20S17P', date: '1.2022', cell: 18650, holder: 'sq-19', sp: '20S17P', total: 340, status: 'draft',
-        note: 'שתי ערימות שוות. הצד שצולם נספר מהתמונה המיושרת: 172 — שניים יותר מ-170, אז שני תאים בספירה לא נכונים',
+      // 20S17P, not 20S13P (Daniel, 2026-09-28, after seeing the photographed side counted). Two
+      // equal stacks of 170. The shape is HIS, in columns from right to left: 11 of 10, 2 of 9, 2
+      // of 8, 3 of 7, and a last column of 5 (one off the top and one off the bottom) — 170. The
+      // photo count was 172: rows 7 and 8 each had one cell too many.
+      { label: 'הסוללה הזהובה — 20S17P', date: '1.2022', cell: 18650, holder: 'sq-19', sp: '20S17P', total: 340, status: 'confirmed',
+        note: 'שתי ערימות שוות של 170. מימין לשמאל: 11 עמודות של 10, 2 של 9, 2 של 8, 3 של 7, ועמודה אחרונה של 5',
         stacks: [
-          { name: 'ערימה 1 (הצד שצולם)', rows: [[1, 18], [0, 19], [0, 19], [0, 19], [0, 19], [0, 19], [0, 19], [3, 16], [6, 13], [8, 11]] },
+          { name: 'ערימה 1', rows: [[1, 18], [0, 19], [0, 19], [0, 19], [0, 19], [0, 19], [1, 18], [4, 15], [6, 13], [8, 11]] },
           { name: 'ערימה 2 (זהה)', same: 0 },
         ] },
       // 20S7P, one stack (Daniel, 2026-09-28) — 140, which is exactly the 14 × 10 the photo shows.
@@ -8734,13 +8737,21 @@ function renderVehiclePacks() {
   const hit = VEHICLE_PACKS.filter((v) => !q || v.m.toLowerCase().includes(q) || v.g.toLowerCase().includes(q));
   let group = '';
   for (const v of hit) {
-    if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
     // The card is the vehicle and its tray, nothing more (2026-09-27: "כדי שלא יהיה עמוס"). The
     // builds, the maximum per voltage, the OEM pack and the counted holders all come after the
     // tap, where the cell and the nickel have been chosen and the numbers mean something.
     const d = dims.find((x) => String(x.model || '').trim().toLowerCase() === v.m.trim().toLowerCase());
     const tb = !d ? tubOf(v) : null;
-    const tray = tb ? `<bdi dir="ltr">${tb.L}×${tb.W}${tb.H ? '×' + tb.H : ''}</bdi> מ"מ` : '<span style="opacity:.7;">אין מידות</span>';
+    // A frame with no tub but a side he built to (the Plus) shows that side, not "no sizes".
+    const sd = !d && !tb && v.side ? v.side : null;
+    // No sizes at all → not listed (2026-10-04, Daniel: "להסתיר"). A search still finds it, so a
+    // vehicle with only the maker's pack is reachable when he asks for it by name.
+    if (!d && !tb && !sd && !q) continue;
+    if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
+    const ok = tubMeasured(v) ? '<span style="color:#34d399;font-weight:700;">✓ נמדד</span> ' : '';
+    const tray = tb ? `${ok}<bdi dir="ltr">${tb.L}×${tb.W}${tb.H ? '×' + tb.H : ''}</bdi> מ"מ`
+      : sd ? `${ok}<bdi dir="ltr">${sd.L}×${sd.H}×${sd.across}</bdi> מ"מ`
+      : '<span style="opacity:.7;">אין מידות</span>';
     html += `<div class="list-item${d ? ' mine' : ''}" onclick="useVehiclePack(${arg(v.m)})" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
         <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong class="list-item-title">${v.m}</strong></span>${d ? '' : `<span style="font-size:11px;color:var(--text-muted);flex:none;">${tray}</span>`}
