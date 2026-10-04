@@ -430,6 +430,11 @@ body { min-height: 100vh; }
   .wb-days { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
   .wb-days label { font-size: 12px; display: flex; align-items: center; gap: 3px; }
   .wb-area { width: 100%; min-height: 90px; font-size: 13px; }
+  /* בוט מסחר (2026-10-05) — סימולים ומספרים באנגלית, משמאל לימין בתוך שורה בעברית */
+  .fu-sym { font-weight: 700; font-size: 13px; direction: ltr; unicode-bidi: isolate; }
+  .fu-num { direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
+  .fu-up { color: var(--success); }
+  .fu-down { color: var(--danger); }
 </style>
 </head>
 <body>
@@ -548,6 +553,12 @@ body { min-height: 100vh; }
         <span class="quick-card-icon">🤖</span>
         <div class="quick-card-title">בוט וואטסאפ</div>
         <div class="quick-card-desc">הגדרות · שאלות · יומן</div>
+      </div>
+
+      <div class="quick-card" onclick="navigateTo('fusion')">
+        <span class="quick-card-icon">📈</span>
+        <div class="quick-card-title">בוט מסחר</div>
+        <div class="quick-card-desc">מצב · פוזיציות · עסקאות</div>
       </div>
 
       <div class="quick-card" onclick="navigateTo('dims')">
@@ -1516,6 +1527,17 @@ body { min-height: 100vh; }
   <div id="wabotBody"></div>
 </section>
 
+<!-- FUSION, his trading bot (2026-10-05, Daniel: "אני רוצה שיהיה טאב של בוט המסחר שבניתי בלוח
+     הבקרה"). Like the WhatsApp bot's page, nothing about it is in this file: the bot sends a snapshot
+     to energylabgreen.com every 2 minutes, and renderFusion() reads the last one with his login into
+     #fusionBody — his positions and money, and this page is public. -->
+<section id="page-fusion" class="page">
+  <div class="page-header">
+    <h2 class="page-title">📈 בוט מסחר</h2>
+  </div>
+  <div id="fusionBody"></div>
+</section>
+
 <!-- One worker: everything about him on one page. Opened by tapping his name anywhere on the
      clock page (openWorker). -->
 <section id="page-worker" class="page">
@@ -2450,6 +2472,7 @@ function navigateTo(page) {
   if (page === 'finances') renderFinances();
   if (page === 'worktime') renderWorktime();
   if (page === 'wabot') renderWaBot();
+  if (page === 'fusion') renderFusion();
   if (page === 'worker') renderWorkerPage();
   if (page === 'orders') renderOrders();
   if (page === 'dims') { calcPackDims(); calcFromOldPack(); setDimTab(dimTab); }
@@ -2643,7 +2666,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v391';
+const HUB_BUILD = 'v392';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9740,6 +9763,136 @@ function waTeach() {
 function waUnteach(i) { const t = (waBot.teach || [])[i]; if (t) askConfirm('למחוק את התשובה הזאת מהבוט?', () => waDo({ op: 'unteach', id: t.id })); }
 function waSaveKnowledge() { waDo({ op: 'knowledge', text: document.getElementById('wbKnow').value }, '✅ נשמר — הבוט ישמור על התיקונים שלך גם כשילמד עוד'); }
 function waRescan() { waDo({ op: 'rescan' }, '🔄 הבוט יתחיל לקרוא מחדש את כל השיחות בדקות הקרובות'); }
+
+// ---- The trading bot's page (2026-10-05) ----
+// Daniel: "אני רוצה שיהיה טאב של בוט המסחר שבניתי בלוח הבקרה". FUSION, his trading bot (its own project,
+// C:\Users\מחול\מסחר), sends a snapshot every 2 minutes to the site Worker (its hub_publisher.py); this
+// page reads the last one with his login (GET /api/fusion/status). His positions and money on a public
+// page, so nothing of it is in this file. Read-only: nothing here can place or cancel a trade. Symbols
+// and fault messages come from the bot, so every string goes through escPunch like all outside text.
+const FUSION_URL = 'https://energylabgreen.com/api/fusion/status';
+const FUSION_STALE_MS = 6 * 60000;   // it sends every 2 minutes: three missed means it stopped
+let fusionData = null;
+async function renderFusion() {
+  const box = document.getElementById('fusionBody');
+  if (!box) return;
+  if (typeof Sync === 'undefined' || !Sync.isAuthed()) {
+    box.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-state-icon">🔐</div><div class="empty-state-text">'
+      + 'בוט המסחר מוצג רק בחשבון שלך. התחבר לענן ואז חזור לכאן.</div></div></div>';
+    return;
+  }
+  if (!fusionData) box.innerHTML = '<div class="card"><div class="empty-state-text">טוען את בוט המסחר…</div></div>';
+  try {
+    const t = await Sync.token();
+    const r = await fetch(FUSION_URL, { headers: { authorization: 'Bearer ' + t } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    fusionData = j;
+  } catch (e) {
+    box.innerHTML = '<div class="card"><div class="empty-state-text">⚠ לא הצלחתי להגיע לבוט המסחר: ' + escPunch(e.message) + '</div>'
+      + '<button class="btn btn-secondary btn-block" style="margin-top:8px" onclick="renderFusion()">🔄 נסה שוב</button></div>';
+    return;
+  }
+  const s = fusionData.snapshot;
+  box.innerHTML = !s ? fuEmptyHtml()
+    : fuStatusHtml(s, fusionData.receivedAt) + fuAccountHtml(s) + fuFaultsHtml(s) + fuPositionsHtml(s) + fuTopHtml(s) + fuMonthHtml(s) + fuTradesHtml(s);
+}
+// while he is looking at it, it follows the bot by itself
+setInterval(() => { const p = document.getElementById('page-fusion'); if (p && p.classList.contains('active') && !document.hidden) renderFusion(); }, 120000);
+const fuNum = (x) => (x == null || x === '' || !isFinite(Number(x)) ? null : Number(x));
+function fuMoney(x, sign) {
+  const n = fuNum(x);
+  if (n === null) return '—';
+  const s = '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: Math.abs(n) >= 1000 ? 0 : 2 });
+  return n < 0 ? '−' + s : sign && n > 0 ? '+' + s : s;
+}
+function fuPnl(x) {
+  const n = fuNum(x);
+  return '<span class="fu-num' + (n > 0 ? ' fu-up' : n < 0 ? ' fu-down' : '') + '">' + fuMoney(n, true) + '</span>';
+}
+function fuWhen(iso) { const ms = Date.parse(iso || ''); return isNaN(ms) ? '—' : waWhen(ms); }
+const fuDay = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || '')); return m ? m[3] + '/' + m[2] : escPunch(d); };
+const fuBox = (label, v) => '<div class="stat-box"><div class="stat-label">' + label + '</div><div class="stat-value">' + v + '</div></div>';
+function fuEmptyHtml() {
+  return '<div class="card"><div class="empty-state"><div class="empty-state-icon">📈</div><div class="empty-state-text">'
+    + 'בוט המסחר עוד לא שלח נתונים. ברגע שהוא יפעל, המצב שלו יופיע כאן ויתעדכן כל 2 דקות.</div></div>'
+    + '<button class="btn btn-secondary btn-block btn-sm" style="margin-top:8px" onclick="renderFusion()">🔄 רענן</button></div>';
+}
+function fuStatusHtml(s, receivedAt) {
+  const stale = !(Date.now() - Date.parse(receivedAt || '') < FUSION_STALE_MS);
+  const now = stale ? '⚠ הבוט לא מדווח מאז ' + fuWhen(receivedAt) + ' — המחשב או השרת כבוי, או שהבוט נפל'
+    : !s.dashboard ? '⚠ המכונה דולקת אבל הבוט עצמו לא רץ'
+    : !s.ibkr ? '⚠ הבוט רץ אבל לא מחובר ל-IBKR — לא יכול לסחור'
+    : s.paused ? '⏸ הבוט מושהה — לא נכנס לעסקאות חדשות'
+    : s.inWindow ? '✅ הבוט סוחר עכשיו'
+    : '🌙 הבוט פעיל — מחוץ לשעות המסחר';
+  const bits = [s.mode === 'paper' ? 'חשבון דמו (Paper)' : 'חשבון אמיתי', s.profile ? 'פרופיל ' + escPunch(s.profile) : '',
+    'סריקה אחרונה ' + fuWhen(s.lastScan), 'עדכון אחרון ' + fuWhen(receivedAt), s.host ? 'רץ על ' + escPunch(s.host) : ''].filter(Boolean);
+  return '<div class="card"' + (stale || !s.dashboard || !s.ibkr ? ' style="border-color:var(--warning)"' : '') + '><h3 class="card-title">📡 מצב</h3>'
+    + '<div class="wb-state">' + now + '</div><div class="wt-muted">' + bits.join(' · ') + '</div>'
+    + (fuNum(s.pending) ? '<div class="wt-muted" style="margin-top:4px">⏳ ' + fuNum(s.pending) + ' עסקאות מחכות לאישור שלך בדשבורד של הבוט</div>' : '')
+    + '<button class="btn btn-secondary btn-block btn-sm" style="margin-top:10px" onclick="renderFusion()">🔄 רענן</button></div>';
+}
+// the live numbers come from the running bot only; with it down, the history below still shows
+function fuAccountHtml(s) {
+  if (!s.dashboard) return '';
+  return '<div class="card"><h3 class="card-title">💰 החשבון</h3><div class="stats-grid">'
+    + fuBox('שווי התיק', '<span class="fu-num">' + fuMoney(s.portfolio) + '</span>') + fuBox('היום', fuPnl(s.dailyPnl)) + fuBox('פוזיציות', (s.positions || []).length)
+    + '</div><div class="wt-muted">נכון ל-' + fuWhen(s.at) + '</div></div>';
+}
+const FU_SEV = { critical: '🔴', warning: '🟠', info: 'ℹ️' };
+function fuFaultsHtml(s) {
+  const f = s.faults || [], un = s.unprotected || [];
+  if (!f.length && !un.length && !fuNum(s.pendingFixes)) return '';
+  return '<div class="card" style="border-color:var(--warning)"><h3 class="card-title">⚠ תקלות שהבוט מזהה (' + f.length + ')</h3>'
+    + f.map((x) => '<div class="wb-row wb-head"><span class="wb-text">' + (FU_SEV[x.sev] || '•') + ' ' + escPunch(x.msg) + '</span>'
+      + '<span class="wb-when">' + fuWhen(x.since) + '</span></div>').join('')
+    + (un.length ? '<div class="wb-text" style="margin-top:6px">🛡 פוזיציות בלי סטופ: <span class="fu-sym">' + un.map(escPunch).join(', ') + '</span></div>' : '')
+    + (fuNum(s.pendingFixes) ? '<div class="wt-muted" style="margin-top:6px">' + fuNum(s.pendingFixes) + ' תיקונים מחכים לאישור שלך בדשבורד של הבוט</div>' : '')
+    + '</div>';
+}
+function fuPositionsHtml(s) {
+  if (!s.dashboard) return '';
+  const pos = (s.positions || []).slice().sort((a, b) => (fuNum(b.pnl) || 0) - (fuNum(a.pnl) || 0));
+  return '<div class="card"><h3 class="card-title">📊 פוזיציות פתוחות (' + pos.length + ')</h3>'
+    + (pos.length ? pos.map((p) => '<div class="wb-row"><div class="wb-head"><span class="fu-sym">' + escPunch(p.s) + '</span>'
+      + (p.opt ? '<span class="wb-tag">אופציה</span>' : '') + fuPnl(p.pnl) + '</div>'
+      + '<div class="wb-text"><span class="fu-num">' + escPunch(p.q) + ' × ' + fuMoney(p.avg) + (fuNum(p.px) !== null ? ' → ' + fuMoney(p.px) : '') + '</span>'
+      + (p.opt ? '' : fuNum(p.sl) !== null ? ' · סטופ <span class="fu-num">' + fuMoney(p.sl) + '</span>' : ' · <b>בלי סטופ</b>')
+      + (fuNum(p.tp) !== null ? ' · יעד <span class="fu-num">' + fuMoney(p.tp) + '</span>' : '') + '</div></div>').join('')
+      : '<div class="wt-muted">אין פוזיציות פתוחות.</div>') + '</div>';
+}
+function fuTopHtml(s) {
+  const t = s.top || [];
+  if (!t.length) return '';
+  return '<div class="card"><h3 class="card-title">🔥 ההזדמנויות החזקות בסריקה האחרונה</h3>'
+    + t.map((x) => '<div class="wb-row wb-head"><span><span class="fu-sym">' + escPunch(x.s) + '</span> '
+      + (x.dir === 'LONG' ? '↑ עלייה' : x.dir === 'SHORT' ? '↓ ירידה' : escPunch(x.dir)) + '</span>'
+      + '<span class="wt-muted">ציון ' + escPunch(x.score) + ' · מומנטום ' + escPunch(x.mom) + '</span></div>').join('') + '</div>';
+}
+function fuMonthHtml(s) {
+  const st = s.stats30 || {}, n = fuNum(st.n) || 0, eq = s.equity || [];
+  let line = '';
+  if (eq.length >= 2) {
+    const a = eq[0], b = eq[eq.length - 1];
+    line = '<div class="wt-muted">שווי התיק: <span class="fu-num">' + fuMoney(a[1]) + '</span> ב-' + fuDay(a[0]) + ' ← <span class="fu-num">' + fuMoney(b[1]) + '</span> ב-'
+      + fuDay(b[0]) + ' (' + fuPnl(fuNum(b[1]) - fuNum(a[1])) + ')</div>';
+  }
+  return '<div class="card"><h3 class="card-title">📈 30 הימים האחרונים</h3><div class="stats-grid">'
+    + fuBox('עסקאות שנסגרו', n) + fuBox('הצליחו', n ? Math.round(100 * (fuNum(st.wins) || 0) / n) + '%' : '—') + fuBox('רווח/הפסד', fuPnl(st.pnl)) + '</div>' + line + '</div>';
+}
+const FU_STATUS = { OPEN: 'פתוחה', CLOSED: 'נסגרה', CANCELLED: 'בוטלה' };
+function fuTradesHtml(s) {
+  const t = s.trades || [];
+  return '<div class="card"><h3 class="card-title">📜 עסקאות אחרונות</h3>'
+    + (t.length ? t.map((x) => '<div class="wb-row"><div class="wb-head"><span><span class="fu-sym">' + escPunch(x.s) + '</span> '
+      + (x.act === 'BUY' ? 'קנייה' : x.act === 'SELL' ? 'מכירה' : escPunch(x.act)) + ' <span class="fu-num">' + escPunch(x.q) + ' × ' + fuMoney(x.entry) + '</span></span>'
+      + '<span class="wb-when">' + fuWhen(x.at) + '</span></div>'
+      + '<span class="wb-tag">' + escPunch(FU_STATUS[x.status] || x.status) + '</span>'
+      + (x.status === 'CLOSED' ? ' ' + fuPnl(x.pnl) + (fuNum(x.pnlPct) !== null ? ' <span class="fu-num">(' + fuNum(x.pnlPct).toFixed(1) + '%)</span>' : '') : '')
+      + (x.mode === 'MANUAL' ? ' <span class="wb-tag">ידני</span>' : '') + '</div>').join('')
+      : '<div class="wt-muted">אין עדיין.</div>') + '</div>';
+}
 
 // The message Daniel already sends, with the balance filled in from the ledger instead of
 // from memory. Format deliberately unchanged — his shops read it every week.

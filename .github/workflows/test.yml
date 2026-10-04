@@ -172,6 +172,11 @@ jobs:
       - name: The Google review request
         run: node test/test-review-ask.mjs
 
+      # FUSION, his trading bot (2026-10-05): read with his login only, never "trading" when it has
+      # stopped reporting, is down or lost IBKR, and nothing from the bot runs as markup.
+      - name: The trading bot's page
+        run: node test/test-fusion.mjs
+
       # He asked why an e-bike cost the same as every other category at the same voltage and
       # capacity. It did: the model had one flat materials figure and the family was not an
       # input to the price at all. The e-bike buys a Silver Fish case; the Sur-Ron an OEM one.
