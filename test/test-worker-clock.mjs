@@ -433,5 +433,44 @@ console.log('\n8. the in-hub shift clock — Daniel punching a worker in and out
   await ctx.close();
 }
 
+console.log('\n7. the clock link beside each worker (2026-10-04)');
+{
+  // Daniel: "תן לי קישור לשעות עבודה בטלפון של העובד שיהיה קישור בדף ליד כל שם". Each worker on the
+  // clock page carries a link to send; it is the PUBLIC address with the name in it, shown as text
+  // to copy (his rule for messages), and opening it names the worker on the clock. --selftest
+  // drops the name from the link, which the round trip must catch.
+  const ctx = await b.newContext({ viewport: { width: 390, height: 844 } });
+  const p = await ctx.newPage();
+  const dialogs = [];
+  p.on('dialog', d => { dialogs.push(d.message()); d.dismiss(); });
+  await p.route('**/rest/v1/worker_punches*', (route) => route.fulfill({ status: 200, body: '[]' }));
+  await p.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
+  await p.waitForFunction(() => typeof window.sendClockLink === 'function', { timeout: 30000 });
+  const r = await p.evaluate((SELF) => {
+    if (SELF) window.workerClockUrl = () => HUB_PUBLIC + '/clock/';
+    localStorage.setItem('gp_workers', JSON.stringify([
+      { id: 'wk1', name: 'יוסי כהן', rate: 40 }, { id: 'wk2', name: 'דנה', rate: 45 }]));
+    document.getElementById('loginOverlay').style.display = 'none';
+    navigateTo('worktime');
+    renderShifts();
+    const links = [...document.querySelectorAll('#shiftList .wt-clock-link')];
+    links[0].click();
+    return { n: links.length, msg: (document.getElementById('waCopyBox') || {}).value || '',
+             title: document.getElementById('modalTitle').textContent };
+  }, SELFTEST);
+  check('every worker has a clock link beside the name', r.n === 2, r.n);
+  check('it is the public clock address with the name in it',
+    r.msg.includes('https://hub.energylabgreen.com/clock/?w=' + encodeURIComponent('יוסי כהן')), r.msg);
+  check('shown as a message to copy, titled for the worker', r.title === 'קישור לשעון — יוסי כהן', r.title);
+  // the round trip: the link, opened on this server, names the worker on the clock
+  const path = (r.msg.match(/https:\/\/hub\.energylabgreen\.com(\/clock\/\S*)/) || [])[1] || '/clock/';
+  const c = await ctx.newPage();
+  await c.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+  await c.waitForTimeout(300);
+  check('opening the link names the worker on the clock', ((await c.textContent('#who').catch(() => '')) || '').trim() === 'יוסי כהן', path);
+  check('and nothing went through a dialog', dialogs.length === 0, dialogs);
+  await ctx.close();
+}
+
 await b.close(); srv.close();
 process.exit(finish());

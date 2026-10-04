@@ -2253,9 +2253,9 @@ function waNumber(raw) {
  * the other way round: execCommand acts on the selection that is already there and is the one
  * that behaves in a WebView.
  */
-function showMessageToCopy(msg) {
+function showMessageToCopy(msg, title) {
   openModal(
-    'הודעה ללקוח',
+    title || 'הודעה ללקוח',
     '<p style="font-size:13px;color:#64748b;margin:0 0 8px;">העתק והדבק לוואטסאפ.</p>'
     + '<textarea id="waCopyBox" readonly style="width:100%;height:240px;direction:rtl;'
     + 'font-size:14px;line-height:1.7;padding:10px;border-radius:10px;border:1px solid #cbd5e1;"></textarea>',
@@ -2600,7 +2600,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v385';
+const HUB_BUILD = 'v386';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6703,6 +6703,7 @@ function renderShifts() {
     const since = on ? new Date(w.shiftStart).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '';
     return `<div class="price-item">
       <div class="price-item-name">${wtNameLink(w.name)}
+        <a href="#" class="wt-clock-link" onclick="sendClockLink(${wtRef(w.name)});return false;" style="font-size:12px;color:var(--primary);margin-inline-start:6px;white-space:nowrap;">📲 קישור לשעון</a>
         <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${on
           ? '<span style="color:var(--success);">● בעבודה מ-' + since + '</span> · <b style="color:var(--success);"><bdi dir="ltr">' + fmtElapsed(el) + '</bdi></b> שעות'
           : 'לא בעבודה'}</div>
@@ -6710,6 +6711,21 @@ function renderShifts() {
       <div class="price-item-final">${on ? outBtn(w.id) : inBtn(w.id)}
       </div></div>`;
   }).join('');
+}
+
+// The link a worker reports hours from on their own phone (2026-10-04, Daniel: "תן לי קישור
+// לשעות עבודה בטלפון של העובד שיהיה קישור בדף ליד כל שם"). It carries the name, so the worker
+// never types it: /clock/ reads ?w= and remembers it for the home-screen icon. Always the public
+// address — it is sent to another phone, so it cannot be wherever this page happens to run.
+// Shown as text to copy and send, his rule for every message (2026-08-23: "שיהיה רק טקסט ואני
+// יעתיק לבד"): opened here, the link would only start the clock on HIS phone.
+const HUB_PUBLIC = 'https://hub.energylabgreen.com';
+function workerClockUrl(name) { return HUB_PUBLIC + '/clock/?w=' + encodeURIComponent(String(name || '').trim()); }
+function sendClockLink(i) {
+  const name = WT_NAMES[i];
+  if (name == null) return;
+  showMessageToCopy(`היי ${name}, זה הקישור לדיווח שעות העבודה שלך:\n${workerClockUrl(name)}\n\nלוחצים "כניסה" כשמתחילים ו"יציאה" כשמסיימים. כדאי להוסיף את הקישור למסך הבית.`,
+    'קישור לשעון — ' + name);
 }
 
 // A second press of כניסה must not silently move the start time forward and eat the hours
