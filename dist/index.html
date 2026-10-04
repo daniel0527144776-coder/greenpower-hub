@@ -2588,7 +2588,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v383';
+const HUB_BUILD = 'v384';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7584,7 +7584,8 @@ function drawPackLayout(o) {
   const { cols, rows, pitch, rowPitch, dia, stagger, N, P, layers } = o;
   // Not for a Bomber (2026-10-04, his choice): it is built with the cells lying, and its page
   // already draws the packs he built that way; a standing grid under them was a second picture.
-  if (!cols || !rows || isBomber(dimVehicle)) { box.innerHTML = ""; return; }
+  // Nor for an e-bike case, whose page draws his build the same way (2026-10-04).
+  if (!cols || !rows || isBomber(dimVehicle) || (dimVehicle && dimVehicle.case)) { box.innerHTML = ""; return; }
   // Drawn ALONG THE LENGTH, the way he builds: each column of circles is one row of the
   // bracket across the pack's width — a parallel group — and the series climbs left to right.
   // The BMS allowance sits at the end of the length, drawn as a box of its own, and the labels
@@ -7908,8 +7909,10 @@ function calcPackDims() {
     }
   }
   const kv = (k, v) => `<div class="dim-kv"><span>${k}</span><b>${v}</b></div>`;
-  // A Bomber gets only its lying answer and his builds (2026-09-28) — see bomberLyingHtml.
-  let html = isBomber(dimVehicle) ? bomberLyingHtml(dimVehicle, c, pitch, rowPitch, V, N, holder) : head + best +
+  // A Bomber gets only its lying answer and his builds (2026-09-28) — see bomberLyingHtml. An e-bike
+  // case gets its build and its size (2026-10-04) — see caseBuildHtml.
+  let html = isBomber(dimVehicle) ? bomberLyingHtml(dimVehicle, c, pitch, rowPitch, V, N, holder)
+    : dimVehicle && dimVehicle.case ? caseBuildHtml(dimVehicle, c, V, N) : head + best +
     kv('תצורה', `<bdi dir="ltr">${S}S ${P}P</bdi> · ${N} תאים`) +
     kv('גודל סוללה', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
     // The tray beside it, in the same shape, so the two read against each other. A height nobody
@@ -8152,7 +8155,9 @@ function bomberLying(side, c, pitch, rowPitch, fill) {
 // count at the end of every row — the drawing IS the build sheet. A side marked `same` repeats
 // another stack; `rest` is the part of the total no photo shows; `rows: null` has not been counted.
 // A 'draft' is counted off a photo and says so; only his own numbers are 'confirmed'.
-function buildSideSvg(rows, cell, holder, unsure) {
+// `bms` is the place he leaves for the board, [row, first column, places] (the Silver Fish,
+// 2026-10-04), drawn as a dashed box over the empty places.
+function buildSideSvg(rows, cell, holder, unsure, bms) {
   const c = cell === 18650 ? { dia: 18.35 } : { dia: 21.15 };
   const [p, rp] = (DIM_PITCH[cell] || {})[holder] || [c.dia + 1, c.dia + 1];
   const diag = rp < p - 0.01;
@@ -8171,6 +8176,12 @@ function buildSideSvg(rows, cell, holder, unsure) {
     }
     g += `<text x="${(Wmm * k + 4).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="11" fill="currentColor">${n}</text>`;
   });
+  if (bms) {
+    const [br, bc, bn] = bms;
+    const x = bc * p * k, y = H - 2 - (br * rp + p) * k, w = bn * p * k, h = p * k;
+    g += `<rect class="build-bms" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="none" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3 2"/>`
+      + `<text x="${(x + w / 2).toFixed(1)}" y="${(y + h / 2 + 3).toFixed(1)}" font-size="8" font-weight="700" text-anchor="middle" fill="#f59e0b">BMS</text>`;
+  }
   return `<svg class="bomber-build-svg" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" role="img" direction="ltr" style="max-width:100%;height:auto;display:block;margin:4px 0;direction:ltr;">${g}</svg>`;
 }
 function bomberBuildsHtml(v) {
@@ -8188,8 +8199,11 @@ function bomberBuildsHtml(v) {
         return b.total > counted ? `<div style="font-size:12px;color:var(--text-muted);">+ ערימה שנייה, כ-${b.total - counted} תאים</div>` : '';
       }
       if (!st.rows) return `<div style="font-size:12px;color:var(--warning,#f59e0b);">עוד לא נספר שורה-שורה</div>`;
-      return buildSideSvg(st.rows, b.cell, b.holder, st.unsure);
+      return buildSideSvg(st.rows, b.cell, b.holder, st.unsure, st.bms);
     }).join('');
+    // His own words for how it goes together, where the drawing alone does not say it (the Silver
+    // Fish is drawn the long way, so his rows of 4 are its columns).
+    const how = b.how ? `<div style="font-size:12px;">${b.how}</div>` : '';
     return `<div class="bomber-build" style="border-top:1px solid var(--border,#334155);margin-top:6px;padding-top:6px;">`
       // RLM around each separator: without it '20S17P · 18650 · 340' fuses into one left-to-right run
       // and reads '340 · 18650 · 20S17P תאים' (2026-09-28).
@@ -8198,7 +8212,7 @@ function bomberBuildsHtml(v) {
       + `<b>🔋 ${b.label}</b>\u200F · \u200F${iso(String(b.cell))}${b.total ? '\u200F · \u200F' + b.total + ' תאים' : ''}`
       + (v.built && b.sp && String(v.built).startsWith(b.sp) ? String(v.built).slice(b.sp.length).split('·').map((t) => t.trim()).filter(Boolean).map((t) => '\u200F · \u200F' + iso(t)).join('') : '')
       + `${draft}`
-      + sides + '</div>';
+      + how + sides + '</div>';
   }).join('');
 }
 // The whole answer for a Bomber (2026-09-28, his choice "קצר: מה נכנס + הציורים"): what the frame
@@ -8224,6 +8238,26 @@ function bomberLyingHtml(v, c, pitch, rowPitch, V, N, holder) {
   return `<div class="dim-rec">${fit}
     ${bomberBuildsHtml(v)}</div>`;
 }
+// ---- an e-bike case: his build is the answer (the Silver Fish, 2026-10-04) ----
+// The case is 70 thick and a standing 21700 in its holders needs 74, so judged as a scooter tray
+// it would print "⛔ לא נכנס" over a pack he built in it — the Bomber Plus's trap. It is shown, not
+// judged: what it takes is what he put in it, counted for the cell he built with, so another cell
+// size is told that rather than answered.
+function caseBuildHtml(v, c, V, N) {
+  const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
+  const fmt = c.label.startsWith('18650') ? 18650 : 21700;
+  const b = (v.builds || [])[0];
+  const S = seriesForV(V), P = Math.round(N / S);
+  const pack = iso(S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah');
+  const fit = b && b.cell !== fmt
+    ? `<span style="color:var(--text-muted);">המקסימום (${v.max} תאים) נספר על ${iso(String(b.cell))}, לא על ${iso(String(fmt))}</span>`
+    : N <= v.max
+      ? `<span style="color:#34d399;">✅ נכנסת — ${pack}, ${N} תאים${N === v.max ? ' · המקסימום' : ''}</span>`
+      : `<span style="color:var(--danger);">⛔ גדולה מדי — ${pack}, ${N} תאים · במארז נכנסים ${v.max}</span>`;
+  const cs = v.case;
+  return `<div class="dim-rec">${fit}<br>מארז: ${iso(cs.L + ' × ' + cs.W + ' × ' + cs.H)} מ"מ (נמדד)
+    ${bomberBuildsHtml(v)}</div>`;
+}
 // ---- the vehicle the estimator is answering for ----------------------------------------
 // The tray, as numbers — L the long side. Read from a STRICT A×B×C for the height and nothing
 // looser: '425×165 + 60×140' (the OX, two rectangles) once had its 60 read as a ceiling.
@@ -8246,6 +8280,8 @@ function tubOf(v) {
 function tubMeasured(v) {
   if (!v) return false;
   if (v.side && v.side.confirmed) return true;
+  // An e-bike case he put a tape on (the Silver Fish, 2026-10-04).
+  if (v.case) return true;
   const t = String(v.tub || '');
   return !/לא נמדד|יצרן השלדה/.test(t) && /נמדד|לקוח/.test(t);
 }
@@ -8485,6 +8521,22 @@ function setDimTab(tab) {
 // They are 10P / 7P / 7P / 12P now, i.e. 50Ah / 35Ah / 35Ah / 60Ah instead of 40/30/30/50.
 // The row check that found them is still live for the next one.
 const VEHICLE_PACKS = [
+  // ── E-bikes. The Silver Fish, 72V 30Ah (Daniel, 2026-10-04): "24 שורות כל שורה 4 תאים ואז עוד 8
+  // שורות 3 בשורה כדי שיהיה מקום ל-BMS". 24 × 4 + 8 × 3 = 120 = 20S6P, which at 30Ah is a 5Ah
+  // 21700, on the 23 square (his pick). The case, his tape: 850 long × 95 wide × 70 thick.
+  // `case`, NOT `tub`: a tub is judged with the cells standing in their holders (74 for a 21700),
+  // and 70 would print "⛔ לא נכנס" over a pack he built in it. See caseBuildHtml.
+  // The drawing is the case from above, the long way, as drawPackLayout draws a pack: each column
+  // is one of his rows across the 95 — 24 of 4, then 8 of 3 with the BMS in the free place.
+  // hubOnly before the nested objects: gen-fit-data reads a row only up to its first '}'.
+  { g: 'אופניים חשמליים', m: 'סילבר פיש 72V', src: 'נמדד', p: 23, s60: 0, p60: 0, s72: 20, p72: 6, max: 120,
+    hubOnly: true, built: '20S6P · 30Ah',
+    case: { L: 850, W: 95, H: 70 },
+    builds: [
+      { label: 'סילבר פיש — 20S6P', cell: 21700, holder: 'square-23', sp: '20S6P', total: 120, status: 'confirmed',
+        how: '24 שורות של 4, ואז 8 שורות של 3 — המקום הפנוי ל-BMS',
+        stacks: [{ name: 'מבט מלמעלה', rows: [[0, 32], [0, 32], [0, 32], [0, 24]], bms: [3, 24, 8] }] },
+    ] },
   // From the WhatsApp thread with Oral Paiman, 24.8.2025: a 72V 40Ah pack for a delivery
   // motorcycle, measured by the customer at 'רוחב 17 · גובה 17 · אורך 48.5' — 485 x 170 x 170mm.
   // It is the only dimension stated in text in that whole thread; every other 'זה המידות' was
@@ -8658,6 +8710,7 @@ const CELL_AH_DEFAULT = 5;
 // gets a shaded frame triangle because on that frame the triangle IS the battery bay.
 function vehType(v) {
   if (/Bomber/i.test(v.m)) return 'bomber';
+  if (v.g.indexOf('אופניים') === 0) return 'ebike';
   if (v.g.indexOf('אופנועים') === 0 || v.g.indexOf('ריקשות') > -1) return 'moto';
   if (v.g.indexOf('E-Moto') > -1) return 'emoto';
   return 'scooter';
@@ -8675,6 +8728,11 @@ const VEH_ART = {
     '<path d="M14 21l7-9h9l-2 9z" fill="currentColor" fill-opacity=".22"/>' +
     '<path d="M9 22L19 12h11l9 10"/><path d="M17 11h14" stroke-width="3"/>' +
     '<circle cx="24" cy="24" r="2.5"/><path d="M30 12l8-3"/><path d="M34 9h8"/>',
+  // A bicycle frame with the pack on its down tube.
+  ebike:
+    '<circle cx="10" cy="22" r="7"/><circle cx="38" cy="22" r="7"/>' +
+    '<path d="M10 22h12l-4-11zM18 11h14l6 11M22 22l10-11"/>' +
+    '<path d="M24 19l6-6" stroke-width="3.5"/><path d="M15 9h6"/><path d="M32 11l-1-4h4"/>',
   moto:
     '<circle cx="10" cy="23" r="6"/><circle cx="38" cy="23" r="6"/>' +
     '<rect x="5" y="7" width="12" height="8" rx="1"/>' +
@@ -8752,7 +8810,7 @@ function renderVehiclePacks() {
   }
   const hit = VEHICLE_PACKS.filter((v) => !q || v.m.toLowerCase().includes(q) || v.g.toLowerCase().includes(q));
   const findMine = (v) => dims.find((x) => String(x.model || '').trim().toLowerCase() === v.m.trim().toLowerCase());
-  const sized = (v) => !!(findMine(v) || tubOf(v) || v.side);
+  const sized = (v) => !!(findMine(v) || tubOf(v) || v.side || v.case);
   // Every vehicle is listed; within each group the ones with sizes come first and the ones
   // without go to its end (2026-10-04: hidden for an hour, then "למה אני לא רואה את כל הכלים").
   const groups = [...new Set(hit.map((v) => v.g))];
@@ -8766,10 +8824,13 @@ function renderVehiclePacks() {
     const tb = !d ? tubOf(v) : null;
     // A frame with no tub but a side he built to (the Plus) shows that side, not "no sizes".
     const sd = !d && !tb && v.side ? v.side : null;
+    // An e-bike case shows the case (the Silver Fish).
+    const cs = !d && !tb && !sd && v.case ? v.case : null;
     if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
     const ok = tubMeasured(v) ? '<span style="color:#34d399;font-weight:700;">✓ נמדד</span> ' : '';
     const tray = tb ? `${ok}<bdi dir="ltr">${tb.L}×${tb.W}${tb.H ? '×' + tb.H : ''}</bdi> מ"מ`
       : sd ? `${ok}<bdi dir="ltr">${sd.L}×${sd.H}×${sd.across}</bdi> מ"מ`
+      : cs ? `${ok}<bdi dir="ltr">${cs.L}×${cs.W}×${cs.H}</bdi> מ"מ`
       : '<span style="opacity:.7;">אין מידות</span>';
     html += `<div class="list-item${d ? ' mine' : ''}" onclick="useVehiclePack(${arg(v.m)})" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">

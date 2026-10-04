@@ -377,7 +377,8 @@ check('the baked vehicle photos reach the list', art.photos >= 6 && art.photoOnO
 check('and none of them is empty', art.inked, 'ok');
 // A vehType that quietly answered "scooter" for everything would still pass the count above
 // and give 29 identical pictures — which is worse than no picture, because it looks right.
-check('all four vehicle kinds are drawn', art.kinds === 'bomber,emoto,moto,scooter', art.kinds);
+// Five since the Silver Fish (2026-10-04): an e-bike is drawn as a bicycle, not a scooter.
+check('all five vehicle kinds are drawn', art.kinds === 'bomber,ebike,emoto,moto,scooter', art.kinds);
 check('nothing in the list fetches an image — every photo is inline', art.imgs === 0, String(art.imgs));
 
 // The Bomber is a frame family whose versions differ by 3.5x in what they hold, so one row
@@ -786,6 +787,47 @@ check('the regular Bomber reads what his builds prove (364×125×192), not the m
 // it is in. So no tub, and no verdict against his build.
 check('the Plus is not judged against its frame standing (no "does not fit" on his own build)',
   !lying.plusTub && !/לא נכנס ל-Bomber Plus/.test(lying.plus), [lying.plusTub, lying.plus.slice(0, 80)]);
+
+// The Silver Fish (Daniel, 2026-10-04): his e-bike case, 850 × 95 × 70, and his 72V build — "24
+// שורות כל שורה 4 תאים ואז עוד 8 שורות 3 בשורה כדי שיהיה מקום ל-BMS" = 120 = 20S6P, 30Ah. The case
+// is NOT judged standing: 70 is under a standing 21700 in its holders (74), and the page must not
+// print ⛔ over his own build. --selftest takes the case away, which sends the row down the
+// scooter path: no case line, no drawing, a standing grid, and "הערכת AI" on the chip.
+const fish = await page.evaluate((SELF) => {
+  const name = 'סילבר פיש 72V';
+  const v = VEHICLE_PACKS.find((x) => x.m === name);
+  if (SELF && v) delete v.case;
+  document.getElementById('dimCell').value = '21700-50e';
+  useVehiclePack(name);
+  const out = document.getElementById('dimResult');
+  const svg = out.querySelector('.bomber-build svg.bomber-build-svg');
+  const cs = svg ? [...svg.querySelectorAll('circle')].map((e) => [Math.round(+e.getAttribute('cx')), Math.round(+e.getAttribute('cy'))]) : [];
+  const ys = [...new Set(cs.map(([, y]) => y))].sort((a, b) => b - a);
+  const xs = [...new Set(cs.map(([x]) => x))].sort((a, b) => a - b);
+  renderVehiclePacks();
+  const card = [...document.querySelectorAll('#vpList .list-item')].find((r) => ((r.querySelector('.list-item-title') || {}).textContent || '').trim() === name);
+  return { text: out.textContent, cells: cs.length,
+           lines: ys.map((y) => cs.filter(([, yy]) => yy === y).length).join(','),
+           cols: xs.map((x) => cs.filter(([xx]) => xx === x).length).join(','),
+           bms: !!(svg && svg.querySelector('rect.build-bms') && /BMS/.test(svg.textContent)),
+           grid: document.querySelectorAll('#dimDraw circle').length,
+           chip: document.getElementById('dimVehChip').textContent,
+           card: card ? card.textContent.replace(/\s+/g, ' ') : null, kind: v ? vehType(v) : '' };
+}, SELFTEST);
+check('the Silver Fish opens on his 72V build: 20S6P, 30Ah, 120 cells, the most the case takes',
+  /✅ נכנסת — 20S6P · 30Ah, 120 תאים · המקסימום/.test(fish.text), fish.text.slice(0, 160));
+check('with the case he measured, and no ⛔ over his own build',
+  /מארז: 850 × 95 × 70/.test(fish.text) && !/לא נכנס|⛔/.test(fish.text), fish.text.slice(0, 200));
+// Drawn the long way: three lanes of 32 and one of 24 — i.e. his 24 rows of 4, then 8 rows of 3.
+check('his build sheet: 24 rows of 4, then 8 rows of 3, drawn cell by cell',
+  fish.cells === 120 && fish.lines === '32,32,32,24' && fish.cols === Array(24).fill(4).concat(Array(8).fill(3)).join(','),
+  [fish.cells, fish.lines, fish.cols]);
+check('and the free place is marked BMS', fish.bms, String(fish.bms));
+check('his words for the build are on the page', /24 שורות של 4, ואז 8 שורות של 3/.test(fish.text), fish.text.slice(0, 200));
+check('no standing grid under his build', fish.grid === 0, String(fish.grid));
+check('the chip and the card say measured, with the case size', /✓ נמדד/.test(fish.chip) && !/הערכת AI/.test(fish.chip)
+  && /✓ נמדד/.test(fish.card || '') && /850×95×70/.test(fish.card || ''), [fish.chip, fish.card]);
+check('an e-bike is drawn as a bicycle', fish.kind === 'ebike', fish.kind);
 
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
