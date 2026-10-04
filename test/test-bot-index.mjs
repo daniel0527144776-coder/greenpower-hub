@@ -91,6 +91,27 @@ const full = await page.evaluate(async () => {
   return { alerts, pushed };
 });
 check('a full phone gets no error box for the bot\'s copy, and the cloud copy still goes', full.alerts.length === 0 && full.pushed.includes('bot_index'), full);
+// The hub sends the index to the bot itself, with his login (his choice: "לבטל את הצורך במפתח
+// Supabase") — and only when he is logged in. --selftest stops it sending.
+const posted = [];
+await page.route('**/rest/v1/**', (route) => route.fulfill({ status: 201, body: '' }));
+await page.route('https://energylabgreen.com/api/wa/index', async (route) => {
+  const req = route.request();
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'POST' };
+  if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+  posted.push({ auth: req.headers()['authorization'] || '', body: req.postData() || '' });
+  return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}', headers: cors });
+});
+await page.evaluate(async (SELF) => {
+  if (SELF) window.postBotIndex = async () => {};
+  Sync.session = { access_token: 'test.' + btoa('{"sub":"u1"}') + '.sig', expires_at: Date.now() + 3600000, email: 't@t' };
+  Sync.userId = 'u1';
+  Store.set('orders', (Store.get('orders') || []).concat([{ id: 'o4', date: new Date().toISOString(), phone: '050-333-4444', status: 'הצעה', items: [{ name: 'מטען', qty: 1, unit: 300 }] }]));
+  await new Promise((res) => setTimeout(res, 2200));
+}, SELFTEST);
+const sent = posted[posted.length - 1] || { auth: '', body: '' };
+check('logged in, the hub sends the index to the bot with his login', /^Bearer test\./.test(sent.auth) && /"v":1/.test(sent.body) && /050-333-4444/.test(sent.body), posted.map((p) => p.auth.slice(0, 20)));
+check('and what it sends holds no photo or cost either', sent.body && !/data:image|"cost"|"profit"/.test(sent.body), sent.body.slice(0, 120));
 check('no page errors', errs.length === 0, errs.join(' | '));
 
 await browser.close();

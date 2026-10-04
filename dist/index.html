@@ -2606,7 +2606,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v387';
+const HUB_BUILD = 'v388';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9335,18 +9335,33 @@ function botIndex() {
 // fails — for a copy nobody types, that would be an error box over his real work. The local copy
 // is best-effort (it only lets an offline push go up later); the cloud copy is what the bot reads.
 // The pull does not bring it down again: every device builds its own from its own data.
-let botIndexTimer = null, botIndexSent = '';
+let botIndexTimer = null, botIndexSent = '', botIndexPosted = '';
 function scheduleBotIndex() {
   clearTimeout(botIndexTimer);
   botIndexTimer = setTimeout(() => {
     try {
       const next = botIndex(), s = JSON.stringify(next);
-      if (s === botIndexSent) return;
-      botIndexSent = s;
-      try { localStorage.setItem('gp_bot_index', s); } catch (e) { /* full: the cloud copy still goes */ }
-      if (typeof Sync !== 'undefined') Sync.push('bot_index', next);
+      if (s !== botIndexSent) {
+        botIndexSent = s;
+        try { localStorage.setItem('gp_bot_index', s); } catch (e) { /* full: the cloud copy still goes */ }
+        if (typeof Sync !== 'undefined') Sync.push('bot_index', next);
+      }
+      postBotIndex(s);
     } catch (e) { console.error('bot_index', e); }
   }, 1500);
+}
+// The bot's own copy (2026-10-04, his choice: "לבטל את הצורך במפתח Supabase"). The index goes
+// straight to the WhatsApp bot with HIS login token, which the bot checks with Supabase before it
+// keeps anything — so the bot holds no key to the database. A copy that did not land (offline, the
+// bot not set up yet) goes again after the next pull, which calls scheduleBotIndex.
+const BOT_INDEX_URL = 'https://energylabgreen.com/api/wa/index';
+async function postBotIndex(s) {
+  if (s === botIndexPosted || typeof Sync === 'undefined' || !Sync.isAuthed()) return;
+  try {
+    const t = await Sync.token();
+    const r = await fetch(BOT_INDEX_URL, { method: 'POST', headers: { authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: s });
+    if (r.ok) botIndexPosted = s;
+  } catch (e) { /* offline, or the bot not reachable: the next pull tries again */ }
 }
 
 // The message Daniel already sends, with the balance filled in from the ledger instead of
