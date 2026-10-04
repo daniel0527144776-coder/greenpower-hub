@@ -2588,7 +2588,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v382';
+const HUB_BUILD = 'v383';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9710,39 +9710,110 @@ function invForecast(row, usage) {
 // outlast its delivery, enough for the delivery time plus three months. A row nobody has used
 // yet keeps the old rule — clear the shortage and put the same again behind it — because with no
 // rate any other number would be a guess dressed as a forecast.
+// Second-hand stock ("(יד 2)", parts pulled from repairs) is never ordered from a supplier: it
+// stays on the shelf and still shows "אזל", but no order line (2026-10-04, his choice).
+const invIsUsed = (row) => /יד\s*2/.test(String((row && row.name) || ''));
 function orderList() {
   const usage = invUsage();
   const { out, low } = invShortages();
   const lines = [];
   const seen = new Set();
   for (const i of getInventory()) {
+    if (invIsUsed(i)) continue;
     const fc = invForecast(i, usage);
     if (fc && fc.orderNow && fc.want > 0) {
-      lines.push({ name: i.name, have: Number(i.qty) || 0, want: fc.want, perMonth: fc.perMonth });
+      lines.push({ name: i.name, have: Number(i.qty) || 0, want: fc.want, perMonth: fc.perMonth, supplier: invSupplierOf(i), cat: invCatOf(i) });
       seen.add(i);
     }
   }
   for (const i of out.concat(low)) {
-    if (seen.has(i) || invForecast(i, usage)) continue;    // a row with a rate is judged by it
+    if (seen.has(i) || invIsUsed(i) || invForecast(i, usage)) continue;    // a row with a rate is judged by it
     const q = Number(i.qty) || 0;
     const t = i.low != null ? Number(i.low) : INV_LOW_DEFAULT;
-    lines.push({ name: i.name, have: q, want: Math.ceil(Math.max(t * 2 - q, t)) });
+    lines.push({ name: i.name, have: q, want: Math.ceil(Math.max(t * 2 - q, t)), supplier: invSupplierOf(i), cat: invCatOf(i) });
   }
   return lines.length ? lines : null;
 }
-function orderListText() {
+// ---- who each row is ordered from (2026-10-04, "הזמנה לפי ספק") ----
+// One message per supplier. The hub HTML is public, so no supplier name is written here: they
+// come from his own synced data. In order: the row's own supplier (set in the item editor), the
+// supplier he chose for the row's category (settings.invSupplierByCat), and otherwise the one
+// supplier whose price list covers that kind of part — cells from the 21700/18650 lines, BMS from
+// the BMS lines. Two suppliers carry chargers, so chargers wait for his choice rather than a guess.
+// Matched on the price list's SECTION (cat), not the item name: a parts supplier lists "מחזיק 21700"
+// without selling cells. "מטע[ןנ]" because the section says מטענים — a final ן never matches it.
+const INV_SUPPLIER_HINT = { 'תא': /·\s*(21700|18650)\s*·/, 'BMS': /\bBMS\b/i, 'מטען': /מטע[ןנ]/ };
+function invSupplierOf(row) {
+  if (row && row.supplier) return String(row.supplier);
+  const cat = invCatOf(row || {});
+  const byCat = (Store.get('settings') || {}).invSupplierByCat || {};
+  if (byCat[cat]) return String(byCat[cat]);
+  const re = INV_SUPPLIER_HINT[cat];
+  if (!re) return '';
+  const who = new Set((Store.get('supplier_prices') || [])
+    .filter((p) => p && p.who && re.test(String(p.cat || ''))).map((p) => String(p.who)));
+  return who.size === 1 ? [...who][0] : '';
+}
+function invSupplierNames() {
+  const names = new Set((Store.get('supplier_prices') || []).map((p) => p && p.who).filter(Boolean).map(String));
+  Object.values((Store.get('settings') || {}).invSupplierByCat || {}).forEach((v) => v && names.add(String(v)));
+  getInventory().forEach((r) => r.supplier && names.add(String(r.supplier)));
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+function setInvCatSupplier(cat, who) {
+  const st = Store.get('settings') || {};
+  st.invSupplierByCat = { ...(st.invSupplierByCat || {}), [cat]: who };
+  if (!who) delete st.invSupplierByCat[cat];
+  if (!Store.set('settings', st)) return;
+  copyOrderList();
+}
+// [{ supplier, lines }], suppliers in name order and the unknown one last.
+function orderGroups() {
   const lines = orderList();
-  if (!lines) return '';
-  return 'הזמנה:\n' + lines.map((l) => `• ${l.name} — ${l.want} יח׳ (נשארו ${l.have}${l.perMonth ? `, יוצאים כ-${l.perMonth} בחודש` : ''})`).join('\n');
+  if (!lines) return [];
+  const by = new Map();
+  for (const l of lines) { const k = l.supplier || ''; if (!by.has(k)) by.set(k, []); by.get(k).push(l); }
+  return [...by.entries()].sort(([a], [b]) => (a === '') - (b === '') || a.localeCompare(b))
+    .map(([supplier, ls]) => ({ supplier, lines: ls }));
+}
+const orderLineText = (l) => `• ${l.name} — ${l.want} יח׳ (נשארו ${l.have}${l.perMonth ? `, יוצאים כ-${l.perMonth} בחודש` : ''})`;
+function orderGroupText(g) {
+  return (g.supplier ? `הזמנה מ-${g.supplier}:` : 'הזמנה (ספק לא ידוע):') + '\n' + g.lines.map(orderLineText).join('\n');
+}
+function orderListText() {
+  return orderGroups().map(orderGroupText).join('\n\n');
+}
+let _orderGroupsShown = [];
+function copyOrderGroup(i) {
+  const g = _orderGroupsShown[i];
+  if (!g) return;
+  const txt = orderGroupText(g);
+  try { const p = navigator.clipboard && navigator.clipboard.writeText(txt); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  const ta = document.getElementById('orderTxt' + i);
+  if (ta) { ta.focus(); ta.select(); }
+  const done = document.getElementById('orderDone' + i);
+  if (done) done.textContent = '✓ הועתק';
 }
 function copyOrderList() {
-  const txt = orderListText();
-  if (!txt) { alert('אין מה להזמין — הכול מעל הסף.'); return; }
-  try { const p = navigator.clipboard && navigator.clipboard.writeText(txt); if (p && p.catch) p.catch(() => {}); } catch (e) {}
-  // The clipboard is unreliable inside the WebView, so the text is shown too rather than
-  // assumed to have arrived somewhere.
-  openModal('🛒 רשימת הזמנה', `<textarea class="form-input-wide" style="width:100%;height:160px;font-size:12px;" readonly>${txt.replace(/</g, '&lt;')}</textarea>
-    <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">הועתק. אפשר להדביק בוואטסאפ לספק.</div>`,
+  const groups = orderGroups();
+  if (!groups.length) { showNotice('אין מה להזמין — הכול מעל הסף.'); return; }
+  _orderGroupsShown = groups;
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const names = invSupplierNames();
+  // The clipboard is unreliable inside the WebView, so each message is shown in full too.
+  const body = groups.map((g, i) => {
+    const pick = g.supplier ? '' : [...new Set(g.lines.map((l) => l.cat))].map((cat) =>
+      `<div class="form-row" style="margin-top:4px;"><label style="font-size:12px;">ספק ל${esc(cat)}</label>
+        <select class="form-select" onchange="setInvCatSupplier(decodeURIComponent('${encodeURIComponent(cat)}'), this.value)">
+          <option value="">— בחר —</option>${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select></div>`).join('');
+    return `<div class="card" style="margin-bottom:10px;padding:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <b>${g.supplier ? '📦 ' + esc(g.supplier) : '❓ ספק לא ידוע'}</b>
+        <span><span id="orderDone${i}" style="font-size:11px;color:#34d399;"></span>
+        <button class="btn btn-sm btn-secondary" onclick="copyOrderGroup(${i})">📋 העתק</button></span></div>
+      <textarea id="orderTxt${i}" class="form-input-wide" style="width:100%;height:${60 + g.lines.length * 18}px;font-size:12px;margin-top:6px;" readonly>${esc(orderGroupText(g))}</textarea>${pick}</div>`;
+  }).join('');
+  openModal('🛒 מה להזמין — לפי ספק', body + '<div style="font-size:11px;color:var(--text-muted);">הודעה נפרדת לכל ספק — להעתיק ולהדביק בוואטסאפ שלו.</div>',
     `<button class="btn btn-secondary" onclick="closeModal()">סגור</button>`);
 }
 
@@ -10074,17 +10145,21 @@ function openInventoryEditor(id) {
     <div class="form-row"><label>שם הפריט</label><input class="form-input-wide" id="invName" value="${it.name || ''}" placeholder="20S 100A / DALY 60A / 72V 5A" style="width:170px;"></div>
     <div class="form-row"><label>כמות במלאי</label><input type="number" class="form-input" id="invQty" value="${it.qty || 0}" min="0"></div>
     <div class="form-row"><label>מתי להזמין (כמות)</label><input type="number" class="form-input" id="invLow" value="${it.low != null ? it.low : ''}" placeholder="לדוגמה 20"></div>
-    <div class="form-row"><label>הערה</label><input class="form-input-wide" id="invNote" value="${it.note || ''}" placeholder="ספק / מק\"ט" style="width:170px;"></div>`,
+    <div class="form-row"><label>הערה</label><input class="form-input-wide" id="invNote" value="${it.note || ''}" placeholder="ספק / מק\"ט" style="width:170px;"></div>
+    <div class="form-row"><label>ספק (להזמנה)</label><input class="form-input-wide" id="invSupplier" list="invSupplierList" value="${String(it.supplier || '').replace(/"/g, '&quot;')}" placeholder="${String(invSupplierOf(it) || 'לפי הקטגוריה').replace(/"/g, '&quot;')}" style="width:170px;">
+      <datalist id="invSupplierList">${invSupplierNames().map((n) => `<option value="${n.replace(/"/g, '&quot;')}">`).join('')}</datalist></div>`,
     `<button class="btn btn-primary" onclick="saveInventory('${id || ''}')">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
 }
 function saveInventory(id) {
   const name = document.getElementById('invName').value.trim();
-  if (!name) { alert('הזן שם פריט'); return; }
+  if (!name) { showNotice('הזן שם פריט'); return; }
   const lowVal = document.getElementById('invLow').value;
   const subEl = document.getElementById('invSub');
   const cat = document.getElementById('invCat').value;
   const rec = { name, cat, sub: (INV_SUB[cat] && subEl && subEl.value) || '', qty: Math.max(0, parseInt(document.getElementById('invQty').value) || 0), low: lowVal === '' ? null : (parseInt(lowVal) || 0), note: document.getElementById('invNote').value };
   const inv = getInventory();
+  const supEl = document.getElementById('invSupplier');
+  if (supEl) rec.supplier = supEl.value.trim();          // empty = order it by its category's supplier
   if (id) { const i = inv.findIndex(x => x.id === id); if (i >= 0) inv[i] = { ...inv[i], ...rec }; }
   else { inv.push({ id: 'inv' + Date.now(), ...rec }); }
   Store.set('inventory', inv); closeModal(); renderInventory();

@@ -290,6 +290,60 @@ check('the order message carries the pace', /תאי EVE 21700 50E — 1200 יח�
 check('a row with no pace still goes on the order by the old rule', /מטען 72V 5A — 4 יח׳ \(נשארו 0\)/.test(pace.text), pace.text);
 check('the shelf row says its pace and to order now', /~33[78] בחודש · מספיק לכ-6 שבועות · ⏰ להזמין עכשיו \(1200\)/.test(pace.pageText), pace.pageText.slice(0, 300));
 
+// ---- 12. one order message per supplier (2026-10-04, "הזמנה לפי ספק") ----
+// No supplier name is in the hub's code: they come from his synced price list, his per-category
+// choice, or a row's own field. Chargers sit with two suppliers, so they wait for his choice.
+// --selftest: every row loses its supplier.
+const sup = await page.evaluate((SELF) => {
+  if (SELF) window.invSupplierOf = () => '';
+  Store.set('inv_log', []); Store.set('orders', []); Store.set('jobs', []);
+  const st = Store.get('settings') || {}; delete st.invSupplierByCat; Store.set('settings', st);
+  Store.set('supplier_prices', [
+    { who: 'ספק-תאים', cat: 'ספק-תאים · 21700 · ימי', name: 'EVE 50E', ils: 7 },
+    { who: 'ספק-חלקים', cat: 'ספק-חלקים · BMS DALY', name: 'DALY 60A', ils: 50 },
+    { who: 'ספק-חלקים', cat: 'ספק-חלקים · מטענים', name: 'מטען 72V', ils: 90 },
+    { who: 'ספק-אחר', cat: 'ספק-אחר · מחירון · מטענים', name: 'מטען 60V', ils: 80 },
+    // a parts supplier naming the cell size without selling cells must not make cells ambiguous
+    { who: 'ספק-חלקים', cat: 'ספק-חלקים · מאזני סוללות', name: 'מחזיק 21700', ils: 3 }]);
+  Store.set('inventory', [
+    { id: 's1', name: 'תאי EVE 21700 50E', qty: 0, low: 100, cat: 'תאים' },
+    { id: 's2', name: 'BMS 20S 100A', qty: 0, cat: 'BMS' },
+    { id: 's3', name: 'מטען 72V 5A', qty: 0, cat: 'מטען' },
+    { id: 's4', name: 'BMS 13S 60A', qty: 0, cat: 'BMS', supplier: 'ספק-מיוחד' },
+    { id: 's5', name: 'BMS 20S 60A (יד 2)', qty: 0, cat: 'BMS' }]);
+  const g1 = orderGroups().map((g) => [g.supplier, g.lines.map((l) => l.name).join('+')]);
+  copyOrderList();
+  const modal1 = { boxes: document.querySelectorAll('[id^="orderTxt"]').length, pick: !!document.querySelector('#modalBody select, .modal select') };
+  setInvCatSupplier('מטען', 'ספק-אחר');
+  const g2 = orderGroups().map((g) => [g.supplier, g.lines.map((l) => l.name).join('+')]);
+  const text = orderListText();
+  closeModal();
+  // nothing to order: a notice, not a dialog
+  Store.set('inventory', [{ id: 'z', name: 'תאי EVE 21700 50E', qty: 5000, low: 10, cat: 'תאים' }]);
+  copyOrderList();
+  const emptyNotice = (document.getElementById('noticeBackdrop') || {}).innerText || '';
+  closeNotice();
+  // a nameless item: a notice too
+  openInventoryEditor(''); document.getElementById('invName').value = ''; saveInventory('');
+  const nameNotice = (document.getElementById('noticeBackdrop') || {}).innerText || '';
+  closeNotice(); closeModal();
+  // the editor stores a row's own supplier
+  openInventoryEditor('z'); document.getElementById('invSupplier').value = 'ספק-מיוחד'; saveInventory('z');
+  const saved = (getInventory().find((r) => r.id === 'z') || {}).supplier;
+  const st2 = Store.get('settings') || {}; delete st2.invSupplierByCat; Store.set('settings', st2);
+  Store.set('supplier_prices', []);
+  return { g1, modal1, g2, text, emptyNotice, nameNotice, saved };
+}, SELFTEST);
+check('cells and BMS go to the one supplier whose list carries them; a row may name its own',
+  JSON.stringify(pace && sup.g1) === JSON.stringify([['ספק-חלקים', 'BMS 20S 100A'], ['ספק-מיוחד', 'BMS 13S 60A'], ['ספק-תאים', 'תאי EVE 21700 50E'], ['', 'מטען 72V 5A']]), JSON.stringify(sup.g1));
+check('second-hand stock ("יד 2") is never on an order', !JSON.stringify(sup.g1).includes('יד 2'), JSON.stringify(sup.g1));
+check('chargers, carried by two suppliers, wait for his choice — one message box per supplier', sup.modal1.boxes === 4 && sup.modal1.pick, JSON.stringify(sup.modal1));
+check('choosing a supplier for a category moves its rows there', JSON.stringify(sup.g2.find(([w]) => w === 'ספק-אחר')) === JSON.stringify(['ספק-אחר', 'מטען 72V 5A']) && !sup.g2.some(([w]) => w === ''), JSON.stringify(sup.g2));
+check('each supplier gets its own message', /הזמנה מ-ספק-תאים:\n• תאי EVE 21700 50E/.test(sup.text) && /הזמנה מ-ספק-אחר:\n• מטען 72V 5A/.test(sup.text), sup.text);
+check('"nothing to order" is said in a notice', /אין מה להזמין/.test(sup.emptyNotice), sup.emptyNotice);
+check('saving an item with no name says so in a notice', /הזן שם פריט/.test(sup.nameNotice), sup.nameNotice);
+check('the item editor stores a row\'s own supplier', sup.saved === 'ספק-מיוחד', String(sup.saved));
+
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');
