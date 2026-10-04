@@ -47,7 +47,8 @@ const read = async (opts) => page.evaluate((o) => {
   if (o.extra != null) { set('dimExtra', o.extra); dimExtraTouched = true; }
   calcPackDims();
   const html = document.getElementById('dimResult').innerHTML;
-  const mm = html.match(/(\d+) × (\d+) × (\d+)/);
+  // The block is the chosen nickel's card since 2026-10-04 (one card per nickel).
+  const mm = ((document.querySelector('#dimResult .dim-nk.sel .dim-size') || {}).textContent || '').match(/(\d+) × (\d+) × (\d+)/);
   return { html, L: +mm[1], W: +mm[2], H: +mm[3], text: document.getElementById('dimResult').textContent };
 }, opts);
 
@@ -56,12 +57,14 @@ const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 
 // 16S4P = 64 cells, HIS way (2026-09-25): each 4P group across, sixteen rows along, on ניקל ב׳ —
 // the 22.5 diagonal since his re-measure of 2026-10-04 (19.49 between rows; it was 21.5 / 18.62).
-//   L = 15*19.49 + 21.15 + 3 + 22 (BMS at 60V) = 338     W = 3*22.5 + 21.15 + 3 = 92     H = 70.15 + 4 = 74
+//   L = 15*19.49 + 21.15 + 3 + 22 (BMS at 60V) = 338     W = 3*22.5 + 21.15 + 3 + 11.25 = 103     H = 70.15 + 4 = 74
+// The 11.25 is the HALF CELL (Daniel, 2026-10-04: "לתקן — להוסיף חצי תא"): rows 19.49 apart nest
+// only by sitting half a pitch over, so every other row sticks out by half a cell. It said 92.
 // The BMS allowance goes on the LENGTH since 2026-09-25; the height is the standing cells alone.
 // (The two Wellgo catalogue brackets this used — square and honeycomb 21.4 — left the list on
 // 2026-09-25; he does not build on them.)
 const honey = await read({ ...base, holder: 'diag-b' });
-check('16S4P block, ניקל ב׳ 22.5: 338 x 92 x 74', honey.L === 338 && honey.W === 92 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
+check('16S4P block, ניקל ב׳ 22.5: 338 x 103 x 74 (with the half cell)', honey.L === 338 && honey.W === 103 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
 check('and it reports 64 cells', /64 תאים/.test(honey.text), honey.text.slice(0, 80));
 // Energy and weight were taken off the result on 2026-09-26 at his word; asserted absent.
 check('no energy or weight line', !/Wh|ק"ג|אנרגיה/.test(honey.text), honey.text.slice(0, 120));
@@ -97,14 +100,14 @@ const noExtra = await read({ ...base, holder: 'diag-b', extra: SELFTEST ? 18 : 0
 check('the BMS allowance goes on the length, not the height', honey.L - noExtra.L === 22 && noExtra.H === honey.H,
   `L ${honey.L} -> ${noExtra.L}, H ${honey.H} -> ${noExtra.H}`);
 
-// Daniel measured a 72V 30Ah pack he built — 20S6P, 120 cells, twenty to a row — at 390 x
-// 135mm. That is the only ground truth this page has, so it is a test: the diagonal spacing
-// he uses must reproduce it. Tolerance 8mm, which is the width of a shrink wrap.
+// 20S6P on ניקל א׳ (22.7), no tray: six across with the half cell, twenty groups along.
+//   W = 5*22.7 + 11.35 + 21.15 + 3 = 149     L = 19*19.66 + 21.15 + 3 = 398 (no BMS allowance here)
+// This was "his measured 72V 30Ah pack: 390 x 135" until 2026-10-04, when the half cell went in at
+// his word — a block that came out 138 wide only because the half cell was missing. His 390 x 135
+// pack is reproduced where it is modelled right: on the no-template diagonal (19 / 21.4) in
+// test-oldpack, which reads it back as twenty to a row and six rows.
 const real = await read({ ...base, v: 72, ah: 30, perRow: 6, holder: 'diag-a' });
-// Compared as a SET: a block is the same block whichever way round it is reported, and
-// pinning the order would be testing which axis I happened to call the length.
-const got = [real.L, real.W].sort((a, b) => a - b);
-check('his measured 72V 30Ah pack: 390 x 135', Math.abs(got[1] - 390) <= 8 && Math.abs(got[0] - 135) <= 8, `${real.L} x ${real.W}`);
+check('20S6P on ניקל א׳: 398 x 149, the half cell included', real.L === 398 && real.W === 149, `${real.L} x ${real.W}`);
 
 // The vehicle table is the answer to "what goes in this scooter", and clicking one has to
 // leave the estimator holding that build rather than merely scrolling to it.
@@ -150,17 +153,35 @@ check('and not over the 140 counted on the square one', !/⚠/.test(ox.okSquare)
 // The drawing is the answer to "how do I lay it out", so it has to BE the layout: one circle
 // per cell, in the grid the numbers above it describe. A picture that disagrees with the
 // figures is worse than no picture.
+//
+// One card per nickel since 2026-10-04 (Daniel: "יראה לי ציור בכל אחד מ-3 הניקלים"): each of his
+// three nickels gets its block, its layout and its drawing, and the chosen one is outlined.
 const draw = await page.evaluate(() => {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30);
   clearDimVehicle();
   set('dimHolder', 'diag-a'); calcPackDims();
-  const svg = document.getElementById('dimDraw');
-  const block = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/) || [];
-  return { circles: svg.querySelectorAll('circle').length, hasSvg: !!svg.querySelector('svg'),
-           txt: svg.textContent, L: block[1], W: block[2], res: document.getElementById('dimResult').innerText };
+  const cards = [...document.querySelectorAll('#dimResult .dim-nk')];
+  const sel = document.querySelector('#dimResult .dim-nk.sel');
+  const svg = sel && sel.querySelector('svg.pack-svg');
+  const block = ((sel && sel.querySelector('.dim-size')) || {}).textContent.match(/(\d+) × (\d+) × (\d+)/) || [];
+  const fills = svg ? [...svg.querySelectorAll('circle')].map((c) => c.getAttribute('fill')) : [];
+  return { circles: svg ? svg.querySelectorAll('circle').length : 0, hasSvg: !!svg,
+           cards: cards.map((k) => k.dataset.holder + ':' + k.querySelectorAll('svg.pack-svg circle').length).join(' '),
+           selHolder: sel ? sel.dataset.holder : '',
+           groups: svg ? [...svg.querySelectorAll('text.pack-group')].map((t) => t.textContent) : [],
+           ends: svg ? [...svg.querySelectorAll('text')].map((t) => t.textContent).filter((s) => /^B[−+]$/.test(s)).join(',') : '',
+           // the first group and the second are shaded differently, the first and third alike
+           bands: fills.length >= 18 && fills[0] !== fills[6] && fills[0] === fills[12],
+           txt: svg ? svg.textContent : '', L: block[1], W: block[2], res: document.getElementById('dimResult').innerText };
 });
+check('three cards, one per nickel, each drawing the whole pack', draw.cards === 'diag-a:120 diag-b:120 square-23:120', draw.cards);
+check('the chosen nickel is the outlined card', draw.selHolder === 'diag-a', draw.selHolder);
 check('the drawing has one circle per cell (120)', draw.circles === 120, String(draw.circles));
+// "צבע לסירוגין + מספר" (2026-10-04): the groups alternate in shade and are numbered B− to B+.
+check('the groups alternate in shade', draw.bands, String(draw.bands));
+check('and are numbered from the first to the last, 1 to 20', draw.groups[0] === '1' && draw.groups[draw.groups.length - 1] === '20' && draw.groups.length >= 10, draw.groups.join(' '));
+check('with B− and B+ at the two ends', draw.ends === 'B−,B+', draw.ends);
 // The drawing's labels are the block's OWN size — they once read 473 beside a block of 476,
 // because the picture left the bracket walls out. Counts are said once, in the layout row.
 // The sizes are said once, in the rows above; the drawing carries none (2026-09-27, Daniel:
@@ -168,23 +189,31 @@ check('the drawing has one circle per cell (120)', draw.circles === 120, String(
 check('the drawing does not repeat the sizes', !/מ"מ/.test(draw.txt), draw.txt);
 const bmsDraw = await page.evaluate((SELF) => {
   const run = (x) => { document.getElementById('dimExtra').value = String(x); dimExtraTouched = true; calcPackDims();
-    const m = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/) || [];
-    return { txt: document.getElementById('dimDraw').textContent, L: m[1] }; };
-  if (SELF) window.drawPackLayout = ((f) => (o) => f({ ...o, extra: 0 }))(window.drawPackLayout);
+    const sel = document.querySelector('#dimResult .dim-nk.sel');
+    const m = (sel.querySelector('.dim-size').textContent || '').match(/(\d+) × (\d+) × (\d+)/) || [];
+    return { txt: sel.querySelector('svg.pack-svg').textContent, box: !!sel.querySelector('svg .pack-bms'), L: m[1] }; };
+  if (SELF) window.standPlan = ((f) => (o) => f({ ...o, extra: 0 }))(window.standPlan);
   return { with26: run(26), with0: run(0) };
 }, SELFTEST);
-check('and draws the BMS at the end of the block', /BMS/.test(bmsDraw.with26.txt), bmsDraw.with26);
-check('and no BMS box when there is no allowance', !/BMS/.test(bmsDraw.with0.txt), bmsDraw.with0.txt);
+check('and draws the BMS at the end of the block', /BMS/.test(bmsDraw.with26.txt) && bmsDraw.with26.box, bmsDraw.with26);
+check('and no BMS box when there is no allowance', !/BMS/.test(bmsDraw.with0.txt) && !bmsDraw.with0.box, bmsDraw.with0.txt);
 check('and does not repeat the counts', !/תאים בשורה|שורות|עיגול/.test(draw.txt), draw.txt);
 check('the layout is said his way: the group across, the series along', /רוחב 6P · אורך 20S/.test(draw.res), draw.res);
 
+// Tapping a card chooses that nickel: the selector follows, and the outline moves with it.
+const tap = await page.evaluate(() => {
+  document.querySelector('#dimResult .dim-nk[data-holder="square-23"]').click();
+  return { holder: document.getElementById('dimHolder').value,
+           sel: (document.querySelector('#dimResult .dim-nk.sel') || {}).dataset.holder };
+});
+check('tapping a nickel card chooses that nickel', tap.holder === 'square-23' && tap.sel === 'square-23', tap);
 
 // A staggered layout must actually be drawn staggered, or the picture lies about the shape.
 const stag = await page.evaluate(() => {
   // Drawn along the length now: a group is a column, and the stagger shows as a vertical
   // offset between the first cell of one group and the first of the next.
   const ys = (h) => { document.getElementById('dimHolder').value = h; calcPackDims();
-    return [...document.querySelectorAll('#dimDraw circle')].map(c => +c.getAttribute('cy')); };
+    return [...document.querySelectorAll('#dimResult .dim-nk.sel circle')].map(c => +c.getAttribute('cy')); };
   const d = ys('diag-a'), s = ys('square-23');
   return { diagFirstTwoRows: d[0] !== d[6], squareFirstTwoRows: s[0] === s[6] };
 });
@@ -275,7 +304,7 @@ check('but the layout itself still computes', /תצורה/.test(pieces.big), pie
 const nickels = await page.evaluate(() => {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
   const run = (h) => { set('dimHolder', h); set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
-    const m = document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/); return [+m[1], +m[2]]; };
+    const m = document.querySelector('#dimResult .dim-nk.sel .dim-size').textContent.match(/(\d+) × (\d+) × (\d+)/); return [+m[1], +m[2]]; };
   return { a: run('diag-a'), b: run('diag-b'), sq: run('square-23') };
 });
 check('the two diagonal nickels give different blocks', nickels.a[0] !== nickels.b[0] || nickels.a[1] !== nickels.b[1], JSON.stringify(nickels));
@@ -433,11 +462,32 @@ const hw = await page.evaluate((SELF) => {
   // a 10P group in a 170mm-wide tray: seven across is the most, so each group takes two rows of five
   useVehiclePack('אופנוע שליחויות 72V'); dimAhPending = 50; calcPackDims();
   const txt = document.getElementById('dimResult').innerText;
-  const circles = [...document.querySelectorAll('#dimDraw circle')].map((c) => [+c.getAttribute('cx'), +c.getAttribute('cy')]);
+  const circles = [...document.querySelectorAll('#dimResult .dim-nk.sel circle')].map((c) => [+c.getAttribute('cx'), +c.getAttribute('cy')]);
   clearDimVehicle();
   return { txt, n: circles.length };
 }, SELFTEST);
 check('a group too wide for the tray takes two rows, and says so', /רוחב 10P \(2 שורות\)/.test(hw.txt), hw.txt.slice(0, 260));
+
+// ...and is DRAWN in its own two rows (2026-10-04). 7P in two rows is a row of 4 and a row of 3;
+// the drawing used to pour the cells into rows of 4 one after another, so the groups ran into each
+// other and the picture had 35 rows where the size counted 40. No row of the drawing may hold two
+// groups. --selftest pours them in one after another again.
+const own = await page.evaluate((SELF) => {
+  if (SELF) window.standPlan = ((f) => (o) => {
+    const p = f(o);
+    p.cells.slice().sort((a, b) => a.x - b.x || a.y - b.y).forEach((c, i) => { c.g = Math.floor(i / o.P); });
+    return p;
+  })(window.standPlan);
+  useVehiclePack('Talaria', 72);
+  document.getElementById('dimHolder').value = 'diag-a'; calcPackDims();
+  const cells = dimLast.plan.cells;
+  const byX = new Map();
+  for (const c of cells) { const k = Math.round(c.x * 10); (byX.get(k) || byX.set(k, new Set()).get(k)).add(c.g); }
+  const txt = document.querySelector('#dimResult .dim-nk.sel').innerText;
+  clearDimVehicle();
+  return { rows: byX.size, mixed: [...byX.values()].filter((s) => s.size > 1).length, txt };
+}, SELFTEST);
+check('a two-row group is drawn in its own two rows: 40 rows, none shared', /רוחב 7P \(2 שורות\)/.test(own.txt) && own.rows === 40 && own.mixed === 0, own);
 
 // ---- the build on a label for the worker (2026-09-25) ----
 // 100 x 50mm at 300dpi is 1181 x 590 dots: one canvas pixel per printer dot, like the battery
@@ -528,7 +578,7 @@ const turn = await page.evaluate((SELF) => {
   VEHICLE_PACKS.push({ g: 'בדיקה', m: 'מגש מבחן', src: 'AI', p: 21.5, s60: 16, p60: 7, s72: 20, p72: 7, max: 140, tub: '500×145×75 מ"מ' });
   useVehiclePack('מגש מבחן', 72); document.getElementById('dimHolder').value = 'diag-b'; dimAhPending = 35; calcPackDims();
   const r = document.getElementById('dimResult').innerText;
-  const circles = document.querySelectorAll('#dimDraw circle').length;
+  const circles = document.querySelectorAll('#dimResult .dim-nk.sel circle').length;
   clearDimVehicle(); VEHICLE_PACKS.pop();
   useVehiclePack('Nami Klima', 60); document.getElementById('dimHolder').value = 'square-23'; dimAhPending = 30; calcPackDims();
   const klima = document.getElementById('dimResult').innerText;
@@ -553,15 +603,18 @@ const mx = await page.evaluate((SELF) => {
   const card = [...document.querySelectorAll('#vpList .list-item')].find((c) => /Talaria/.test(c.innerText));
   const cardTxt = card ? card.innerText : '';
   useVehiclePack('Talaria', 72);
-  const res = document.getElementById('dimResult').innerText;
+  const res = document.querySelector('#dimResult .dim-nk.sel').innerText;
+  // every nickel's card says what it takes, under its own name
+  const cards = [...document.querySelectorAll('#dimResult .dim-nk')].map((k) => k.innerText);
   const sharedAfter = !document.getElementById('dimShared').hidden;
   clearDimVehicle();
-  return { res, cardTxt, sharedOnList, sharedAfter };
+  return { res, cards, cardTxt, sharedOnList, sharedAfter };
 }, SELFTEST);
 // Talaria 385 x 171, no BMS allowance: twenty rows go in on neither nickel since the 2026-10-04
 // re-measure (22.5 / 22.7), so 72V has no maximum and 60V has one.
 check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: —/.test(mx.res), mx.res.slice(0, 400));
-check('and each nickel says how much it takes', /ניקל ב׳ \(22\.5\) — (עד 20S\d+P|לא נכנס)/.test(mx.res) && /ניקל א׳ W \(22\.7\)/.test(mx.res), mx.res.slice(-260));
+check('and each nickel\'s card says how much it takes', mx.cards.length === 3 && /^ניקל א׳ — W 22\.7/.test(mx.cards[0]) && /^ניקל ב׳ — אלכסוני 22\.5/.test(mx.cards[1]) && /^ריבועי 23/.test(mx.cards[2])
+  && mx.cards.every((k) => /מקסימום באמבטיה\s*60V: (16S\d+P · \d+Ah|—)\s*72V: (20S\d+P · \d+Ah|—)/.test(k)), mx.cards.map((k) => k.slice(0, 120)));
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
 check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /385×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
 check('the cell and nickel are chosen after the tap, not above the list', !mx.sharedOnList && mx.sharedAfter, [mx.sharedOnList, mx.sharedAfter]);
@@ -583,18 +636,20 @@ const n18 = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('choosing 18650 offers his three 18650 nickels', JSON.stringify(n18.opts18) === JSON.stringify(['diag-185', 'sq-19', 'sq-2025', 'custom']), n18.opts18);
 check('and 21700 gets its own three back', JSON.stringify(n18.opts21) === JSON.stringify(['diag-a', 'diag-b', 'square-23', 'custom']), n18.opts21);
-// 16S4P on the 18.5 diagonal: four across = 3 x 18.5 + 18.35 + 3 = 77; sixteen rows along at
-// 16.02 = 15 x 16.02 + 21.35 + 22 (BMS at 60V) = 284.
-check('an 18650 block is measured on the 18650 nickel', /גודל סוללה\s*284 × 77 × 69/.test(n18.res) && !/משוער/.test(n18.res), n18.res.slice(0, 200));
+// 16S4P on the 18.5 diagonal: four across = 3 x 18.5 + 9.25 (the half cell) + 18.35 + 3 = 86;
+// sixteen rows along at 16.02 = 15 x 16.02 + 21.35 + 22 (BMS at 60V) = 284. It is the first card.
+check('an 18650 block is measured on the 18650 nickel', /^[\s\S]*?אלכסוני 18\.5[\s\S]*?גודל סוללה\s*284 × 86 × 69/.test(n18.res) && !/משוער/.test(n18.res), n18.res.slice(0, 260));
 
-// ---- the tray size sits directly under the battery size (2026-09-27) ----
+// ---- the tray size sits at the top, right under the configuration (2026-10-04) ----
+// It sat under the battery size until the blocks moved into one card per nickel; now it is the
+// one tray all three cards below are read against.
 const order = await page.evaluate(() => {
   useVehiclePack('Nami Klima', 72);
-  const keys = [...document.querySelectorAll('#dimResult .dim-kv span')].map((s) => s.textContent.trim());
+  const keys = [...document.querySelectorAll('#dimResult > .dim-kv span')].map((s) => s.textContent.trim());
   clearDimVehicle();
   return keys;
 });
-check('the tray size is the row right under the battery size', order.indexOf('גודל אמבטיה') === order.indexOf('גודל סוללה') + 1, order);
+check('the tray size is the row right under the configuration', order.indexOf('תצורה') >= 0 && order.indexOf('גודל אמבטיה') === order.indexOf('תצורה') + 1, order);
 
 // ---- the Bomber Plus carries its BMS on top (2026-09-27; it is 22S15P, 2026-09-28) ----
 const top = await page.evaluate((SELF) => {
@@ -603,13 +658,13 @@ const top = await page.evaluate((SELF) => {
   useVehiclePack('Bomber Plus 15kW', 72);
   const res = document.getElementById('dimResult').innerText;
   const chip = document.getElementById('dimVehChip').innerText;
-  const box = /BMS/.test(document.getElementById('dimDraw').textContent);
+  const box = !!document.querySelector('#dimResult svg .pack-bms');
   const label = document.getElementById('dimExtraLabel').textContent;
   clearDimVehicle();
   return { res, chip, box, label };
 }, SELFTEST);
-// Since 2026-10-04 the build is not repeated on the bar: it is drawn below, with its Ah and BMS.
-check('his Bomber Plus build is shown once, with its Ah and BMS', !/נבנה במעבדה/.test(top.chip) && /Plus — 22S15P[\s\S]*75Ah[\s\S]*JK/.test(top.res), [top.chip, top.res.slice(0, 160)]);
+// 2026-10-04: "זה לא מעניין שתכתוב מה בניתי" — no build history on the bar or on the page.
+check('the Plus page carries no build history', !/נבנה במעבדה|22S15P|הסוללות שבנית/.test(top.chip + top.res), [top.chip, top.res.slice(0, 160)]);
 // At 72V the frame is filled with the build he named for next time: 20S16P, 320 of its 330 places.
 check('and at 72V the build filled in is his next one, 20S16P', /נכנסת — 20S16P[^,]*, 320 תאים/.test(top.res), top.res.slice(0, 120));
 // The BMS on top still decides where the allowance goes (the label and the drawing say so), though
@@ -672,7 +727,7 @@ const rb = await page.evaluate((SELF) => {
   out.hasBest = !!document.querySelector('#dimResult .dim-best');
   if (out.hasBest) applyDimBest();
   out.after = res();
-  out.afterL = +((document.getElementById('dimResult').innerHTML.match(/(\d+) × (\d+) × (\d+)/) || [])[1] || 0);
+  out.afterL = +((((document.querySelector('#dimResult .dim-nk.sel .dim-size') || {}).textContent || '').match(/(\d+) × (\d+) × (\d+)/) || [])[1] || 0);
   // one list: his tray on its vehicle's card, and a tray for an unknown vehicle listed first
   localStorage.setItem('gp_dims', JSON.stringify([
     { id: 'dz', model: 'Zero 10X', l: 455, w: 134, h: 58, measured: true },
@@ -704,76 +759,68 @@ check('a tray for a vehicle not in the table is listed first', rb.kugooFirst, rb
 check('there is one list, not two', rb.oneList, rb.oneList);
 check('picking his own tray judges the build against it', rb.kugooMine && /✅ נכנס ל-Kugoo G2/.test(rb.kugoo), rb.kugoo.slice(0, 60));
 
-// ---- cells lying, for the Bombers (2026-09-27) ----
-// The one thing the lying estimate is fitted to is his own Bomber Plus: 2 stacks of 165 on the
-// 23 square = 330 = 22S15P. If the geometry or the fill drifts, that build stops coming back.
+// ---- cells lying, for the Bombers: one card per nickel (2026-10-04) ----
+// The frame's side is his biggest build's outline, filled on each nickel ("צורת השלדה, ממולאת לפי
+// כל ניקל"). On the build's own nickel the fill must give his build back cell for cell: the Plus is
+// 165 a side on the 23 square, two stacks = 330 = 20S16P at 72V; the regular Bomber is his blue
+// 20S17P, 170 a side on the 19 square in 18650. If the outline or the fill drifts, those stop
+// coming back. --selftest narrows the Plus to one stack and drops a row from the regular's build.
 const lying = await page.evaluate((SELF) => {
-  // --selftest: a frame 100mm across takes one stack, not two, so 330 must not come back.
   const res = (m, V, h) => {
     useVehiclePack(m, V);
     if (h) { document.getElementById('dimHolder').value = h; calcPackDims(); }
     return document.getElementById('dimResult').textContent;
   };
-  const r = SELF ? bomberLying({ L: 393, H: 255, across: 100 }, DIM_CELLS['21700-50e'], 23, 23)
-    : bomberLying(bomberSide(vehicleByName('Bomber Plus 15kW')), DIM_CELLS['21700-50e'], 23, 23);
+  const svgOf = (h) => document.querySelector(`#dimResult .dim-nk[data-holder="${h}"] svg.pack-svg`);
+  // the drawing as data: cells per row, bottom up, read off the SVG itself
+  const shape = (svg) => {
+    if (!svg) return { cells: 0, rows: '' };
+    const ys = [...svg.querySelectorAll('circle')].map((e) => Math.round(+e.getAttribute('cy')));
+    const rows = [...new Set(ys)].sort((a, b) => b - a);
+    return { cells: ys.length, rows: rows.map((y) => ys.filter((yy) => yy === y).length).join(',') };
+  };
+  const C = DIM_CELLS['21700-50e'];
+  const fr = bomberFrame(vehicleByName('Bomber Plus 15kW'));
+  const across = SELF ? 100 : fr.across;
+  const stacks = Math.floor((across - 2 * DIM_WALL) / (C.len + DIM_CAP));
+  const sq = bomberFill(fr, C, 23, 23).cells.length;
   // --selftest: read the maker's table instead of his measurement, which the check must catch.
   const regName = 'Bomber רגיל 3-12kW';
   const regTub = SELF ? tubOf({ tub: '355×120×185' }) : tubOf(vehicleByName(regName));
   // A frame too narrow for a lying 21700 (no row is, since the FC-1 was measured at 90): a stand-in.
-  const narrow = bomberLyingHtml({ m: 'Bomber test', tub: '280×75×150 מ"מ' }, DIM_CELLS['21700-50e'], 21.5, 18.62, 72, 100, 'diag-b');
-  const regHtml = (res('Bomber רגיל 3-12kW', 72), document.getElementById('dimResult').innerHTML);
-  // --selftest: drop a row from his blue 20S17P, which the drawing must then show short of 170.
-  if (SELF) VEHICLE_PACKS.find((v) => v.m === 'Bomber רגיל 3-12kW').builds[0].stacks[0].rows.pop();
-  const blue = (res('Bomber רגיל 3-12kW', 72), document.querySelector('#dimResult .bomber-build'));
-  const blueSvg = blue && blue.querySelector('svg.bomber-build-svg');
-  const builds = document.querySelectorAll('#dimResult .bomber-build').length;
-  // The drawings as data: cells per row (bottom up) and per column, read off the SVG itself.
-  const svgOf = (i) => [...document.querySelectorAll('#dimResult .bomber-build')][i]?.querySelector('svg.bomber-build-svg');
-  const shape = (svg) => {
-    if (!svg) return { cells: 0, rows: '', cols: '' };
-    const cs = [...svg.querySelectorAll('circle')].map((e) => [+e.getAttribute('cx'), +e.getAttribute('cy')]);
-    const key = (v) => Math.round(v);
-    const ys = [...new Set(cs.map(([, y]) => key(y)))].sort((a, b) => b - a);
-    const xs = [...new Set(cs.map(([x]) => key(x)))].sort((a, b) => a - b);
-    return { cells: cs.length, rows: ys.map((y) => cs.filter(([, yy]) => key(yy) === y).length).join(','),
-             cols: xs.map((x) => cs.filter(([xx]) => key(xx) === x).length).join(',') };
-  };
-  res('Bomber רגיל 3-12kW', 72);
-  const gold = shape(svgOf(1));
-  res('Bomber Plus 15kW', 72, 'square-23');
-  const plusShape = shape(svgOf(0));
-  const plusChip = (res('Bomber Plus 15kW', 72, 'square-23'), document.getElementById('dimVehChip').textContent);
-  const plusDraw = document.querySelectorAll('#dimDraw circle').length;
-  return { r, plusChip, plusDraw, plus: res('Bomber Plus 15kW', 72, 'square-23'), fc1: res('Bomber FC-1', 72, 'diag-b'), narrow, regHtml,
-           goldCells: gold.cells, goldCols: gold.cols, plusCells: plusShape.cells, plusRows: plusShape.rows,
-           blue: blue ? blue.textContent : '', blueCells: blueSvg ? blueSvg.querySelectorAll('circle').length : 0, builds,
-           surron: res('Sur-Ron', 72), regular: res(regName, 72), regTub,
-           plusTub: tubOf(vehicleByName('Bomber Plus 15kW')),
-           plusHtml: (res('Bomber Plus 15kW', 72, 'square-23'), document.getElementById('dimResult').innerHTML) };
+  const narrow = bomberHtml({ m: 'Bomber test', tub: '280×75×150 מ"מ' }, C, 21700, 'diag-b', 72, 100, () => [22.5, 19.49]).html;
+  const plus = res('Bomber Plus 15kW', 72, 'square-23');
+  const plusShape = shape(svgOf('square-23'));
+  const plusCards = [...document.querySelectorAll('#dimResult .dim-nk')]
+    .map((k) => k.dataset.holder + ':' + k.querySelectorAll('circle').length + ':' + k.querySelectorAll('polygon.pack-outline').length).join(' ');
+  const plusChip = document.getElementById('dimVehChip').textContent;
+  const plusHtml = document.getElementById('dimResult').innerHTML;
+  // the regular Bomber in 18650, on the 19 square his builds are on
+  document.getElementById('dimCell').value = '18650-25p';
+  if (SELF) VEHICLE_PACKS.find((v) => v.m === regName).builds[0].stacks[0].rows.pop();
+  const reg18 = res(regName, 72, 'sq-19');
+  const regShape = shape(svgOf('sq-19'));
+  document.getElementById('dimCell').value = '21700-50e';
+  return { sq, stacks, plus, plusShape, plusCards, plusChip, plusHtml, narrow, reg18, regShape,
+           fc1: res('Bomber FC-1', 72, 'diag-b'), surron: res('Sur-Ron', 72), regular: res(regName, 72), regTub,
+           plusTub: tubOf(vehicleByName('Bomber Plus 15kW')) };
 }, SELFTEST);
-check('his Bomber Plus comes back as 2 stacks of 165 = 330 cells', lying.r.stacks === 2 && lying.r.perSide === 165 && lying.r.n === 330, lying.r);
-check('which at 72V is 20S16P, 80Ah (his next build)', /20S16P · 80Ah/.test(lying.plus), lying.plus.slice(-260));
-// His own rows (16,16,17×5,16,13,11,8 = 165), drawn — the build sheet for the Plus.
-// His own rows (16,16,17×5,16,13,11,8 = 165), drawn — the build sheet for the Plus: the drawing's
-// row counts, bottom to top, are his.
-check('the Plus build sheet draws his 165 a side', lying.plusRows === '16,16,17,17,17,17,17,16,13,11,8' && lying.plusCells === 165, [lying.plusRows, lying.plusCells]);
+check('his Bomber Plus comes back as 2 stacks of 165 = 330 cells', lying.stacks === 2 && lying.sq === 165, [lying.stacks, lying.sq]);
+check('which at 72V is 20S16P, 80Ah (his next build)', /20S16P · 80Ah/.test(lying.plus), lying.plus.slice(0, 260));
+// The 23-square card fills the outline of his own Plus: his rows, bottom to top, cell for cell.
+check('on its own nickel the Plus card is his 165 a side, row for row', lying.plusShape.rows === '16,16,17,17,17,17,17,16,13,11,8' && lying.plusShape.cells === 165, lying.plusShape);
+check('the Plus has a card per nickel, each drawn inside the frame\'s outline', /^diag-a:\d+:1 diag-b:\d+:1 square-23:165:1$/.test(lying.plusCards), lying.plusCards);
+check('the regular Bomber in 18650 on the 19 square is his blue 20S17P: 170 a side, 340', lying.regShape.cells === 170 && /170 תאים × 2 ערימות = 340/.test(lying.reg18) && /20S17P/.test(lying.reg18), [lying.regShape, lying.reg18.slice(0, 160)]);
 check('a Bomber frame too narrow for a lying cell says so', /צר מדי לתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
 check('the FC-1 (90 across, his tape) fits a 72V build lying on ניקל ב׳', /נכנס עד: 72V 20S8P · 40Ah|נכנסת — 20S8P · 40Ah, 160 תאים · המקסימום/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
-// The build sheet (2026-09-28: "ציור סכמה של הסוללות שבניתי"): every cell of his blue 20S17P
-// drawn, 170 a side, from his own table — and all three of his builds under the regular Bomber.
-check('the regular Bomber shows his three builds', lying.builds === 3, String(lying.builds));
-check('his blue 20S17P is drawn cell by cell, 170 a side', lying.blueCells === 170 && /הסוללה הכחולה — 20S17P/.test(lying.blue), [lying.blueCells, lying.blue.slice(0, 120)]);
-// 2026-09-28: the gold one is 20S17P in HIS shape (11 of 10, 2 of 9, 2 of 8, 3 of 7, 1 of 5 from
-// the right) — 170, confirmed; the green one is his 20S7P = 14 × 10.
-check('the gold 20S17P is his shape, 170, confirmed', lying.goldCells === 170 && lying.goldCols === '5,7,7,7,8,8,9,9,10,10,10,10,10,10,10,10,10,10,10' && !/טיוטה/.test(lying.regHtml), [lying.goldCells, lying.goldCols]);
-check('the green one is his 20S7P, 140 in one stack', /הסוללה הירוקה — 20S7P\u200F · \u200F18650\u200F · \u200F140 תאים/.test(lying.regular), lying.regular.slice(0, 200));
+// 2026-10-04: "זה לא מעניין שתכתוב מה בניתי" — his builds are the frame's shape, not a list.
+check('no Bomber page lists his builds', !/הסוללות שבנית|הסוללה הכחולה|הסוללה הזהובה|הסוללה הירוקה|bomber-build/.test(lying.plusHtml + lying.regular + lying.fc1), lying.regular.slice(0, 120));
 check('the lying answer is for Bombers only', /נכנס עד:|· המקסימום/.test(lying.plus) && !/נכנס עד:|· המקסימום/.test(lying.surron), lying.surron.slice(-80));
 // 2026-10-04 ("יש כאן תוכן כפול"): the chip names the vehicle and the result does not again; the
-// build is drawn below, not also listed in the chip; the chosen pack that IS the most it takes is
-// one line, not two; and the Plus, his own confirmed side, is not called an AI estimate.
+// chosen pack that IS the most it takes is one line, not two; and the Plus, his own confirmed side,
+// is not called an AI estimate.
 check('the Bomber result does not repeat the vehicle name', !/🏍️ Bomber Plus/.test(lying.plus), lying.plus.slice(0, 80));
-check('the chip does not repeat the build the drawing shows', !/נבנה במעבדה/.test(lying.plusChip), lying.plusChip);
-check('a Bomber page has no standing grid under his builds', lying.plusDraw === 0, lying.plusDraw);
+check('the chip does not repeat a build', !/נבנה במעבדה/.test(lying.plusChip), lying.plusChip);
 check('the Plus chip says measured, not AI', /✓ נמדד/.test(lying.plusChip) && !/הערכת AI/.test(lying.plusChip), lying.plusChip);
 check('the most it takes and the chosen pack are one line when they are the same pack', /✅ נכנסת — 20S16P · 80Ah, 320 תאים · המקסימום/.test(lying.plus) && !/נכנס עד:/.test(lying.plus), lying.plus.slice(0, 160));
 // What he asked for (2026-09-28: "מה זה הסיבוך הזה ... תמחק תוכן מיותר"): a Bomber's page is the
@@ -788,11 +835,33 @@ check('the regular Bomber reads what his builds prove (364×125×192), not the m
 check('the Plus is not judged against its frame standing (no "does not fit" on his own build)',
   !lying.plusTub && !/לא נכנס ל-Bomber Plus/.test(lying.plus), [lying.plusTub, lying.plus.slice(0, 80)]);
 
-// The Silver Fish (Daniel, 2026-10-04): his e-bike case, 850 × 95 × 70, and his 72V build — "24
-// שורות כל שורה 4 תאים ואז עוד 8 שורות 3 בשורה כדי שיהיה מקום ל-BMS" = 120 = 20S6P, 30Ah. The case
-// is NOT judged standing: 70 is under a standing 21700 in its holders (74), and the page must not
-// print ⛔ over his own build. --selftest takes the case away, which sends the row down the
-// scooter path: no case line, no drawing, a standing grid, and "הערכת AI" on the chip.
+// ---- every vehicle, one sweep (2026-10-04) ----
+// A card per nickel with its drawing (one, the 23 square, for the Silver Fish), the worker's label
+// drawing exactly the chosen card, and no "what I built" anywhere. --selftest puts the old build
+// list back on one page.
+const sweep = await page.evaluate((SELF) => {
+  const bad = [];
+  document.getElementById('dimCell').value = '21700-50e';
+  for (const v of VEHICLE_PACKS) {
+    useVehiclePack(v.m);
+    const r = document.getElementById('dimResult');
+    if (SELF && v.m === 'Bomber Plus 15kW') r.insertAdjacentHTML('beforeend', '<div>הסוללות שבנית</div>');
+    const cards = [...r.querySelectorAll('.dim-nk')];
+    const want = v.case ? 1 : 3;
+    if (cards.length !== want || !cards.every((k) => k.querySelector('svg.pack-svg circle')) || /הסוללות שבנית/.test(r.textContent)) bad.push(v.m + ':' + cards.length);
+    const sel = r.querySelector('.dim-nk.sel');
+    if (!sel || !dimLast || dimLast.plan.cells.length !== sel.querySelectorAll('circle').length) bad.push(v.m + ' label');
+  }
+  clearDimVehicle();
+  return bad;
+}, SELFTEST);
+check('every vehicle: its nickel cards and drawings, the label = the chosen card, no build list', sweep.length === 0, sweep.join(', '));
+
+// ---- the Silver Fish (Daniel, 2026-10-04) ----
+// His e-bike case, 850 × 95 × 70, and his 72V layout: "24 שורות כל שורה 4 תאים ואז עוד 8 שורות 3
+// בשורה כדי שיהיה מקום ל-BMS" = 120 = 20S6P, 30Ah. Square only ("אין אלכסון בסילבר פיש"), its height
+// not judged ("המארז מתגמש"), and no build history on the page. --selftest takes the case away,
+// which sends the row down the scooter path: three cards, no case line, "הערכת AI" on the chip.
 const fish = await page.evaluate((SELF) => {
   const name = 'סילבר פיש 72V';
   const v = VEHICLE_PACKS.find((x) => x.m === name);
@@ -800,31 +869,34 @@ const fish = await page.evaluate((SELF) => {
   document.getElementById('dimCell').value = '21700-50e';
   useVehiclePack(name);
   const out = document.getElementById('dimResult');
-  const svg = out.querySelector('.bomber-build svg.bomber-build-svg');
-  const cs = svg ? [...svg.querySelectorAll('circle')].map((e) => [Math.round(+e.getAttribute('cx')), Math.round(+e.getAttribute('cy'))]) : [];
-  const ys = [...new Set(cs.map(([, y]) => y))].sort((a, b) => b - a);
-  const xs = [...new Set(cs.map(([x]) => x))].sort((a, b) => a - b);
+  const cards = [...out.querySelectorAll('.dim-nk')];
+  const svg = cards[0] && cards[0].querySelector('svg.pack-svg');
+  const cs = svg ? [...svg.querySelectorAll('circle')].map((e) => Math.round(+e.getAttribute('cx'))) : [];
+  const xs = [...new Set(cs)].sort((a, b) => a - b);
+  const label = dimLast ? dimLast.plan.cells.length : 0;
   renderVehiclePacks();
   const card = [...document.querySelectorAll('#vpList .list-item')].find((r) => ((r.querySelector('.list-item-title') || {}).textContent || '').trim() === name);
-  return { text: out.textContent, cells: cs.length,
-           lines: ys.map((y) => cs.filter(([, yy]) => yy === y).length).join(','),
-           cols: xs.map((x) => cs.filter(([xx]) => xx === x).length).join(','),
-           bms: !!(svg && svg.querySelector('rect.build-bms') && /BMS/.test(svg.textContent)),
-           grid: document.querySelectorAll('#dimDraw circle').length,
+  return { text: out.textContent, cards: cards.map((k) => k.dataset.holder).join(' '), cells: cs.length,
+           cols: xs.map((x) => cs.filter((xx) => xx === x).length).join(','),
+           bms: !!(svg && svg.querySelector('.pack-bms') && /BMS/.test(svg.textContent)),
+           groups: svg ? [...svg.querySelectorAll('text.pack-group')].map((t) => t.textContent) : [],
+           size: ((cards[0] && cards[0].querySelector('.dim-size')) || {}).textContent || '', label,
            chip: document.getElementById('dimVehChip').textContent,
            card: card ? card.textContent.replace(/\s+/g, ' ') : null, kind: v ? vehType(v) : '' };
 }, SELFTEST);
-check('the Silver Fish opens on his 72V build: 20S6P, 30Ah, 120 cells, the most the case takes',
+check('the Silver Fish opens on its 72V pack: 20S6P, 30Ah, 120 cells, the most the case takes',
   /✅ נכנסת — 20S6P · 30Ah, 120 תאים · המקסימום/.test(fish.text), fish.text.slice(0, 160));
-check('with the case he measured, and no ⛔ over his own build',
-  /מארז: 850 × 95 × 70/.test(fish.text) && !/לא נכנס|⛔/.test(fish.text), fish.text.slice(0, 200));
-// Drawn the long way: three lanes of 32 and one of 24 — i.e. his 24 rows of 4, then 8 rows of 3.
-check('his build sheet: 24 rows of 4, then 8 rows of 3, drawn cell by cell',
-  fish.cells === 120 && fish.lines === '32,32,32,24' && fish.cols === Array(24).fill(4).concat(Array(8).fill(3)).join(','),
-  [fish.cells, fish.lines, fish.cols]);
-check('and the free place is marked BMS', fish.bms, String(fish.bms));
-check('his words for the build are on the page', /24 שורות של 4, ואז 8 שורות של 3/.test(fish.text), fish.text.slice(0, 200));
-check('no standing grid under his build', fish.grid === 0, String(fish.grid));
+check('with the case he measured, its height not judged, and no ⛔',
+  /גודל מארז\s*850 × 95 × 70 מ"מ · הגובה לא נבדק/.test(fish.text) && !/לא נכנס|⛔/.test(fish.text), fish.text.slice(0, 220));
+check('one card only, the 23 square: no diagonal in a Silver Fish', fish.cards === 'square-23', fish.cards);
+// Drawn the long way: each column is one of his rows across the 95.
+check('24 rows of 4, then 8 rows of 3, cell by cell: a 737 x 93 block',
+  fish.cells === 120 && fish.cols === Array(24).fill(4).concat(Array(8).fill(3)).join(',') && /737 × 93/.test(fish.size),
+  [fish.cells, fish.cols, fish.size]);
+check('the BMS sits in the free strip beside the short rows', fish.bms, String(fish.bms));
+check('its twenty groups are numbered', fish.groups[0] === '1' && fish.groups[fish.groups.length - 1] === '20', fish.groups.join(' '));
+check('no build history on the page', !/שבנית|24 שורות של 4|נבנה במעבדה/.test(fish.text + fish.chip), fish.text.slice(0, 200));
+check('the worker\'s label draws the same 120 cells', fish.label === 120, fish.label);
 check('the chip and the card say measured, with the case size', /✓ נמדד/.test(fish.chip) && !/הערכת AI/.test(fish.chip)
   && /✓ נמדד/.test(fish.card || '') && /850×95×70/.test(fish.card || ''), [fish.chip, fish.card]);
 check('an e-bike is drawn as a bicycle', fish.kind === 'ebike', fish.kind);

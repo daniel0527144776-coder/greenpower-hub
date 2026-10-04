@@ -79,7 +79,12 @@ check('and it says so', /ידני/.test(held.note), held.note);
 // small in plan and tall enough for another standing cell; never in a scooter tub.
 const stack = await page.evaluate((SELF) => {
   if (SELF) window.stackAllowed = () => false;  // the old behaviour: never folded unless typed
-  const r = (name, ah) => { useVehiclePack(name); dimAhPending = ah; calcPackDims(); return document.getElementById('dimResult').innerText; };
+  // The answer and the CHOSEN nickel's card (2026-10-04): another nickel's card may well need a
+  // fold the chosen one does not.
+  const r = (name, ah) => { useVehiclePack(name); dimAhPending = ah; calcPackDims();
+    const res = document.getElementById('dimResult');
+    return [...res.children].filter((e) => !e.classList.contains('dim-nks')).map((e) => e.innerText).join('\n')
+      + '\n' + ((res.querySelector('.dim-nk.sel') || {}).innerText || ''); };
   return {
     field: !!document.getElementById('dimLayers'),
     moto40: r('אופנוע שליחויות 72V', 35),    // 20S7P: seven across a 170mm tray, twenty rows along
@@ -101,14 +106,17 @@ check('a scooter tub is never folded', /⛔/.test(stack.scooter) && !/בקיפו
 const rec = await page.evaluate(() => {
   // The OX is the one row with a measured tub, so the recommendation has something real to
   // fit into rather than an estimate.
-  // A stand-in 363 x 171 tray, 16S8P, no BMS allowance: sixteen rows along are 362mm on ניקל ב׳
-  // (22.5) and 365 on ניקל א׳ (22.7), and eight straight across the square 23 are 185 — so ב only.
-  // (It was the Talaria on the 21.5 nickel until his re-measure of 2026-10-04.)
+  // A stand-in 374 x 171 tray, 16S8P, no BMS allowance: eight nested across, sixteen groups along
+  // with the half cell are 373mm on ניקל ב׳ (22.5) and 376 on ניקל א׳ (22.7), and eight straight
+  // across the square 23 are 185 — so ב only. (363 until the half cell went in, 2026-10-04.)
   document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
-  VEHICLE_PACKS.push({ g: 'בדיקה', m: 'מגש מבחן', src: 'AI', p: 22.5, s60: 16, p60: 8, s72: 20, p72: 8, max: 128, tub: '363×171×140 מ"מ' });
+  VEHICLE_PACKS.push({ g: 'בדיקה', m: 'מגש מבחן', src: 'AI', p: 22.5, s60: 16, p60: 8, s72: 20, p72: 8, max: 128, tub: '374×171×140 מ"מ' });
   useVehiclePack('מגש מבחן', 60);
   calcPackDims();
   const html = document.getElementById('dimResult').innerHTML;
+  // each nickel's card, as "holder:badge:tags"
+  const cards = [...document.querySelectorAll('#dimResult .dim-nk')].map((k) => k.dataset.holder + ':'
+    + ((k.querySelector('.dim-badge') || {}).textContent || '') + ':' + [...k.querySelectorAll('.dim-tag')].map((t) => t.textContent).join('+'));
   clearDimVehicle(); VEHICLE_PACKS.pop();
   const order = holdersFor(21700).slice();
   // and the OX: his count is a ceiling, not a layout. 20S7P on the square holder is exactly the
@@ -117,13 +125,14 @@ const rec = await page.evaluate(() => {
   useVehiclePack('Inokim OX', 72);
   document.getElementById('dimHolder').value = 'square-23'; calcPackDims();
   const ox = document.getElementById('dimResult').innerText;
-  return { html, order, ox };
+  return { html, order, ox, cards };
 });
 check('the densest holder is tried first', rec.order[0] === 'diag-b', rec.order.join(','));
 check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), rec.html.slice(0, 80).replace(/<[^>]*>/g, ''));
 // Densest FIRST is only right if it also has to fit: a recommendation that ignores whether the
-// pack goes in is just the first item of a list.
-check('and it only recommends one that fits', /מומלץ: ניקל ב׳/.test(rec.html) && /✗[^·]*ניקל א׳/.test(rec.html.replace(/<[^>]*>/g, '')), rec.html.replace(/<[^>]*>/g, '').slice(-120));
+// pack goes in is just the first item of a list. Since 2026-10-04 each nickel is its own card.
+check('and it only recommends one that fits', rec.cards.length === 3 && /^diag-b:✓ נכנס:.*מומלץ/.test(rec.cards.find((k) => k.startsWith('diag-b')) || '')
+  && /^diag-a:✗ לא נכנס:(?!.*מומלץ)/.test(rec.cards.find((k) => k.startsWith('diag-a')) || '') && /^square-23:✗ לא נכנס/.test(rec.cards.find((k) => k.startsWith('square-23')) || ''), rec.cards);
 check('a counted tray is still judged by the layout, not the count alone', /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.ox), rec.ox.slice(0, 90));
 
 // ---- 4b. the tray HEIGHT, which was stored and never read until 2026-09-22 ----
@@ -200,8 +209,8 @@ check('but the pack is still computed', over.stillComputed, over.text);
 const side = await page.evaluate(() => {
   useVehiclePack('Sur-Ron');
   calcPackDims();
-  const d = document.getElementById('dimDraw');
-  return { svgs: d.querySelectorAll('svg').length, hasSide: /מבט מהצד/.test(d.textContent),
+  const d = document.getElementById('dimResult');
+  return { svgs: d.querySelectorAll('.dim-nk svg.pack-svg').length, hasSide: /מבט מהצד/.test(d.textContent),
     hasBms: /BMS/.test(d.textContent), hasSideFn: typeof window.sideElevation === 'function' };
 });
 // The side elevation was REMOVED on 2026-09-22 (Daniel asked for it gone). These assert its

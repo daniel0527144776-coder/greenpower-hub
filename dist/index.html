@@ -197,6 +197,19 @@ body { min-height: 100vh; }
 .dim-rec { margin-top:6px; font-size:11.5px; }
 .dim-holder { white-space:nowrap; margin-inline-end:10px; }
 .dim-over-sub { font-weight:400; font-size:11px; margin-top:2px; }
+/* one card per nickel (2026-10-04) — the chosen one outlined, tap another to choose it */
+.dim-nks { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+.dim-nk { border:1px solid var(--border); border-radius:8px; padding:8px 10px; cursor:pointer; }
+.dim-nk.sel { border-color:var(--primary); box-shadow:inset 0 0 0 1px var(--primary); }
+.dim-nk-head { display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:13px; margin-bottom:2px; }
+.dim-nk-head b { margin-inline-end:auto; }
+.dim-badge { font-size:12px; font-weight:700; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+.dim-badge.ok { color:#34d399; background:rgba(52,211,153,.12); }
+.dim-badge.no { color:var(--danger); background:rgba(239,68,68,.12); }
+.dim-tag { font-size:11px; padding:1px 7px; border-radius:10px; border:1px solid var(--border); color:var(--text-muted); }
+.dim-tag.ok { border-color:#34d399; color:#34d399; }
+.dim-nk .pack-svg { display:block; margin:8px auto 0; }
+.dim-nk-note { font-size:11px; color:var(--text-muted); margin-top:4px; }
 .info-banner { background: var(--primary-light); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; font-size: 12.5px; color: var(--primary-dark); display: flex; align-items: center; gap: 8px; }
 
 /* Section divider */
@@ -1148,7 +1161,6 @@ body { min-height: 100vh; }
       </div>
     </div>
     <div id="dimResult" class="dim-card"></div>
-    <div id="dimDraw" style="margin-top:10px;overflow-x:auto;"></div>
     <button class="btn btn-secondary btn-block btn-sm" style="margin-top:10px;" onclick="printPackLabel()">🏷️ הדפס מדבקה לעובד</button>
   </div>
   </div>
@@ -2588,7 +2600,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v384';
+const HUB_BUILD = 'v385';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7566,68 +7578,85 @@ const DIM_PITCH = {
 };
 const DIM_WALL = 1.5;        // bracket edge either side
 const DIM_CAP = 4;           // holder caps above and below the cell
-// Draws the cell grid to scale — every circle is a cell where it actually sits, so the
-// picture IS the build instruction: count along a row, count the rows, see where the last
-// row runs short. Drawn in real millimetres and scaled once at the end, because doing the
-// arithmetic in screen pixels is how a diagram stops matching the numbers printed above it.
+// ---- THE DRAWING: one engine for every card (2026-10-04) ------------------------------------
+// Daniel: "צריך שהעמוד יהיה יותר מקצועי ויראה לי ציור בכל אחד מ-3 הניקלים". Each nickel card
+// draws a PLAN: the cells in real millimetres, each with its parallel group, and what surrounds
+// them (the BMS, a frame's outline). The card's SVG and the label for the worker are drawn from
+// the same plan, so the two cannot disagree; the label used to draw its own copy of the grid.
 //
-// The parallel groups are shaded in alternating bands: cells welded to each other are one
-// band, which is the thing a photo of someone else's pack never tells you.
-// The same block seen from the SIDE. Height is the measurement this project has least of, and
-// the one that decides whether a second layer is possible at all — a plan view cannot show it,
-// and every "will it fit" argument ends up there.
-
-
-function drawPackLayout(o) {
-  const box = document.getElementById("dimDraw");
-  if (!box) return;
-  const { cols, rows, pitch, rowPitch, dia, stagger, N, P, layers } = o;
-  // Not for a Bomber (2026-10-04, his choice): it is built with the cells lying, and its page
-  // already draws the packs he built that way; a standing grid under them was a second picture.
-  // Nor for an e-bike case, whose page draws his build the same way (2026-10-04).
-  if (!cols || !rows || isBomber(dimVehicle) || (dimVehicle && dimVehicle.case)) { box.innerHTML = ""; return; }
-  // Drawn ALONG THE LENGTH, the way he builds: each column of circles is one row of the
-  // bracket across the pack's width — a parallel group — and the series climbs left to right.
-  // The BMS allowance sits at the end of the length, drawn as a box of its own, and the labels
-  // are the whole block: the same numbers as the size row.
-  // Orientation B (the bracket's straight rows along the length) puts the half-pitch offset on
-  // the length and the nested step across; A the other way round.
+// Every circle is a cell where it actually sits. The groups alternate in shade and are numbered
+// in the order the series runs, B− to B+ (his answer: "צבע לסירוגין + מספר").
+//
+// A standing pack is drawn ALONG ITS LENGTH, the way he builds: each column of circles is one row
+// of the bracket across the pack's width, and the series climbs left to right. Orientation B (the
+// bracket's straight rows along the length) puts the half-pitch offset on the length; A across.
+function standPlan(o) {
+  const { cols, rows, pitch, rowPitch, dia, N, P, layers } = o;
   const B = o.orient === 'B';
+  const stagger = rowPitch < pitch - 0.01 && (B ? cols > 1 : rows > 1);
   const aStep = B ? pitch : rowPitch, cStep = B ? rowPitch : pitch;
-  const lenMM = (rows - 1) * aStep + dia;
-  const widMM = (cols - 1) * cStep + dia;
-  const bms = Math.max(0, o.extra || 0), wall = o.wall || 0;
-  const drawL = lenMM + (B && stagger ? pitch / 2 : 0);
-  const drawH = widMM + (!B && stagger ? pitch / 2 : 0);
-  const PAD = 26;
-  const scale = Math.min(1, (340 - PAD * 2) / (drawL + bms));
-  const W = Math.round((drawL + bms) * scale) + PAD * 2, H = Math.round(drawH * scale) + PAD * 2;
-  const r = (dia / 2) * scale;
-  const perLayer = Math.ceil(N / (layers || 1));
-  let cells = "", n = 0;
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      if (n >= perLayer) break;
+  // A group wider than the tray takes g rows of its own (groupLayout) — 7P as a row of 4 and a row
+  // of 3 — so each group is laid in ITS rows. Filling the rows one after another instead let the
+  // groups run into each other and drew fewer rows than the size above them counts.
+  const g = Math.max(1, Math.ceil(P / cols));
+  const groups = Math.ceil(N / P / (layers || 1));
+  const cells = [];
+  for (let k = 0; k < groups; k++) {
+    for (let j = 0; j < P; j++) {
+      const row = k * g + Math.floor(j / cols), col = j % cols;
       const offA = !B && stagger && row % 2 ? pitch / 2 : 0, offB = B && stagger && col % 2 ? pitch / 2 : 0;
-      const cx = PAD + (row * aStep + offB + dia / 2) * scale;
-      const cy = PAD + (col * cStep + offA + dia / 2) * scale;
-      const band = P > 1 ? Math.floor(n / P) % 2 : 0;
-      cells += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${band ? "var(--primary)" : "var(--bg-card, #1e293b)"}" fill-opacity="${band ? 0.35 : 0.9}" stroke="var(--primary)" stroke-width="1"/>`;
-      n++;
+      cells.push({ x: row * aStep + offB + dia / 2, y: col * cStep + offA + dia / 2, g: k });
     }
   }
-  const lab = (x, y, s) => `<text x="${x}" y="${y}" fill="var(--text-muted)" font-size="11" text-anchor="middle">${s}</text>`;
-  const bx = PAD + drawL * scale + 2, bw = Math.max(1, bms * scale - 2), bh = drawH * scale;
-  const bmsBox = !bms ? '' :
-    `<rect x="${bx.toFixed(1)}" y="${PAD}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="3" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>` +
-    (bw >= 24 ? lab(bx + bw / 2, PAD + bh / 2 + 4, 'BMS')
-      : `<g transform="translate(${(bx + bw / 2 + 4).toFixed(1)},${(PAD + bh / 2).toFixed(1)}) rotate(-90)">` + lab(0, 0, 'BMS') + '</g>');
-  box.innerHTML =
-    `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;">` +
-    `<rect x="${PAD - 4}" y="${PAD - 4}" width="${W - PAD * 2 + 8}" height="${H - PAD * 2 + 8}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>` +
-    cells + bmsBox +
-    "</svg>" +
-    (layers > 1 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">שכבה אחת מתוך ${layers}</div>` : '');
+  const wMM = (rows - 1) * aStep + dia + (B && stagger ? pitch / 2 : 0);
+  const hMM = (cols - 1) * cStep + dia + (!B && stagger ? pitch / 2 : 0);
+  const bms = Math.max(0, o.extra || 0);
+  const sPer = Math.ceil(N / P / (layers || 1));
+  return { cells, dia, wMM, hMM, groups: true,
+    bms: bms ? { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM } : null,
+    split: layers > 1, note: layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : '' };
+}
+// The plan on screen. The numbers over the cells are the groups; B− and B+ are the two ends of
+// the series. Sizes are not printed in the drawing: they are the card's own rows, said once
+// (2026-09-27: "למה המידות כתובות כפול?").
+function packSvg(plan) {
+  const PX = 24, PT = plan.groups ? 20 : 8, PB = 8;
+  const ext = Math.max(plan.wMM, plan.bms ? plan.bms.x + plan.bms.w : 0);
+  const sc = Math.min(1.2, (340 - 2 * PX) / ext, 260 / plan.hMM);
+  const W = Math.round(ext * sc) + 2 * PX, H = Math.round(plan.hMM * sc) + PT + PB;
+  const X = (x) => (PX + x * sc).toFixed(1), Y = (y) => (PT + y * sc).toFixed(1);
+  const txt = (x, y, s, more) => `<text x="${x}" y="${y}" fill="var(--text-muted)" font-size="10" text-anchor="middle"${more || ''}>${s}</text>`;
+  let g = plan.outline
+    ? `<polygon class="pack-outline" points="${plan.outline.map(([x, y]) => X(x) + ',' + Y(y)).join(' ')}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`
+    : `<rect x="${PX - 3}" y="${PT - 3}" width="${(ext * sc + 6).toFixed(1)}" height="${(plan.hMM * sc + 6).toFixed(1)}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`;
+  const r = (plan.dia / 2 * sc * 0.94).toFixed(1);
+  for (const c of plan.cells) {
+    const band = c.g >= 0 && c.g % 2 === 1;
+    g += `<circle cx="${X(c.x)}" cy="${Y(c.y)}" r="${r}" fill="${band ? 'var(--primary)' : 'var(--bg-card, #1e293b)'}" fill-opacity="${band ? 0.35 : 0.9}" stroke="var(--primary)" stroke-width="1"/>`;
+  }
+  if (plan.bms) {
+    const b = plan.bms, bw = b.w * sc, bh = b.h * sc, bx = PX + b.x * sc, by = PT + b.y * sc;
+    g += `<rect class="pack-bms" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>`
+      + (bw >= 24 ? txt((bx + bw / 2).toFixed(1), (by + bh / 2 + 3.5).toFixed(1), 'BMS', ' font-weight="700"')
+        : `<g transform="translate(${(bx + bw / 2 + 3.5).toFixed(1)},${(by + bh / 2).toFixed(1)}) rotate(-90)">` + txt(0, 0, 'BMS', ' font-weight="700"') + '</g>');
+  }
+  if (plan.groups) {
+    // Each group's number over its middle: every one where there is room, else every other or
+    // every fifth, and always the last, so the far end of the series is never unnumbered.
+    const xs = [];
+    for (const c of plan.cells) if (c.g >= 0) (xs[c.g] = xs[c.g] || []).push(c.x);
+    const mid = xs.map((a) => a.reduce((s, v) => s + v, 0) / a.length);
+    let gap = Infinity;
+    for (let i = 1; i < mid.length; i++) gap = Math.min(gap, (mid[i] - mid[i - 1]) * sc);
+    const step = gap >= 15 ? 1 : gap >= 7.5 ? 2 : 5, last = mid.length - 1;
+    mid.forEach((m, i) => { if ((i % step === 0 && last - i >= step) || i === last) g += txt(X(m), PT - 7, String(i + 1), ' class="pack-group"'); });
+    const yMid = Y(plan.hMM / 2);
+    // B+ is the end of the series — not on a first layer the string goes on from.
+    g += `<text x="${PX - 4}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="end" dominant-baseline="middle">B−</text>`
+      + (plan.split ? '' : `<text x="${(PX + ext * sc + 4).toFixed(1)}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="start" dominant-baseline="middle">B+</text>`);
+  }
+  return `<svg class="pack-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" direction="ltr" style="max-width:100%;height:auto;direction:ltr;">${g}</svg>`
+    + (plan.note ? `<div class="dim-nk-note">${plan.note}</div>` : '');
 }
 
 // Set once he types his own case allowance; from then on the voltage stops overwriting it.
@@ -7673,13 +7702,21 @@ function groupLayout(S, P, layers, acrossMax) {
 // both: the 390 x 135 pack he measured is A (6 across at 22.5, 20 along at 19.49), and his Nami
 // Klima note "21×7 בניקל ב׳" (since corrected by him, 2026-10-04: it takes 16S6P on the square 23) is B — seven across 139mm only fit at 18.62 a step. A alone told
 // him the Klima takes six. A is tried first, as the pack he measured was built.
+// THE HALF CELL (Daniel, 2026-10-04: "לתקן — להוסיף חצי תא"). Rows that nest closer than the
+// pitch do so only by sitting half a pitch over from their neighbours, so the block is half a
+// pitch bigger on that side: across in A, along in B. Until then the size left it out while the
+// drawing put it in — 16S4P on ניקל ב׳ said 92 wide and was drawn 103.
+function staggerAdd(orient, pitch, rowPitch) {
+  return rowPitch < pitch - 0.01 ? { A: orient === 'A' ? pitch / 2 : 0, B: orient === 'B' ? pitch / 2 : 0 } : { A: 0, B: 0 };
+}
 function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
   let first = null;
   for (const [orient, cStep, aStep] of [['A', pitch, rowPitch], ['B', rowPitch, pitch]]) {
-    const across = acrossFit(tub.W, cStep, dia);
+    const half = staggerAdd(orient, pitch, rowPitch);
+    const across = acrossFit(tub.W - half.A, cStep, dia);
     const lay = groupLayout(S, P, layers, across);
-    const acrossMM = (lay.inRow - 1) * cStep + dia + 2 * DIM_WALL;
-    const alongMM = (lay.rowsAlong - 1) * aStep + dia + 2 * DIM_WALL;
+    const acrossMM = (lay.inRow - 1) * cStep + dia + 2 * DIM_WALL + (lay.rowsAlong > 1 ? half.A : 0);
+    const alongMM = (lay.rowsAlong - 1) * aStep + dia + 2 * DIM_WALL + (lay.inRow > 1 ? half.B : 0);
     const r = { ...lay, orient, fits: across >= 1 && acrossMM <= tub.W + 0.5 && alongMM <= tub.L + 0.5 };
     if (r.fits) return r;
     if (!first) first = r;
@@ -7828,30 +7865,55 @@ function calcPackDims() {
   const bmsTop = !!(dimVehicle && dimVehicle.bmsTop);
   const tub = bmsTop ? (tubAll && tubAll.H ? { ...tubAll, H: Math.max(0, tubAll.H - extra) } : tubAll) : cellTub(tubAll, extra);
   const standH = c.len + DIM_CAP;
-  let layers = 1, lay = groupLayout(S, P, 1, Infinity), fitsTray = null;
   const maxLayers = maxLayersFor(dimVehicle, tub, c);
   const riser = !!(tub && tub.H && tub.H < standH && needsRiser(dimVehicle));
-  if (tub && (!(tub.H && tub.H < standH) || riser)) {
-    layers = layersFor(tub, S, P, maxLayers, pitch, rowPitch, c.dia) || 1;
-    lay = hisFit(tub, S, P, layers, pitch, rowPitch, c.dia);
-    fitsTray = lay.fits;
-  }
-  const cols = lay.inRow, rows = lay.rowsAlong;
-  const orient = lay.orient || 'A';
-  const isDiag = holder.startsWith('diag') || holder === 'custom';
-  const stagger = isDiag && (orient === 'B' ? cols > 1 : rows > 1);
-  // The block: L runs along the series (the BMS sits at its end, so its allowance is added
-  // there), W is across the groups, H is the standing cells and their holders alone.
-  const aStep = orient === 'B' ? pitch : rowPitch, cStep = orient === 'B' ? rowPitch : pitch;
-  const alongMM = (rows - 1) * aStep + c.dia + 2 * DIM_WALL;
-  const acrossMM = (cols - 1) * cStep + c.dia + 2 * DIM_WALL;
-  const L = Math.round(alongMM + (bmsTop ? 0 : extra)), W = Math.round(acrossMM);
-  const H = Math.round(layers * (c.len + DIM_CAP) + (bmsTop ? extra : 0));
+  // A tray the cell stands in (or stands in on a riser) is judged; one it cannot stand in is not.
+  const judged = !!(tub && (!(tub.H && tub.H < standH) || riser));
+  // ---- one card per nickel (2026-10-04: "יראה לי ציור בכל אחד מ-3 הניקלים") ----
+  // His three nickels for the cell chosen, in the order he knows them by, and the custom one when
+  // it is the one chosen. Each card is that nickel's whole answer: does it go in, the block, the
+  // layout, the most the tray takes, and the drawing. The selector picks which one the verdict
+  // on top, the label and "the build" are about; tapping a card does the same.
+  const pairOf = (h) => h === 'custom' ? [num('dimPitchAlong', 19), num('dimPitchAcross', 21.5)]
+    : (DIM_PITCH[fmt] || {})[h] || [c.dia + 1, c.dia + 1];
+  const shown = (HOLDERS_SHOWN[fmt] || HOLDERS_SHOWN[21700]).concat(holder === 'custom' ? ['custom'] : []);
+  const cardFor = (h) => {
+    const [p, rp] = pairOf(h);
+    let layersH = 1, lay = groupLayout(S, P, 1, Infinity), fits = null;
+    if (judged) {
+      layersH = layersFor(tub, S, P, maxLayers, p, rp, c.dia) || 1;
+      lay = hisFit(tub, S, P, layersH, p, rp, c.dia);
+      // Where he COUNTED this holder in this tray (the OX), his count is a ceiling as well.
+      fits = lay.fits && !(dimVehicle.caps && dimVehicle.caps[h] != null && N > dimVehicle.caps[h]);
+    } else if (tub) fits = false;
+    const orient = lay.orient || 'A', rows = lay.rowsAlong, cols = lay.inRow;
+    // The block: L runs along the series (the BMS sits at its end, so its allowance is added
+    // there), W is across the groups, H is the standing cells and their holders alone.
+    const half = staggerAdd(orient, p, rp);
+    const aStep = orient === 'B' ? p : rp, cStep = orient === 'B' ? rp : p;
+    const alongMM = (rows - 1) * aStep + c.dia + 2 * DIM_WALL + (cols > 1 ? half.B : 0);
+    const acrossMM = (cols - 1) * cStep + c.dia + 2 * DIM_WALL + (rows > 1 ? half.A : 0);
+    // A cell wider than the space it goes in cannot be assembled. The distance to check is the
+    // NEAREST NEIGHBOUR, not the row pitch: in a staggered layout the rows nest, so a row pitch of
+    // 19.5mm holds 21.15mm cells because the nearest cell in the next row sits half a pitch over.
+    const stagger = rp < p - 0.01 && (orient === 'B' ? cols > 1 : rows > 1);
+    const tight = Math.min(p, stagger ? Math.sqrt((p / 2) ** 2 + rp ** 2) : rp);
+    return { h, p, rp, lay, orient, rows, cols, fits, tight, layers: layersH,
+      L: Math.round(alongMM + (bmsTop ? 0 : extra)), W: Math.round(acrossMM),
+      H: Math.round(layersH * (c.len + DIM_CAP) + (bmsTop ? extra : 0)),
+      plan: standPlan({ cols, rows, pitch: p, rowPitch: rp, dia: c.dia, N, P, layers: layersH, extra: bmsTop ? 0 : extra, orient }) };
+  };
+  const cards = shown.map(cardFor);
+  const sel = cards.find((k) => k.h === holder) || cards[0];
+  const { layers, rows, cols, L, W, H } = sel;
+  const fitsTray = judged ? sel.lay.fits : null;
+  // Densest first, and it has to FIT: the first of his nickels, densest first, that takes the build.
+  const win = holdersFor(fmt).map((h) => cards.find((k) => k.h === h)).find((k) => k && k.fits);
   renderDimVehChip();
 
   // ---- the answer first: does it go in the vehicle? ----
   // Rebuilt 2026-09-25. The old block was a paragraph where the verdict came fifth, after the
-  // pitch written as "23/23 מ"מ". Now: one line that answers, then labelled rows.
+  // pitch written as "23/23 מ"מ". Now: one line that answers, for the nickel chosen, then rows.
   dimBest = null;
   let head = '', best = '', rec = '';
   if (dimVehicle) {
@@ -7863,7 +7925,6 @@ function calcPackDims() {
       head = `<div class="dim-over">⛔ ${c.label} לא נכנס לאמבטיה הזו — גובה פנוי ${tub.H} מ"מ, ותא עומד צריך ${Math.round(standH)}.</div>`;
       rec = shallowCellOptions(tub.L, tub.W, tub.H, V, S);
     } else if (tub) {
-      // Where he COUNTED this holder in this tray (the OX), his count decides; elsewhere his method.
       const counted = dimVehicle.caps && dimVehicle.caps[holder] != null;
       const overCount = counted && N > dimVehicle.caps[holder];
       const ok = !overCount && fitsTray;
@@ -7871,10 +7932,11 @@ function calcPackDims() {
       else {
         // Say WHY in his terms: how many series groups the length takes, against how many he needs.
         let across = 0, g = 1, sFit = 0;
-        for (const [cs, as] of [[pitch, rowPitch], [rowPitch, pitch]]) {
-          const ac = acrossFit(tub.W, cs, c.dia);
+        for (const [cs, as, o] of [[pitch, rowPitch, 'A'], [rowPitch, pitch, 'B']]) {
+          const half = staggerAdd(o, pitch, rowPitch);
+          const ac = acrossFit(tub.W - half.A, cs, c.dia);
           const gg = Math.ceil(P / Math.max(1, ac));
-          const rf = Math.max(0, Math.floor((tub.L - c.dia - 2 * DIM_WALL) / as) + 1);
+          const rf = Math.max(0, Math.floor((tub.L - c.dia - 2 * DIM_WALL - half.B) / as) + 1);
           const sf = Math.floor(rf / gg) * Math.max(1, maxLayers);
           if (ac >= 1 && sf > sFit) { sFit = sf; g = gg; across = ac; }
           if (!across) across = ac;
@@ -7889,14 +7951,7 @@ function calcPackDims() {
           best = `<button class="btn btn-secondary btn-sm dim-best" onclick="applyDimBest()"><span>הכי גדול שנכנס: <bdi dir="ltr">${b.S}S ${b.P}P · ${+(b.P * c.ah).toFixed(1)}Ah</bdi> · ${HOLDER_NAME[b.h]}${b.layers > 1 ? ' · ' + b.layers + ' שכבות' : ''} ←</span></button>`;
         }
       }
-      // Which holder to reach for, densest first: the first one that takes this build.
-      const hs = holdersFor(fmt).map((h) => ({ h, fits: !!holderTakes(dimVehicle, tub, fmt, h, S, P, c, maxLayers) }));
-      const win = hs.find((o) => o.fits);
-      // Each nickel with the most it takes here at this voltage, so the choice of nickel says
-      // what it buys; the one selected is bold.
-      const most = (h) => { const mp = maxPFor(dimVehicle, tub, fmt, h, V, c); return mp ? `עד <bdi dir="ltr">${S}S${mp}P · ${+(mp * c.ah).toFixed(1)}Ah</bdi>` : 'לא נכנס'; };
-      const mark = (o) => `<span class="dim-holder" style="color:${o.fits ? '#34d399' : 'var(--text-muted)'};${o.h === holder ? 'font-weight:700;' : ''}">${o.fits ? '✓' : '✗'} ${HOLDER_NAME[o.h]} — ${most(o.h)}</span>`;
-      rec = `<div class="dim-rec">${win ? `<b style="color:#34d399;">מומלץ: ${HOLDER_NAME[win.h]} — ${most(win.h)}</b>` : '<b style="color:var(--danger);">אף מחזיק לא מכיל את החבילה במגש הזה</b>'}${hs.filter((o) => o !== win).map((o) => '<br>' + mark(o)).join('')}</div>`;
+      if (!win) rec = '<div class="dim-rec"><b style="color:var(--danger);">אף מחזיק לא מכיל את החבילה במגש הזה</b></div>';
     } else if (dimVehicle.max) {
       // No tray size at all — only the table's ceiling, which is an AI estimate. Loud, and NOT a
       // block: refusing to compute a pack on the strength of a guess would stop a real build.
@@ -7908,33 +7963,49 @@ function calcPackDims() {
         : `<div class="dim-over">⛔ ${name} מחזיק ${cap} — חורג ב-${N - cap} תאים (${whence} — אין מידות). מדוד לפני שאתה בונה.</div>`;
     }
   }
+  const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
   const kv = (k, v) => `<div class="dim-kv"><span>${k}</span><b>${v}</b></div>`;
-  // A Bomber gets only its lying answer and his builds (2026-09-28) — see bomberLyingHtml. An e-bike
-  // case gets its build and its size (2026-10-04) — see caseBuildHtml.
-  let html = isBomber(dimVehicle) ? bomberLyingHtml(dimVehicle, c, pitch, rowPitch, V, N, holder)
-    : dimVehicle && dimVehicle.case ? caseBuildHtml(dimVehicle, c, V, N) : head + best +
-    kv('תצורה', `<bdi dir="ltr">${S}S ${P}P</bdi> · ${N} תאים`) +
-    kv('גודל סוללה', `<bdi dir="ltr">${L} × ${W} × ${H}</bdi> מ"מ`) +
-    // The tray beside it, in the same shape, so the two read against each other. A height nobody
-    // measured is written as '?' and said — the height was not checked (2026-09-26/27).
-    (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ${tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` : '') : ' · גובה לא ידוע, לא נבדק'}`) : '') +
-    (dimVehicle && tub && (DIM_PITCH[fmt] || {})[holder] ? kv('מקסימום באמבטיה', [60, 72].concat([48, 52, 84].includes(V) ? [V] : []).map((vv) => { const mp = maxPFor(dimVehicle, tub, fmt, holder, vv, c); return `<bdi dir="ltr">${vv}V: ${mp ? seriesForV(vv) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah' : '—'}</bdi>`; }).join('<br>')) : '') +
-    kv('פריסה', layoutText(S, P, layers, cols, rows, derived)) +
-    rec;
-  // A cell wider than the space it goes in cannot be assembled. The distance to check is the
-  // NEAREST NEIGHBOUR, not the row pitch: in a staggered layout the rows nest, so a row pitch of
-  // 19.5mm holds 21.15mm cells because the nearest cell in the next row sits half a pitch over.
-  const near = stagger ? Math.sqrt((pitch / 2) ** 2 + rowPitch ** 2) : rowPitch;
-  const tight = Math.min(pitch, near);
-  // 0.1mm of margin (2026-09-27). It was 0.2, which condemned his own 18.5 bracket for an 18.35mm
-  // 18650 — 0.15mm, the clearance real brackets are built to. What it exists to catch is the
-  // 50SG (21.35) in a 21.4 bracket: 0.05mm, and that is still flagged.
-  if (c.dia > tight - 0.1) {
-    html += `<div class="dim-over">⚠ ${c.label} בקוטר ${c.dia} מ"מ לא נכנס — המרחק הקצר ביותר בין מרכזים הוא ${tight.toFixed(1)} מ"מ</div>`;
+  const maxLine = (h) => [60, 72].concat([48, 52, 84].includes(V) ? [V] : []).map((vv) => {
+    const mp = maxPFor(dimVehicle, tub, fmt, h, vv, c);
+    return iso(`${vv}V: ${mp ? seriesForV(vv) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah' : '—'}`);
+  }).join('<br>');
+  const cardHtml = (k) => {
+    const badge = k.fits == null ? '' : `<span class="dim-badge ${k.fits ? 'ok' : 'no'}">${k.fits ? '✓ נכנס' + (k.layers > 1 ? ` ב-${k.layers} שכבות` : '') : '✗ לא נכנס'}</span>`;
+    // 0.1mm of margin (2026-09-27). It was 0.2, which condemned his own 18.5 bracket for an
+    // 18.35mm 18650 — 0.15mm, the clearance real brackets are built to. What it exists to catch is
+    // the 50SG (21.35) in a 21.4 bracket: 0.05mm, and that is still flagged.
+    const warn = c.dia > k.tight - 0.1
+      ? `<div class="dim-over">⚠ ${c.label} בקוטר ${c.dia} מ"מ לא נכנס — המרחק הקצר ביותר בין מרכזים הוא ${k.tight.toFixed(1)} מ"מ</div>` : '';
+    return `<div class="dim-nk${k === sel ? ' sel' : ''}" data-holder="${k.h}" onclick="pickDimHolder('${k.h}')">`
+      + `<div class="dim-nk-head"><b>${k.h === 'custom' ? 'מותאם אישית' : HOLDER_LABEL[k.h]}</b>`
+      + (k === sel ? '<span class="dim-tag">נבחר</span>' : '') + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '') + badge + '</div>'
+      + kv('גודל סוללה', `<span class="dim-size">${iso(k.L + ' × ' + k.W + ' × ' + k.H)}</span> מ"מ`)
+      + kv('פריסה', layoutText(S, P, k.layers, k.cols, k.rows, false))
+      + (dimVehicle && tub && k.h !== 'custom' ? kv('מקסימום באמבטיה', maxLine(k.h)) : '')
+      + warn + packSvg(k.plan) + '</div>';
+  };
+  // The label for the worker draws the chosen card's plan; its two text lines are said here.
+  const sPer = Math.ceil(S / layers), gRows = Math.ceil(P / cols);
+  let label = { plan: sel.plan,
+    line: 'רוחב ' + P + 'P' + (gRows > 1 ? ' (' + gRows + ' שורות)' : '') + ' · אורך ' + sPer + 'S' + (layers > 1 ? ' · ' + layers + ' שכבות' : '')
+      + ' · ' + (sel.h === 'custom' ? 'מותאם אישית' : HOLDER_NAME[sel.h]),
+    foot: 'גודל סוללה ' + L + '×' + W + '×' + H + ' מ״מ' + (layers > 1 ? ' · שכבה 1: קבוצות 1–' + sPer + ' · שכבה 2: קבוצות ' + (sPer + 1) + '–' + S : '') };
+  let html;
+  // A Bomber is built lying, and an e-bike case is his own layout (2026-10-04) — each has its own
+  // cards, below; everything else is the standing pack.
+  if (isBomber(dimVehicle)) { const r = bomberHtml(dimVehicle, c, fmt, holder, V, N, pairOf); html = r.html; label = r.label; }
+  else if (dimVehicle && dimVehicle.case) { const r = caseHtml(dimVehicle, c, fmt, V, S, P, N); html = r.html; label = r.label; }
+  else {
+    html = head + best
+      + kv('תצורה', `<bdi dir="ltr">${S}S ${P}P</bdi> · ${N} תאים`)
+      // The tray, in the same shape as the blocks below, so the two read against each other. A
+      // height nobody measured is written as '?' and said — the height was not checked.
+      + (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ${tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` : '') : ' · גובה לא ידוע, לא נבדק'}`) : '')
+      + rec + `<div class="dim-nks">${cards.map(cardHtml).join('')}</div>`;
   }
   // With no vehicle chosen, check the build against his saved trays — turned either way,
   // because a 300x180 block goes into a 190x310 tray. Only a tray with all three measurements
-  // can be judged; one with no height is not a "no".
+  // can be judged; one with no height is not a "no". The block is the chosen nickel's.
   if (!dimVehicle) {
     const full = getDims().filter((d) => +d.l && +d.w && +d.h);
     const fits = [];
@@ -7947,12 +8018,16 @@ function calcPackDims() {
     else if (getDims().length) html += '<div class="dim-rec" style="color:var(--text-muted);">אין דגם שמור עם מידות מלאות להשוואה</div>';
   }
   out.innerHTML = html;
-  drawPackLayout({ cols, rows, pitch, rowPitch, dia: c.dia, stagger, N, P, layers, len: c.len, extra: bmsTop ? 0 : extra, wall: DIM_WALL, orient });
   const lbl = document.getElementById('dimExtraLabel');
   if (lbl) lbl.textContent = bmsTop ? 'תוספת BMS מעל החבילה (מ"מ)' : 'תוספת BMS באורך (מ"מ)';
-  dimLast = { S, P, N, layers, cols, rows, pitch, rowPitch, dia: c.dia, stagger, extra: bmsTop ? 0 : extra, L, W, H, orient,
-    cell: c.label, holder: (DIM_PITCH[fmt] || {})[holder] ? HOLDER_NAME[holder] : 'מותאם אישית',
-    vehicle: dimVehicle ? dimVehicle.m : '' };
+  dimLast = label.plan ? { S, P, N, plan: label.plan, line: label.line, foot: label.foot, vehicle: dimVehicle ? dimVehicle.m : '' } : null;
+}
+// Tapping a nickel's card chooses it: the verdict on top, the label and the build are that nickel's.
+function pickDimHolder(h) {
+  const el = document.getElementById('dimHolder');
+  if (!el || el.value === h) return;
+  el.value = h;
+  calcPackDims(); calcFromOldPack();
 }
 
 // ---- the build, on a label for the worker (Daniel, 2026-09-25: "להדפיס את הציור במדבקה שאני
@@ -8005,61 +8080,53 @@ function packLabelCanvas() {
   x.font = 'bold 46px Heebo, Arial, sans-serif';
   rtlText(d.S + 'S ' + d.P + 'P · ' + d.N + ' תאים' + (d.vehicle ? ' · ' + d.vehicle : ''), R, 54);
   x.font = 'bold 34px Heebo, Arial, sans-serif';
-  const sPer = Math.ceil(d.S / d.layers);
-  const g = Math.ceil(d.P / d.cols);
-  rtlText('רוחב ' + d.P + 'P' + (g > 1 ? ' (' + g + ' שורות)' : '') + ' · אורך ' + sPer + 'S'
-    + (d.layers > 1 ? ' · ' + d.layers + ' שכבות' : '') + ' · ' + d.holder, R, 100);
+  rtlText(d.line, R, 100);
 
-  // the drawing: along the length, one group per column, the BMS box at the end
-  const top = 150, bottom = 530, avW = R - LEFT - 40, avH = bottom - top;
-  const B = d.orient === 'B';
-  const aStep = B ? d.pitch : d.rowPitch, cStep = B ? d.rowPitch : d.pitch;
-  const lenMM = (d.rows - 1) * aStep + d.dia + (B && d.stagger ? d.pitch / 2 : 0);
-  const widMM = (d.cols - 1) * cStep + d.dia + (!B && d.stagger ? d.pitch / 2 : 0);
-  const bms = d.extra || 0;
-  const sc = Math.min(avW / (lenMM + bms), avH / widMM);
-  const x0 = LEFT + 30, y0 = top;
-  const perLayer = Math.ceil(d.N / d.layers);
-  let n = 0;
-  const firstX = [];
+  // The drawing is the chosen card's plan (2026-10-04), scaled to the label: the same cells, the
+  // same groups and the same BMS as on the screen, so the worker builds what Daniel saw.
+  const pl = d.plan;
+  const top = 150, bottom = 530, avW = R - LEFT - 70, avH = bottom - top;
+  const ext = Math.max(pl.wMM, pl.bms ? pl.bms.x + pl.bms.w : 0);
+  const sc = Math.min(avW / ext, avH / pl.hMM);
+  const x0 = LEFT + 30, y0 = top, yMid = y0 + pl.hMM * sc / 2;
   x.lineWidth = 3;
-  for (let row = 0; row < d.rows; row++) {
-    for (let col = 0; col < d.cols; col++) {
-      if (n >= perLayer) break;
-      const grp = Math.floor(n / d.P);
-      const offA = !B && d.stagger && row % 2 ? d.pitch / 2 : 0, offB = B && d.stagger && col % 2 ? d.pitch / 2 : 0;
-      const cx = x0 + (row * aStep + offB + d.dia / 2) * sc;
-      const cy = y0 + (col * cStep + offA + d.dia / 2) * sc;
-      x.beginPath(); x.arc(cx, cy, Math.max(2, d.dia / 2 * sc - 2), 0, Math.PI * 2);
-      if (grp % 2) x.fill(); else x.stroke();
-      if (firstX[grp] == null) firstX[grp] = cx;
-      n++;
-    }
+  if (pl.outline) {
+    x.save(); x.setLineDash([10, 8]); x.beginPath();
+    pl.outline.forEach(([px, py], i) => { if (i) x.lineTo(x0 + px * sc, y0 + py * sc); else x.moveTo(x0 + px * sc, y0 + py * sc); });
+    x.closePath(); x.stroke(); x.restore();
   }
-  // group numbers above the columns — every one when there is room, else every other
-  x.direction = 'ltr'; x.textAlign = 'center';
-  const colGap = aStep * sc * g;
-  const step = colGap >= 30 ? 1 : colGap >= 15 ? 2 : 5;
-  x.font = 'bold ' + Math.max(18, Math.min(28, Math.round(colGap * 0.9))) + 'px Arial, sans-serif';
-  firstX.forEach((gx, i) => { if (i % step === 0 || i === firstX.length - 1) x.fillText(String(i + 1), gx, top - 12); });
-  // B− before the first group, B+ after the last one of this layer
-  x.font = 'bold 28px Arial, sans-serif';
-  x.textAlign = 'right'; x.fillText('B−', x0 - 6, y0 + widMM * sc / 2 + 10);
-  const endX = x0 + lenMM * sc;
-  if (bms) {
-    x.lineWidth = 4;
-    x.strokeRect(endX + 6, y0, Math.max(10, bms * sc - 6), widMM * sc);
-    x.save(); x.translate(endX + 6 + Math.max(10, bms * sc - 6) / 2, y0 + widMM * sc / 2);
-    x.rotate(-Math.PI / 2); x.textAlign = 'center'; x.font = 'bold 26px Arial, sans-serif';
-    x.fillText('BMS', 0, 9); x.restore();
+  // every other group filled solid, so a worker sees which cells weld together without colour
+  for (const cl of pl.cells) {
+    x.beginPath(); x.arc(x0 + cl.x * sc, y0 + cl.y * sc, Math.max(2, pl.dia / 2 * sc - 2), 0, Math.PI * 2);
+    if (cl.g >= 0 && cl.g % 2) x.fill(); else x.stroke();
   }
-  x.textAlign = 'left'; x.font = 'bold 28px Arial, sans-serif';
-  x.fillText(d.layers > 1 ? '' : 'B+', endX + (bms ? bms * sc + 8 : 6), y0 + widMM * sc / 2 + 10);
+  if (pl.groups) {
+    // group numbers over each group's middle — every one when there is room, else every other
+    const xs = [];
+    for (const cl of pl.cells) if (cl.g >= 0) (xs[cl.g] = xs[cl.g] || []).push(cl.x);
+    const mid = xs.map((a) => a.reduce((s, v) => s + v, 0) / a.length);
+    let gap = Infinity;
+    for (let i = 1; i < mid.length; i++) gap = Math.min(gap, (mid[i] - mid[i - 1]) * sc);
+    const step = gap >= 30 ? 1 : gap >= 15 ? 2 : 5, last = mid.length - 1;
+    x.direction = 'ltr'; x.textAlign = 'center';
+    x.font = 'bold ' + Math.max(18, Math.min(28, Math.round(gap * 0.9))) + 'px Arial, sans-serif';
+    mid.forEach((m, i) => { if ((i % step === 0 && last - i >= step) || i === last) x.fillText(String(i + 1), x0 + m * sc, top - 12); });
+    // B− before the first group, B+ after the last one — not on a layer the string runs on from
+    x.font = 'bold 28px Arial, sans-serif';
+    x.textAlign = 'right'; x.fillText('B−', x0 - 6, yMid + 10);
+    if (!pl.split) { x.textAlign = 'left'; x.fillText('B+', x0 + ext * sc + 8, yMid + 10); }
+  }
+  if (pl.bms) {
+    const b = pl.bms, bx = x0 + b.x * sc, by = y0 + b.y * sc, bw = Math.max(10, b.w * sc), bh = b.h * sc;
+    x.lineWidth = 4; x.strokeRect(bx, by, bw, bh);
+    x.save(); x.translate(bx + bw / 2, by + bh / 2);
+    if (bw < bh) x.rotate(-Math.PI / 2);
+    x.textAlign = 'center'; x.font = 'bold 26px Arial, sans-serif'; x.fillText('BMS', 0, 9); x.restore();
+  }
 
   // footer: the block's size, and how the layers split the string
   x.font = 'bold 30px Heebo, Arial, sans-serif';
-  rtlText('גודל סוללה ' + d.L + '×' + d.W + '×' + d.H + ' מ״מ'
-    + (d.layers > 1 ? ' · שכבה 1: קבוצות 1–' + sPer + ' · שכבה 2: קבוצות ' + (sPer + 1) + '–' + d.S : ''), R, 576);
+  rtlText(d.foot, R, 576);
   return cv;
 }
 // Phone: the APK's Bluetooth bridge and TSPL, the same path the battery sticker takes. PC: the
@@ -8116,14 +8183,7 @@ function layoutText(S, P, layers, cols, rows, derived) {
 // ---- cells LYING, for the Bombers (2026-09-27, Daniel: "כן, לבומברים בלבד") ----------------
 // A Bomber is not built like a scooter. The cells lie on their side ACROSS the frame, in stacks
 // side by side (two in his Plus), and the pack is cut to the triangle of the frame — so the side
-// of the frame is the floor plan and its width decides how many stacks. The standing estimate
-// above cannot say that.
-//
-// The triangle is a guess on a rectangle: BOMBER_FILL is what his Plus actually took of its own
-// bounding box (165 of 17 x 11 = 187 on the 23 square — his own row counts, Daniel 2026-09-28;
-// it was 150/170 while the pack was taken for a 20S15P read off a photo as ten rows). A frame with its own figure carries `fill`: the
-// FC-1's bay is a plain rectangle (1), the regular Bomber's is what his 20S17P took (170 of 190).
-const BOMBER_FILL = 165 / 187;
+// of the frame is the floor plan and its width decides how many stacks.
 function isBomber(v) { return !!v && /Bomber/i.test(v.m || ''); }
 function bomberSide(v) {
   if (!v) return null;
@@ -8134,129 +8194,167 @@ function bomberSide(v) {
   // The narrow side is the width across the frame; the other two are the side it is cut to.
   return { L: d[2], H: d[1], across: d[0] };
 }
-function bomberLying(side, c, pitch, rowPitch, fill) {
-  const FILL = fill != null ? fill : BOMBER_FILL;
-  const stackW = c.len + DIM_CAP;
-  const stacks = Math.max(0, Math.floor((side.across - 2 * DIM_WALL) / stackW));
-  const inL = side.L - 2 * DIM_WALL - c.dia, inH = side.H - 2 * DIM_WALL - c.dia;
-  const cols = inL < 0 ? 0 : Math.floor(inL / pitch + 1e-9) + 1;
-  const rows = inH < 0 ? 0 : Math.floor(inH / rowPitch + 1e-9) + 1;
-  // A diagonal nickel shifts every other row half a pitch; that row loses its last cell unless
-  // the length has half a pitch to spare.
-  const stagger = rowPitch < pitch - 0.01;
-  const short = stagger && inL - (cols - 1) * pitch < pitch / 2 ? Math.floor(rows / 2) : 0;
-  const rect = Math.max(0, cols * rows - short);
-  const perSide = Math.round(rect * FILL);
-  return { stacks, stackW, cols, rows, rect, perSide, n: perSide * stacks, fill: FILL };
-}
-// ---- how HE built his Bomber packs, drawn cell by cell (2026-09-28) ----
-// "ציור סכמה של הסוללות שבניתי שאני ידע בעתיד איך לבנות אותם". Each build's side is a list of
-// rows from the BOTTOM, [first column, cells], drawn to scale on its own nickel pitch, with the
-// count at the end of every row — the drawing IS the build sheet. A side marked `same` repeats
-// another stack; `rest` is the part of the total no photo shows; `rows: null` has not been counted.
-// A 'draft' is counted off a photo and says so; only his own numbers are 'confirmed'.
-// `bms` is the place he leaves for the board, [row, first column, places] (the Silver Fish,
-// 2026-10-04), drawn as a dashed box over the empty places.
-function buildSideSvg(rows, cell, holder, unsure, bms) {
-  const c = cell === 18650 ? { dia: 18.35 } : { dia: 21.15 };
-  const [p, rp] = (DIM_PITCH[cell] || {})[holder] || [c.dia + 1, c.dia + 1];
-  const diag = rp < p - 0.01;
-  const cols = Math.max(...rows.map(([s, n]) => s + n)) + (diag ? 0.5 : 0);
-  const Wmm = cols * p, Hmm = (rows.length - 1) * rp + p;
-  const k = Math.min(300 / Wmm, 150 / Hmm), lab = 26;
-  const W = Wmm * k + lab, H = Hmm * k + 4;
-  const bad = new Set((unsure || []).map(([r, col]) => r + ':' + col));
-  let g = '';
-  rows.forEach(([s, n], r) => {
-    const y = H - 2 - (r * rp + p / 2) * k;
-    for (let i = 0; i < n; i++) {
-      const x = ((s + i) * p + p / 2 + (diag && r % 2 ? p / 2 : 0)) * k;
-      const u = bad.has(r + ':' + (s + i));
-      g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(c.dia / 2 * k * 0.92).toFixed(1)}" fill="${u ? 'none' : '#38bdf8'}" fill-opacity=".55" stroke="${u ? '#f59e0b' : '#0ea5e9'}" stroke-width="1"${u ? ' stroke-dasharray="2 2"' : ''}/>`;
-    }
-    g += `<text x="${(Wmm * k + 4).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="11" fill="currentColor">${n}</text>`;
-  });
-  if (bms) {
-    const [br, bc, bn] = bms;
-    const x = bc * p * k, y = H - 2 - (br * rp + p) * k, w = bn * p * k, h = p * k;
-    g += `<rect class="build-bms" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="none" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3 2"/>`
-      + `<text x="${(x + w / 2).toFixed(1)}" y="${(y + h / 2 + 3).toFixed(1)}" font-size="8" font-weight="700" text-anchor="middle" fill="#f59e0b">BMS</text>`;
-  }
-  return `<svg class="bomber-build-svg" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" role="img" direction="ltr" style="max-width:100%;height:auto;display:block;margin:4px 0;direction:ltr;">${g}</svg>`;
-}
-function bomberBuildsHtml(v) {
-  if (!v || !Array.isArray(v.builds) || !v.builds.length) return '';
-  const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
-  // Short on purpose (2026-09-28: "תעשה טקסט קצר וקולע תמחק תוכן מיותר"): a title, the drawing
-  // with the count at each row's end, and one line for the second stack. The notes stay in
-  // VEHICLE_PACKS for whoever reads the code; the page shows the build.
-  return '<div style="margin-top:8px;font-weight:700;">הסוללות שבנית</div>' + v.builds.map((b) => {
-    const draft = b.status === 'confirmed' ? '' : ' · <span style="color:var(--warning,#f59e0b);">טיוטה</span>';
-    const sides = b.stacks.map((st) => {
-      if (st.same != null) return `<div style="font-size:12px;color:var(--text-muted);">+ ערימה שנייה זהה</div>`;
-      if (st.rest) {
-        const counted = b.stacks.reduce((t, x) => t + (x.rows ? x.rows.reduce((a, [, n]) => a + n, 0) : 0), 0);
-        return b.total > counted ? `<div style="font-size:12px;color:var(--text-muted);">+ ערימה שנייה, כ-${b.total - counted} תאים</div>` : '';
-      }
-      if (!st.rows) return `<div style="font-size:12px;color:var(--warning,#f59e0b);">עוד לא נספר שורה-שורה</div>`;
-      return buildSideSvg(st.rows, b.cell, b.holder, st.unsure, st.bms);
-    }).join('');
-    // His own words for how it goes together, where the drawing alone does not say it (the Silver
-    // Fish is drawn the long way, so his rows of 4 are its columns).
-    const how = b.how ? `<div style="font-size:12px;">${b.how}</div>` : '';
-    return `<div class="bomber-build" style="border-top:1px solid var(--border,#334155);margin-top:6px;padding-top:6px;">`
-      // RLM around each separator: without it '20S17P · 18650 · 340' fuses into one left-to-right run
-      // and reads '340 · 18650 · 20S17P תאים' (2026-09-28).
-      // The row's `built` ("22S15P · 75Ah · JK") rides on the build it describes: it left the chip on
-      // 2026-10-04 as a duplicate, and its capacity and BMS are not in the label.
-      + `<b>🔋 ${b.label}</b>\u200F · \u200F${iso(String(b.cell))}${b.total ? '\u200F · \u200F' + b.total + ' תאים' : ''}`
-      + (v.built && b.sp && String(v.built).startsWith(b.sp) ? String(v.built).slice(b.sp.length).split('·').map((t) => t.trim()).filter(Boolean).map((t) => '\u200F · \u200F' + iso(t)).join('') : '')
-      + `${draft}`
-      + how + sides + '</div>';
-  }).join('');
-}
-// The whole answer for a Bomber (2026-09-28, his choice "קצר: מה נכנס + הציורים"): what the frame
-// takes lying down, whether the chosen pack goes in, and the packs he built. The standing
-// estimate above it is NOT shown for a Bomber — a Bomber is built lying, and a "⛔ לא נכנס" worked
-// out for standing cells answered a question nobody building one asks.
-function bomberLyingHtml(v, c, pitch, rowPitch, V, N, holder) {
-  const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
+// THE FRAME'S SIDE, one card per nickel (2026-10-04). Daniel: "צורת השלדה, ממולאת לפי כל ניקל".
+// The triangle is known only from the packs he built in it, so the side is his biggest build's
+// outline in millimetres — row by row, from the bottom, on the nickel he built it on — and each
+// nickel fills that outline as far as it goes. On the build's own nickel the fill is his build,
+// cell for cell. A frame that is a plain rectangle (the FC-1, `fill: 1`, by his tape) or a bay
+// he measured himself is filled as the rectangle it is.
+//
+// The builds are the frame's shape here, not something the page shows: "זה לא מעניין שתכתוב מה
+// בניתי" — no build list, no labels, no history on the page.
+function bomberFrame(v) {
   const side = bomberSide(v);
-  // No title: the chip right above it already names the vehicle (2026-10-04, "יש כאן תוכן כפול").
-  if (!side) return `<div class="dim-rec">אין מידות לשלדה הזו — מדוד ושמור ב"הוסף מדידה של מגש".${bomberBuildsHtml(v)}</div>`;
-  const r = bomberLying(side, c, pitch, rowPitch, v.mine ? null : v.fill);
-  if (!r.stacks) return `<div class="dim-rec"><span style="color:var(--danger);">צר מדי לתא שוכב (${side.across} מ"מ)</span>${bomberBuildsHtml(v)}</div>`;
-  const S = seriesForV(V);
-  const P = Math.floor(r.n / S);
-  const fits = N <= r.n;
-  const chosenP = Math.round(N / S);
-  const most = `נכנס עד: <b>${iso(V + 'V ' + S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah')}</b>`;
-  // When the chosen pack is exactly the most it takes, one line says both.
-  const fit = fits && chosenP === P
-    ? `<span style="color:#34d399;">✅ נכנסת — ${iso(S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah')}, ${N} תאים · המקסימום</span>`
-    : `${most}<br><span style="color:${fits ? '#34d399' : 'var(--danger)'};">${fits ? '✅ נכנסת' : '⛔ גדולה מדי'} — ${iso(S + 'S' + chosenP + 'P')}, ${N} תאים</span>`;
-  return `<div class="dim-rec">${fit}
-    ${bomberBuildsHtml(v)}</div>`;
+  const rect = () => (side ? { rect: true, L: side.L, H: side.H, across: side.across } : null);
+  const built = (v.builds || []).filter((b) => b.stacks && b.stacks[0] && Array.isArray(b.stacks[0].rows));
+  if (v.mine || v.fill === 1 || !built.length) return rect();
+  const b = built.reduce((a, z) => (z.total > a.total ? z : a));
+  const [pb, rpb] = (DIM_PITCH[b.cell] || {})[b.holder] || [];
+  if (!pb) return rect();
+  const diag = rpb < pb - 0.01;
+  const rows = b.stacks[0].rows.map(([s, n], i) => {
+    const off = diag && i % 2 ? pb / 2 : 0;
+    return { y0: i * rpb, y1: i * rpb + pb, x0: s * pb + off, x1: (s + n) * pb + off };
+  });
+  return { rect: false, rows, L: Math.max(...rows.map((r) => r.x1)), H: (rows.length - 1) * rpb + pb,
+           across: (v.side || side || {}).across };
 }
-// ---- an e-bike case: his build is the answer (the Silver Fish, 2026-10-04) ----
-// The case is 70 thick and a standing 21700 in its holders needs 74, so judged as a scooter tray
-// it would print "⛔ לא נכנס" over a pack he built in it — the Bomber Plus's trap. It is shown, not
-// judged: what it takes is what he put in it, counted for the cell he built with, so another cell
-// size is told that rather than answered.
-function caseBuildHtml(v, c, V, N) {
+// One side of the frame filled on a nickel: the cells (x along, y down from the top, in mm) and
+// the outline they sit in.
+function bomberFill(fr, c, p, rp) {
+  const diag = rp < p - 0.01;
+  const cells = [];
+  if (fr.rect) {
+    // Centres inside the walls; a staggered row loses its last cell without half a pitch to spare.
+    const inL = fr.L - 2 * DIM_WALL - c.dia, inH = fr.H - 2 * DIM_WALL - c.dia;
+    const cols = inL < 0 ? 0 : Math.floor(inL / p + 1e-9) + 1, rows = inH < 0 ? 0 : Math.floor(inH / rp + 1e-9) + 1;
+    const short = diag && inL - (cols - 1) * p < p / 2;
+    for (let j = 0; j < rows; j++) {
+      for (let k = 0; k < cols - (short && j % 2 ? 1 : 0); k++) {
+        cells.push({ x: DIM_WALL + c.dia / 2 + k * p + (diag && j % 2 ? p / 2 : 0), y: fr.H - (DIM_WALL + c.dia / 2 + j * rp), g: -1 });
+      }
+    }
+    return { cells, outline: [[0, 0], [fr.L, 0], [fr.L, fr.H], [0, fr.H]] };
+  }
+  // A cell's place is a whole slot of this nickel, and it must lie inside every row of the
+  // outline it overlaps by more than a quarter of a slot — so a denser nickel never pokes out of
+  // the step where his rows got shorter.
+  for (let j = 0; j * rp + p <= fr.H + 0.5; j++) {
+    const y0 = j * rp, y1 = y0 + p;
+    const over = fr.rows.filter((r) => Math.min(r.y1, y1) - Math.max(r.y0, y0) > 0.25 * p);
+    if (!over.length) continue;
+    const lo = Math.max(...over.map((r) => r.x0)), hi = Math.min(...over.map((r) => r.x1));
+    const off = diag && j % 2 ? p / 2 : 0;
+    for (let k = Math.ceil((lo - off - 0.5) / p); (k + 1) * p + off <= hi + 0.5; k++) {
+      cells.push({ x: k * p + off + p / 2, y: fr.H - (y0 + p / 2), g: -1 });
+    }
+  }
+  // the outline steps the way his rows step
+  const bnd = fr.rows.map((r, i) => (i ? (r.y0 + fr.rows[i - 1].y1) / 2 : 0)).concat([fr.H]);
+  const right = [], left = [];
+  fr.rows.forEach((r, i) => {
+    right.push([r.x1, fr.H - bnd[i]], [r.x1, fr.H - bnd[i + 1]]);
+    left.unshift([r.x0, fr.H - bnd[i + 1]], [r.x0, fr.H - bnd[i]]);
+  });
+  return { cells, outline: right.concat(left) };
+}
+// A Bomber's page (2026-09-28, his choice "קצר: מה נכנס + הציורים"): what the frame takes lying
+// down on the nickel chosen, then one card per nickel. No standing verdict: a Bomber is built lying.
+function bomberHtml(v, c, fmt, holder, V, N, pairOf) {
   const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
-  const fmt = c.label.startsWith('18650') ? 18650 : 21700;
-  const b = (v.builds || [])[0];
-  const S = seriesForV(V), P = Math.round(N / S);
-  const pack = iso(S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah');
-  const fit = b && b.cell !== fmt
-    ? `<span style="color:var(--text-muted);">המקסימום (${v.max} תאים) נספר על ${iso(String(b.cell))}, לא על ${iso(String(fmt))}</span>`
-    : N <= v.max
-      ? `<span style="color:#34d399;">✅ נכנסת — ${pack}, ${N} תאים${N === v.max ? ' · המקסימום' : ''}</span>`
-      : `<span style="color:var(--danger);">⛔ גדולה מדי — ${pack}, ${N} תאים · במארז נכנסים ${v.max}</span>`;
+  const kv = (k, val) => `<div class="dim-kv"><span>${k}</span><b>${val}</b></div>`;
+  const fr = bomberFrame(v);
+  // No title: the chip right above it already names the vehicle (2026-10-04, "יש כאן תוכן כפול").
+  if (!fr) return { html: '<div class="dim-rec">אין מידות לשלדה הזו — מדוד ושמור ב"הוסף מדידה של מגש".</div>', label: {} };
+  const stacks = Math.max(0, Math.floor(((fr.across || 0) - 2 * DIM_WALL) / (c.len + DIM_CAP)));
+  if (!stacks) return { html: `<div class="dim-rec"><span style="color:var(--danger);">צר מדי לתא שוכב (${fr.across} מ"מ)</span></div>`, label: {} };
+  const S = seriesForV(V), chosenP = Math.round(N / S);
+  const shown = (HOLDERS_SHOWN[fmt] || HOLDERS_SHOWN[21700]).concat(holder === 'custom' ? ['custom'] : []);
+  const cards = shown.map((h) => {
+    const [p, rp] = pairOf(h);
+    const f = bomberFill(fr, c, p, rp);
+    const n = f.cells.length * stacks;
+    return { h, cells: f.cells, outline: f.outline, perSide: f.cells.length, n, P: Math.floor(n / S), fits: N <= n };
+  });
+  const sel = cards.find((k) => k.h === holder) || cards[0];
+  const win = holdersFor(fmt).map((h) => cards.find((k) => k.h === h)).find((k) => k && k.fits);
+  const ah = (P) => +(P * c.ah).toFixed(1);
+  // When the chosen pack is exactly the most it takes, one line says both.
+  const top = sel.fits && chosenP === sel.P
+    ? `<span style="color:#34d399;">✅ נכנסת — ${iso(S + 'S' + sel.P + 'P · ' + ah(sel.P) + 'Ah')}, ${N} תאים · המקסימום</span>`
+    : `נכנס עד: <b>${iso(V + 'V ' + S + 'S' + sel.P + 'P · ' + ah(sel.P) + 'Ah')}</b><br><span style="color:${sel.fits ? '#34d399' : 'var(--danger)'};">${sel.fits ? '✅ נכנסת' : '⛔ גדולה מדי'} — ${iso(S + 'S' + chosenP + 'P')}, ${N} תאים</span>`;
+  const stackWord = stacks === 1 ? 'ערימה אחת' : stacks + ' ערימות';
+  const maxLine = (k) => [60, 72].map((vv) => {
+    const s = seriesForV(vv), mp = Math.floor(k.n / s);
+    return iso(`${vv}V: ${mp ? s + 'S' + mp + 'P · ' + ah(mp) + 'Ah' : '—'}`);
+  }).join('<br>');
+  const plan = (k) => ({ cells: k.cells, dia: c.dia, wMM: fr.L, hMM: fr.H, outline: k.outline, groups: false, bms: null, note: '' });
+  const cardHtml = (k) => `<div class="dim-nk${k === sel ? ' sel' : ''}" data-holder="${k.h}" onclick="pickDimHolder('${k.h}')">`
+    + `<div class="dim-nk-head"><b>${k.h === 'custom' ? 'מותאם אישית' : HOLDER_LABEL[k.h]}</b>`
+    + (k === sel ? '<span class="dim-tag">נבחר</span>' : '') + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '')
+    + `<span class="dim-badge ${k.fits ? 'ok' : 'no'}">${k.fits ? '✓ נכנס' : '✗ לא נכנס'}</span></div>`
+    + kv('בצד אחד', `${k.perSide} תאים × ${stackWord} = ${k.n}`)
+    + kv('מקסימום', maxLine(k))
+    + packSvg(plan(k)) + '</div>';
+  const name = sel.h === 'custom' ? 'מותאם אישית' : HOLDER_NAME[sel.h];
+  return {
+    html: `<div class="dim-rec">${top}</div>`
+      + `<div class="dim-nk-note">צד אחד של השלדה · כל עיגול הוא ${stacks === 1 ? 'תא אחד שוכב' : stacks + ' תאים שוכבים, ערימה ליד ערימה'}</div>`
+      + `<div class="dim-nks">${cards.map(cardHtml).join('')}</div>`,
+    label: { plan: plan(sel), line: `צד אחד · ${sel.perSide} תאים × ${stackWord} · ${name}`,
+      foot: `צד השלדה ${Math.round(fr.L)}×${Math.round(fr.H)} מ״מ · ${sel.n} תאים` },
+  };
+}
+// ---- an e-bike case (the Silver Fish, 2026-10-04) ----
+// Square only: "אין אלכסון בסילבר פיש". His layout: `lanes` across the case, and the last
+// `bmsRows` rows one short — the strip beside them is where the BMS goes. 20S6P is 24 rows of 4,
+// then 8 of 3. Any other pack fills the same way: rows of four until what is left fits the short
+// rows beside the BMS. The case is 70 thick, under a standing 21700 in holders, and it flexes, so
+// its height is not judged ("המארז מתגמש — לא לבדוק גובה").
+function casePlan(cs, c, N, P) {
+  const [p] = DIM_PITCH[21700][cs.holder];
+  const lanes = cs.lanes;
+  const full = Math.max(0, Math.ceil((N - (lanes - 1) * cs.bmsRows) / lanes));
+  const cells = [];
+  let cols = 0;
+  for (let col = 0, n = 0; n < N; col++, cols++) {
+    const inCol = col < full ? lanes : lanes - 1;
+    for (let k = 0; k < inCol && n < N; k++, n++) {
+      // the short rows leave lane 0 free: the BMS's
+      cells.push({ x: col * p + c.dia / 2, y: (col < full ? k : k + 1) * p + c.dia / 2, g: Math.floor(n / P) });
+    }
+  }
+  const wMM = (cols - 1) * p + c.dia, hMM = (lanes - 1) * p + c.dia;
+  return { cols, full, cells, dia: c.dia, wMM, hMM, groups: true, note: '',
+    bms: cols > full ? { x: full * p, y: 0, w: (cols - full - 1) * p + c.dia, h: c.dia } : null };
+}
+function caseHtml(v, c, fmt, V, S, P, N) {
+  const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
+  const kv = (k, val) => `<div class="dim-kv"><span>${k}</span><b>${val}</b></div>`;
   const cs = v.case;
-  return `<div class="dim-rec">${fit}<br>מארז: ${iso(cs.L + ' × ' + cs.W + ' × ' + cs.H)} מ"מ (נמדד)
-    ${bomberBuildsHtml(v)}</div>`;
+  const caseRow = kv('גודל מארז', `${iso(cs.L + ' × ' + cs.W + ' × ' + cs.H)} מ"מ · הגובה לא נבדק — המארז מתגמש`);
+  if (fmt !== 21700) return { html: `<div class="dim-rec">המארז הזה נבנה ב-21700 על ${HOLDER_NAME[cs.holder]} — אין לו פריסה ל-18650.</div>` + caseRow, label: {} };
+  const pl = casePlan(cs, c, N, P);
+  const L = Math.round(pl.wMM + 2 * DIM_WALL), W = Math.round(pl.hMM + 2 * DIM_WALL);
+  const fits = N <= v.max && L <= cs.L + 0.5 && W <= cs.W + 0.5;
+  const pack = iso(S + 'S' + P + 'P · ' + +(P * c.ah).toFixed(1) + 'Ah');
+  const top = fits ? `<div class="dim-ok">✅ נכנסת — ${pack}, ${N} תאים${N === v.max ? ' · המקסימום' : ''}</div>`
+    : `<div class="dim-over">⛔ גדולה מדי — ${pack}, ${N} תאים · במארז נכנסים ${v.max}</div>`;
+  const mp = Math.floor(v.max / S);
+  const shortRows = pl.cols - pl.full;
+  const layout = `רוחב ${cs.lanes} · ${pl.cols} שורות` + (shortRows ? ` · ${shortRows} האחרונות של ${cs.lanes - 1}, ליד ה-BMS` : '');
+  const card = `<div class="dim-nk sel" data-holder="${cs.holder}">`
+    + `<div class="dim-nk-head"><b>${HOLDER_LABEL[cs.holder]}</b><span class="dim-badge ${fits ? 'ok' : 'no'}">${fits ? '✓ נכנס' : '✗ לא נכנס'}</span></div>`
+    + kv('גודל סוללה', `<span class="dim-size">${iso(L + ' × ' + W)}</span> מ"מ`)
+    + kv('פריסה', layout)
+    + kv('מקסימום במארז', iso(`${V}V: ${mp ? S + 'S' + mp + 'P · ' + +(mp * c.ah).toFixed(1) + 'Ah' : '—'}`))
+    + packSvg(pl) + '</div>';
+  return {
+    html: top + kv('תצורה', `${iso(S + 'S ' + P + 'P')} · ${N} תאים`) + caseRow + `<div class="dim-nks">${card}</div>`,
+    // The label's line has no comma and no "ה-BMS": its own right-to-left layout splits on spaces.
+    label: { plan: pl, line: `רוחב ${cs.lanes} · ${pl.cols} שורות` + (shortRows ? ` · ${shortRows} אחרונות של ${cs.lanes - 1} ליד BMS` : '') + ` · ${HOLDER_NAME[cs.holder]}`,
+      foot: `גודל סוללה ${L}×${W} מ״מ · מארז ${cs.L}×${cs.W}` },
+  };
 }
 // ---- the vehicle the estimator is answering for ----------------------------------------
 // The tray, as numbers — L the long side. Read from a STRICT A×B×C for the height and nothing
@@ -8523,20 +8621,14 @@ function setDimTab(tab) {
 const VEHICLE_PACKS = [
   // ── E-bikes. The Silver Fish, 72V 30Ah (Daniel, 2026-10-04): "24 שורות כל שורה 4 תאים ואז עוד 8
   // שורות 3 בשורה כדי שיהיה מקום ל-BMS". 24 × 4 + 8 × 3 = 120 = 20S6P, which at 30Ah is a 5Ah
-  // 21700, on the 23 square (his pick). The case, his tape: 850 long × 95 wide × 70 thick.
-  // `case`, NOT `tub`: a tub is judged with the cells standing in their holders (74 for a 21700),
-  // and 70 would print "⛔ לא נכנס" over a pack he built in it. See caseBuildHtml.
-  // The drawing is the case from above, the long way, as drawPackLayout draws a pack: each column
-  // is one of his rows across the 95 — 24 of 4, then 8 of 3 with the BMS in the free place.
+  // 21700, on the 23 square (his pick; "אין אלכסון בסילבר פיש"). The case, his tape: 850 long ×
+  // 95 wide × 70 thick. `case`, NOT `tub`: a tub is judged with the cells standing in their
+  // holders (74 for a 21700), and the case flexes ("המארז מתגמש — לא לבדוק גובה"). `lanes` across,
+  // and the last `bmsRows` rows one short, the BMS beside them — see casePlan.
   // hubOnly before the nested objects: gen-fit-data reads a row only up to its first '}'.
   { g: 'אופניים חשמליים', m: 'סילבר פיש 72V', src: 'נמדד', p: 23, s60: 0, p60: 0, s72: 20, p72: 6, max: 120,
-    hubOnly: true, built: '20S6P · 30Ah',
-    case: { L: 850, W: 95, H: 70 },
-    builds: [
-      { label: 'סילבר פיש — 20S6P', cell: 21700, holder: 'square-23', sp: '20S6P', total: 120, status: 'confirmed',
-        how: '24 שורות של 4, ואז 8 שורות של 3 — המקום הפנוי ל-BMS',
-        stacks: [{ name: 'מבט מלמעלה', rows: [[0, 32], [0, 32], [0, 32], [0, 24]], bms: [3, 24, 8] }] },
-    ] },
+    hubOnly: true,
+    case: { L: 850, W: 95, H: 70, holder: 'square-23', lanes: 4, bmsRows: 8 } },
   // From the WhatsApp thread with Oral Paiman, 24.8.2025: a 72V 40Ah pack for a delivery
   // motorcycle, measured by the customer at 'רוחב 17 · גובה 17 · אורך 48.5' — 485 x 170 x 170mm.
   // It is the only dimension stated in text in that whole thread; every other 'זה המידות' was
@@ -8564,7 +8656,8 @@ const VEHICLE_PACKS = [
   // builds: how HE built packs for the frame, cell by cell, so the next one can be built the same
   // way (Daniel: "ציור סכמה של הסוללות שבניתי שאני ידע בעתיד איך לבנות אותם"). Each side is
   // rows from the BOTTOM: [first column, cells]. status 'confirmed' = his own numbers; 'draft' =
-  // counted off a photo and not yet checked by him. See bomberBuildsHtml.
+  // counted off a photo and not yet checked by him. Since 2026-10-04 the page does not show them
+  // ('זה לא מעניין שתכתוב מה בניתי'): the biggest one is the frame's outline (bomberFrame).
   //
   // דגם 1 — the regular Stealth Bomber (his bikes: black, black-red, white). Three builds, all
   // 18650 on his square-19 nickel. His 2021 measurement was 360×125×190; the builds that went in
@@ -8572,7 +8665,7 @@ const VEHICLE_PACKS = [
   // pitch). Two stacks of 18650 need 141 across and the frame body is 125 — they go in because
   // the side covers bulge (Daniel, 2026-09-28). So `side` is what the builds prove, not the tape.
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber רגיל 3-12kW', src: 'מחושב', p: 21.5, s60: 16, p60: 9, s72: 20, p72: 7, max: 144,
-    model: 1, hubOnly: true, fill: 170 / 190,
+    model: 1, hubOnly: true,
     tub: '364×125×192 מ"מ (נמדד במעבדה 360×125×190, והבניות שנכנסו מוכיחות 364×192) · שתי ערימות 18650 נכנסות בזכות המכסים', packSrc: 'theebikemotorkit — טבלת מידות' ,
     side: { L: 364, H: 192, across: 141, holder: 'sq-19', proven: true },
     builds: [
@@ -8602,7 +8695,8 @@ const VEHICLE_PACKS = [
   // his note 10.2024: "20S10P 18.5 נכנס במארז 41×20×9"). 90 across = ONE stack of either cell.
   // Sellers list a 72V 40-42Ah pack for it at 447×240×79, not rectangular — 79 fits in 90, and
   // 40Ah is 20S8P of 21700 on the 22.5 diagonal, which is what the side takes (175). The sellers'
-  // 48V table (75 across) would not take a lying 21700 at all; his tape wins.
+  // 48V table (75 across) would not take a lying 21700 at all; his tape wins. `fill: 1` = the bay is
+  // a plain rectangle, so bomberFrame fills his tape's rectangle rather than his build's outline.
   { g: 'אופנועי שטח (E-Moto)', m: 'Bomber FC-1', src: 'מחושב', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 8, max: 175,
     model: 3, hubOnly: true, fill: 1,
     tub: '410×90×200 מ"מ (נמדד במעבדה: אורך 41, גובה 20, רוחב 9) · התא מלבני',
@@ -9053,16 +9147,21 @@ function oldPackFit() {
   // Either way round: on a diagonal bracket, turning it can take more cells.
   const grid = (a, b) => [Math.floor((a + TOL - c.dia - 2 * DIM_WALL) / pitch) + 1, Math.floor((b + TOL - c.dia - 2 * DIM_WALL) / rowPitch) + 1];
   const Lc = Math.max(L, W) - extra, Wc = Math.min(L, W);
+  // Rows that nest closer than the pitch sit half a pitch over (2026-10-04, the half cell): every
+  // other row loses its last cell unless the run has half a pitch to spare.
+  const short = (a, [k, r]) => (rowPitch < pitch - 0.01 && r > 1 && a + TOL - c.dia - 2 * DIM_WALL - (k - 1) * pitch < pitch / 2 ? Math.floor(r / 2) : 0);
   const g1 = grid(Lc, Wc), g2 = grid(Wc, Lc);
-  const [cols, rows] = (g2[0] > 0 && g2[1] > 0 && g2[0] * g2[1] > g1[0] * g1[1]) ? g2 : g1;
+  const n1 = g1[0] * g1[1] - short(Lc, g1), n2 = g2[0] * g2[1] - short(Wc, g2);
+  const turned = g2[0] > 0 && g2[1] > 0 && n2 > n1;
+  const [cols, rows] = turned ? g2 : g1;
   const layers = Math.floor((usableH + TOL) / (c.len + DIM_CAP));
   if (cols < 1 || rows < 1 || layers < 1) return { fits: false, cols, rows, layers, V, c, extra };
-  const N = cols * rows * layers;
+  const N = (turned ? n2 : n1) * layers;
   const S = seriesForV(V);
   const P = Math.floor(N / S);
   if (P < 1) return { fits: false, tooSmallForV: true, N, S, cols, rows, layers, V, c, extra };
   const used = S * P;
-  return { fits: true, cols, rows, layers, N, S, P, used, spare: N - used,
+  return { fits: true, cols, rows, layers, N, S, P, used, spare: N - used, shortRows: turned ? short(Wc, g2) : short(Lc, g1),
            ah: +(P * c.ah).toFixed(1), wh: Math.round(S * 3.6 * P * c.ah),
            kg: +((used * c.g + 500) / 1000).toFixed(1), V, c, extra };
 }
@@ -9077,7 +9176,7 @@ function calcFromOldPack() {
       : 'המידות קטנות מדי לתא אחד עם התושבת הזו. בדוק את המידות ואת תוספת המארז.';
     return;
   }
-  out.innerHTML = `נכנסים <b>${r.cols}</b> לאורך × <b>${r.rows}</b> שורות${r.layers > 1 ? ' × <b>' + r.layers + '</b> שכבות' : ''} = <b>${r.N}</b> תאים.<br>
+  out.innerHTML = `נכנסים <b>${r.cols}</b> לאורך × <b>${r.rows}</b> שורות${r.shortRows ? ' (' + r.shortRows + ' מהן מוזזות חצי תא, עם תא אחד פחות)' : ''}${r.layers > 1 ? ' × <b>' + r.layers + '</b> שכבות' : ''} = <b>${r.N}</b> תאים.<br>
     ב-${r.V}V (${r.S}S): <b>${r.S}S${r.P}P</b> · <b>${r.ah}Ah</b>${r.spare ? ' · ' + r.spare + ' תאים עודפים' : ''}<br>
     <span style="font-size:11px;color:var(--text-muted);">כולל ${r.extra} מ"מ ל-BMS באורך, ${r.c.label}</span>`;
 }
