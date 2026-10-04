@@ -1268,6 +1268,10 @@ body { min-height: 100vh; }
       <label>אימייל</label>
       <input type="email" class="form-input-wide" id="bizEmail" placeholder="greenpower.service.israel@gmail.com" style="width: 180px;">
     </div>
+    <div class="form-row">
+      <label>קישור לביקורת בגוגל</label>
+      <input type="url" class="form-input-wide" id="bizReviewUrl" placeholder="https://g.page/r/…/review" style="width: 180px; direction: ltr;">
+    </div>
 
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">💳 פרטי תשלום להצעת מחיר</div>
@@ -2639,7 +2643,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v390';
+const HUB_BUILD = 'v391';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3963,8 +3967,80 @@ function openCustomerDetails(idx) {
   `;
   openModal(c.name, body, `
     <button class="btn btn-accent" style="background: #25D366;" onclick="callCustomer('${c.phone}')">💬 וואטסאפ</button>
+    <button class="btn btn-secondary" onclick="openReviewAskFor(${idx})">⭐ ${c.reviewAskedAt ? 'ביקורת (נשלח ' + new Date(c.reviewAskedAt).toLocaleDateString('he-IL') + ')' : 'ביקורת בגוגל'}</button>
     <button class="btn btn-secondary" onclick="closeModal()">סגור</button>
   `);
+}
+
+// ---- Asking for a Google review (2026-10-05) ----
+// Daniel chose it on 2026-09-01 ("ביקורות באתר — לאסוף אמיתיות?" → "כן — דרך גוגל") and it was
+// never built; found again going through the old sessions. A message with a WhatsApp link only
+// shows for copying on his phone (sendWhatsApp, above), so the request goes out through the bot
+// from the business number: he sees the message, may edit it, and one tap sends it. Offered by
+// itself when a job or a sale is marked נמסר — once per customer (reviewAskedAt).
+// The link: his Google Business Profile's own review link when he has set one in the settings;
+// until then the business on Google Maps (the cid the site already links to).
+const REVIEW_FALLBACK_URL = 'https://www.google.com/maps?cid=661613135664544059';
+let reviewTarget = null;
+function reviewLink() {
+  const b = (typeof bizDetails !== 'undefined' && bizDetails) || Store.get('biz') || {};
+  return String(b.reviewUrl || '').trim() || REVIEW_FALLBACK_URL;
+}
+function reviewMessage(name) {
+  const first = String(name || '').trim().split(/\s+/)[0];
+  return 'שלום' + (first ? ' ' + first : '') + ', תודה שבחרת ב-Green Power 🔋\n'
+    + 'אם אתה מרוצה מהעבודה, נשמח מאוד לביקורת קצרה בגוגל — זה עוזר לנו המון:\n'
+    + reviewLink() + '\nתודה רבה, דניאל';
+}
+function customerForPhone(phone) {
+  const n = waNumber(phone);
+  if (!n) return null;
+  const list = Store.get('customers') || [];
+  const i = list.findIndex((c) => custPhones(c).some((p) => waNumber(p) === n));
+  return i < 0 ? null : { list, i, c: list[i] };
+}
+function openReviewAskFor(idx) {
+  const c = (Store.get('customers') || [])[idx];
+  if (c) openReviewAsk(c.phone, c.name);
+}
+function openReviewAsk(phone, name) {
+  if (!waNumber(phone)) { showNotice('אין מספר טלפון תקין ללקוח הזה'); return; }
+  reviewTarget = { phone, name };
+  openModal('⭐ בקשת ביקורת בגוגל',
+    '<textarea id="reviewMsg" class="form-input-wide wb-area" style="min-height:150px">' + escPunch(reviewMessage(name)) + '</textarea>'
+    + '<div class="wt-muted" style="margin-top:6px">יישלח מהוואטסאפ העסקי שלך, דרך הבוט. אפשר לערוך לפני השליחה.</div>',
+    '<button class="btn btn-primary" onclick="sendReviewAsk()">📤 שלח</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>');
+}
+function markReviewAsked(phone) {
+  const f = customerForPhone(phone);
+  if (!f) return;
+  f.list[f.i] = { ...f.c, reviewAskedAt: new Date().toISOString() };
+  Store.set('customers', f.list);
+}
+async function sendReviewAsk() {
+  const t = reviewTarget, box = document.getElementById('reviewMsg');
+  if (!t || !box) return;
+  const text = box.value.trim();
+  if (!text) { showNotice('ההודעה ריקה'); return; }
+  try {
+    if (typeof Sync === 'undefined' || !Sync.isAuthed()) throw new Error('not logged in');
+    await waAdmin({ op: 'send', chat: t.phone, text, name: t.name || '' });
+    markReviewAsked(t.phone);
+    closeModal();
+    showNotice('✅ הבקשה נשלחה ל' + (t.name || 'לקוח') + ' בוואטסאפ');
+  } catch (e) {
+    // the bot out of reach (offline, logged out): the message to copy, the way it always worked
+    closeModal();
+    markReviewAsked(t.phone);
+    showMessageToCopy(text, 'הבוט לא זמין — העתק ושלח בעצמך');
+  }
+}
+// When a job or a sale is marked נמסר: offer it, unless this customer was already asked.
+function offerReviewAsk(phone, name) {
+  if (!waNumber(phone)) return;
+  const f = customerForPhone(phone);
+  if (f && f.c.reviewAskedAt) return;
+  askConfirm('נמסר ✅\nלשלוח ל' + (name || 'לקוח') + ' בקשה לביקורת בגוגל?', () => openReviewAsk(phone, name));
 }
 
 function callCustomer(phone) {
@@ -5965,6 +6041,7 @@ function cycleOrderStatus(id) {
   if (saleIsIncome(o)) takeOrderStock(o);
   Store.set('orders', orders);
   renderOrders();
+  if (o.status === 'נמסר') offerReviewAsk(o.phone, o.customer);
 }
 function deleteOrder(id) {
   const o = (Store.get('orders') || []).find(x => x.id === id);
@@ -9416,7 +9493,7 @@ async function waAdmin(body, query) {
   return j;
 }
 const WA_RESULT = { sent: '✅ ענה', asked: '❓ העביר אליך', paused: '⏸ שתק — ענית בעצמך', rate: '⏸ יותר מדי הודעות בשעה', blocked: '🚫 מספר חסום',
-  off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל' };
+  off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל', manual: '📤 נשלח ממך' };
 const WA_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 function waNum(c) {
   const d = String(c || '').split('@')[0];
@@ -9811,6 +9888,7 @@ function saveJobEdit(jobId) {
   j.voltage = document.getElementById('jeVolt').value.trim();
   j.capacity = document.getElementById('jeCap').value.trim();
   j.reason = document.getElementById('jeReason').value.trim();
+  const wasStatus = j.jobStatus;
   j.jobStatus = document.getElementById('jeStatus').value;
   const q = document.getElementById('jeQuick');
   if (q) j.quickRepair = q.value.trim();
@@ -9827,6 +9905,7 @@ function saveJobEdit(jobId) {
   else { adjustCustomerTotals(oldPhone, -oldPrice, -1); adjustCustomerTotals(phone, price, 1, name); }
   closeModal();
   afterJobChange();
+  if (j.jobStatus === 'נמסר' && wasStatus !== 'נמסר') offerReviewAsk(phone, name);
 }
 
 function deleteJob(jobId, ret) {
@@ -10876,6 +10955,7 @@ function saveBizDetails() {
     address: document.getElementById('bizAddress').value,
     id: document.getElementById('bizId').value,
     email: document.getElementById('bizEmail').value,
+    reviewUrl: document.getElementById('bizReviewUrl').value.trim(),
     // Payment details live here — in the synced `biz` key behind the login — and never
     // in the HTML. hub.energylabgreen.com serves this file to anyone who asks (the gate
     // is JS-side only), so a hardcoded account number would be published.
@@ -11111,6 +11191,7 @@ function init() {
   document.getElementById('bizAddress').value = bizDetails.address || '';
   document.getElementById('bizId').value = bizDetails.id || '';
   document.getElementById('bizEmail').value = bizDetails.email || '';
+  document.getElementById('bizReviewUrl').value = bizDetails.reviewUrl || '';
   document.getElementById('bizBit').value = bizDetails.bit || '';
   document.getElementById('bizBankHolder').value = bizDetails.bankHolder || '';
   document.getElementById('bizBankName').value = bizDetails.bankName || '';

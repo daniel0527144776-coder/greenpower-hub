@@ -167,6 +167,11 @@ jobs:
       - name: The WhatsApp bot's page
         run: node test/test-wabot.mjs
 
+      # Asking a customer for a Google review after a job (2026-10-05): offered on נמסר once per
+      # customer, sent through the bot only when he presses send, copyable when the bot is down.
+      - name: The Google review request
+        run: node test/test-review-ask.mjs
+
       # He asked why an e-bike cost the same as every other category at the same voltage and
       # capacity. It did: the model had one flat materials figure and the family was not an
       # input to the price at all. The e-bike buys a Silver Fish case; the Sur-Ron an OEM one.
