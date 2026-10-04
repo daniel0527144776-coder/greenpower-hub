@@ -225,6 +225,71 @@ const sub = await page.evaluate(() => {
 check('a new item can be filed under a sub-category its name does not show', /16S/.test(sub.heads), sub);
 check('editing a cell saved as "תאים" keeps it a cell', sub.catShown === 'תא' && sub.cellCat === 'תא', sub);
 
+// ---- 10b. a repair's cell finds its shelf row (bug found 2026-10-04) ----
+// The repair calculator names its cell "21700-50pl"; the shelf says "תאי EVE 21700 50PL". Split on
+// spaces only, the whole "21700-50pl" was the tail and matched nothing, so no full build saved
+// from a repair ever took a cell off the shelf. "18650-6" must still match nothing.
+const rep = await page.evaluate(() => {
+  Store.set('inventory', [{ id: 'r1', name: 'תאי EVE 21700 50PL', qty: 400, cat: 'תאים' },
+    { id: 'r2', name: 'תאי EVE 21700 50E', qty: 2500, cat: 'תאים' }, { id: 'r3', name: 'תאי EVE 18650 25P', qty: 100, cat: 'תאים' }]);
+  const pl = inventoryDeduct('21700-50pl', 64, 'בדיקה');
+  const p25 = inventoryDeduct('18650-25p', 10, 'בדיקה');
+  const six = inventoryDeduct('18650-6', 10, 'בדיקה');
+  const inv = getInventory();
+  return { pl: pl && pl.matched, p25: p25 && p25.matched, six: six && six.matched, q: inv.map((r) => r.qty) };
+});
+check('a repair\'s "21700-50pl" comes off "תאי EVE 21700 50PL"', rep.pl === true && rep.q[0] === 336, JSON.stringify(rep));
+check('and "18650-25p" off the 18650 25P row', rep.p25 === true && rep.q[2] === 90, JSON.stringify(rep));
+check('"18650-6" matches no row rather than a near one', rep.six === false && rep.q[1] === 2500, JSON.stringify(rep));
+
+// ---- 11. ordering by pace (2026-10-04, "הזמנת מלאי לפי קצב") ----
+// Every automatic deduction leaves a dated line; before the log, sales and repairs are read back
+// with the same decomposition that deducted them; a hand recount is not usage; and what to order
+// covers the delivery time plus three months. --selftest: the deductions stop logging.
+const pace = await page.evaluate((SELF) => {
+  if (SELF) window.invLogUse = () => {};
+  const day = 864e5, now = Date.now(), iso = (d) => new Date(now - d * day).toISOString();
+  // a) a deduction is logged; a hand recount is not
+  Store.set('inv_log', []);
+  Store.set('inventory', [{ id: 'p1', name: 'תאי EVE 21700 50E', qty: 1000, cat: 'תאים' }, { id: 'p2', name: 'BMS 20S 100A', qty: 5, cat: 'BMS' }]);
+  inventoryDeduct('EVE 50E', 120, 'בדיקה');
+  inventoryTake('BMS 20S 100A', 1, 'בדיקה');
+  adjustInventory('p1', -1);
+  const logged = (Store.get('inv_log') || []).map((e) => [e.row, e.qty]);
+  // b) before any log line, the records say what was used: a delivered 72V sale and a full build
+  Store.set('inv_log', []);
+  Store.set('orders', [{ id: 'o1', date: iso(20), status: 'נמסר', customer: 'x', total: 1,
+    items: [{ cat: 'סוללות אופניים - 72V CLASSIC', name: '72V 20Ah', qty: 1, unit: 1 }] },
+    { id: 'o2', date: iso(10), status: 'הצעה', customer: 'y', total: 1, items: [{ cat: 'סוללות אופניים - 72V CLASSIC', name: '72V 20Ah', qty: 1, unit: 1 }] }]);
+  Store.set('jobs', [{ id: 'j1', date: iso(5), jobs: ['full'], voltage: '60', capacity: '20', cellType: '21700-50e', bmsBrand: 'daly', bmsAmps: '60' }]);
+  const back = invUsage();
+  const sale = batteryStockParts({ cat: 'סוללות אופניים - 72V CLASSIC', name: '72V 20Ah', qty: 1 });
+  const job = jobStockParts(Store.get('jobs')[0]);
+  // c) the forecast: 900 cells over 80 days on a shelf of 500, cells arriving in 60 days
+  Store.set('orders', []); Store.set('jobs', []);
+  Store.set('inventory', [{ id: 'p1', name: 'תאי EVE 21700 50E', qty: 500, cat: 'תאים' },
+    { id: 'p3', name: 'מטען 72V 5A', qty: 0, cat: 'מטען' }]);
+  Store.set('inv_log', [{ id: 'l1', at: iso(80), row: 'p1', name: 'תאי EVE 21700 50E', qty: 600 },
+    { id: 'l2', at: iso(10), row: 'p1', name: 'תאי EVE 21700 50E', qty: 300 }]);
+  const fc = invForecast(getInventory()[0]);
+  const text = orderListText();
+  navigateTo('inventory');
+  if (!INV_OPEN.has('תא')) toggleInvCat(encodeURIComponent('תא'));
+  const pageText = document.getElementById('page-inventory').innerText;
+  Store.set('inv_log', []); Store.set('orders', []); Store.set('jobs', []);
+  return { logged, back, saleCells: sale && sale.cells, jobCells: job.cells, fc, text, pageText };
+}, SELFTEST);
+check('a deduction leaves a dated usage line, a hand recount does not', JSON.stringify(pace.logged) === JSON.stringify([['p1', 120], ['p2', 1]]), JSON.stringify(pace.logged));
+check('before the log, a delivered sale and a full build count as used — a quote does not',
+  pace.back.used.p1 === pace.saleCells + pace.jobCells && pace.saleCells > 0 && pace.jobCells === 64, JSON.stringify(pace.back));
+check('the BMS of the sale and of the build are counted on their own rows', pace.back.used.p2 === 1, JSON.stringify(pace.back.used));
+check('900 cells in 80 days is ~338 a month, and 500 lasts 44 days', pace.fc && Math.abs(pace.fc.perMonth - 337.5) <= 1 && pace.fc.daysLeft === 44, JSON.stringify(pace.fc));
+check('cells that will not outlast a 60-day delivery are to be ordered now', pace.fc && pace.fc.orderNow === true, JSON.stringify(pace.fc));
+check('enough for the delivery plus three months, by the box of 50', pace.fc && pace.fc.want === 1200, JSON.stringify(pace.fc));
+check('the order message carries the pace', /תאי EVE 21700 50E — 1200 יח׳ \(נשארו 500, יוצאים כ-33[78] בחודש\)/.test(pace.text), pace.text);
+check('a row with no pace still goes on the order by the old rule', /מטען 72V 5A — 4 יח׳ \(נשארו 0\)/.test(pace.text), pace.text);
+check('the shelf row says its pace and to order now', /~33[78] בחודש · מספיק לכ-6 שבועות · ⏰ להזמין עכשיו \(1200\)/.test(pace.pageText), pace.pageText.slice(0, 300));
+
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');

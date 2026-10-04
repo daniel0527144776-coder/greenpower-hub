@@ -1817,7 +1817,7 @@ let bizDetails = {};
 // on any device that still holds the rows puts them back everywhere.
 // Lists of rows with an id: merged row by row (2026-09-25, extended to everything that has one).
 const MERGE_KEYS = ['inventory', 'worktime', 'wage_payments', 'customers', 'jobs', 'incomes', 'expenses',
-  'workers', 'orders', 'dims', 'biz_payments'];
+  'workers', 'orders', 'dims', 'biz_payments', 'inv_log'];
 // Single objects and maps: merged field by field, each field stamped when it changed, the stamps
 // synced beside them in fs_<key>. Not merged: supplier_prices (no row ids — and "החלף רשימה" is
 // meant to replace it), sticker_history (its own merge), worktime_trash (a local-ish log).
@@ -1949,7 +1949,7 @@ const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
 const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'bms_pick', 'supplier_costs', 'supplier_prices', 'biz_payments', 'wage_payments', 'worktime_trash',
   'tomb_inventory', 'tomb_worktime', 'tomb_wage_payments', 'tomb_customers', 'tomb_jobs', 'tomb_incomes', 'tomb_expenses',
-  'tomb_workers', 'tomb_orders', 'tomb_dims', 'tomb_biz_payments',
+  'tomb_workers', 'tomb_orders', 'tomb_dims', 'tomb_biz_payments', 'inv_log', 'tomb_inv_log',
   'fs_settings', 'fs_biz', 'fs_costs', 'fs_diag_notes', 'fs_bms_pick', 'fs_supplier_costs'];
 
 const Sync = {
@@ -2588,7 +2588,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v381';
+const HUB_BUILD = 'v382';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3276,19 +3276,15 @@ function saveJob() {
   // those would drain the shelf on paper while the cells are still in the drawer.
   // A BMS is consumed by a full build, a BMS swap AND a BMS upgrade — the same three jobs the
   // calculator charges one for (`bmsUsed` in recalc). Anything else leaves it alone.
-  if (['full', 'bms', 'bms_upgrade'].some((k) => (entry.jobs || []).includes(k)) && entry.bmsBrand && entry.bmsAmps) {
-    // The shelf labels a BMS by SERIES COUNT and amps — `BMS 20S 100A` — because that is what
-    // decides whether one fits. The brand is not on the label, so a name built from it
-    // ('BMS DALY 60A') matches nothing. seriesForV is the hub's own voltage->S table.
-    const bmsName = `BMS ${seriesForV(+entry.voltage)}S ${entry.bmsAmps}A`;
+  const parts = jobStockParts(entry);
+  if (parts.bmsName) {
+    const bmsName = parts.bmsName;
     const hit = inventoryTake(bmsName, 1, entry.customerName || '');
     if (hit && hit.matched) showNotice(`ירד מהמלאי: ${hit.name} · נשארו ${hit.left}`);
     else if (hit) showNotice(`⚠ ${bmsName} לא נמצא במלאי — לא הופחת`);
   }
-  if ((entry.jobs || []).includes('full') && entry.voltage && entry.capacity && entry.cellType) {
-    const S = seriesForV(+entry.voltage);
-    const P = Math.max(1, Math.ceil(+entry.capacity / 5));
-    const hit = inventoryDeduct(entry.cellType, S * P, entry.customerName || '');
+  if (parts.cells) {
+    const hit = inventoryDeduct(parts.cellModel, parts.cells, entry.customerName || '');
     if (hit && hit.matched) {
       showNotice(`הופחתו ${hit.cells} תאים · נשארו ${hit.left}`);
     } else if (hit) {
@@ -9542,21 +9538,47 @@ function invShortages() {
 // Matching is by CELL MODEL, not by row name: the inventory row can be called anything, and the
 // job knows which cell it used. A build whose cell is not on the shelf is left alone and
 // reported rather than silently deducted from something similar.
+// A repair's parts — what a saved job takes off the shelf. One definition: saveJob deducts these,
+// and the usage rate reads them back for jobs saved before the usage log existed.
+// Only a FULL BUILD consumes cells; a BMS goes with a full build, a BMS swap or a BMS upgrade
+// (the three the calculator charges one for). The shelf labels a BMS by SERIES COUNT and amps —
+// `BMS 20S 100A` — because that decides whether one fits; the brand is not on the label.
+function jobStockParts(entry) {
+  const jobs = (entry && entry.jobs) || [];
+  const out = { bmsName: null, cellModel: null, cells: 0 };
+  if (['full', 'bms', 'bms_upgrade'].some((k) => jobs.includes(k)) && entry.bmsBrand && entry.bmsAmps) {
+    out.bmsName = `BMS ${seriesForV(+entry.voltage)}S ${entry.bmsAmps}A`;
+  }
+  if (jobs.includes('full') && entry.voltage && entry.capacity && entry.cellType) {
+    out.cellModel = entry.cellType;
+    out.cells = seriesForV(+entry.voltage) * Math.max(1, Math.ceil(+entry.capacity / 5));
+  }
+  return out;
+}
+function invFindCellRow(inv, cellModel) {
+  const key = String(cellModel || '').toLowerCase();
+  if (!key) return null;
+  return inv.find((i) => {
+    const n = String(i.name || '').toLowerCase();
+    // "EVE 50E" must match a row called "תאי EVE 21700 50E" — compare on the distinctive part.
+    // A repair names its cell "21700-50pl" (the calculator's value), so a hyphen splits too: split
+    // on spaces alone, its whole "21700-50pl" was the tail, and no full build from the repair
+    // calculator ever took a cell off the shelf (found 2026-10-04). "18650-6" still matches
+    // nothing — a one-character tail is not distinctive enough to deduct from.
+    const tail = key.split(/[\s\-_]+/).pop();
+    return n.includes(key) || (tail && tail.length >= 3 && n.includes(tail));
+  }) || null;
+}
 function inventoryDeduct(cellModel, cells, note) {
   if (!cellModel || !cells) return null;
   const inv = getInventory();
-  const key = String(cellModel).toLowerCase();
-  const row = inv.find((i) => {
-    const n = String(i.name || '').toLowerCase();
-    // "EVE 50E" must match a row called "תאי EVE 21700 50E" — compare on the distinctive part.
-    const tail = key.split(/\s+/).pop();
-    return n.includes(key) || (tail && tail.length >= 3 && n.includes(tail));
-  });
+  const row = invFindCellRow(inv, cellModel);
   if (!row) return { matched: false, cellModel, cells };
   row.qty = Math.max(0, (Number(row.qty) || 0) - cells);
   row.lastUsed = new Date().toISOString();
   if (note) row.lastNote = String(note).slice(0, 60);
   Store.set('inventory', inv);
+  invLogUse(row, cells, note);
   return { matched: true, name: row.name, left: row.qty, cells };
 }
 
@@ -9596,31 +9618,122 @@ function inventoryTake(name, qty, note) {
   row.lastUsed = new Date().toISOString();
   if (note) row.lastNote = String(note).slice(0, 60);
   Store.set('inventory', inv);
+  invLogUse(row, qty, note);
   return { matched: true, name: row.name, left: row.qty, qty };
+}
+
+// ---- how fast each part goes, and when to order it (2026-10-04) ----
+// He asked for ordering "לפי קצב". The shelf only ever held a count, so there was nothing to take
+// a rate from: every automatic deduction now leaves a dated line in inv_log (synced, row-merged).
+// For the time before the log, the rate is read back from the sales and repairs themselves, with
+// the same decomposition that deducted them (batteryStockParts / jobStockParts) — never a guess.
+// Hand corrections with − / + are NOT usage: a recount is not consumption.
+//
+// His figures, 2026-10-04: cells take about two months to arrive (sea import), a BMS or a charger
+// about three weeks; an order should leave three months of stock behind it.
+const INV_LEAD_DAYS = { cell: 60, part: 21 };
+const INV_COVER_DAYS = 90;
+const INV_RATE_DAYS = 90;        // the window the rate is averaged over
+const INV_LOG_KEEP_DAYS = 400;
+const invIsCell = (row) => invCatOf(row) === 'תא';
+function invLogUse(row, qty, note) {
+  if (!row || !(qty > 0)) return;
+  const log = Store.get('inv_log') || [];
+  log.push({ id: 'iu' + Date.now() + Math.random().toString(36).slice(2, 6), at: new Date().toISOString(),
+    row: String(row.id != null ? row.id : row.name), name: row.name, qty: Number(qty), note: note ? String(note).slice(0, 40) : '' });
+  const cut = Date.now() - INV_LOG_KEEP_DAYS * 864e5;
+  Store.set('inv_log', log.filter((e) => Date.parse(e.at) >= cut));
+}
+// Units used per shelf row over the window: { [row key]: qty }, plus the days that window covers.
+function invUsage(now = Date.now()) {
+  const inv = getInventory();
+  const keyOf = (row) => String(row.id != null ? row.id : row.name);
+  const from = now - INV_RATE_DAYS * 864e5;
+  const log = (Store.get('inv_log') || []).filter((e) => Date.parse(e.at) >= from && Date.parse(e.at) <= now);
+  const used = {};
+  const add = (row, n) => { if (row && n > 0) used[keyOf(row)] = (used[keyOf(row)] || 0) + n; };
+  for (const e of log) {
+    const row = inv.find((r) => keyOf(r) === e.row) || invFindRow(inv, e.name);
+    add(row, Number(e.qty) || 0);
+  }
+  // Before the first log line, the records themselves say what left the shelf.
+  const firstLog = log.length ? Math.min(...log.map((e) => Date.parse(e.at))) : now;
+  let earliest = now;
+  const inBackfill = (d) => { const t = Date.parse(d); return t >= from && t < firstLog; };
+  for (const o of Store.get('orders') || []) {
+    if (!o || !saleIsIncome(o) || !inBackfill(o.date) || !Array.isArray(o.items)) continue;
+    earliest = Math.min(earliest, Date.parse(o.date));
+    for (const it of o.items) {
+      if (it.custom) continue;
+      const qty = Number(it.qty) || 1;
+      const named = invFindRow(inv, it.name);
+      if (named) { add(named, qty); continue; }
+      const parts = batteryStockParts(it);
+      if (!parts) continue;
+      add(invFindCellRow(inv, parts.cellModel), parts.cells * qty);
+      if (parts.bmsName) add(invFindRow(inv, parts.bmsName), qty);
+    }
+  }
+  for (const j of Store.get('jobs') || []) {
+    if (!j || !inBackfill(j.date)) continue;
+    earliest = Math.min(earliest, Date.parse(j.date));
+    const p = jobStockParts(j);
+    if (p.bmsName) add(invFindRow(inv, p.bmsName), 1);
+    if (p.cells) add(invFindCellRow(inv, p.cellModel), p.cells);
+  }
+  if (log.length) earliest = Math.min(earliest, firstLog);
+  // A shelf with only three weeks of history is averaged over those weeks, not over 90 days of
+  // which most are empty — but never fewer than 30, or one big build reads as a monthly habit.
+  const days = Math.max(30, Math.min(INV_RATE_DAYS, (now - earliest) / 864e5));
+  return { used, days };
+}
+// For one row: the rate, how long the shelf lasts, and whether to order now and how many.
+function invForecast(row, usage) {
+  const u = usage || invUsage();
+  const n = u.used[String(row.id != null ? row.id : row.name)] || 0;
+  if (!n) return null;
+  const perDay = n / u.days;
+  const qty = Number(row.qty) || 0;
+  const lead = invIsCell(row) ? INV_LEAD_DAYS.cell : INV_LEAD_DAYS.part;
+  const daysLeft = qty / perDay;
+  // Order when what is left will not outlast the delivery plus two weeks to get the order out.
+  const orderNow = daysLeft < lead + 14;
+  let want = Math.ceil(perDay * (lead + INV_COVER_DAYS) - qty);
+  if (invIsCell(row)) want = Math.ceil(want / 50) * 50;      // cells are bought by the box
+  return { perMonth: Math.round(perDay * 30), daysLeft: Math.floor(daysLeft), lead, orderNow, want: Math.max(0, want) };
 }
 
 // What to send the supplier. He named ordering as one of his three daily time sinks, so the
 // answer is a message ready to paste rather than a screen to read off.
 //
-// The suggested quantity is deliberately crude: enough to clear the shortage and put the same
-// amount again behind it. A reorder model needs a demand rate, and his own answer about build
-// volume was "משתנה מאוד" — so inventing one would be a number pretending to be a forecast.
+// By RATE where the shelf has one (2026-10-04, "לפי קצב"): a row is ordered when it will not
+// outlast its delivery, enough for the delivery time plus three months. A row nobody has used
+// yet keeps the old rule — clear the shortage and put the same again behind it — because with no
+// rate any other number would be a guess dressed as a forecast.
 function orderList() {
+  const usage = invUsage();
   const { out, low } = invShortages();
-  const need = out.concat(low);
-  if (!need.length) return null;
-  const lines = need.map((i) => {
+  const lines = [];
+  const seen = new Set();
+  for (const i of getInventory()) {
+    const fc = invForecast(i, usage);
+    if (fc && fc.orderNow && fc.want > 0) {
+      lines.push({ name: i.name, have: Number(i.qty) || 0, want: fc.want, perMonth: fc.perMonth });
+      seen.add(i);
+    }
+  }
+  for (const i of out.concat(low)) {
+    if (seen.has(i) || invForecast(i, usage)) continue;    // a row with a rate is judged by it
     const q = Number(i.qty) || 0;
     const t = i.low != null ? Number(i.low) : INV_LOW_DEFAULT;
-    const want = Math.max(t * 2 - q, t);
-    return { name: i.name, have: q, want: Math.ceil(want) };
-  });
-  return lines;
+    lines.push({ name: i.name, have: q, want: Math.ceil(Math.max(t * 2 - q, t)) });
+  }
+  return lines.length ? lines : null;
 }
 function orderListText() {
   const lines = orderList();
   if (!lines) return '';
-  return 'הזמנה:\n' + lines.map((l) => `• ${l.name} — ${l.want} יח׳ (נשארו ${l.have})`).join('\n');
+  return 'הזמנה:\n' + lines.map((l) => `• ${l.name} — ${l.want} יח׳ (נשארו ${l.have}${l.perMonth ? `, יוצאים כ-${l.perMonth} בחודש` : ''})`).join('\n');
 }
 function copyOrderList() {
   const txt = orderListText();
@@ -9764,6 +9877,7 @@ function seedCellStockOnce() {
 const INV_OPEN = new Set();
 function toggleInvCat(c) { c = decodeURIComponent(c); if (INV_OPEN.has(c)) INV_OPEN.delete(c); else INV_OPEN.add(c); renderInventory(); }
 function renderInventory() {
+  _invUsageCache = null;    // the pace lines read usage fresh on every render
   // The cell-cost reference used to render here. It is a SUPPLIER cost, not stock on a
   // shelf, so it belongs on עלויות ספקים — where it now lives alongside every other
   // supplier — and not on a page about what is in the drawer.
@@ -9889,7 +10003,7 @@ function renderInvItem(i, cat) {
   return `<div class="list-item" style="${isLow ? 'border-color:var(--danger);' : ''}">
       <div class="list-item-header">
         <div><div class="list-item-title">${title} ${isLow ? '<span style="font-size:10px;color:var(--danger);">🔴 אזל</span>' : ''}</div>
-          <div class="list-item-subtitle">${i.note || ''}${i.low != null ? ` · סף: ${i.low}` : ''}</div></div>
+          <div class="list-item-subtitle">${i.note || ''}${i.low != null ? ` · סף: ${i.low}` : ''}${invPaceLine(i)}</div></div>
         <div class="num-input">
           <button class="num-btn" onclick="adjustInventory('${i.id}',-1)">−</button>
           <span class="num-val" style="${isLow ? 'color:var(--danger);' : ''}">${i.qty}</span>
@@ -9901,6 +10015,16 @@ function renderInvItem(i, cat) {
         <button class="btn btn-sm btn-danger" onclick="deleteInventory('${i.id}')">🗑️</button>
       </div>
     </div>`;
+}
+// "~400 בחודש · מספיק לכ-6 שבועות", and when it will not outlast a delivery, says to order now.
+// The usage is computed once per render of the page, not once per row.
+let _invUsageCache = null;
+function invPaceLine(i) {
+  const fc = invForecast(i, _invUsageCache || (_invUsageCache = invUsage()));
+  if (!fc) return '';
+  const left = fc.daysLeft >= 365 ? 'יותר משנה' : fc.daysLeft >= 21 ? `כ-${Math.round(fc.daysLeft / 7)} שבועות` : `כ-${fc.daysLeft} ימים`;
+  return `<div style="font-size:11px;margin-top:2px;${fc.orderNow ? 'color:var(--warning,#f59e0b);font-weight:700;' : ''}">`
+    + `~${fc.perMonth} בחודש · מספיק ל${left}${fc.orderNow ? ` · ⏰ להזמין עכשיו (${fc.want})` : ''}</div>`;
 }
 function adjustInventory(id, d) {
   const inv = getInventory(); const it = inv.find(x => x.id === id); if (!it) return;
