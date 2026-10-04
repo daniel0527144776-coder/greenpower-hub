@@ -2639,7 +2639,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v389';
+const HUB_BUILD = 'v390';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9406,17 +9406,17 @@ async function postBotIndex(s) {
 // button refers to its row by index, never by a string in the onclick.
 const WA_ADMIN_URL = 'https://energylabgreen.com/api/wa/admin';
 let waBot = null, waBotLogFilter = 'all';
-async function waAdmin(body) {
+async function waAdmin(body, query) {
   const t = await Sync.token();
   const init = { headers: { authorization: 'Bearer ' + t } };
   if (body) { init.method = 'POST'; init.headers['content-type'] = 'application/json'; init.body = JSON.stringify(body); }
-  const r = await fetch(WA_ADMIN_URL, init);
+  const r = await fetch(WA_ADMIN_URL + (query ? '?' + query : ''), init);
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
   return j;
 }
 const WA_RESULT = { sent: '✅ ענה', asked: '❓ העביר אליך', paused: '⏸ שתק — ענית בעצמך', rate: '⏸ יותר מדי הודעות בשעה', blocked: '🚫 מספר חסום',
-  off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות' };
+  off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל' };
 const WA_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 function waNum(c) {
   const d = String(c || '').split('@')[0];
@@ -9492,6 +9492,7 @@ function waSettingsHtml() {
     + '<div class="form-row"><label>עד שעה</label><input type="time" class="form-input" id="wbTo" value="' + escPunch(c.to) + '"></div></div>'
     + '<div class="form-row"><label>מודל</label><select class="form-select" id="wbModel">' + opt('quality', st.model, 'איכותי (Sonnet)') + opt('saving', st.model, 'חסכוני (Haiku)') + '</select></div>'
     + chk('wbShabbat', st.shabbat, '🕯 לא לענות בשבת ובחג (לפי השקיעה באלעד)')
+    + chk('wbIsrael', st.israelOnly, '🇮🇱 לענות רק למספרים ישראליים (ספקים ומכרים מחו״ל לא יקבלו תשובה)')
     + chk('wbVoice', st.voice, '🎤 לתמלל הודעות קוליות')
     + chk('wbMedia', st.media, '🖼 להסתכל על תמונות וקבצי PDF')
     + chk('wbAsk', st.askDaniel, '❓ מה שהבוט לא יודע — לשאול אותך')
@@ -9516,7 +9517,54 @@ function waBlockedHtml() {
     + '<div class="divider"></div>'
     + '<div class="form-row"><label>מספר</label><input type="tel" class="form-input" id="wbBlockNum" placeholder="050-0000000"></div>'
     + '<div class="form-row"><label>שם (לא חובה)</label><input type="text" class="form-input-wide" id="wbBlockName" style="width:150px"></div>'
-    + '<button class="btn btn-secondary btn-block" onclick="waBlock()">➕ הוסף</button></div>';
+    + '<button class="btn btn-secondary btn-block" onclick="waBlock()">➕ הוסף</button>'
+    + '<button class="btn btn-secondary btn-block" style="margin-top:6px" onclick="waPickContacts()">📇 בחירה מאנשי הקשר בוואטסאפ</button>'
+    + '<div id="wbPick"></div></div>';
+}
+// His suppliers sit under a WhatsApp Business label ("ספקים ישראלים"), which Green API cannot read —
+// so he picks them here from his WhatsApp contacts (2026-10-04). Names come from his phone, and a
+// contact's own WhatsApp name is written by that person: escaped like everything else.
+let waContacts = [], waPicked = new Set();
+async function waPickContacts() {
+  const box = document.getElementById('wbPick');
+  if (!box) return;
+  box.innerHTML = '<div class="wt-muted" style="margin-top:8px">טוען את אנשי הקשר…</div>';
+  try { waContacts = (await waAdmin(null, 'contacts=1')).contacts || []; }
+  catch (e) { box.innerHTML = '<div class="wt-muted" style="margin-top:8px">⚠ ' + escPunch(e.message) + '</div>'; return; }
+  waPicked = new Set();
+  box.innerHTML = '<input type="search" class="form-input-wide" id="wbPickQ" placeholder="חיפוש לפי שם או מספר" oninput="waPickList()" style="margin:8px 0">'
+    + '<div id="wbPickList" class="cust-pick-rows" style="max-height:340px"></div>'
+    + '<button class="btn btn-primary btn-block" id="wbPickGo" style="margin-top:8px" onclick="waBlockPicked()">🚫 חסום את המסומנים (0)</button>';
+  waPickList();
+}
+function waPickList() {
+  const list = document.getElementById('wbPickList');
+  if (!list) return;
+  const q = wbVal('wbPickQ').toLowerCase(), digits = q.replace(/D/g, '');
+  const blocked = new Set((waBot.settings.blocked || []).map((b) => b.p));
+  const rows = waContacts.map((c, i) => ({ c, i })).filter(({ c }) => !q || c.n.toLowerCase().includes(q)
+    || (digits.length >= 3 && (c.p.includes(digits) || waNum(c.p).replace(/D/g, '').includes(digits))));
+  const shown = rows.slice(0, 80);
+  list.innerHTML = shown.map(({ c, i }) => {
+    const isB = blocked.has(c.p), on = waPicked.has(i);
+    return '<div class="cust-pick-row" onclick="waPickToggle(' + i + ')"><span><span class="cust-pick-name">' + (isB ? '🚫 ' : on ? '☑ ' : '☐ ') + escPunch(c.n) + '</span>'
+      + '<div class="cust-pick-sub">' + escPunch(waNum(c.p)) + (isB ? ' · כבר חסום' : '') + '</div></span></div>';
+  }).join('')
+    + (rows.length > shown.length ? '<div class="cust-pick-empty">ועוד ' + (rows.length - shown.length) + ' — חפש כדי לצמצם</div>' : '')
+    + (rows.length ? '' : '<div class="cust-pick-empty">לא נמצא</div>');
+  const go = document.getElementById('wbPickGo');
+  if (go) go.textContent = '🚫 חסום את המסומנים (' + waPicked.size + ')';
+}
+function waPickToggle(i) {
+  const c = waContacts[i];
+  if (!c || (waBot.settings.blocked || []).some((b) => b.p === c.p)) return;
+  if (waPicked.has(i)) waPicked.delete(i); else waPicked.add(i);
+  waPickList();
+}
+function waBlockPicked() {
+  if (!waPicked.size) return showNotice('לא סימנת אף איש קשר');
+  const add = [...waPicked].map((i) => ({ p: waContacts[i].p, n: waContacts[i].n }));
+  waDo({ op: 'settings', settings: { blocked: (waBot.settings.blocked || []).concat(add) } }, '✅ נחסמו ' + add.length + ' — הבוט לא יענה להם');
 }
 function waPausedHtml() {
   const list = waBot.paused || [];
@@ -9575,7 +9623,7 @@ function waSaveSettings() {
   if (hours === 'custom' && !days.length) return showNotice('בחרת "שעות שאני קובע" בלי אף יום — הבוט לא יענה אף פעם. סמן לפחות יום אחד.');
   waDo({ op: 'settings', settings: { pauseHours: Number(wbVal('wbPause')), maxPerHour: Number(wbVal('wbMax')), hours,
     custom: { days, from: wbVal('wbFrom') || '00:00', to: wbVal('wbTo') || '23:59' }, model: wbVal('wbModel'),
-    shabbat: on('wbShabbat'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
+    shabbat: on('wbShabbat'), israelOnly: on('wbIsrael'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
     hubFacts: on('wbFacts'), introduce: on('wbIntro'), learn: on('wbLearn') } }, '✅ ההגדרות נשמרו');
 }
 function waSaveInstructions() {

@@ -36,7 +36,7 @@ const EVIL = '<img src=x onerror="window.__xss=1">';
 const NOW = Date.now();
 const DATA = {
   settings: { enabled: true, pauseHours: 6, maxPerHour: 12, hours: 'always', custom: { days: [0, 1, 2, 3, 4, 5, 6], from: '00:00', to: '23:59' },
-    shabbat: true, blocked: [{ p: '972501112222', n: 'אשתי' }], voice: true, media: true, askDaniel: true, hubFacts: true, learn: true,
+    shabbat: true, israelOnly: true, blocked: [{ p: '972501112222', n: 'אשתי' }], voice: true, media: true, askDaniel: true, hubFacts: true, learn: true,
     introduce: true, model: 'quality', instructions: 'מבצע החודש' },
   now: NOW, holy: '', offHours: '', stats: { sent: 5, asked: 1, quiet: 2 },
   log: [{ at: NOW - 60000, c: '972501234567@c.us', n: EVIL, in: 'כמה עולה ' + EVIL, out: 'תשובה ' + EVIL, r: 'sent' },
@@ -50,9 +50,11 @@ const DATA = {
 };
 const gets = [], posts = [];
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, POST' };
-await page.route('https://energylabgreen.com/api/wa/admin', async (route) => {
+const CONTACTS = [{ p: '972501112222', n: 'אישתי המתוקה' }, { p: '972531112233', n: 'יוניפרטס חלקים' }, { p: '972541112233', n: 'אורן אספקה' }, { p: '972551112233', n: EVIL }];
+await page.route(/energylabgreen\.com\/api\/wa\/admin/, async (route) => {
   const req = route.request();
   if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+  if (req.method() === 'GET' && /contacts=1/.test(req.url())) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ contacts: CONTACTS }), headers: CORS });
   if (req.method() === 'GET') { gets.push(req.headers()['authorization'] || ''); return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(DATA), headers: CORS }); }
   posts.push(JSON.parse(req.postData() || '{}'));
   return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}', headers: CORS });
@@ -90,7 +92,7 @@ check('the log, with why it did or did not answer', /✅ ענה/.test(t1) && /ש
 await page.evaluate(() => { document.getElementById('wbPause').value = '3'; document.getElementById('wbModel').value = 'saving'; document.getElementById('wbVoice').checked = false; waSaveSettings(); });
 let p = await lastPost(1);
 check('saving the settings sends what he set', p && p.op === 'settings' && p.settings.pauseHours === 3 && p.settings.model === 'saving' && p.settings.voice === false
-  && p.settings.shabbat === true && p.settings.hours === 'always' && p.settings.custom.days.length === 7, p);
+  && p.settings.shabbat === true && p.settings.israelOnly === true && p.settings.hours === 'always' && p.settings.custom.days.length === 7, p);
 await page.evaluate(() => { document.getElementById('wbHours').value = 'custom'; for (let i = 0; i < 7; i++) document.getElementById('wbDay' + i).checked = false; waSaveSettings(); });
 await page.waitForTimeout(300);
 check('his own hours with no day at all are not saved — the bot would never answer', posts.length === 1
@@ -125,6 +127,20 @@ check('a question and answer he teaches', p && p.op === 'teach' && p.q === 'יש
 await page.evaluate(() => { document.getElementById('wbKnow').value = 'ידע מתוקן'; waSaveKnowledge(); });
 p = await lastPost(8);
 check('his corrections to what it learned', p && p.op === 'knowledge' && p.text === 'ידע מתוקן', p);
+
+// picking suppliers from his WhatsApp contacts (their WhatsApp Business label is out of Green API's reach)
+await page.evaluate(() => waPickContacts());
+await page.waitForFunction(() => document.getElementById('wbPickList'), null, { timeout: 5000 });
+let pick = await page.evaluate(() => document.getElementById('wbPickList').innerText);
+check('his contacts are listed to pick from, the blocked ones marked, a strange name as text', /יוניפרטס חלקים/.test(pick) && /כבר חסום/.test(pick)
+  && pick.includes('<img src=x') && await page.evaluate(() => window.__xss === undefined), pick.slice(0, 200));
+await page.evaluate(() => { document.getElementById('wbPickQ').value = 'יוני'; waPickList(); });
+pick = await page.evaluate(() => document.getElementById('wbPickList').innerText);
+check('the search narrows the list', /יוניפרטס/.test(pick) && !/אורן אספקה/.test(pick), pick);
+await page.evaluate(() => { waPickToggle(0); waPickToggle(1); waPickToggle(2); document.getElementById('wbPickQ').value = ''; waPickList(); waBlockPicked(); });
+p = await lastPost(9);
+check('the picked ones are added to the blocked, an already-blocked one is not picked twice', p && p.op === 'settings' && p.settings.blocked.length === 3
+  && p.settings.blocked.some((b) => b.p === '972531112233' && b.n === 'יוניפרטס חלקים') && p.settings.blocked.some((b) => b.p === '972541112233'), p && p.settings.blocked);
 
 // the log's filter, and the way in from the home page
 await page.evaluate(() => waLogFilter('quiet'));
