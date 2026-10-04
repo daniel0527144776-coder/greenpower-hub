@@ -1925,6 +1925,7 @@ const Store = {
       else if (MAP_KEYS.includes(key)) stampMap(key, val);
       localStorage.setItem('gp_' + key, JSON.stringify(val));
       if (typeof Sync !== 'undefined' && SYNC_KEYS.includes(key)) Sync.push(key, val);
+      if (key === 'jobs' || key === 'orders' || key === 'customers') scheduleBotIndex();
       if (typeof Sync !== 'undefined' && MAP_KEYS.includes(key)) {
         try { Sync.push('fs_' + key, JSON.parse(localStorage.getItem('gp_fs_' + key) || '{}')); } catch (e) { /* storage refused */ }
       }
@@ -1962,7 +1963,9 @@ const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
 const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'bms_pick', 'supplier_costs', 'supplier_prices', 'biz_payments', 'wage_payments', 'worktime_trash',
   'tomb_inventory', 'tomb_worktime', 'tomb_wage_payments', 'tomb_customers', 'tomb_jobs', 'tomb_incomes', 'tomb_expenses',
   'tomb_workers', 'tomb_orders', 'tomb_dims', 'tomb_biz_payments', 'inv_log', 'tomb_inv_log',
-  'fs_settings', 'fs_biz', 'fs_costs', 'fs_diag_notes', 'fs_bms_pick', 'fs_supplier_costs'];
+  'fs_settings', 'fs_biz', 'fs_costs', 'fs_diag_notes', 'fs_bms_pick', 'fs_supplier_costs',
+  // the WhatsApp bot's slim copy of jobs and orders (2026-10-04) — see botIndex
+  'bot_index'];
 
 const Sync = {
   session: null,
@@ -2075,6 +2078,7 @@ const Sync = {
     rows.forEach(row => {
       serverKeys.add(row.key);
       if (/^(tomb|fs)_/.test(row.key) || MAP_KEYS.includes(row.key)) return;
+      if (row.key === 'bot_index') return;   // built on each device from its own data (botIndex)
       if (MERGE_KEYS.includes(row.key)) {
         // merged even when this device has an unsent change: the union contains it, and the
         // merge is what goes up
@@ -2112,6 +2116,8 @@ const Sync = {
       }
     });
     this._setMeta(meta);
+    // jobs or orders from another device change what the WhatsApp bot may say (botIndex)
+    scheduleBotIndex();
     // anything the merge added that the server does not have yet goes back up
     for (const v of mergedPush) { try { await this.push('sticker_history', v); } catch {} }
     for (const [k, v] of rowPush) { try { await this.push(k, v); } catch {} }
@@ -2600,7 +2606,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v386';
+const HUB_BUILD = 'v387';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9295,6 +9301,53 @@ function bizAccount(phone) {
 // '₪' + '-60' puts a neutral minus at the head of an RTL line; build the sign explicitly.
 function ilsSigned(n) { return (n < 0 ? '-' : '') + '₪' + Math.abs(Math.round(n)).toLocaleString('he-IL'); }
 const JOB_STATUS = ['התקבל במעבדה', 'בעבודה', 'מוכן לאיסוף', 'נמסר'];
+
+// ---- what the WhatsApp bot may know about a customer (2026-10-04) ----
+// Daniel: "כן, רק לו עצמו" — the bot tells a customer about HIS OWN repairs and orders. It cannot
+// read `jobs` itself: the photos ride inside it, megabytes the bot would parse on every message.
+// So the hub keeps a slim copy beside it, `bot_index`: per job and order the phone, the date, what
+// was done, the status, the price and the warranty end — no photos, no cost, no profit, no notes —
+// rebuilt whenever jobs, orders or customers change here or arrive from another device. The bot
+// (the site's worker.js) reads it with the project's secret key and filters it by the sender's
+// number before a line reaches the model. Eighteen months back: a warranty is twelve.
+const BOT_INDEX_MONTHS = 18;
+function botIndex() {
+  const since = Date.now() - BOT_INDEX_MONTHS * 30 * 86400000;
+  const recent = (d) => !d || new Date(d).getTime() >= since;
+  const plusMonths = (d, m) => { const t = new Date(d); if (isNaN(t)) return ''; t.setMonth(t.getMonth() + m); return t.toISOString().slice(0, 10); };
+  const customers = (Store.get('customers') || []).map((c) => ({ n: c.name || '', p: custPhones(c) })).filter((c) => c.p.length);
+  const jobs = (Store.get('jobs') || []).filter((j) => j && j.customerPhone && recent(j.date)).map((j) => ({
+    p: j.customerPhone, d: j.date,
+    w: (j.jobs || []).map((k) => JOB_LABELS[k] || k).concat(j.quickRepair ? [j.quickRepair] : []),
+    veh: j.vehicle || '', v: [j.voltage ? j.voltage + 'V' : '', j.capacity ? j.capacity + 'Ah' : ''].filter(Boolean).join(' '),
+    s: j.jobStatus || 'בעבודה', t: Math.round(j.price || 0), we: j.warrantyEnd ? String(j.warrantyEnd).slice(0, 10) : '',
+  }));
+  const orders = (Store.get('orders') || []).filter((o) => o && o.phone && recent(o.date)).map((o) => {
+    const items = Array.isArray(o.items) ? o.items : [];
+    const months = items.length ? Math.max(...items.map(warrantyForItem)) : 0;
+    return { p: o.phone, d: o.date, i: items.map((it) => it.name + (it.qty > 1 ? ' x' + it.qty : '')), s: o.status || 'הצעה',
+      t: Math.round(items.reduce((s, it) => s + (Number(it.unit) || 0) * (Number(it.qty) || 0), 0)),
+      we: saleIsIncome(o) && months ? plusMonths(o.date, months) : '' };
+  });
+  return { v: 1, customers, jobs, orders };
+}
+// Not through Store.set: his phone's storage runs close to full, and Store.set ALERTS when a write
+// fails — for a copy nobody types, that would be an error box over his real work. The local copy
+// is best-effort (it only lets an offline push go up later); the cloud copy is what the bot reads.
+// The pull does not bring it down again: every device builds its own from its own data.
+let botIndexTimer = null, botIndexSent = '';
+function scheduleBotIndex() {
+  clearTimeout(botIndexTimer);
+  botIndexTimer = setTimeout(() => {
+    try {
+      const next = botIndex(), s = JSON.stringify(next);
+      if (s === botIndexSent) return;
+      botIndexSent = s;
+      try { localStorage.setItem('gp_bot_index', s); } catch (e) { /* full: the cloud copy still goes */ }
+      if (typeof Sync !== 'undefined') Sync.push('bot_index', next);
+    } catch (e) { console.error('bot_index', e); }
+  }, 1500);
+}
 
 // The message Daniel already sends, with the balance filled in from the ledger instead of
 // from memory. Format deliberately unchanged — his shops read it every week.

@@ -156,6 +156,12 @@ jobs:
       - name: Choosing the BMS, and keeping supplier prices out of a public file
         run: node test/test-bms-pick.mjs
 
+      # The WhatsApp bot tells a customer about his own jobs from bot_index (2026-10-04). It is
+      # read by a model talking to customers, so what it must NOT hold — photos, cost, profit,
+      # notes — is checked as hard as what it must.
+      - name: The WhatsApp bot's index of jobs and orders
+        run: node test/test-bot-index.mjs
+
       # He asked why an e-bike cost the same as every other category at the same voltage and
       # capacity. It did: the model had one flat materials figure and the family was not an
       # input to the price at all. The e-bike buys a Silver Fish case; the Sur-Ron an OEM one.
