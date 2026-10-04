@@ -415,6 +415,21 @@ body { min-height: 100vh; }
   .wt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   .wt-table th, .wt-table td { padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: start; white-space: nowrap; }
   .wt-table th { color: var(--text-muted); font-weight: 600; }
+  /* בוט וואטסאפ (2026-10-04) */
+  .wb-state { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .wb-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .wb-row:last-child { border-bottom: none; }
+  .wb-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .wb-who { font-weight: 600; font-size: 13px; }
+  .wb-when { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .wb-text { font-size: 12.5px; margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
+  .wb-out { font-size: 12.5px; margin-top: 4px; padding: 6px 8px; background: var(--primary-light); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+  .wb-tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); margin-top: 4px; }
+  .wb-check { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 0; }
+  .wb-check input { width: 18px; height: 18px; }
+  .wb-days { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  .wb-days label { font-size: 12px; display: flex; align-items: center; gap: 3px; }
+  .wb-area { width: 100%; min-height: 90px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -527,6 +542,12 @@ body { min-height: 100vh; }
         <span class="quick-card-icon">⏱️</span>
         <div class="quick-card-title">שעון עובדים</div>
         <div class="quick-card-desc">כניסה · יציאה · שעות</div>
+      </div>
+
+      <div class="quick-card" onclick="navigateTo('wabot')">
+        <span class="quick-card-icon">🤖</span>
+        <div class="quick-card-title">בוט וואטסאפ</div>
+        <div class="quick-card-desc">הגדרות · שאלות · יומן</div>
       </div>
 
       <div class="quick-card" onclick="navigateTo('dims')">
@@ -1480,6 +1501,17 @@ body { min-height: 100vh; }
   </div>
 </section>
 
+<!-- The WhatsApp bot (2026-10-04, Daniel: "טאב בלוח בקרה שאני שולט בכל ההגדרות של הבוט וכל מה
+     שאפשר להפיק ממנו"). Nothing about it is in this file: everything is read from and written to
+     the bot itself (energylabgreen.com/api/wa/admin) with his login — the log holds what
+     customers wrote, and this page is public. renderWaBot() draws it all into #wabotBody. -->
+<section id="page-wabot" class="page">
+  <div class="page-header">
+    <h2 class="page-title">🤖 בוט וואטסאפ</h2>
+  </div>
+  <div id="wabotBody"></div>
+</section>
+
 <!-- One worker: everything about him on one page. Opened by tapping his name anywhere on the
      clock page (openWorker). -->
 <section id="page-worker" class="page">
@@ -2413,6 +2445,7 @@ function navigateTo(page) {
   if (page === 'catalog') renderCatalog();
   if (page === 'finances') renderFinances();
   if (page === 'worktime') renderWorktime();
+  if (page === 'wabot') renderWaBot();
   if (page === 'worker') renderWorkerPage();
   if (page === 'orders') renderOrders();
   if (page === 'dims') { calcPackDims(); calcFromOldPack(); setDimTab(dimTab); }
@@ -2606,7 +2639,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v388';
+const HUB_BUILD = 'v389';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9363,6 +9396,225 @@ async function postBotIndex(s) {
     if (r.ok) botIndexPosted = s;
   } catch (e) { /* offline, or the bot not reachable: the next pull tries again */ }
 }
+
+// ---- The WhatsApp bot's page (2026-10-04) ----
+// Daniel: "תבנה לי טאב בלוח בקרה שאני שולט בכל ההגדרות של הבוט וכל מה שאפשר להפיק ממנו", and "הרעיון
+// הוא שהבוט ידע לעשות הכל כדי שלא יצטרכו אותי כמעט". Nothing here is kept in this file or on this
+// phone: the page reads the bot with his login (GET /api/wa/admin) and every change is one POST
+// {op} that the bot checks itself. Customer names and messages, and the bot's own replies, are
+// written by strangers — every string from the bot goes through escPunch before the markup, and a
+// button refers to its row by index, never by a string in the onclick.
+const WA_ADMIN_URL = 'https://energylabgreen.com/api/wa/admin';
+let waBot = null, waBotLogFilter = 'all';
+async function waAdmin(body) {
+  const t = await Sync.token();
+  const init = { headers: { authorization: 'Bearer ' + t } };
+  if (body) { init.method = 'POST'; init.headers['content-type'] = 'application/json'; init.body = JSON.stringify(body); }
+  const r = await fetch(WA_ADMIN_URL, init);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+const WA_RESULT = { sent: '✅ ענה', asked: '❓ העביר אליך', paused: '⏸ שתק — ענית בעצמך', rate: '⏸ יותר מדי הודעות בשעה', blocked: '🚫 מספר חסום',
+  off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות' };
+const WA_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+function waNum(c) {
+  const d = String(c || '').split('@')[0];
+  return d.length === 12 && d.startsWith('972') ? '0' + d.slice(3, 5) + '-' + d.slice(5, 8) + '-' + d.slice(8) : d;
+}
+function waWhen(ms) { return ms ? new Date(ms).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''; }
+async function renderWaBot(reload = true) {
+  const box = document.getElementById('wabotBody');
+  if (!box) return;
+  if (typeof Sync === 'undefined' || !Sync.isAuthed()) {
+    box.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-state-icon">🔐</div><div class="empty-state-text">'
+      + 'הבוט נשלט רק מהחשבון שלך. התחבר לענן ואז חזור לכאן.</div></div></div>';
+    return;
+  }
+  if (reload || !waBot) {
+    if (!waBot) box.innerHTML = '<div class="card"><div class="empty-state-text">טוען את הבוט…</div></div>';
+    try { waBot = await waAdmin(); }
+    catch (e) {
+      box.innerHTML = '<div class="card"><div class="empty-state-text">⚠ לא הצלחתי להגיע לבוט: ' + escPunch(e.message) + '</div>'
+        + '<button class="btn btn-secondary btn-block" style="margin-top:8px" onclick="renderWaBot()">🔄 נסה שוב</button></div>';
+      return;
+    }
+  }
+  box.innerHTML = waStatusHtml() + waQuestionsHtml() + waSettingsHtml() + waInstructionsHtml() + waBlockedHtml()
+    + waPausedHtml() + waTeachHtml() + waKnowledgeHtml() + waLogHtml();
+}
+function waStatusHtml() {
+  const b = waBot, st = b.settings, L = b.learning || {}, n = (x) => Number(x) || 0;
+  const now = !st.enabled ? '⏻ הבוט כבוי — לא עונה לאף אחד'
+    : st.shabbat && b.holy ? '🕯 ' + escPunch(b.holy) + ' — הבוט שותק עכשיו'
+    : b.offHours ? '🕐 מחוץ לשעות שבחרת — הבוט שותק עכשיו'
+    : '✅ הבוט עונה עכשיו ללקוחות';
+  const wa = b.wa === 'authorized' ? '✅ מחובר לוואטסאפ' : '⚠ וואטסאפ לא מחובר (' + escPunch(b.wa) + ')';
+  const learn = !L.on ? 'כבויה' : L.pausedUntil ? 'בהמתנה עד ' + waWhen(Date.parse(L.pausedUntil))
+    : n(L.chatsLearned) + ' שיחות נקראו' + (n(L.queued) ? ' · ' + n(L.queued) + ' בתור' : '') + (L.learnedAt ? ' · עודכן ' + waWhen(Date.parse(L.learnedAt)) : '');
+  const box = (label, v) => '<div class="stat-box"><div class="stat-label">' + label + '</div><div class="stat-value">' + n(v) + '</div></div>';
+  return '<div class="card"><h3 class="card-title">📡 מצב</h3><div class="wb-state">' + now + '</div>'
+    + '<div class="stats-grid">' + box('ענה השבוע', b.stats && b.stats.sent) + box('העביר אליך', b.stats && b.stats.asked) + box('שתק', b.stats && b.stats.quiet) + '</div>'
+    + '<div class="wt-muted">' + wa + ' · למידה מהשיחות: ' + learn + (n(L.hubJobs) ? ' · ' + n(L.hubJobs) + ' עבודות מלוח הבקרה' : '') + '</div>'
+    + '<button class="btn ' + (st.enabled ? 'btn-danger' : 'btn-primary') + ' btn-block" style="margin-top:10px" onclick="waToggle()">'
+    + (st.enabled ? '⏻ כבה את הבוט' : '▶ הפעל את הבוט') + '</button>'
+    + '<button class="btn btn-secondary btn-block btn-sm" style="margin-top:6px" onclick="renderWaBot()">🔄 רענן</button></div>';
+}
+function waQuestionsHtml() {
+  const all = waBot.questions || [], open = all.filter((q) => !q.done);
+  if (!open.length) return '';
+  return '<div class="card" style="border-color:var(--warning)"><h3 class="card-title">❓ שאלות שהבוט לא ידע — מחכות לך (' + open.length + ')</h3>'
+    + open.map((q) => {
+      const i = all.indexOf(q);
+      return '<div class="wb-row"><div class="wb-head"><span class="wb-who">' + escPunch(q.n || 'לקוח') + ' · ' + escPunch(waNum(q.c)) + '</span>'
+        + '<span class="wb-when">' + waWhen(q.at) + '</span></div>'
+        + (q.msg ? '<div class="wb-text">💬 ' + escPunch(q.msg) + '</div>' : '')
+        + '<div class="wb-text"><b>הבוט שאל אותך:</b> ' + escPunch(q.q) + '</div>'
+        + '<textarea class="form-input-wide wb-area" id="wbAns' + i + '" placeholder="התשובה שלך"></textarea>'
+        + '<label class="wb-check"><input type="checkbox" id="wbSend' + i + '" checked> לשלוח ללקוח בוואטסאפ</label>'
+        + '<label class="wb-check"><input type="checkbox" id="wbKeep' + i + '" checked> שהבוט ילמד את התשובה לפעם הבאה</label>'
+        + '<div class="btn-group"><button class="btn btn-primary btn-sm" onclick="waAnswer(' + i + ')">✔ שמור</button>'
+        + '<button class="btn btn-secondary btn-sm" onclick="waDismiss(' + i + ')">סגור בלי תשובה</button></div></div>';
+    }).join('') + '</div>';
+}
+function waSettingsHtml() {
+  const st = waBot.settings, c = st.custom || { days: [], from: '00:00', to: '23:59' };
+  const chk = (id, on, label) => '<label class="wb-check"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '> ' + label + '</label>';
+  const opt = (v, cur, label) => '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + label + '</option>';
+  return '<div class="card"><h3 class="card-title">⚙️ הגדרות</h3>'
+    + '<div class="form-row"><label>כמה שעות לשתוק בשיחה אחרי שאתה עונה בה</label><input type="number" class="form-input" id="wbPause" min="0" max="168" step="0.5" value="' + (Number(st.pauseHours) || 0) + '"></div>'
+    + '<div class="form-row"><label>מקסימום תשובות לשיחה בשעה</label><input type="number" class="form-input" id="wbMax" min="1" max="60" value="' + (Number(st.maxPerHour) || 1) + '"></div>'
+    + '<div class="form-row"><label>מתי הבוט עונה</label><select class="form-select" id="wbHours" onchange="waHoursMode()">'
+    + opt('always', st.hours, 'תמיד') + opt('closed', st.hours, 'רק כשהמעבדה סגורה') + opt('open', st.hours, 'רק בשעות הפתיחה') + opt('custom', st.hours, 'שעות שאני קובע') + '</select></div>'
+    + '<div id="wbCustom"' + (st.hours === 'custom' ? '' : ' hidden') + '>'
+    + '<div class="wb-days">' + WA_DAYS.map((d, i) => '<label><input type="checkbox" id="wbDay' + i + '"' + ((c.days || []).includes(i) ? ' checked' : '') + '> ' + d + '</label>').join('') + '</div>'
+    + '<div class="form-row"><label>משעה</label><input type="time" class="form-input" id="wbFrom" value="' + escPunch(c.from) + '"></div>'
+    + '<div class="form-row"><label>עד שעה</label><input type="time" class="form-input" id="wbTo" value="' + escPunch(c.to) + '"></div></div>'
+    + '<div class="form-row"><label>מודל</label><select class="form-select" id="wbModel">' + opt('quality', st.model, 'איכותי (Sonnet)') + opt('saving', st.model, 'חסכוני (Haiku)') + '</select></div>'
+    + chk('wbShabbat', st.shabbat, '🕯 לא לענות בשבת ובחג (לפי השקיעה באלעד)')
+    + chk('wbVoice', st.voice, '🎤 לתמלל הודעות קוליות')
+    + chk('wbMedia', st.media, '🖼 להסתכל על תמונות וקבצי PDF')
+    + chk('wbAsk', st.askDaniel, '❓ מה שהבוט לא יודע — לשאול אותך')
+    + chk('wbFacts', st.hubFacts, '🔧 לספר ללקוח על התיקונים וההזמנות שלו (מלוח הבקרה)')
+    + chk('wbIntro', st.introduce, '👋 בהודעה הראשונה בשיחה לומר שזה עוזר אוטומטי')
+    + chk('wbLearn', st.learn, '📚 ללמוד מהשיחות שלך עם לקוחות')
+    + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="waSaveSettings()">💾 שמור הגדרות</button></div>';
+}
+function waHoursMode() { const el = document.getElementById('wbCustom'); if (el) el.hidden = document.getElementById('wbHours').value !== 'custom'; }
+function waInstructionsHtml() {
+  return '<div class="card"><h3 class="card-title">📝 הוראות שלך לבוט</h3>'
+    + '<div class="wt-muted" style="margin-bottom:6px">הבוט מקיים את זה בכל תשובה: מבצע, "השבוע סגורים ביום שלישי", איך לדבר, מה לא להבטיח.</div>'
+    + '<textarea class="form-input-wide wb-area" id="wbInstr" maxlength="4000">' + escPunch(waBot.settings.instructions || '') + '</textarea>'
+    + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="waSaveInstructions()">💾 שמור הוראות</button></div>';
+}
+function waBlockedHtml() {
+  const list = waBot.settings.blocked || [];
+  return '<div class="card"><h3 class="card-title">🚫 מספרים שהבוט לא עונה להם</h3>'
+    + (list.length ? list.map((x, i) => '<div class="wb-row wb-head"><span><span class="wb-who">' + escPunch(x.n || 'ללא שם') + '</span> · ' + escPunch(waNum(x.p)) + '</span>'
+      + '<button class="btn btn-secondary btn-sm" onclick="waUnblock(' + i + ')">✕ הסר</button></div>').join('')
+      : '<div class="wt-muted">אין. כדאי להוסיף משפחה, ספקים ועובדים.</div>')
+    + '<div class="divider"></div>'
+    + '<div class="form-row"><label>מספר</label><input type="tel" class="form-input" id="wbBlockNum" placeholder="050-0000000"></div>'
+    + '<div class="form-row"><label>שם (לא חובה)</label><input type="text" class="form-input-wide" id="wbBlockName" style="width:150px"></div>'
+    + '<button class="btn btn-secondary btn-block" onclick="waBlock()">➕ הוסף</button></div>';
+}
+function waPausedHtml() {
+  const list = waBot.paused || [];
+  return '<div class="card"><h3 class="card-title">🔇 שיחות שהבוט שותק בהן עכשיו</h3>'
+    + (list.length ? list.map((x, i) => '<div class="wb-row"><div class="wb-head"><span class="wb-who">' + escPunch(x.n || 'לקוח') + ' · ' + escPunch(waNum(x.c)) + '</span>'
+      + '<span class="wb-when">עד ' + waWhen(x.until) + '</span></div><div class="wt-muted">' + (x.manual ? 'השתקת ידנית' : 'ענית בעצמך') + '</div>'
+      + '<button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="waRelease(' + i + ')">▶ שהבוט יחזור לענות כאן</button></div>').join('')
+      : '<div class="wt-muted">אין כרגע.</div>')
+    + '<div class="divider"></div>'
+    + '<div class="form-row"><label>להשתיק מספר</label><input type="tel" class="form-input" id="wbMuteNum" placeholder="050-0000000"></div>'
+    + '<div class="form-row"><label>לכמה שעות</label><input type="number" class="form-input" id="wbMuteHours" value="24" min="0.25" step="1"></div>'
+    + '<button class="btn btn-secondary btn-block" onclick="waMute()">🔇 השתק</button></div>';
+}
+function waTeachHtml() {
+  const list = waBot.teach || [];
+  return '<div class="card"><h3 class="card-title">🎓 תשובות שלימדת את הבוט (' + list.length + ')</h3>'
+    + list.map((t, i) => '<div class="wb-row"><div class="wb-text"><b>ש:</b> ' + escPunch(t.q) + '</div><div class="wb-text"><b>ת:</b> ' + escPunch(t.a) + '</div>'
+      + '<button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="waUnteach(' + i + ')">✕ מחק</button></div>').reverse().join('')
+    + '<div class="divider"></div>'
+    + '<input type="text" class="form-input-wide" id="wbTeachQ" placeholder="שאלה שלקוחות שואלים" style="margin-bottom:6px">'
+    + '<textarea class="form-input-wide wb-area" id="wbTeachA" placeholder="מה לענות"></textarea>'
+    + '<button class="btn btn-secondary btn-block" style="margin-top:6px" onclick="waTeach()">➕ למד את הבוט</button></div>';
+}
+function waKnowledgeHtml() {
+  const k = waBot.knowledge || {};
+  return '<div class="card"><h3 class="card-title">📚 מה שהבוט למד מהשיחות שלך</h3>'
+    + '<div class="wt-muted" style="margin-bottom:6px">' + (k.at ? 'עודכן ' + waWhen(Date.parse(k.at)) + (k.edited ? ' · כולל התיקונים שלך' : '') : 'עוד לא נלמד — הבוט קורא את השיחות שלך בהדרגה.') + '</div>'
+    + '<textarea class="form-input-wide wb-area" id="wbKnow" style="min-height:180px" maxlength="8000">' + escPunch(k.text || '') + '</textarea>'
+    + '<div class="btn-group" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="waSaveKnowledge()">💾 שמור תיקונים</button>'
+    + '<button class="btn btn-secondary btn-sm" onclick="waRescan()">🔄 לקרוא שוב את כל השיחות</button></div></div>';
+}
+function waLogHtml() {
+  const f = waBotLogFilter, answered = (e) => e.r === 'sent' || e.r === 'asked';
+  const list = (waBot.log || []).filter((e) => f === 'all' || (f === 'sent' ? answered(e) : !answered(e)));
+  const tab = (v, l) => '<div class="sub-tab' + (f === v ? ' active' : '') + '" onclick="waLogFilter(\'' + v + '\')">' + l + '</div>';
+  return '<div class="card" id="wbLog"><h3 class="card-title">📜 יומן</h3><div class="sub-tabs">' + tab('all', 'הכול') + tab('sent', 'ענה') + tab('quiet', 'לא ענה') + '</div>'
+    + (list.length ? list.slice(0, 100).map((e) => '<div class="wb-row"><div class="wb-head"><span class="wb-who">' + escPunch(e.n || 'לקוח') + ' · ' + escPunch(waNum(e.c)) + '</span>'
+      + '<span class="wb-when">' + waWhen(e.at) + '</span></div>'
+      + (e.in ? '<div class="wb-text">💬 ' + escPunch(e.in) + '</div>' : '')
+      + (e.out ? '<div class="wb-out">🤖 ' + escPunch(e.out) + '</div>' : '')
+      + '<span class="wb-tag">' + escPunch(WA_RESULT[e.r] || e.r) + '</span></div>').join('')
+      : '<div class="wt-muted">אין עדיין.</div>')
+    + '</div>';
+}
+function waLogFilter(v) { waBotLogFilter = v; const el = document.getElementById('wbLog'); if (el) el.outerHTML = waLogHtml(); }
+async function waDo(body, okMsg) {
+  try { await waAdmin(body); await renderWaBot(); if (okMsg) showNotice(okMsg); }
+  catch (e) { showNotice('⚠ לא נשמר: ' + e.message); }
+}
+const wbVal = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+function waToggle() { waDo({ op: 'settings', settings: { enabled: !waBot.settings.enabled } }); }
+function waSaveSettings() {
+  const on = (id) => { const el = document.getElementById(id); return !!(el && el.checked); };
+  const days = WA_DAYS.map((d, i) => (on('wbDay' + i) ? i : -1)).filter((i) => i >= 0);
+  const hours = wbVal('wbHours');
+  if (hours === 'custom' && !days.length) return showNotice('בחרת "שעות שאני קובע" בלי אף יום — הבוט לא יענה אף פעם. סמן לפחות יום אחד.');
+  waDo({ op: 'settings', settings: { pauseHours: Number(wbVal('wbPause')), maxPerHour: Number(wbVal('wbMax')), hours,
+    custom: { days, from: wbVal('wbFrom') || '00:00', to: wbVal('wbTo') || '23:59' }, model: wbVal('wbModel'),
+    shabbat: on('wbShabbat'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
+    hubFacts: on('wbFacts'), introduce: on('wbIntro'), learn: on('wbLearn') } }, '✅ ההגדרות נשמרו');
+}
+function waSaveInstructions() {
+  waDo({ op: 'settings', settings: { instructions: document.getElementById('wbInstr').value } }, '✅ ההוראות נשמרו — הבוט יפעל לפיהן מההודעה הבאה');
+}
+function waBlock() {
+  const p = wbVal('wbBlockNum');
+  if (p.replace(/\D/g, '').length < 8) return showNotice('מספר לא תקין');
+  waDo({ op: 'settings', settings: { blocked: (waBot.settings.blocked || []).concat([{ p, n: wbVal('wbBlockName') }]) } }, '✅ נוסף — הבוט לא יענה למספר הזה');
+}
+function waUnblock(i) {
+  const list = (waBot.settings.blocked || []).slice();
+  list.splice(i, 1);
+  waDo({ op: 'settings', settings: { blocked: list } });
+}
+function waMute() {
+  const p = wbVal('wbMuteNum'), h = Number(wbVal('wbMuteHours'));
+  if (p.replace(/\D/g, '').length < 8) return showNotice('מספר לא תקין');
+  if (!(h > 0)) return showNotice('כמה שעות?');
+  waDo({ op: 'mute', chat: p, hours: h }, '🔇 הבוט לא יענה בשיחה הזאת ' + h + ' שעות');
+}
+function waRelease(i) { const x = (waBot.paused || [])[i]; if (x) waDo({ op: 'release', chat: x.c }, '▶ הבוט יחזור לענות בשיחה הזאת'); }
+function waAnswer(i) {
+  const q = (waBot.questions || [])[i];
+  const a = wbVal('wbAns' + i);
+  if (!q) return;
+  if (!a) return showNotice('כתוב תשובה קודם');
+  const send = document.getElementById('wbSend' + i).checked, keep = document.getElementById('wbKeep' + i).checked;
+  waDo({ op: 'answer', id: q.id, a, send, keep }, send ? '✅ נשלח ללקוח' + (keep ? ' והבוט למד את התשובה' : '') : keep ? '✅ הבוט למד את התשובה' : '✅ נסגר');
+}
+function waDismiss(i) { const q = (waBot.questions || [])[i]; if (q) waDo({ op: 'dismiss', id: q.id }); }
+function waTeach() {
+  const q = wbVal('wbTeachQ'), a = wbVal('wbTeachA');
+  if (!q || !a) return showNotice('צריך גם שאלה וגם תשובה');
+  waDo({ op: 'teach', q, a }, '✅ הבוט למד');
+}
+function waUnteach(i) { const t = (waBot.teach || [])[i]; if (t) askConfirm('למחוק את התשובה הזאת מהבוט?', () => waDo({ op: 'unteach', id: t.id })); }
+function waSaveKnowledge() { waDo({ op: 'knowledge', text: document.getElementById('wbKnow').value }, '✅ נשמר — הבוט ישמור על התיקונים שלך גם כשילמד עוד'); }
+function waRescan() { waDo({ op: 'rescan' }, '🔄 הבוט יתחיל לקרוא מחדש את כל השיחות בדקות הקרובות'); }
 
 // The message Daniel already sends, with the balance filled in from the ledger instead of
 // from memory. Format deliberately unchanged — his shops read it every week.

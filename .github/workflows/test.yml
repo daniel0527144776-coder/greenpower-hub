@@ -162,6 +162,11 @@ jobs:
       - name: The WhatsApp bot's index of jobs and orders
         run: node test/test-bot-index.mjs
 
+      # His control page for the bot (2026-10-04). The log shows what customers wrote on a public
+      # page, so nothing from the bot may run as markup; each control must send exactly his change.
+      - name: The WhatsApp bot's page
+        run: node test/test-wabot.mjs
+
       # He asked why an e-bike cost the same as every other category at the same voltage and
       # capacity. It did: the model had one flat materials figure and the family was not an
       # input to the price at all. The e-bike buys a Silver Fish case; the Sur-Ron an OEM one.
