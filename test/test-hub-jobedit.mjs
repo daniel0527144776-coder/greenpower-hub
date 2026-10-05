@@ -192,14 +192,16 @@ const org = await page.evaluate(() => {
   setSalesFilter('all');
   // The summary CARD is gone — it repeated the first month header underneath it. The figures
   // moved into the headers, where they answer for every month instead of only this one.
-  const headerMoney = [...document.querySelectorAll('#ordersList .price-cat')]
+  // Each month is a fold since 2026-10-05 (every tab folded): its summary is the month header.
+  const headerMoney = [...document.querySelectorAll('#ordersList details.fold > summary')]
     .map((e) => e.textContent.replace(/\s+/g, ' ').trim());
-  const monthHeaders = (document.getElementById('ordersList').innerHTML.match(/price-cat/g) || []).length;
+  const monthHeaders = document.querySelectorAll('#ordersList details.fold').length;
+  const monthsFolded = [...document.querySelectorAll('#ordersList details.fold')].every((d) => !d.open);
   const rows = document.querySelectorAll('#ordersList .list-item').length;
   const more = document.getElementById('ordersList').innerHTML.includes('salesShowMore');
   const pendingShown = document.getElementById('salesPending').style.display !== 'none';
   const chips = [...document.querySelectorAll('#salesFilterBar .sub-tab')].map(e => e.textContent);
-  return { headerMoney, monthHeaders, rows, more, pendingShown, chips };
+  return { headerMoney, monthHeaders, monthsFolded, rows, more, pendingShown, chips };
 });
 check('every month header carries its own money', org.headerMoney.every((h) => /₪/.test(h)), org.headerMoney[0]);
 check('and it is a split, not one lump', /🛒|🔧/.test(org.headerMoney[0] || ''), org.headerMoney[0]);
@@ -208,6 +210,7 @@ check('open-quotes banner is showing', org.pendingShown);
 check('list is capped, not all 180 rows', org.rows === 60, org.rows);
 check('a "show more" button appears', org.more);
 check('rows are grouped under month headers', org.monthHeaders >= 2, org.monthHeaders);
+check('and every month starts folded (2026-10-05, every tab folded)', org.monthsFolded === true, org.monthsFolded);
 
 const org2 = await page.evaluate(() => {
   salesShowMore();
@@ -511,7 +514,7 @@ console.log('\n13. work that another job drags in is priced once, and only when 
       quoteMentions: (row.textContent.match(/הצעה/g) || []).length,
       cycleLabel: (row.querySelector('button[onclick^="cycleOrderStatus"]') || {}).textContent || '',
       statsCard: !!sec.querySelector('#salesStats'),
-      monthHeads: [...sec.querySelectorAll('#ordersList .price-cat')].map((e) => e.textContent.replace(/\s+/g, ' ').trim()),
+      monthHeads: [...sec.querySelectorAll('#ordersList details.fold > summary')].map((e) => e.textContent.replace(/\s+/g, ' ').trim()),
     };
   });
   check('the page does not print its own name twice', !sales.titleVisible, sales.titleText + ' / ' + sales.activeTab);

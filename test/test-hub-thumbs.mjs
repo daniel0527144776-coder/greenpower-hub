@@ -81,7 +81,7 @@ console.log('2. they are inlined, not fetched');
 
 console.log('3. the bytes actually decode');
 {
-  await p.evaluate(() => navigateTo('catalog'));
+  await p.evaluate(() => { navigateTo('catalog'); document.querySelectorAll('#catalogList details.fold').forEach((d) => { d.open = true; foldOpen.add(d.dataset.fold); }); renderCatalog(); });   // topics fold since 2026-10-05
   await p.waitForSelector('.price-cat img', { timeout: 10000 });
   const imgs = p.locator('.price-cat img');
   const n = await imgs.count();
