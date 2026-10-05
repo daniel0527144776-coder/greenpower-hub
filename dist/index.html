@@ -415,6 +415,19 @@ body { min-height: 100vh; }
   .wt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   .wt-table th, .wt-table td { padding: 6px 4px; border-bottom: 1px solid var(--border); text-align: start; white-space: nowrap; }
   .wt-table th { color: var(--text-muted); font-weight: 600; }
+  /* מקטע מקופל (2026-10-05, דניאל: "שכל הקטגוריות יהיו מקופלות … מינימום טקסט"). כותרת אחת לחיצה,
+     מונה בצד, והתוכן רק כשפותחים. fold() בונה אותו; foldStatic() עוטף כרטיס קיים. */
+  details.fold { background: var(--card); border-radius: var(--radius); margin-bottom: 10px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  details.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 14px 16px; font-size: 14px; font-weight: 600; color: var(--text); user-select: none; -webkit-tap-highlight-color: transparent; }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary .fold-title { flex: 1; }
+  details.fold > summary .fold-count { font-size: 12px; font-weight: 700; min-width: 22px; text-align: center; padding: 1px 8px; border-radius: 999px; background: var(--bg); color: var(--text-muted); }
+  details.fold > summary .fold-count.hot { background: var(--warning); color: #111; }
+  details.fold > summary::after { content: ''; width: 7px; height: 7px; border-left: 2px solid var(--text-muted); border-bottom: 2px solid var(--text-muted); transform: rotate(-45deg); transition: transform .18s; margin-inline-start: 4px; }
+  details.fold[open] > summary::after { transform: rotate(135deg); }
+  details.fold[open] > summary { border-bottom: 1px solid var(--border); }
+  details.fold > .fold-body { padding: 12px 16px 16px; }
+  details.fold > .fold-body > .card { box-shadow: none; padding: 0; margin: 0; background: none; }
   /* בוט וואטסאפ (2026-10-04) */
   .wb-state { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
   .wb-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
@@ -430,6 +443,12 @@ body { min-height: 100vh; }
   .wb-days { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
   .wb-days label { font-size: 12px; display: flex; align-items: center; gap: 3px; }
   .wb-area { width: 100%; min-height: 90px; font-size: 13px; }
+  .wb-log .wb-text, .wb-log .wb-out { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .wb-log.open .wb-text, .wb-log.open .wb-out { display: block; }
+  .wb-log { cursor: pointer; }
+  .wb-inline { display: flex; gap: 6px; }
+  .wb-inline > * { flex: 1; min-width: 0; }
+  .wb-sub { font-size: 12px; color: var(--text-muted); }
   /* בוט מסחר (2026-10-05) — סימולים ומספרים באנגלית, משמאל לימין בתוך שורה בעברית */
   .fu-sym { font-weight: 700; font-size: 13px; direction: ltr; unicode-bidi: isolate; }
   .fu-num { direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
@@ -2681,7 +2700,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v398';
+const HUB_BUILD = 'v400';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9533,13 +9552,47 @@ async function waAdmin(body, query) {
 const WA_RESULT = { sent: '✅ ענה', asked: '❓ העביר אליך', paused: '⏸ שתק — ענית בעצמך', rate: '⏸ יותר מדי הודעות בשעה', blocked: '🚫 מספר חסום',
   off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל', manual: '📤 נשלח ממך',
   // the two the bot used to drop without a trace (2026-10-05): over ten minutes late, and a chat it cannot tell is a person
-  stale: '⌛ הגיעה באיחור — לא נענתה', unknown: '❔ שיחה שהבוט לא זיהה' };
+  stale: '⌛ הגיעה באיחור — לא נענתה', unknown: '❔ שיחה שהבוט לא זיהה',
+  // his choice (2026-10-05): someone saved in his contacts, left to him
+  saved: '📇 איש קשר שמור — עליך' };
 const WA_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 function waNum(c) {
   const d = String(c || '').split('@')[0];
   return d.length === 12 && d.startsWith('972') ? '0' + d.slice(3, 5) + '-' + d.slice(5, 8) + '-' + d.slice(8) : d;
 }
 function waWhen(ms) { return ms ? new Date(ms).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''; }
+// A folded section (2026-10-05): closed unless he opened it — a page re-drawn after a save keeps
+// the one he was working in open. `count` shows beside the title; `hot` marks one that waits for him.
+const foldOpen = new Set();
+function fold(id, title, body, { count = null, hot = false, open = false } = {}) {
+  const isOpen = foldOpen.has(id) || open;
+  return '<details class="fold" data-fold="' + id + '"' + (isOpen ? ' open' : '') + ' ontoggle="foldToggled(this)"><summary><span class="fold-title">' + title + '</span>'
+    + (count === null ? '' : '<span class="fold-count' + (hot ? ' hot' : '') + '">' + count + '</span>') + '</summary><div class="fold-body">' + body + '</div></details>';
+}
+function foldToggled(el) { const id = el.getAttribute('data-fold'); if (el.open) foldOpen.add(id); else foldOpen.delete(id); }
+// A page written in the HTML (settings, work hours) folds the same way: each titled card without an
+// id becomes a section, its title the summary. A card WITH an id is left as it is — code hides and
+// shows those (the approvals card hides itself when nothing waits), and an empty section header
+// would be left behind.
+function foldStatic(pageId, keepOpen = []) {
+  const page = document.getElementById('page-' + pageId);
+  if (!page) return;
+  [...page.querySelectorAll(':scope > .card')].forEach((card, i) => {
+    const h = card.querySelector(':scope > h3.card-title');
+    if (!h || card.id) return;
+    const id = pageId + '-' + i;
+    const d = document.createElement('details');
+    d.className = 'fold';
+    d.dataset.fold = id;
+    d.innerHTML = '<summary><span class="fold-title"></span></summary><div class="fold-body"></div>';
+    d.querySelector('.fold-title').textContent = h.textContent.trim();
+    h.remove();
+    card.before(d);
+    d.querySelector('.fold-body').appendChild(card);
+    d.open = keepOpen.includes(i) || foldOpen.has(id);
+    d.addEventListener('toggle', () => foldToggled(d));
+  });
+}
 async function renderWaBot(reload = true) {
   const box = document.getElementById('wabotBody');
   if (!box) return;
@@ -9567,76 +9620,73 @@ function waStatusHtml() {
     : b.offHours ? '🕐 מחוץ לשעות שבחרת — הבוט שותק עכשיו'
     : '✅ הבוט עונה עכשיו ללקוחות';
   const wa = b.wa === 'authorized' ? '✅ מחובר לוואטסאפ' : '⚠ וואטסאפ לא מחובר (' + escPunch(b.wa) + ')';
-  const learn = !L.on ? 'כבויה' : L.pausedUntil ? 'בהמתנה עד ' + waWhen(Date.parse(L.pausedUntil))
-    : n(L.chatsLearned) + ' שיחות נקראו' + (n(L.queued) ? ' · ' + n(L.queued) + ' בתור' : '') + (L.learnedAt ? ' · עודכן ' + waWhen(Date.parse(L.learnedAt)) : '');
+  const learn = !L.on ? 'למידה כבויה' : L.pausedUntil ? 'למידה בהמתנה עד ' + waWhen(Date.parse(L.pausedUntil))
+    : n(L.chatsLearned) + ' שיחות נקראו';
   const box = (label, v) => '<div class="stat-box"><div class="stat-label">' + label + '</div><div class="stat-value">' + n(v) + '</div></div>';
-  return '<div class="card"><h3 class="card-title">📡 מצב</h3><div class="wb-state">' + now + '</div>'
+  return '<div class="card"><div class="wb-state">' + now + '</div>'
     + '<div class="stats-grid">' + box('ענה השבוע', b.stats && b.stats.sent) + box('העביר אליך', b.stats && b.stats.asked) + box('שתק', b.stats && b.stats.quiet) + '</div>'
-    + '<div class="wt-muted">' + wa + ' · למידה מהשיחות: ' + learn + (n(L.hubJobs) ? ' · ' + n(L.hubJobs) + ' עבודות מלוח הבקרה' : '') + '</div>'
-    + '<button class="btn ' + (st.enabled ? 'btn-danger' : 'btn-primary') + ' btn-block" style="margin-top:10px" onclick="waToggle()">'
-    + (st.enabled ? '⏻ כבה את הבוט' : '▶ הפעל את הבוט') + '</button>'
-    + '<button class="btn btn-secondary btn-block btn-sm" style="margin-top:6px" onclick="renderWaBot()">🔄 רענן</button></div>';
+    + '<div class="wb-sub">' + wa + ' · ' + learn + '</div>'
+    + '<div class="wb-inline" style="margin-top:10px"><button class="btn ' + (st.enabled ? 'btn-danger' : 'btn-primary') + '" onclick="waToggle()">'
+    + (st.enabled ? '⏻ כבה' : '▶ הפעל') + '</button>'
+    + '<button class="btn btn-secondary" onclick="renderWaBot()">🔄 רענן</button></div></div>';
 }
 function waQuestionsHtml() {
   const all = waBot.questions || [], open = all.filter((q) => !q.done);
   if (!open.length) return '';
-  return '<div class="card" style="border-color:var(--warning)"><h3 class="card-title">❓ שאלות שהבוט לא ידע — מחכות לך (' + open.length + ')</h3>'
-    + open.map((q) => {
+  return fold('q', '❓ שאלות שמחכות לך', open.map((q) => {
       const i = all.indexOf(q);
       return '<div class="wb-row"><div class="wb-head"><span class="wb-who">' + escPunch(q.n || 'לקוח') + ' · ' + escPunch(waNum(q.c)) + '</span>'
         + '<span class="wb-when">' + waWhen(q.at) + '</span></div>'
         + (q.msg ? '<div class="wb-text">💬 ' + escPunch(q.msg) + '</div>' : '')
         + '<div class="wb-text"><b>הבוט שאל אותך:</b> ' + escPunch(q.q) + '</div>'
         + '<textarea class="form-input-wide wb-area" id="wbAns' + i + '" placeholder="התשובה שלך"></textarea>'
-        + '<label class="wb-check"><input type="checkbox" id="wbSend' + i + '" checked> לשלוח ללקוח בוואטסאפ</label>'
-        + '<label class="wb-check"><input type="checkbox" id="wbKeep' + i + '" checked> שהבוט ילמד את התשובה לפעם הבאה</label>'
+        + '<label class="wb-check"><input type="checkbox" id="wbSend' + i + '" checked> לשלוח ללקוח</label>'
+        + '<label class="wb-check"><input type="checkbox" id="wbKeep' + i + '" checked> שהבוט ילמד</label>'
         + '<div class="btn-group"><button class="btn btn-primary btn-sm" onclick="waAnswer(' + i + ')">✔ שמור</button>'
         + '<button class="btn btn-secondary btn-sm" onclick="waDismiss(' + i + ')">סגור בלי תשובה</button></div></div>';
-    }).join('') + '</div>';
+    }).join(''), { count: open.length, hot: true, open: true });
 }
 function waSettingsHtml() {
   const st = waBot.settings, c = st.custom || { days: [], from: '00:00', to: '23:59' };
   const chk = (id, on, label) => '<label class="wb-check"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '> ' + label + '</label>';
   const opt = (v, cur, label) => '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + label + '</option>';
-  return '<div class="card"><h3 class="card-title">⚙️ הגדרות</h3>'
-    + '<div class="form-row"><label>כמה שעות לשתוק בשיחה אחרי שאתה עונה בה</label><input type="number" class="form-input" id="wbPause" min="0" max="168" step="0.5" value="' + (Number(st.pauseHours) || 0) + '"></div>'
-    + '<div class="form-row"><label>מקסימום תשובות לשיחה בשעה</label><input type="number" class="form-input" id="wbMax" min="1" max="60" value="' + (Number(st.maxPerHour) || 1) + '"></div>'
-    + '<div class="form-row"><label>מתי הבוט עונה</label><select class="form-select" id="wbHours" onchange="waHoursMode()">'
+  return fold('settings', '⚙️ הגדרות', ''
+    + '<div class="form-row"><label>שקט אחרי שאתה עונה (שעות)</label><input type="number" class="form-input" id="wbPause" min="0" max="168" step="0.5" value="' + (Number(st.pauseHours) || 0) + '"></div>'
+    + '<div class="form-row"><label>מקסימום תשובות בשעה</label><input type="number" class="form-input" id="wbMax" min="1" max="60" value="' + (Number(st.maxPerHour) || 1) + '"></div>'
+    + '<div class="form-row"><label>מתי עונה</label><select class="form-select" id="wbHours" onchange="waHoursMode()">'
     + opt('always', st.hours, 'תמיד') + opt('closed', st.hours, 'רק כשהמעבדה סגורה') + opt('open', st.hours, 'רק בשעות הפתיחה') + opt('custom', st.hours, 'שעות שאני קובע') + '</select></div>'
     + '<div id="wbCustom"' + (st.hours === 'custom' ? '' : ' hidden') + '>'
     + '<div class="wb-days">' + WA_DAYS.map((d, i) => '<label><input type="checkbox" id="wbDay' + i + '"' + ((c.days || []).includes(i) ? ' checked' : '') + '> ' + d + '</label>').join('') + '</div>'
     + '<div class="form-row"><label>משעה</label><input type="time" class="form-input" id="wbFrom" value="' + escPunch(c.from) + '"></div>'
     + '<div class="form-row"><label>עד שעה</label><input type="time" class="form-input" id="wbTo" value="' + escPunch(c.to) + '"></div></div>'
     + '<div class="form-row"><label>מודל</label><select class="form-select" id="wbModel">' + opt('quality', st.model, 'איכותי (Sonnet)') + opt('saving', st.model, 'חסכוני (Haiku)') + '</select></div>'
-    + chk('wbShabbat', st.shabbat, '🕯 לא לענות בשבת ובחג (לפי השקיעה באלעד)')
-    + chk('wbIsrael', st.israelOnly, '🇮🇱 לענות רק למספרים ישראליים (ספקים ומכרים מחו״ל לא יקבלו תשובה)')
-    + chk('wbVoice', st.voice, '🎤 לתמלל הודעות קוליות')
-    + chk('wbMedia', st.media, '🖼 להסתכל על תמונות וקבצי PDF')
-    + chk('wbAsk', st.askDaniel, '❓ מה שהבוט לא יודע — לשאול אותך')
-    + chk('wbFacts', st.hubFacts, '🔧 לספר ללקוח על התיקונים וההזמנות שלו (מלוח הבקרה)')
-    + chk('wbIntro', st.introduce, '👋 בהודעה הראשונה בשיחה לומר שזה עוזר אוטומטי')
-    + chk('wbLearn', st.learn, '📚 ללמוד מהשיחות שלך עם לקוחות')
-    + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="waSaveSettings()">💾 שמור הגדרות</button></div>';
+    + chk('wbShabbat', st.shabbat, '🕯 שותק בשבת ובחג')
+    + chk('wbIsrael', st.israelOnly, '🇮🇱 רק מספרים ישראליים')
+    + chk('wbSaved', st.skipSaved, '📇 לא עונה לאנשי קשר שמורים — רק למספרים חדשים')
+    + chk('wbVoice', st.voice, '🎤 מתמלל הודעות קוליות')
+    + chk('wbMedia', st.media, '🖼 קורא תמונות ו-PDF')
+    + chk('wbAsk', st.askDaniel, '❓ מה שלא יודע — שואל אותך')
+    + chk('wbFacts', st.hubFacts, '🔧 מספר ללקוח על העבודות שלו')
+    + chk('wbIntro', st.introduce, '👋 מציג את עצמו כעוזר אוטומטי')
+    + chk('wbLearn', st.learn, '📚 לומד מהשיחות שלך')
+    + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="waSaveSettings()">💾 שמור</button>');
 }
 function waHoursMode() { const el = document.getElementById('wbCustom'); if (el) el.hidden = document.getElementById('wbHours').value !== 'custom'; }
 function waInstructionsHtml() {
-  return '<div class="card"><h3 class="card-title">📝 הוראות שלך לבוט</h3>'
-    + '<div class="wt-muted" style="margin-bottom:6px">הבוט מקיים את זה בכל תשובה: מבצע, "השבוע סגורים ביום שלישי", איך לדבר, מה לא להבטיח.</div>'
-    + '<textarea class="form-input-wide wb-area" id="wbInstr" maxlength="4000">' + escPunch(waBot.settings.instructions || '') + '</textarea>'
-    + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="waSaveInstructions()">💾 שמור הוראות</button></div>';
+  const text = waBot.settings.instructions || '';
+  return fold('instr', '📝 הוראות לבוט', '<textarea class="form-input-wide wb-area" id="wbInstr" maxlength="4000" placeholder="מבצע, יום סגור, מה לא להבטיח…">' + escPunch(text) + '</textarea>'
+    + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="waSaveInstructions()">💾 שמור</button>', { count: text.trim() ? '✓' : null });
 }
 function waBlockedHtml() {
   const list = waBot.settings.blocked || [];
-  return '<div class="card"><h3 class="card-title">🚫 מספרים שהבוט לא עונה להם</h3>'
-    + (list.length ? list.map((x, i) => '<div class="wb-row wb-head"><span><span class="wb-who">' + escPunch(x.n || 'ללא שם') + '</span> · ' + escPunch(waNum(x.p)) + '</span>'
-      + '<button class="btn btn-secondary btn-sm" onclick="waUnblock(' + i + ')">✕ הסר</button></div>').join('')
-      : '<div class="wt-muted">אין. כדאי להוסיף משפחה, ספקים ועובדים.</div>')
+  return fold('blocked', '🚫 חסומים', (list.length ? list.map((x, i) => '<div class="wb-row wb-head"><span><span class="wb-who">' + escPunch(x.n || 'ללא שם') + '</span> · ' + escPunch(waNum(x.p)) + '</span>'
+      + '<button class="btn btn-secondary btn-sm" onclick="waUnblock(' + i + ')">✕</button></div>').join('')
+      : '<div class="wb-sub">אין</div>')
     + '<div class="divider"></div>'
-    + '<div class="form-row"><label>מספר</label><input type="tel" class="form-input" id="wbBlockNum" placeholder="050-0000000"></div>'
-    + '<div class="form-row"><label>שם (לא חובה)</label><input type="text" class="form-input-wide" id="wbBlockName" style="width:150px"></div>'
-    + '<button class="btn btn-secondary btn-block" onclick="waBlock()">➕ הוסף</button>'
-    + '<button class="btn btn-secondary btn-block" style="margin-top:6px" onclick="waPickContacts()">📇 בחירה מאנשי הקשר בוואטסאפ</button>'
-    + '<div id="wbPick"></div></div>';
+    + '<div class="wb-inline"><input type="tel" class="form-input" id="wbBlockNum" placeholder="מספר"><input type="text" class="form-input" id="wbBlockName" placeholder="שם"></div>'
+    + '<div class="wb-inline" style="margin-top:6px"><button class="btn btn-secondary" onclick="waBlock()">➕ הוסף</button>'
+    + '<button class="btn btn-secondary" onclick="waPickContacts()">📇 מאנשי הקשר</button></div>'
+    + '<div id="wbPick"></div>', { count: list.length });
 }
 // His suppliers sit under a WhatsApp Business label ("ספקים ישראלים"), which Green API cannot read —
 // so he picks them here from his WhatsApp contacts (2026-10-04). Names come from his phone, and a
@@ -9645,7 +9695,9 @@ let waContacts = [], waPicked = new Set();
 async function waPickContacts() {
   const box = document.getElementById('wbPick');
   if (!box) return;
-  box.innerHTML = '<div class="wt-muted" style="margin-top:8px">טוען את אנשי הקשר…</div>';
+  const sec = box.closest('details');   // the list shows in its own section — open it
+  if (sec && !sec.open) sec.open = true;
+  box.innerHTML = '<div class="wb-sub" style="margin-top:8px">טוען…</div>';
   try { waContacts = (await waAdmin(null, 'contacts=1')).contacts || []; }
   catch (e) { box.innerHTML = '<div class="wt-muted" style="margin-top:8px">⚠ ' + escPunch(e.message) + '</div>'; return; }
   waPicked = new Set();
@@ -9685,48 +9737,44 @@ function waBlockPicked() {
 }
 function waPausedHtml() {
   const list = waBot.paused || [];
-  return '<div class="card"><h3 class="card-title">🔇 שיחות שהבוט שותק בהן עכשיו</h3>'
-    + (list.length ? list.map((x, i) => '<div class="wb-row"><div class="wb-head"><span class="wb-who">' + escPunch(x.n || 'לקוח') + ' · ' + escPunch(waNum(x.c)) + '</span>'
-      + '<span class="wb-when">עד ' + waWhen(x.until) + '</span></div><div class="wt-muted">' + (x.manual ? 'השתקת ידנית' : 'ענית בעצמך') + '</div>'
-      + '<button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="waRelease(' + i + ')">▶ שהבוט יחזור לענות כאן</button></div>').join('')
-      : '<div class="wt-muted">אין כרגע.</div>')
+  return fold('paused', '🔇 שותק עכשיו', (list.length ? list.map((x, i) => '<div class="wb-row"><div class="wb-head"><span class="wb-who">' + escPunch(x.n || 'לקוח') + ' · ' + escPunch(waNum(x.c)) + '</span>'
+      + '<span class="wb-when">עד ' + waWhen(x.until) + '</span></div><div class="wb-head"><span class="wb-sub">' + (x.manual ? 'השתקת' : 'ענית בעצמך') + '</span>'
+      + '<button class="btn btn-secondary btn-sm" onclick="waRelease(' + i + ')">▶ שיחזור לענות</button></div></div>').join('')
+      : '<div class="wb-sub">אין</div>')
     + '<div class="divider"></div>'
-    + '<div class="form-row"><label>להשתיק מספר</label><input type="tel" class="form-input" id="wbMuteNum" placeholder="050-0000000"></div>'
-    + '<div class="form-row"><label>לכמה שעות</label><input type="number" class="form-input" id="wbMuteHours" value="24" min="0.25" step="1"></div>'
-    + '<button class="btn btn-secondary btn-block" onclick="waMute()">🔇 השתק</button></div>';
+    + '<div class="wb-inline"><input type="tel" class="form-input" id="wbMuteNum" placeholder="מספר"><input type="number" class="form-input" id="wbMuteHours" value="24" min="0.25" step="1" title="שעות"></div>'
+    + '<button class="btn btn-secondary btn-block" style="margin-top:6px" onclick="waMute()">🔇 השתק (שעות)</button>', { count: list.length });
 }
 function waTeachHtml() {
   const list = waBot.teach || [];
-  return '<div class="card"><h3 class="card-title">🎓 תשובות שלימדת את הבוט (' + list.length + ')</h3>'
-    + list.map((t, i) => '<div class="wb-row"><div class="wb-text"><b>ש:</b> ' + escPunch(t.q) + '</div><div class="wb-text"><b>ת:</b> ' + escPunch(t.a) + '</div>'
+  return fold('teach', '🎓 תשובות שלימדת', list.map((t, i) => '<div class="wb-row"><div class="wb-text"><b>ש:</b> ' + escPunch(t.q) + '</div><div class="wb-text"><b>ת:</b> ' + escPunch(t.a) + '</div>'
       + '<button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="waUnteach(' + i + ')">✕ מחק</button></div>').reverse().join('')
-    + '<div class="divider"></div>'
-    + '<input type="text" class="form-input-wide" id="wbTeachQ" placeholder="שאלה שלקוחות שואלים" style="margin-bottom:6px">'
-    + '<textarea class="form-input-wide wb-area" id="wbTeachA" placeholder="מה לענות"></textarea>'
-    + '<button class="btn btn-secondary btn-block" style="margin-top:6px" onclick="waTeach()">➕ למד את הבוט</button></div>';
+    + (list.length ? '<div class="divider"></div>' : '')
+    + '<input type="text" class="form-input-wide" id="wbTeachQ" placeholder="שאלה" style="margin-bottom:6px">'
+    + '<textarea class="form-input-wide wb-area" id="wbTeachA" placeholder="תשובה"></textarea>'
+    + '<button class="btn btn-secondary btn-block" style="margin-top:6px" onclick="waTeach()">➕ הוסף</button>', { count: list.length });
 }
 function waKnowledgeHtml() {
   const k = waBot.knowledge || {};
-  return '<div class="card"><h3 class="card-title">📚 מה שהבוט למד מהשיחות שלך</h3>'
-    + '<div class="wt-muted" style="margin-bottom:6px">' + (k.at ? 'עודכן ' + waWhen(Date.parse(k.at)) + (k.edited ? ' · כולל התיקונים שלך' : '') : 'עוד לא נלמד — הבוט קורא את השיחות שלך בהדרגה.') + '</div>'
+  return fold('know', '📚 מה שהבוט למד', '<div class="wb-sub" style="margin-bottom:6px">' + (k.at ? 'עודכן ' + waWhen(Date.parse(k.at)) : 'עוד לא') + '</div>'
     + '<textarea class="form-input-wide wb-area" id="wbKnow" style="min-height:180px" maxlength="8000">' + escPunch(k.text || '') + '</textarea>'
-    + '<div class="btn-group" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="waSaveKnowledge()">💾 שמור תיקונים</button>'
-    + '<button class="btn btn-secondary btn-sm" onclick="waRescan()">🔄 לקרוא שוב את כל השיחות</button></div></div>';
+    + '<div class="wb-inline" style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="waSaveKnowledge()">💾 שמור</button>'
+    + '<button class="btn btn-secondary btn-sm" onclick="waRescan()">🔄 לקרוא הכל מחדש</button></div>');
 }
 function waLogHtml() {
   const f = waBotLogFilter, answered = (e) => e.r === 'sent' || e.r === 'asked';
   const list = (waBot.log || []).filter((e) => f === 'all' || (f === 'sent' ? answered(e) : !answered(e)));
   const tab = (v, l) => '<div class="sub-tab' + (f === v ? ' active' : '') + '" onclick="waLogFilter(\'' + v + '\')">' + l + '</div>';
-  return '<div class="card" id="wbLog"><h3 class="card-title">📜 יומן</h3><div class="sub-tabs">' + tab('all', 'הכול') + tab('sent', 'ענה') + tab('quiet', 'לא ענה') + '</div>'
-    + (list.length ? list.slice(0, 100).map((e) => '<div class="wb-row"><div class="wb-head"><span class="wb-who">' + escPunch(e.n || 'לקוח') + ' · ' + escPunch(waNum(e.c)) + '</span>'
+  return fold('log', '📜 יומן', '<div id="wbLog"><div class="sub-tabs">' + tab('all', 'הכול') + tab('sent', 'ענה') + tab('quiet', 'לא ענה') + '</div>'
+    + (list.length ? list.slice(0, 100).map((e) => '<div class="wb-row wb-log" onclick="this.classList.toggle(\'open\')"><div class="wb-head"><span class="wb-who">' + escPunch(e.n || 'לקוח') + ' · ' + escPunch(waNum(e.c)) + '</span>'
       + '<span class="wb-when">' + waWhen(e.at) + '</span></div>'
       + (e.in ? '<div class="wb-text">💬 ' + escPunch(e.in) + '</div>' : '')
       + (e.out ? '<div class="wb-out">🤖 ' + escPunch(e.out) + '</div>' : '')
       + '<span class="wb-tag">' + escPunch(WA_RESULT[e.r] || e.r) + '</span></div>').join('')
-      : '<div class="wt-muted">אין עדיין.</div>')
-    + '</div>';
+      : '<div class="wb-sub">אין עדיין</div>')
+    + '</div>', { count: (waBot.log || []).length });
 }
-function waLogFilter(v) { waBotLogFilter = v; const el = document.getElementById('wbLog'); if (el) el.outerHTML = waLogHtml(); }
+function waLogFilter(v) { waBotLogFilter = v; foldOpen.add('log'); const el = document.querySelector('details[data-fold="log"]'); if (el) el.outerHTML = waLogHtml(); }
 async function waDo(body, okMsg) {
   try { await waAdmin(body); await renderWaBot(); if (okMsg) showNotice(okMsg); }
   catch (e) { showNotice('⚠ לא נשמר: ' + e.message); }
@@ -9740,7 +9788,7 @@ function waSaveSettings() {
   if (hours === 'custom' && !days.length) return showNotice('בחרת "שעות שאני קובע" בלי אף יום — הבוט לא יענה אף פעם. סמן לפחות יום אחד.');
   waDo({ op: 'settings', settings: { pauseHours: Number(wbVal('wbPause')), maxPerHour: Number(wbVal('wbMax')), hours,
     custom: { days, from: wbVal('wbFrom') || '00:00', to: wbVal('wbTo') || '23:59' }, model: wbVal('wbModel'),
-    shabbat: on('wbShabbat'), israelOnly: on('wbIsrael'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
+    shabbat: on('wbShabbat'), israelOnly: on('wbIsrael'), skipSaved: on('wbSaved'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
     hubFacts: on('wbFacts'), introduce: on('wbIntro'), learn: on('wbLearn') } }, '✅ ההגדרות נשמרו');
 }
 function waSaveInstructions() {
@@ -9861,31 +9909,28 @@ const FU_SEV = { critical: '🔴', warning: '🟠', info: 'ℹ️' };
 function fuFaultsHtml(s) {
   const f = s.faults || [], un = s.unprotected || [];
   if (!f.length && !un.length && !fuNum(s.pendingFixes)) return '';
-  return '<div class="card" style="border-color:var(--warning)"><h3 class="card-title">⚠ תקלות שהבוט מזהה (' + f.length + ')</h3>'
-    + f.map((x) => '<div class="wb-row wb-head"><span class="wb-text">' + (FU_SEV[x.sev] || '•') + ' ' + escPunch(x.msg) + '</span>'
+  return fold('fu-faults', '⚠ תקלות שהבוט מזהה', f.map((x) => '<div class="wb-row wb-head"><span class="wb-text">' + (FU_SEV[x.sev] || '•') + ' ' + escPunch(x.msg) + '</span>'
       + '<span class="wb-when">' + fuWhen(x.since) + '</span></div>').join('')
     + (un.length ? '<div class="wb-text" style="margin-top:6px">🛡 פוזיציות בלי סטופ: <span class="fu-sym">' + un.map(escPunch).join(', ') + '</span></div>' : '')
-    + (fuNum(s.pendingFixes) ? '<div class="wt-muted" style="margin-top:6px">' + fuNum(s.pendingFixes) + ' תיקונים מחכים לאישור שלך בדשבורד של הבוט</div>' : '')
-    + '</div>';
+    + (fuNum(s.pendingFixes) ? '<div class="wt-muted" style="margin-top:6px">' + fuNum(s.pendingFixes) + ' תיקונים מחכים לאישור שלך בדשבורד של הבוט</div>' : ''),
+    { count: f.length + un.length, hot: true, open: true });
 }
 function fuPositionsHtml(s) {
   if (!s.dashboard) return '';
   const pos = (s.positions || []).slice().sort((a, b) => (fuNum(b.pnl) || 0) - (fuNum(a.pnl) || 0));
-  return '<div class="card"><h3 class="card-title">📊 פוזיציות פתוחות (' + pos.length + ')</h3>'
-    + (pos.length ? pos.map((p) => '<div class="wb-row"><div class="wb-head"><span class="fu-sym">' + escPunch(p.s) + '</span>'
+  return fold('fu-pos', '📊 פוזיציות פתוחות', (pos.length ? pos.map((p) => '<div class="wb-row"><div class="wb-head"><span class="fu-sym">' + escPunch(p.s) + '</span>'
       + (p.opt ? '<span class="wb-tag">אופציה</span>' : '') + fuPnl(p.pnl) + '</div>'
       + '<div class="wb-text"><span class="fu-num">' + escPunch(p.q) + ' × ' + fuMoney(p.avg) + (fuNum(p.px) !== null ? ' → ' + fuMoney(p.px) : '') + '</span>'
       + (p.opt ? '' : fuNum(p.sl) !== null ? ' · סטופ <span class="fu-num">' + fuMoney(p.sl) + '</span>' : ' · <b>בלי סטופ</b>')
       + (fuNum(p.tp) !== null ? ' · יעד <span class="fu-num">' + fuMoney(p.tp) + '</span>' : '') + '</div></div>').join('')
-      : '<div class="wt-muted">אין פוזיציות פתוחות.</div>') + '</div>';
+      : '<div class="wb-sub">אין</div>'), { count: pos.length });
 }
 function fuTopHtml(s) {
   const t = s.top || [];
   if (!t.length) return '';
-  return '<div class="card"><h3 class="card-title">🔥 ההזדמנויות החזקות בסריקה האחרונה</h3>'
-    + t.map((x) => '<div class="wb-row wb-head"><span><span class="fu-sym">' + escPunch(x.s) + '</span> '
+  return fold('fu-top', '🔥 הזדמנויות בסריקה האחרונה', t.map((x) => '<div class="wb-row wb-head"><span><span class="fu-sym">' + escPunch(x.s) + '</span> '
       + (x.dir === 'LONG' ? '↑ עלייה' : x.dir === 'SHORT' ? '↓ ירידה' : escPunch(x.dir)) + '</span>'
-      + '<span class="wt-muted">ציון ' + escPunch(x.score) + ' · מומנטום ' + escPunch(x.mom) + '</span></div>').join('') + '</div>';
+      + '<span class="wt-muted">ציון ' + escPunch(x.score) + ' · מומנטום ' + escPunch(x.mom) + '</span></div>').join(''), { count: t.length });
 }
 function fuMonthHtml(s) {
   const st = s.stats30 || {}, n = fuNum(st.n) || 0, eq = s.equity || [];
@@ -9895,20 +9940,19 @@ function fuMonthHtml(s) {
     line = '<div class="wt-muted">שווי התיק: <span class="fu-num">' + fuMoney(a[1]) + '</span> ב-' + fuDay(a[0]) + ' ← <span class="fu-num">' + fuMoney(b[1]) + '</span> ב-'
       + fuDay(b[0]) + ' (' + fuPnl(fuNum(b[1]) - fuNum(a[1])) + ')</div>';
   }
-  return '<div class="card"><h3 class="card-title">📈 30 הימים האחרונים</h3><div class="stats-grid">'
-    + fuBox('עסקאות שנסגרו', n) + fuBox('הצליחו', n ? Math.round(100 * (fuNum(st.wins) || 0) / n) + '%' : '—') + fuBox('רווח/הפסד', fuPnl(st.pnl)) + '</div>' + line + '</div>';
+  return fold('fu-month', '📈 30 הימים האחרונים', '<div class="stats-grid">'
+    + fuBox('עסקאות שנסגרו', n) + fuBox('הצליחו', n ? Math.round(100 * (fuNum(st.wins) || 0) / n) + '%' : '—') + fuBox('רווח/הפסד', fuPnl(st.pnl)) + '</div>' + line);
 }
 const FU_STATUS = { OPEN: 'פתוחה', CLOSED: 'נסגרה', CANCELLED: 'בוטלה' };
 function fuTradesHtml(s) {
   const t = s.trades || [];
-  return '<div class="card"><h3 class="card-title">📜 עסקאות אחרונות</h3>'
-    + (t.length ? t.map((x) => '<div class="wb-row"><div class="wb-head"><span><span class="fu-sym">' + escPunch(x.s) + '</span> '
+  return fold('fu-trades', '📜 עסקאות אחרונות', (t.length ? t.map((x) => '<div class="wb-row"><div class="wb-head"><span><span class="fu-sym">' + escPunch(x.s) + '</span> '
       + (x.act === 'BUY' ? 'קנייה' : x.act === 'SELL' ? 'מכירה' : escPunch(x.act)) + ' <span class="fu-num">' + escPunch(x.q) + ' × ' + fuMoney(x.entry) + '</span></span>'
       + '<span class="wb-when">' + fuWhen(x.at) + '</span></div>'
       + '<span class="wb-tag">' + escPunch(FU_STATUS[x.status] || x.status) + '</span>'
       + (x.status === 'CLOSED' ? ' ' + fuPnl(x.pnl) + (fuNum(x.pnlPct) !== null ? ' <span class="fu-num">(' + fuNum(x.pnlPct).toFixed(1) + '%)</span>' : '') : '')
       + (x.mode === 'MANUAL' ? ' <span class="wb-tag">ידני</span>' : '') + '</div>').join('')
-      : '<div class="wt-muted">אין עדיין.</div>') + '</div>';
+      : '<div class="wb-sub">אין עדיין</div>'), { count: t.length });
 }
 
 // The message Daniel already sends, with the balance filled in from the ledger instead of
@@ -11417,6 +11461,11 @@ async function startApp() {
 }
 
 function boot() {
+  // folded sections (2026-10-05, "שכל הקטגוריות יהיו מקופלות"): settings all folded; on the work-hours
+  // page the live cards (who is in, approvals, who is owed) stay open and the history folds. Here and
+  // not in init(), which waits for the login.
+  foldStatic('settings');
+  foldStatic('worktime');
   tuckNotes();
   showBuildTag();
   try {
