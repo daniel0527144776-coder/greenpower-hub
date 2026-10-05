@@ -884,7 +884,7 @@ check('the case takes 132: 48V 50Ah (13S10P, 130 cells) goes in, 13S11P does not
 // measured. 170 takes two standing 21700, and an ATV may be folded into two layers, so it opens on
 // 72V 20S11P (220 cells, 55Ah) in two layers, and takes 60V 16S18P (90Ah) at most. hubOnly, since "a
 // plastic ATV tub" was no model a customer could check; it is the Tiger 2 (his answer, same day), and
-// stays hub-only until he says otherwise. The name carries טרקטורון so a search for the word finds it.
+// stays hub-only — his decision ("ב", the same day). The name carries טרקטורון so a search for the word finds it.
 // The stacking rule matched 'טרקטורון' (final nun) and so never the group 'טרקטורונים' (plain nun):
 // the row passed only because its model name happens to say טרקטורון. Any other ATV in the group
 // was held to one layer. --selftest puts that pattern back, and swaps length and height (the 170
