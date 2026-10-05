@@ -65,6 +65,9 @@ await page.evaluate(() => {
 await page.evaluate(() => { const o = document.getElementById('loginOverlay'); if (o) o.style.display = 'none'; init(); navigateTo('worktime'); });
 await page.waitForTimeout(500);
 
+// The debts are a fold since 2026-10-05 (every tab folded): opened, as he would.
+const debtFolded = await page.evaluate(() => { const d = document.getElementById('wageDebtCard'); const was = !d.open; d.open = true; return was && /₪/.test(document.getElementById('wageDebtSum').textContent); });
+check('the debts start folded, the total in their title', debtFolded, debtFolded);
 const acct = await page.evaluate(() => ({
   noMonthPicker: !document.getElementById('wtMonth'),
   text: document.getElementById('wageDebtList').innerText,
@@ -264,6 +267,7 @@ const fin = await page.evaluate(() => {
   ]));
   localStorage.setItem('gp_expenses', JSON.stringify([{ id: 'e1', amount: 3000, date: iso(2026, 4, 5), cat: 'רכש', note: 'תאים' }]));
   navigateTo('finances');
+  document.querySelectorAll('#page-finances details.fold').forEach((d) => { d.open = true; });   // "כל החודשים" folds since 2026-10-05
   const t = document.getElementById('page-finances').innerText;
   const m = t.match(/סה"כ הכנסות\s*₪([\d,]+)[\s\S]*?סה"כ הוצאות\s*₪([\d,]+)[\s\S]*?רווח מצטבר\s*₪([\d,\-]+)/);
   return {

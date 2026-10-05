@@ -93,8 +93,9 @@ const list = await page.evaluate(() => {
   navigateTo('customers');
   const out = {};
   for (const el of document.querySelectorAll('#customersList .list-item')) {
-    const name = el.querySelector('.list-item-title').innerText.trim();
-    const val = Number((el.querySelector('.list-item-value').innerText || '').replace(/[^\d]/g, '')) || 0;
+    // textContent: the list is folded by month since 2026-10-05, and a closed fold has no innerText
+    const name = el.querySelector('.list-item-title').textContent.trim();
+    const val = Number((el.querySelector('.list-item-value').textContent || '').replace(/[^\d]/g, '')) || 0;
     (out[name] = out[name] || []).push(val);
   }
   return out;
