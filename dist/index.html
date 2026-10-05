@@ -491,6 +491,7 @@ body { min-height: 100vh; }
       </div>
     </div>
     <div class="app-header-actions">
+      <button class="header-btn" id="alertBell" onclick="showHubAlerts(true)" title="התראות" style="position:relative;">🔔<span id="alertDot" style="display:none;position:absolute;top:5px;left:5px;width:9px;height:9px;border-radius:50%;background:#ef4444;"></span></button>
       <button class="header-btn" onclick="navigateTo('settings')" title="הגדרות">⚙️</button>
     </div>
   </div>
@@ -2719,7 +2720,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v408';
+const HUB_BUILD = 'v409';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6725,6 +6726,100 @@ function renderSyncPending() {
     '<div style="font-size:11px;opacity:.85;margin-top:2px;">' + names.join(' · ') +
     ' — הם קיימים במכשיר הזה בלבד, ולא יופיעו בטלפון.</div>';
 }
+// ---- התראות (Daniel, 2026-10-05: "תעשה גם שקופץ התראות בלוח הבקרה אם יש על מה להתריע") ----
+// He chose four: the bot's open questions, stuck work, the backup and the sync. They pop up INSIDE the
+// hub — the phone's WebView cannot raise a system notification — when the hub opens, when it comes back
+// to the front, and once a minute while it is open; only when something is new. The same set again
+// waits for the next day, and nothing pops over a window he has open. The 🔔 in the header shows the
+// list at any time, with a red dot while there is something on it.
+const ALERT_SEEN_KEY = 'gp_alerts_seen';
+const STUCK_DAYS = 7;            // no change for a week
+const STUCK_WINDOW_DAYS = 45;    // older rows predate the status field and read as 'בעבודה' forever
+let _waOpenQuestions = null;     // the bot's open questions; null while unknown (offline, logged out)
+let _syncPendingSince = 0;
+// A repair not delivered and not touched for a week, or a sale paid and not delivered. _u is when the
+// row last changed (stampRows), so a status moved yesterday is not stuck.
+function stuckWork(now = Date.now()) {
+  const day = 86400000, out = [];
+  const lastTouch = (r) => Math.max(Number(r._u) || 0, new Date(r.date).getTime() || 0);
+  const recent = (r) => (new Date(r.date).getTime() || 0) > now - STUCK_WINDOW_DAYS * day;
+  for (const j of Store.get('jobs') || []) {
+    if (!j || !j.date || !recent(j)) continue;
+    const st = j.jobStatus || 'בעבודה';
+    if (st === 'נמסר' || now - lastTouch(j) < STUCK_DAYS * day) continue;
+    out.push({ name: j.customerName || '', what: st, days: Math.floor((now - lastTouch(j)) / day) });
+  }
+  for (const o of Store.get('orders') || []) {
+    if (!o || o.status !== 'שולם' || !o.date || !recent(o) || now - lastTouch(o) < STUCK_DAYS * day) continue;
+    out.push({ name: o.customer || '', what: 'שולם ולא נמסר', days: Math.floor((now - lastTouch(o)) / day) });
+  }
+  return out;
+}
+function hubAlerts(now = Date.now()) {
+  const a = [];
+  const q = _waOpenQuestions;
+  if (q) a.push({ id: 'wa', n: q, icon: '❓', text: q === 1 ? 'שאלה אחת מהבוט מחכה לתשובה שלך' : q + ' שאלות מהבוט מחכות לתשובה שלך',
+    go: "navigateTo('wabot')", btn: 'לשאלות' });
+  const st = stuckWork(now);
+  if (st.length) a.push({ id: 'stuck', n: st.length, icon: '📋',
+    text: st.length === 1 ? 'עבודה אחת לא זזה יותר משבוע' : st.length + ' עבודות לא זזו יותר משבוע',
+    sub: st.slice(0, 4).map((x) => escPunch(x.name || 'ללא שם') + ' · ' + escPunch(x.what) + ' · ' + x.days + ' ימים').join('<br>') + (st.length > 4 ? '<br>ועוד…' : ''),
+    go: "navigateTo('orders')", btn: 'לעבודות' });
+  // The phone's WebView cannot download a file, so a backup reminder there could never be acted on.
+  if (!IS_ANDROID_WEBVIEW) {
+    const last = Store.get('lastBackup');
+    const days = last ? Math.floor((now - last) / 86400000) : null;
+    if (days === null || days >= 7) a.push({ id: 'backup', n: days === null ? 0 : days, icon: '💾',
+      text: days === null ? 'עוד לא נעשה גיבוי' : 'לא נעשה גיבוי כבר ' + days + ' ימים', go: 'exportData()', btn: 'גבה עכשיו' });
+  }
+  const pend = (typeof Sync !== 'undefined' && Sync.pending) ? Sync.pending() : [];
+  if (!pend.length) _syncPendingSince = 0;
+  else if (!_syncPendingSince) _syncPendingSince = now;
+  // Two minutes: a push in flight is not an alert; one that keeps failing is.
+  if (pend.length && now - _syncPendingSince >= 2 * 60000) a.push({ id: 'sync', n: pend.length, icon: '☁️',
+    text: 'יש נתונים שלא עלו לענן', sub: escPunch(pend.map((k) => SYNC_LABELS[k] || k).join(' · ')), go: 'forceSyncUp()', btn: 'העלה עכשיו' });
+  return a;
+}
+function hubAlertsSig(a) { return a.map((x) => x.id + ':' + x.n).join('|'); }
+function showHubAlerts(manual, list) {
+  const a = list || hubAlerts();
+  const dot = document.getElementById('alertDot');
+  if (dot) dot.style.display = a.length ? '' : 'none';
+  if (!a.length) { if (manual) showNotice('🔔 אין כרגע התראות.'); return; }
+  const body = a.map((x, i) => '<div class="card" data-alert="' + x.id + '" style="margin-bottom:8px;padding:10px;display:flex;gap:10px;align-items:center;">'
+    + '<div style="font-size:24px;">' + x.icon + '</div><div style="flex:1;min-width:0;"><b>' + escPunch(x.text) + '</b>'
+    + (x.sub ? '<div style="font-size:11.5px;color:var(--text-muted);margin-top:3px;">' + x.sub + '</div>' : '') + '</div>'
+    + '<button class="btn btn-sm btn-primary" onclick="closeModal();' + x.go + '">' + x.btn + '</button></div>').join('');
+  openModal('🔔 התראות', body, '<button class="btn btn-secondary" onclick="closeModal()">הבנתי</button>');
+  try { localStorage.setItem(ALERT_SEEN_KEY, JSON.stringify({ sig: hubAlertsSig(a), day: new Date().toISOString().slice(0, 10) })); } catch (e) {}
+}
+// Pops the list up when there is something new; quiet otherwise.
+function checkHubAlerts() {
+  const a = hubAlerts();
+  const dot = document.getElementById('alertDot');
+  if (dot) dot.style.display = a.length ? '' : 'none';
+  if (!a.length || document.hidden) return false;
+  // A test browser (Playwright sets navigator.webdriver) gets no pop-up of its own accord: one
+  // landing in the middle of another suite's steps would take over its modal. test-alerts.mjs turns it on.
+  if (navigator.webdriver && !window.__gpAlertsUnderTest) return false;
+  const login = document.getElementById('loginOverlay');
+  if (login && login.style.display !== 'none' && getComputedStyle(login).display !== 'none') return false;
+  if (document.getElementById('modalBackdrop').classList.contains('active')) return false;
+  if (document.getElementById('noticeBackdrop').classList.contains('active')) return false;
+  let seen = {};
+  try { seen = JSON.parse(localStorage.getItem(ALERT_SEEN_KEY) || '{}') || {}; } catch (e) { seen = {}; }
+  if (seen.sig === hubAlertsSig(a) && seen.day === new Date().toISOString().slice(0, 10)) return false;
+  showHubAlerts(false, a);
+  return true;
+}
+async function refreshWaAlertCount() {
+  if (typeof Sync === 'undefined' || !Sync.isAuthed()) return;
+  try { const b = await waAdmin(); _waOpenQuestions = (b.questions || []).filter((x) => !x.done).length; } catch (e) { /* offline: keep the last count */ }
+}
+let _alertTick = 0;
+function alertHeartbeat(withBot) {
+  (withBot ? refreshWaAlertCount() : Promise.resolve()).then(() => checkHubAlerts()).catch(() => {});
+}
 async function forceSyncUp() {
   if (typeof Sync === 'undefined' || !Sync.isAuthed()) { showNotice('אין חיבור לענן — התחבר ונסה שוב.'); return; }
   showNotice('מעלה…');
@@ -9644,7 +9739,7 @@ async function renderWaBot(reload = true) {
   }
   if (reload || !waBot) {
     if (!waBot) box.innerHTML = '<div class="card"><div class="empty-state-text">טוען את הבוט…</div></div>';
-    try { waBot = await waAdmin(); }
+    try { waBot = await waAdmin(); _waOpenQuestions = (waBot.questions || []).filter((x) => !x.done).length; }
     catch (e) {
       box.innerHTML = '<div class="card"><div class="empty-state-text">⚠ לא הצלחתי להגיע לבוט: ' + escPunch(e.message) + '</div>'
         + '<button class="btn btn-secondary btn-block" style="margin-top:8px" onclick="renderWaBot()">🔄 נסה שוב</button></div>';
@@ -11674,6 +11769,7 @@ function boot() {
 // so an edit made while briefly offline could stay unsynced to the cloud
 // for the rest of the session even after connectivity returned.
 document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) alertHeartbeat(true);
   if (!document.hidden && Sync.isAuthed()) {
     Sync.pull().then(ch => { if (ch) { init(); } }).catch(() => {});
     Sync.flush().catch(() => {});
@@ -11691,6 +11787,10 @@ setInterval(() => {
     Sync.flush().catch(() => {});
   }
 }, 60000);
+
+// The alerts: a look once a minute, the bot asked every fifth.
+setInterval(() => { if (!document.hidden) alertHeartbeat(++_alertTick % 5 === 0); }, 60000);
+setTimeout(() => alertHeartbeat(true), 4000);
 
 // Run on load
 window.addEventListener('DOMContentLoaded', boot);
