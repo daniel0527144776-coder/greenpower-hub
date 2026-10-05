@@ -2666,7 +2666,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v396';
+const HUB_BUILD = 'v397';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9516,7 +9516,9 @@ async function waAdmin(body, query) {
   return j;
 }
 const WA_RESULT = { sent: '✅ ענה', asked: '❓ העביר אליך', paused: '⏸ שתק — ענית בעצמך', rate: '⏸ יותר מדי הודעות בשעה', blocked: '🚫 מספר חסום',
-  off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל', manual: '📤 נשלח ממך' };
+  off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל', manual: '📤 נשלח ממך',
+  // the two the bot used to drop without a trace (2026-10-05): over ten minutes late, and a chat it cannot tell is a person
+  stale: '⌛ הגיעה באיחור — לא נענתה', unknown: '❔ שיחה שהבוט לא זיהה' };
 const WA_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 function waNum(c) {
   const d = String(c || '').split('@')[0];

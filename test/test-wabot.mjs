@@ -40,7 +40,9 @@ const DATA = {
     introduce: true, model: 'quality', instructions: 'מבצע החודש' },
   now: NOW, holy: '', offHours: '', stats: { sent: 5, asked: 1, quiet: 2 },
   log: [{ at: NOW - 60000, c: '972501234567@c.us', n: EVIL, in: 'כמה עולה ' + EVIL, out: 'תשובה ' + EVIL, r: 'sent' },
-        { at: NOW - 120000, c: '972504444444@c.us', n: 'משה', in: 'שלום', r: 'paused' }],
+        { at: NOW - 120000, c: '972504444444@c.us', n: 'משה', in: 'שלום', r: 'paused' },
+        { at: NOW - 180000, c: '972505555555@c.us', n: 'דוד', r: 'stale', late: 1500 },
+        { at: NOW - 240000, c: '123456789012345@lid', n: 'לקוח', r: 'unknown' }],
   paused: [{ c: '972504444444@c.us', n: 'משה', until: NOW + 3600000, manual: false }],
   questions: [{ id: 'q1', at: NOW - 30000, c: '972501234567@c.us', n: 'יוסי', q: 'יש מטען 84V? ' + EVIL, msg: 'יש לכם מטען?', done: false },
               { id: 'q0', at: NOW - 900000, c: '972501234567@c.us', n: 'יוסי', q: 'ישנה', done: true }],
@@ -66,7 +68,17 @@ await page.waitForFunction(() => typeof window.renderWaBot === 'function', null,
 if (SELFTEST) await page.evaluate(() => { window.escPunch = (s) => String(s == null ? '' : s); window.waNum = (c) => String(c); });
 
 const text = () => page.evaluate(() => document.getElementById('wabotBody').innerText);
-const lastPost = async (n) => { for (let i = 0; i < 50 && posts.length < n; i++) await page.waitForTimeout(100); await page.evaluate(() => closeNotice()); return posts[n - 1]; };
+// Wait for the WHOLE save, not just its POST: waDo then re-reads the page (a GET) and only then
+// shows its notice. Closing the notice on the POST alone let that late '✅ נשמרו' land on top of the
+// next check's warning — 1 run in 6 failed 'no day at all' that way (2026-10-05).
+const lastPost = async (n) => {
+  for (let i = 0; i < 50 && posts.length < n; i++) await page.waitForTimeout(100);
+  const g = gets.length;
+  for (let i = 0; i < 50 && gets.length <= g; i++) await page.waitForTimeout(100);
+  await page.waitForTimeout(50);
+  await page.evaluate(() => closeNotice());
+  return posts[n - 1];
+};
 
 // logged out: nothing is asked
 await page.evaluate(() => { Sync.session = null; Sync.userId = null; navigateTo('wabot'); });
@@ -87,6 +99,7 @@ check('it is shown as text instead', t1.includes('כמה עולה <img src=x') &
 check('numbers in the local form', t1.includes('050-123-4567') && t1.includes('050-444-4444'), '');
 check('only the open question waits for him', (t1.match(/הבוט שאל אותך/g) || []).length === 1 && /מחכות לך \(1\)/.test(t1), '');
 check('the log, with why it did or did not answer', /✅ ענה/.test(t1) && /שתק — ענית בעצמך/.test(t1), '');
+check('including a message too late to answer, and a chat it could not place', /הגיעה באיחור — לא נענתה/.test(t1) && /שיחה שהבוט לא זיהה/.test(t1), '');
 
 // the settings
 await page.evaluate(() => { document.getElementById('wbPause').value = '3'; document.getElementById('wbModel').value = 'saving'; document.getElementById('wbVoice').checked = false; waSaveSettings(); });
