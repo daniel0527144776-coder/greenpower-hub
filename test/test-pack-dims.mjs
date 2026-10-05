@@ -883,31 +883,39 @@ check('the case takes 132: 48V 50Ah (13S10P, 130 cells) goes in, 13S11P does not
 // "מידות אמבטיה טרקטורון מארז פלסטיק גובה 13 אורך 34.5 רוחב 23 — תעדכן שהגובה 17cm" = 345 × 230 × 170,
 // measured. 170 takes two standing 21700, and an ATV may be folded into two layers, so it opens on
 // 72V 20S11P (220 cells, 55Ah) in two layers, and takes 60V 16S18P (90Ah) at most. hubOnly, since "a
-// plastic ATV tub" is no model a customer can check.
+// plastic ATV tub" was no model a customer could check; it is the Tiger 2 (his answer, same day), and
+// stays hub-only until he says otherwise. The name carries טרקטורון so a search for the word finds it.
 // The stacking rule matched 'טרקטורון' (final nun) and so never the group 'טרקטורונים' (plain nun):
 // the row passed only because its model name happens to say טרקטורון. Any other ATV in the group
 // was held to one layer. --selftest puts that pattern back, and swaps length and height (the 170
 // read as the length), the mistake a "גובה … אורך …" order invites.
 const atv = await page.evaluate((SELF) => {
-  const name = 'טרקטורון — מארז פלסטיק';
-  const v = VEHICLE_PACKS.find((x) => x.m === name);
+  const v = VEHICLE_PACKS.find((x) => x.m === 'טייגר 2 — טרקטורון');
   if (!v) return { missing: true };
   if (SELF) {
+    v.m = 'טייגר 2';
     v.tub = v.tub.replace('345×230×170', '170×230×345');
     window.stackAllowed = (x) => !x || /אופנוע|ריקשה|E-Moto|טרקטורון/i.test((x.g || '') + ' ' + (x.m || ''));
   }
   const tb = tubOf(v);
+  const name = v.m;
   const groupStacks = stackAllowed({ g: 'טרקטורונים', m: 'Can-Am Outlander' });
+  const s = document.getElementById('vpSearch');
+  const found = (q) => { s.value = q; renderVehiclePacks(); return [...document.querySelectorAll('#vpList .list-item-title')].some((t) => t.textContent.trim() === name); };
+  const byWord = found('טרקטורון'), byModel = found('טייגר');
+  s.value = ''; renderVehiclePacks();
   document.getElementById('dimCell').value = '21700-50e';
   useVehiclePack(name);
   const r72 = document.getElementById('dimResult').innerText;
   const V = document.getElementById('dimV').value;
   clearDimVehicle();
-  return { tb, type: vehType(v), hubOnly: v.hubOnly === true, measured: tubMeasured(v), groupStacks, V, r72 };
+  return { tb, type: vehType(v), hubOnly: v.hubOnly === true, measured: tubMeasured(v), groupStacks, byWord, byModel, V, r72 };
 }, SELFTEST);
 check('the ATV tub is in the table, 345 × 230 × 170 measured, hub-only, drawn as a quad',
   !atv.missing && atv.tb && atv.tb.L === 345 && atv.tb.W === 230 && atv.tb.H === 170 && atv.type === 'atv' && atv.hubOnly && atv.measured,
   JSON.stringify(atv.missing ? atv : { tb: atv.tb, type: atv.type, hubOnly: atv.hubOnly, measured: atv.measured }));
+check('the Tiger 2 is found by a search for טייגר and for טרקטורון',
+  !atv.missing && atv.byWord && atv.byModel, atv.missing ? 'missing' : [atv.byWord, atv.byModel]);
 check('any vehicle in the ATV group may be folded into two layers, not only one named טרקטורון',
   !atv.missing && atv.groupStacks === true, String(atv.groupStacks));
 check('it opens on 72V 20S11P (220 cells) in two layers, and 60V takes 16S18P at most',

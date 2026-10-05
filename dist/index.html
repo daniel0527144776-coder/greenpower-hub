@@ -2700,7 +2700,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v405';
+const HUB_BUILD = 'v406';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -8939,8 +8939,10 @@ const VEHICLE_PACKS = [
   // folded into two layers when one will not do ("לקפל ל2 זה רק באופנועים וטרקטורונים"). His way —
   // groups across the 230, the series along the 345 less the BMS — that is 72V 20S11P (220, 55Ah),
   // 60V 16S18P (288, 90Ah, the most), 52V 14S18P (252) and 48V 13S18P (234), all in two layers.
-  // hubOnly: "a plastic ATV tub" is not a model a customer can check, so it stays in the hub.
-  { g: 'טרקטורונים', m: 'טרקטורון — מארז פלסטיק', src: 'נמדד', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 11, max: 288, hubOnly: true,
+  // The model is the Tiger 2 (Daniel, 2026-10-05: "טייגר 2"; the tub measured inside). The name keeps the
+  // word טרקטורון so that a search for it finds the row: the group's plural (plain nun) does not contain
+  // it (final nun). hubOnly until he says the row goes to the site's fit page.
+  { g: 'טרקטורונים', m: 'טייגר 2 — טרקטורון', src: 'נמדד', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 11, max: 288, hubOnly: true,
     tub: '345×230×170 מ"מ (נמדד: אורך 34.5, רוחב 23, גובה 17) · מארז פלסטיק' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' ,
     tub: '420×155×65 מ"מ — לפי מידות הסוללה המקורית (boardstore), לא נמדד' },
