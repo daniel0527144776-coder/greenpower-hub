@@ -604,6 +604,12 @@ body { min-height: 100vh; }
         <div class="quick-card-desc">תאים · BMS · חלקים</div>
       </div>
 
+      <div class="quick-card" onclick="openNeedList()">
+        <span class="quick-card-icon">📝</span>
+        <div class="quick-card-title">חסר להזמנה</div>
+        <div class="quick-card-desc">לכתוב מה חסר · לשלוח לספק</div>
+      </div>
+
       <div class="quick-card" onclick="navigateTo('supplier')">
         <span class="quick-card-icon">🔒</span>
         <div class="quick-card-title">עלויות ספקים</div>
@@ -1680,6 +1686,19 @@ body { min-height: 100vh; }
       <button class="btn btn-primary btn-sm" onclick="openInventoryEditor(null)">➕ פריט</button>
     </div>
   </div>
+  <!-- What he writes down as missing (Daniel, 2026-10-05: "מקום שאני כותב איזה חלקי עבודה חסרים לי
+       בשביל להזמין"). Free text, not a stock row: half of what runs out is never counted. -->
+  <div class="card" id="needCard">
+    <div style="font-weight:800;margin-bottom:8px;">📝 חסר להזמנה</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <input id="needText" class="form-input-wide" style="flex:1 1 200px;width:auto;" placeholder="מה חסר? למשל: ניקל 0.15, שרינק 300 מ&quot;מ" onkeydown="if(event.key==='Enter')addNeed()">
+      <input id="needQty" class="form-input-wide" style="flex:0 0 90px;width:90px;" placeholder="כמות" onkeydown="if(event.key==='Enter')addNeed()">
+      <input id="needSupplier" class="form-input-wide" style="flex:0 1 130px;width:130px;" placeholder="ספק (לא חובה)" list="needSuppliers" onkeydown="if(event.key==='Enter')addNeed()">
+      <datalist id="needSuppliers"></datalist>
+      <button class="btn btn-primary btn-sm" onclick="addNeed()">➕ הוסף</button>
+    </div>
+    <div id="needList" style="margin-top:8px;"></div>
+  </div>
   <div id="inventoryLowAlert"></div>
   <div class="card">
     <div id="inventoryList"></div>
@@ -1906,7 +1925,7 @@ let bizDetails = {};
 // on any device that still holds the rows puts them back everywhere.
 // Lists of rows with an id: merged row by row (2026-09-25, extended to everything that has one).
 const MERGE_KEYS = ['inventory', 'worktime', 'wage_payments', 'customers', 'jobs', 'incomes', 'expenses',
-  'workers', 'orders', 'dims', 'biz_payments', 'inv_log'];
+  'workers', 'orders', 'dims', 'biz_payments', 'inv_log', 'need_list'];
 // Single objects and maps: merged field by field, each field stamped when it changed, the stamps
 // synced beside them in fs_<key>. Not merged: supplier_prices (no row ids — and "החלף רשימה" is
 // meant to replace it), sticker_history (its own merge), worktime_trash (a local-ish log).
@@ -2037,7 +2056,7 @@ const Store = {
 // ============================================================
 const SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
 const SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
-const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'diag_notes', 'bms_pick', 'supplier_costs', 'supplier_prices', 'biz_payments', 'wage_payments', 'worktime_trash',
+const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses', 'worktime', 'workers', 'orders', 'costs', 'dims', 'sticker_history', 'inventory', 'need_list', 'tomb_need_list', 'diag_notes', 'bms_pick', 'supplier_costs', 'supplier_prices', 'biz_payments', 'wage_payments', 'worktime_trash',
   'tomb_inventory', 'tomb_worktime', 'tomb_wage_payments', 'tomb_customers', 'tomb_jobs', 'tomb_incomes', 'tomb_expenses',
   'tomb_workers', 'tomb_orders', 'tomb_dims', 'tomb_biz_payments', 'inv_log', 'tomb_inv_log',
   'fs_settings', 'fs_biz', 'fs_costs', 'fs_diag_notes', 'fs_bms_pick', 'fs_supplier_costs',
@@ -2700,7 +2719,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v406';
+const HUB_BUILD = 'v407';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -10679,6 +10698,8 @@ function orderList() {
     const t = i.low != null ? Number(i.low) : INV_LOW_DEFAULT;
     lines.push({ name: i.name, have: q, want: Math.ceil(Math.max(t * 2 - q, t)), supplier: invSupplierOf(i), cat: invCatOf(i) });
   }
+  // What he wrote down as missing (חסר להזמנה), beside what the stock says.
+  lines.push(...needOrderLines());
   return lines.length ? lines : null;
 }
 // ---- who each row is ordered from (2026-10-04, "הזמנה לפי ספק") ----
@@ -10723,7 +10744,8 @@ function orderGroups() {
   return [...by.entries()].sort(([a], [b]) => (a === '') - (b === '') || a.localeCompare(b))
     .map(([supplier, ls]) => ({ supplier, lines: ls }));
 }
-const orderLineText = (l) => `• ${l.name} — ${l.want} יח׳ (נשארו ${l.have}${l.perMonth ? `, יוצאים כ-${l.perMonth} בחודש` : ''})`;
+const orderLineText = (l) => (l.manual ? `• ${l.name}${l.qty ? ` — ${l.qty}` : ''}`
+  : `• ${l.name} — ${l.want} יח׳ (נשארו ${l.have}${l.perMonth ? `, יוצאים כ-${l.perMonth} בחודש` : ''})`);
 function orderGroupText(g) {
   return (g.supplier ? `הזמנה מ-${g.supplier}:` : 'הזמנה (ספק לא ידוע):') + '\n' + g.lines.map(orderLineText).join('\n');
 }
@@ -10741,6 +10763,12 @@ function copyOrderGroup(i) {
   const done = document.getElementById('orderDone' + i);
   if (done) done.textContent = '✓ הועתק';
 }
+// WhatsApp with the message ready; he picks the supplier's chat (2026-10-05). openExternal, since
+// window.open does nothing in the phone's WebView.
+function sendOrderGroup(i) {
+  const g = _orderGroupsShown[i];
+  if (g) openExternal('https://wa.me/?text=' + encodeURIComponent(orderGroupText(g)));
+}
 function copyOrderList() {
   const groups = orderGroups();
   if (!groups.length) { showNotice('אין מה להזמין — הכול מעל הסף.'); return; }
@@ -10749,7 +10777,7 @@ function copyOrderList() {
   const names = invSupplierNames();
   // The clipboard is unreliable inside the WebView, so each message is shown in full too.
   const body = groups.map((g, i) => {
-    const pick = g.supplier ? '' : [...new Set(g.lines.map((l) => l.cat))].map((cat) =>
+    const pick = g.supplier ? '' : [...new Set(g.lines.filter((l) => l.cat).map((l) => l.cat))].map((cat) =>
       `<div class="form-row" style="margin-top:4px;"><label style="font-size:12px;">ספק ל${esc(cat)}</label>
         <select class="form-select" onchange="setInvCatSupplier(decodeURIComponent('${encodeURIComponent(cat)}'), this.value)">
           <option value="">— בחר —</option>${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select></div>`).join('');
@@ -10757,7 +10785,8 @@ function copyOrderList() {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
         <b>${g.supplier ? '📦 ' + esc(g.supplier) : '❓ ספק לא ידוע'}</b>
         <span><span id="orderDone${i}" style="font-size:11px;color:#34d399;"></span>
-        <button class="btn btn-sm btn-secondary" onclick="copyOrderGroup(${i})">📋 העתק</button></span></div>
+        <button class="btn btn-sm btn-secondary" onclick="copyOrderGroup(${i})">📋 העתק</button>
+        <button class="btn btn-sm btn-secondary" data-wa-order="${i}" onclick="sendOrderGroup(${i})">💬 וואטסאפ</button></span></div>
       <textarea id="orderTxt${i}" class="form-input-wide" style="width:100%;height:${60 + g.lines.length * 18}px;font-size:12px;margin-top:6px;" readonly>${esc(orderGroupText(g))}</textarea>${pick}</div>`;
   }).join('');
   openModal('🛒 מה להזמין — לפי ספק', body + '<div style="font-size:11px;color:var(--text-muted);">הודעה נפרדת לכל ספק — להעתיק ולהדביק בוואטסאפ שלו.</div>',
@@ -10892,9 +10921,62 @@ function seedCellStockOnce() {
     if (added || set) showNotice(`מלאי התאים עודכן · ${added} חדשים, ${set} עודכנו. הסף ("מתי להזמין") הוא הצעה — אפשר לשנות בדף המלאי.`);
   } catch (e) { /* a device with no localStorage is not a reason to fail boot */ }
 }
+// ---- חסר להזמנה (Daniel, 2026-10-05) ----
+// What he writes down as missing, to order: free text with an optional quantity and supplier.
+// Synced and merged row by row like the inventory (MERGE_KEYS), so a line written on the phone
+// is on the PC, and a line removed on one is removed on both (tomb_need_list).
+// Open lines join "🛒 מה להזמין" beside the stock that ran low, in their supplier's message.
+// "✓ הוזמן" keeps a line, dimmed, until the part arrives; 🗑 removes it.
+function getNeeds() { const v = Store.get('need_list'); return Array.isArray(v) ? v : []; }
+function openNeedList() {
+  navigateTo('inventory');
+  setTimeout(() => { const el = document.getElementById('needText'); if (el) el.focus(); }, 60);
+}
+function addNeed() {
+  const t = document.getElementById('needText'), q = document.getElementById('needQty'), s = document.getElementById('needSupplier');
+  const text = String((t && t.value) || '').trim();
+  if (!text) { showNotice('כתוב מה חסר — למשל "ניקל 0.15".'); return; }
+  const row = { id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text,
+    qty: String((q && q.value) || '').trim(), supplier: String((s && s.value) || '').trim(), added: Date.now() };
+  if (!Store.set('need_list', getNeeds().concat([row]))) return;
+  if (t) t.value = ''; if (q) q.value = '';
+  renderNeedList();
+  if (t) t.focus();
+}
+function toggleNeedOrdered(id) {
+  const rows = getNeeds();
+  const r = rows.find((x) => String(x.id) === String(id));
+  if (!r) return;
+  if (r.ordered) delete r.ordered; else r.ordered = Date.now();
+  if (Store.set('need_list', rows)) renderNeedList();
+}
+function removeNeed(id) {
+  if (Store.set('need_list', getNeeds().filter((x) => String(x.id) !== String(id)))) renderNeedList();
+}
+// The open lines, as order lines — the shape orderList gives a stock row.
+function needOrderLines() {
+  return getNeeds().filter((r) => !r.ordered && r.text).map((r) => ({ name: String(r.text), qty: String(r.qty || ''), supplier: String(r.supplier || ''), manual: true }));
+}
+function renderNeedList() {
+  const box = document.getElementById('needList');
+  if (!box) return;
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+  const dl = document.getElementById('needSuppliers');
+  if (dl) dl.innerHTML = invSupplierNames().map((n) => `<option value="${esc(n)}"></option>`).join('');
+  const rows = getNeeds().slice().sort((a, b) => (!!a.ordered - !!b.ordered) || (Number(a.added) || 0) - (Number(b.added) || 0));
+  if (!rows.length) { box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">אין כרגע. מה שתכתוב כאן ייכנס גם להודעה של "🛒 מה להזמין".</div>'; return; }
+  const day = (t) => new Date(Number(t)).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+  box.innerHTML = rows.map((r) => `<div class="need-row" data-need="${esc(r.id)}" style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-top:1px solid var(--border);${r.ordered ? 'opacity:.55;' : ''}">
+      <div style="flex:1;min-width:0;"><b style="${r.ordered ? 'text-decoration:line-through;' : ''}">${esc(r.text)}</b>${r.qty ? ` <span style="color:var(--text-muted);">— ${esc(r.qty)}</span>` : ''}
+        <div style="font-size:11px;color:var(--text-muted);">${r.supplier ? '📦 ' + esc(r.supplier) + ' · ' : ''}${r.ordered ? '✓ הוזמן ' + day(r.ordered) : 'נכתב ' + day(r.added || Date.now())}</div></div>
+      <button class="btn btn-sm btn-secondary" onclick="toggleNeedOrdered(decodeURIComponent('${encodeURIComponent(r.id)}'))">${r.ordered ? '↩️ לא הוזמן' : '✓ הוזמן'}</button>
+      <button class="btn btn-sm btn-secondary" title="התקבל / לא צריך" onclick="removeNeed(decodeURIComponent('${encodeURIComponent(r.id)}'))">🗑</button>
+    </div>`).join('');
+}
 const INV_OPEN = new Set();
 function toggleInvCat(c) { c = decodeURIComponent(c); if (INV_OPEN.has(c)) INV_OPEN.delete(c); else INV_OPEN.add(c); renderInventory(); }
 function renderInventory() {
+  renderNeedList();
   _invUsageCache = null;    // the pace lines read usage fresh on every render
   // The cell-cost reference used to render here. It is a SUPPLIER cost, not stock on a
   // shelf, so it belongs on עלויות ספקים — where it now lives alongside every other

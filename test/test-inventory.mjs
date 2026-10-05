@@ -157,9 +157,12 @@ const restoreOnce = async () => {
   return page.evaluate(() => (Store.get('inventory') || []).map((r) => [r.name.split(' ').pop(), r.qty]));
 };
 // The restore reads the shelf blind — as if it were empty — so it re-adds every row on top.
-if (SELFTEST) await page.evaluate(() => { window.getInventory = () => []; });
+// Scoped to this section: left in place, it crashed every later section, so their own selftests
+// were never seen failing (found 2026-10-05).
+if (SELFTEST) await page.evaluate(() => { window._realGetInventory = window.getInventory; window.getInventory = () => []; });
 const r1 = await restoreOnce();
 const r2 = await restoreOnce();
+if (SELFTEST) await page.evaluate(() => { window.getInventory = window._realGetInventory; });
 const q = (rows, m) => (rows.find(([n]) => n === m) || [])[1];
 check('the four missing cell models come back', r1.length === 7, JSON.stringify(r1));
 check('a model already on the shelf keeps its own count', q(r1, '50E') === 1500 && q(r1, '50PL') === 220, JSON.stringify(r1));
@@ -343,6 +346,58 @@ check('each supplier gets its own message', /הזמנה מ-ספק-תאים:\n•
 check('"nothing to order" is said in a notice', /אין מה להזמין/.test(sup.emptyNotice), sup.emptyNotice);
 check('saving an item with no name says so in a notice', /הזן שם פריט/.test(sup.nameNotice), sup.nameNotice);
 check('the item editor stores a row\'s own supplier', sup.saved === 'ספק-מיוחד', String(sup.saved));
+
+// ---- 13. חסר להזמנה (Daniel, 2026-10-05: "מקום שאני כותב איזה חלקי עבודה חסרים לי בשביל להזמין") ----
+// Free text he writes down, synced row by row like the stock, and in the order message beside it.
+// --selftest leaves the written lines out of the order, the way the page was before.
+const need = await page.evaluate(async (SELF) => {
+  if (SELF) window.needOrderLines = () => [];
+  Store.set('inventory', [{ id: 'z', name: 'תאי EVE 21700 50E', qty: 5000, low: 10, cat: 'תאים' }]);
+  Store.set('need_list', []);
+  openNeedList();
+  await new Promise((r) => setTimeout(r, 120));
+  const focused = document.activeElement && document.activeElement.id;
+  const put = (id, v) => { document.getElementById(id).value = v; };
+  put('needText', 'ניקל 0.15'); put('needQty', '2 ק"ג'); put('needSupplier', 'ספק-חלקים');
+  document.getElementById('needText').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  // The supplier stays for the next line (several parts from one supplier in a row); cleared, the line has none.
+  const sticky = document.getElementById('needSupplier').value;
+  put('needSupplier', ''); put('needText', 'שרינק <b>300</b>'); addNeed();
+  put('needText', '   '); addNeed();
+  const blankNotice = (document.getElementById('noticeBackdrop') || {}).innerText || '';
+  closeNotice();
+  const rows = getNeeds();
+  const listHtml = document.getElementById('needList').innerHTML;
+  const groups = orderGroups().map((g) => [g.supplier, g.lines.map((l) => l.name).join('+')]);
+  const text = orderListText();
+  copyOrderList();
+  const modal = { title: (document.getElementById('modalTitle') || {}).textContent || '', wa: document.querySelectorAll('[data-wa-order]').length };
+  let opened = '';
+  const keep = window.openExternal; window.openExternal = (u) => { opened = u; };
+  sendOrderGroup(0);
+  window.openExternal = keep;
+  closeModal();
+  toggleNeedOrdered(rows[0].id);
+  const afterOrdered = orderListText();
+  const orderedRow = getNeeds().find((r) => r.id === rows[0].id);
+  removeNeed(rows[1].id);
+  const tomb = Store.get('tomb_need_list') || {};
+  return { sticky, focused, n: rows.length, row0: rows[0], blankNotice, escaped: listHtml.includes('&lt;b&gt;300') && !listHtml.includes('<b>300'),
+    groups, text, modal, opened, afterOrdered, ordered: !!(orderedRow && orderedRow.ordered), tombed: tomb[rows[1].id] != null,
+    left: getNeeds().map((r) => r.text), sync: SYNC_KEYS.includes('need_list') && SYNC_KEYS.includes('tomb_need_list') && MERGE_KEYS.includes('need_list') };
+}, SELFTEST);
+check('the home card opens the list with the cursor in it', need.focused === 'needText', String(need.focused));
+check('Enter or ➕ adds a line, with its quantity and supplier (which stays for the next); a blank one is refused in a notice',
+  need.n === 2 && need.sticky === 'ספק-חלקים' && need.row0.text === 'ניקל 0.15' && need.row0.qty === '2 ק"ג' && need.row0.supplier === 'ספק-חלקים' && /כתוב מה חסר/.test(need.blankNotice), JSON.stringify([need.n, need.row0, need.blankNotice]));
+check('what he types is shown as text, never as markup', need.escaped, 'escaped');
+check('the written lines join "מה להזמין", in their supplier\'s message',
+  /הזמנה מ-ספק-חלקים:\n• ניקל 0\.15 — 2 ק"ג/.test(need.text) && /• שרינק <b>300<\/b>/.test(need.text), need.text);
+check('with nothing low on the shelf, the order still opens for them, each message with a WhatsApp button',
+  /מה להזמין/.test(need.modal.title) && need.modal.wa === need.groups.length && need.groups.length === 2, JSON.stringify([need.modal, need.groups]));
+check('the WhatsApp button opens wa.me with that supplier\'s message', /^https:\/\/wa\.me\/\?text=/.test(need.opened) && decodeURIComponent(need.opened.split('text=')[1] || '').includes('ניקל 0.15'), need.opened.slice(0, 80));
+check('a line marked ✓ הוזמן stays on the list and leaves the order', need.ordered && !need.afterOrdered.includes('ניקל'), need.afterOrdered);
+check('🗑 removes a line and leaves a tombstone, so another device does not bring it back', need.tombed && need.left.join() === 'ניקל 0.15', JSON.stringify(need.left));
+check('the list syncs, row by row, with its tombstones', need.sync, 'SYNC_KEYS / MERGE_KEYS');
 
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
