@@ -387,20 +387,24 @@ const lst = await page.evaluate(() => {
   const s = document.getElementById('vpSearch');
   const rowText = (name) => { const r = [...document.querySelectorAll('#vpList .list-item')].find((x) => ((x.querySelector('.list-item-title') || {}).textContent || '').trim() === name); return r ? r.textContent : null; };
   s.value = ''; renderVehiclePacks();
-  const items = [...document.querySelectorAll('#vpList > div')];
-  // per group: once an "אין מידות" card appears, no card with sizes may follow it
-  let late = false, seenNone = false;
-  for (const el of items) {
-    if (!el.classList.contains('list-item')) { seenNone = false; continue; }
-    const none = /אין מידות/.test(el.textContent);
-    if (none) seenNone = true; else if (seenNone) late = true;
+  // Each group is a fold since 2026-10-05; per group: once an "אין מידות" card appears, no card
+  // with sizes may follow it.
+  let late = false, count = 0;
+  for (const g of document.querySelectorAll('#vpList details.fold')) {
+    let seenNone = false;
+    for (const el of g.querySelectorAll('.fold-body > .list-item')) {
+      count++;
+      const none = /אין מידות/.test(el.textContent);
+      if (none) seenNone = true; else if (seenNone) late = true;
+    }
   }
-  const out = { late, count: items.filter((e) => e.classList.contains('list-item')).length, total: VEHICLE_PACKS.length, zero: rowText('Zero 10X'), talaria: rowText('Talaria'), plus: rowText('Bomber Plus 15kW'), wolfBare: rowText('Wolf Warrior') };
+  const out = { late, count, groupsFolded: [...document.querySelectorAll('#vpList details.fold')].every((d) => !d.open), total: VEHICLE_PACKS.length, zero: rowText('Zero 10X'), talaria: rowText('Talaria'), plus: rowText('Bomber Plus 15kW'), wolfBare: rowText('Wolf Warrior') };
   s.value = 'wolf'; renderVehiclePacks(); out.wolfSearch = rowText('Wolf Warrior');
   s.value = ''; renderVehiclePacks();
   return out;
 });
 check('every vehicle is listed, a vehicle with no sizes too', lst.count === lst.total && lst.wolfBare != null, [lst.count, lst.total]);
+check('each vehicle group starts folded (2026-10-05, every tab folded)', lst.groupsFolded === true, lst.groupsFolded);
 check('and in each group the ones with sizes come first', !lst.late, lst.late);
 check('a search finds a vehicle with no sizes', lst.wolfSearch != null, String(lst.wolfSearch));
 check('a measured tray says ✓ נמדד, a table guess does not', /✓ נמדד/.test(lst.zero || '') && !/✓ נמדד/.test(lst.talaria || ''), [lst.zero, lst.talaria]);
@@ -605,6 +609,7 @@ const mx = await page.evaluate((SELF) => {
   navigateTo('calcs'); setCalcTab('dims');
   setDimTab('veh');
   const sharedOnList = !document.getElementById('dimShared').hidden;
+  document.querySelectorAll('#vpList details.fold').forEach((d) => { d.open = true; });   // as he taps a group open
   const card = [...document.querySelectorAll('#vpList .list-item')].find((c) => /Talaria/.test(c.innerText));
   const cardTxt = card ? card.innerText : '';
   useVehiclePack('Talaria', 72);
@@ -738,6 +743,7 @@ const rb = await page.evaluate((SELF) => {
     { id: 'dz', model: 'Zero 10X', l: 455, w: 134, h: 58, measured: true },
     { id: 'dk', model: 'Kugoo G2', l: 400, w: 150, h: 80, measured: true }]));
   setDimTab('veh');
+  document.querySelectorAll('#vpList details.fold').forEach((d) => { d.open = true; });
   const cards = [...document.querySelectorAll('#vpList .list-item')];
   out.zeroMine = cards.some((c) => /Zero 10X/.test(c.innerText) && /נמדד/.test(c.innerText) && /455/.test(c.innerText));
   out.kugooFirst = /Kugoo G2/.test((cards[0] || {}).innerText || '');

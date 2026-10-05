@@ -39,6 +39,9 @@ await page.waitForFunction(() => typeof window.navigateTo === 'function', null, 
 await page.evaluate(() => { const o = document.getElementById('loginOverlay'); if (o) o.style.display = 'none'; init(); });
 await page.evaluate(() => navigateTo('catalog'));
 await page.waitForTimeout(400);
+// Each topic is a fold since 2026-10-05 (every tab folded); open them, as he would by tapping.
+const topicsFolded = await page.evaluate(() => [...document.querySelectorAll('#catalogList details.fold')].every((d) => !d.open));
+await page.evaluate(() => { document.querySelectorAll('#catalogList details.fold').forEach((d) => { d.open = true; foldOpen.add(d.dataset.fold); }); renderCatalog(); });
 
 if (SELFTEST) {
   // Put the original hazard back: keys built separately from the render, so the headings shift
@@ -54,7 +57,7 @@ if (SELFTEST) {
 const shape = await page.evaluate(() => {
   const list = document.getElementById('catalogList');
   const out = [];
-  for (const el of list.children) {
+  for (const el of list.querySelectorAll('.price-series, .price-volt, .price-cat')) {
     if (el.classList.contains('price-series')) out.push({ topic: el.innerText.trim() });
     else if (el.classList.contains('price-volt')) out.push({ volt: el.innerText.trim() });
     else if (el.classList.contains('price-cat')) out.push({ cat: el.innerText.replace(/^[▾▸]\s*/, '').trim() });
@@ -62,6 +65,7 @@ const shape = await page.evaluate(() => {
   return out;
 });
 const volts = shape.filter((x) => x.volt).map((x) => x.volt);
+check('the topics start folded (2026-10-05, every tab folded)', topicsFolded === true, topicsFolded);
 check('the price list has voltage headings', volts.length > 0, volts);
 check('and they read as a voltage', volts.every((v) => /^\d+V$/.test(v)), volts);
 
@@ -85,7 +89,7 @@ const nonBattery = await page.evaluate(() => {
   // no non-battery category carries a voltage at all, so none of them may gain a heading
   const list = document.getElementById('catalogList');
   let topic = null, bad = [];
-  for (const el of list.children) {
+  for (const el of list.querySelectorAll('.price-series, .price-volt, .price-cat')) {
     if (el.classList.contains('price-series')) topic = el.innerText.trim();
     else if (el.classList.contains('price-volt') && !/סוללות/.test(topic || '')) bad.push(topic + ' / ' + el.innerText.trim());
   }
@@ -97,7 +101,7 @@ check('no voltage heading appears outside the batteries', nonBattery.length === 
 const order = await page.evaluate(() => {
   const list = document.getElementById('catalogList');
   let topic = null, seq = {}, cur = [];
-  for (const el of list.children) {
+  for (const el of list.querySelectorAll('.price-series, .price-volt, .price-cat')) {
     if (el.classList.contains('price-series')) { if (cur.length) seq[topic] = cur; topic = el.innerText.trim(); cur = []; }
     else if (el.classList.contains('price-volt')) cur.push(parseInt(el.innerText, 10));
   }
@@ -138,7 +142,7 @@ const still = await page.evaluate(() => {
   const hits = document.getElementById('catalogList').querySelectorAll('.price-item').length;
   document.getElementById('catalogSearch').value = '';
   setCatalogTier('PRO');
-  const proCats = [...document.getElementById('catalogList').querySelectorAll('.price-cat')].map((e) => e.innerText);
+  const proCats = [...document.getElementById('catalogList').querySelectorAll('.price-cat')].map((e) => e.textContent);
   setCatalogTier('');
   renderCatalog();
   return { openAll, closedAll, hits, proOnly: proCats.every((c) => /PRO/.test(c)), proCount: proCats.length };
