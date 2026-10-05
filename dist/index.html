@@ -2700,7 +2700,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v400';
+const HUB_BUILD = 'v401';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9610,7 +9610,7 @@ async function renderWaBot(reload = true) {
       return;
     }
   }
-  box.innerHTML = waStatusHtml() + waQuestionsHtml() + waSettingsHtml() + waInstructionsHtml() + waBlockedHtml()
+  box.innerHTML = waStatusHtml() + waQuestionsHtml() + waComposeHtml() + waSettingsHtml() + waInstructionsHtml() + waBlockedHtml()
     + waPausedHtml() + waTeachHtml() + waKnowledgeHtml() + waLogHtml();
 }
 function waStatusHtml() {
@@ -9639,11 +9639,12 @@ function waQuestionsHtml() {
         + '<span class="wb-when">' + waWhen(q.at) + '</span></div>'
         + (q.msg ? '<div class="wb-text">💬 ' + escPunch(q.msg) + '</div>' : '')
         + '<div class="wb-text"><b>הבוט שאל אותך:</b> ' + escPunch(q.q) + '</div>'
-        + '<textarea class="form-input-wide wb-area" id="wbAns' + i + '" placeholder="התשובה שלך"></textarea>'
-        + '<label class="wb-check"><input type="checkbox" id="wbSend' + i + '" checked> לשלוח ללקוח</label>'
+        + '<div class="wb-sub">' + (q.draft ? 'הטיוטה של הבוט — ערוך אם צריך:' : 'כתוב בקצרה מה לענות, ו"נסח" יכתוב מזה הודעה:') + '</div>'
+        + '<textarea class="form-input-wide wb-area" id="wbAns' + i + '" placeholder="מה לענות (אפשר להכתיב במיקרופון של המקלדת)">' + escPunch(q.draft || '') + '</textarea>'
         + '<label class="wb-check"><input type="checkbox" id="wbKeep' + i + '" checked> שהבוט ילמד</label>'
-        + '<div class="btn-group"><button class="btn btn-primary btn-sm" onclick="waAnswer(' + i + ')">✔ שמור</button>'
-        + '<button class="btn btn-secondary btn-sm" onclick="waDismiss(' + i + ')">סגור בלי תשובה</button></div></div>';
+        + '<div class="btn-group"><button class="btn btn-primary btn-sm" onclick="waAnswer(' + i + ')">📤 שלח ללקוח</button>'
+        + '<button class="btn btn-secondary btn-sm" onclick="waPolishQ(' + i + ')">✨ נסח</button>'
+        + '<button class="btn btn-secondary btn-sm" onclick="waDismiss(' + i + ')">🗑 אל תענה</button></div></div>';
     }).join(''), { count: open.length, hot: true, open: true });
 }
 function waSettingsHtml() {
@@ -9660,12 +9661,16 @@ function waSettingsHtml() {
     + '<div class="form-row"><label>משעה</label><input type="time" class="form-input" id="wbFrom" value="' + escPunch(c.from) + '"></div>'
     + '<div class="form-row"><label>עד שעה</label><input type="time" class="form-input" id="wbTo" value="' + escPunch(c.to) + '"></div></div>'
     + '<div class="form-row"><label>מודל</label><select class="form-select" id="wbModel">' + opt('quality', st.model, 'איכותי (Sonnet)') + opt('saving', st.model, 'חסכוני (Haiku)') + '</select></div>'
+    + '<div class="form-row"><label>אורך תשובה</label><select class="form-select" id="wbLength">' + opt('short', st.length, 'קצר מאוד') + opt('normal', st.length, 'קצר') + opt('detailed', st.length, 'מפורט') + '</select></div>'
+    + '<div class="form-row"><label>טון</label><select class="form-select" id="wbTone">' + opt('friendly', st.tone, 'חברי') + opt('business', st.tone, 'ענייני') + opt('formal', st.tone, 'רשמי') + '</select></div>'
+    + '<div class="form-row"><label>אמוג׳י</label><select class="form-select" id="wbEmoji">' + opt('some', st.emoji, 'מעט') + opt('none', st.emoji, 'בלי') + '</select></div>'
     + chk('wbShabbat', st.shabbat, '🕯 שותק בשבת ובחג')
     + chk('wbIsrael', st.israelOnly, '🇮🇱 רק מספרים ישראליים')
     + chk('wbSaved', st.skipSaved, '📇 לא עונה לאנשי קשר שמורים — רק למספרים חדשים')
     + chk('wbVoice', st.voice, '🎤 מתמלל הודעות קוליות')
     + chk('wbMedia', st.media, '🖼 קורא תמונות ו-PDF')
-    + chk('wbAsk', st.askDaniel, '❓ מה שלא יודע — שואל אותך')
+    + chk('wbAsk', st.askDaniel, '❓ כשלא בטוח — טיוטה מחכה לך כאן, לאישור')
+    + chk('wbHold', st.holdLine !== false, '⏳ ובינתיים אומר ללקוח שתחזור אליו')
     + chk('wbFacts', st.hubFacts, '🔧 מספר ללקוח על העבודות שלו')
     + chk('wbIntro', st.introduce, '👋 מציג את עצמו כעוזר אוטומטי')
     + chk('wbLearn', st.learn, '📚 לומד מהשיחות שלך')
@@ -9788,6 +9793,7 @@ function waSaveSettings() {
   if (hours === 'custom' && !days.length) return showNotice('בחרת "שעות שאני קובע" בלי אף יום — הבוט לא יענה אף פעם. סמן לפחות יום אחד.');
   waDo({ op: 'settings', settings: { pauseHours: Number(wbVal('wbPause')), maxPerHour: Number(wbVal('wbMax')), hours,
     custom: { days, from: wbVal('wbFrom') || '00:00', to: wbVal('wbTo') || '23:59' }, model: wbVal('wbModel'),
+    length: wbVal('wbLength'), tone: wbVal('wbTone'), emoji: wbVal('wbEmoji'), holdLine: on('wbHold'),
     shabbat: on('wbShabbat'), israelOnly: on('wbIsrael'), skipSaved: on('wbSaved'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
     hubFacts: on('wbFacts'), introduce: on('wbIntro'), learn: on('wbLearn') } }, '✅ ההגדרות נשמרו');
 }
@@ -9816,8 +9822,91 @@ function waAnswer(i) {
   const a = wbVal('wbAns' + i);
   if (!q) return;
   if (!a) return showNotice('כתוב תשובה קודם');
-  const send = document.getElementById('wbSend' + i).checked, keep = document.getElementById('wbKeep' + i).checked;
-  waDo({ op: 'answer', id: q.id, a, send, keep }, send ? '✅ נשלח ללקוח' + (keep ? ' והבוט למד את התשובה' : '') : keep ? '✅ הבוט למד את התשובה' : '✅ נסגר');
+  const keep = document.getElementById('wbKeep' + i).checked;
+  waDo({ op: 'answer', id: q.id, a, send: true, keep }, '✅ נשלח ללקוח' + (keep ? ' והבוט למד את התשובה' : ''));
+}
+// His few words, or a recording, made into the message (2026-10-05: "אני נותן טקסט קצר או הקלטה והוא משפר את
+// הניסוח"). The bot writes it from the customer's chat and his style settings and sends NOTHING: the text
+// comes back into the box, for him to change and send. The keyboard's own microphone dictates into the
+// box; the 🎤 button records, where the app allows it.
+async function waPolish(chat, words, audio) {
+  try { const r = await waAdmin(audio ? { op: 'polish', chat, audio } : { op: 'polish', chat, text: words }); return r; }
+  catch (e) { showNotice('⚠ לא הצלחתי לנסח: ' + e.message); return null; }
+}
+async function waPolishQ(i) {
+  const q = (waBot.questions || [])[i], el = document.getElementById('wbAns' + i);
+  if (!q || !el) return;
+  if (!el.value.trim()) return showNotice('כתוב בקצרה מה לענות קודם');
+  el.disabled = true;
+  const r = await waPolish(q.c, el.value.trim());
+  el.disabled = false;
+  if (r && r.text) el.value = r.text;
+}
+function waComposeHtml() {
+  const seen = new Set(), chats = [];
+  for (const e of waBot.log || []) if (e.c && /@c\.us$/.test(e.c) && !seen.has(e.c)) { seen.add(e.c); chats.push(e); if (chats.length >= 30) break; }
+  return fold('compose', '✍️ כתוב ללקוח', '<div class="form-row"><label>ללקוח</label><select class="form-select" id="wbCmpChat">'
+      + '<option value="">— בחר שיחה אחרונה —</option>'
+      + chats.map((e, k) => '<option value="' + k + '">' + escPunch(e.n || 'לקוח') + ' · ' + escPunch(waNum(e.c)) + '</option>').join('') + '</select></div>'
+    + '<input type="tel" class="form-input-wide" id="wbCmpNum" placeholder="או מספר" style="margin-bottom:6px">'
+    + '<textarea class="form-input-wide wb-area" id="wbCmpText" placeholder="מה לענות, בקצרה (אפשר להכתיב במיקרופון של המקלדת)"></textarea>'
+    + '<div class="wb-inline" style="margin-top:6px"><button class="btn btn-secondary" id="wbRec" onclick="waRecord()">🎤 הקלט</button>'
+    + '<button class="btn btn-primary" onclick="waCompose()">✨ נסח</button></div>'
+    + '<div id="wbCmpOut" hidden><div class="wb-sub" style="margin-top:8px">ההודעה ללקוח — אפשר לשנות לפני שליחה:</div>'
+    + '<textarea class="form-input-wide wb-area" id="wbCmpFinal"></textarea>'
+    + '<button class="btn btn-primary btn-block" style="margin-top:6px" onclick="waComposeSend()">📤 שלח ללקוח</button></div>');
+}
+function waComposeChat() {
+  const k = wbVal('wbCmpChat'), num = wbVal('wbCmpNum');
+  if (num) return num.replace(/\D/g, '').length >= 8 ? { c: num, n: '' } : null;
+  const seen = new Set(), chats = [];
+  for (const e of waBot.log || []) if (e.c && /@c\.us$/.test(e.c) && !seen.has(e.c)) { seen.add(e.c); chats.push(e); }
+  return k !== '' && chats[Number(k)] ? { c: chats[Number(k)].c, n: chats[Number(k)].n || '' } : null;
+}
+async function waCompose(audio) {
+  const to = waComposeChat();
+  if (!to) return showNotice('בחר שיחה או כתוב מספר');
+  const words = wbVal('wbCmpText');
+  if (!audio && !words) return showNotice('כתוב בקצרה מה לענות, או הקלט');
+  const r = await waPolish(to.c, words, audio);
+  if (!r || !r.text) return;
+  if (r.heard) document.getElementById('wbCmpText').value = r.heard;
+  document.getElementById('wbCmpFinal').value = r.text;
+  document.getElementById('wbCmpOut').hidden = false;
+}
+function waComposeSend() {
+  const to = waComposeChat(), msg = wbVal('wbCmpFinal');
+  if (!to) return showNotice('בחר שיחה או כתוב מספר');
+  if (!msg) return showNotice('אין מה לשלוח');
+  askConfirm('לשלוח ללקוח את ההודעה?', () => waDo({ op: 'send', chat: to.c, name: to.n, text: msg }, '✅ נשלח ללקוח'));
+}
+// A recording, up to a minute, as the polish's input. Not every WebView lets a page use the microphone,
+// so a refusal says what to use instead rather than failing quietly.
+let waRec = null;
+async function waRecord() {
+  const btn = document.getElementById('wbRec');
+  if (waRec) { waRec.stop(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined')
+    return showNotice('ההקלטה לא נתמכת כאן. לחץ על 🎤 שבמקלדת והכתב לתוך התיבה.');
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { return showNotice('אין גישה למיקרופון. לחץ על 🎤 שבמקלדת והכתב לתוך התיבה.'); }
+  const parts = [];
+  const rec = new MediaRecorder(stream);
+  waRec = rec;
+  rec.ondataavailable = (ev) => { if (ev.data && ev.data.size) parts.push(ev.data); };
+  rec.onstop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    waRec = null;
+    if (btn) btn.textContent = '🎤 הקלט';
+    const blob = new Blob(parts, { type: rec.mimeType || 'audio/webm' });
+    const fr = new FileReader();
+    fr.onload = () => waCompose(String(fr.result).split(',')[1] || '');
+    fr.readAsDataURL(blob);
+  };
+  rec.start();
+  if (btn) btn.textContent = '⏹ עצור';
+  setTimeout(() => { if (waRec === rec) rec.stop(); }, 60000);
 }
 function waDismiss(i) { const q = (waBot.questions || [])[i]; if (q) waDo({ op: 'dismiss', id: q.id }); }
 function waTeach() {
