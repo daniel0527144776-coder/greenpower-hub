@@ -2447,6 +2447,21 @@ function renderFilms() {
   if (fr && !fr.getAttribute('src')) fr.setAttribute('src', FILMS_URL);
 }
 
+// The films page in the frame asks the hub for what it cannot do from inside a frame (2026-10-05):
+// 'share' opens WhatsApp with the film's watch page; 'send-me' has the bot send the upright MP4 to
+// the business number's own chat, from where it is one forward to a status (the WebView cannot
+// download). Only messages from the site itself, and only links to its own /videos, are acted on.
+function onFilmShare(e) {
+  if (e.origin !== 'https://energylabgreen.com') return;
+  const m = e.data || {};
+  if (m.gp !== 'film-share') return;
+  const ours = (u) => typeof u === 'string' && u.indexOf('https://energylabgreen.com/videos/') === 0;
+  const title = String(m.title || '').slice(0, 120);
+  if (m.action === 'share' && ours(m.page)) return openExternal('https://wa.me/?text=' + encodeURIComponent(title + '\n' + m.page));
+  if (m.action === 'send-me' && ours(m.mp4)) return waDo({ op: 'sendfile', url: m.mp4, caption: title }, '✅ הסרטון נשלח אליך בוואטסאפ, לצ׳אט של העסק — משם אפשר להעביר אותו לסטטוס');
+}
+window.addEventListener('message', onFilmShare);
+
 function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById('page-' + page);
@@ -2666,7 +2681,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v397';
+const HUB_BUILD = 'v398';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so

@@ -61,6 +61,28 @@ check('the frame loads nothing until the tab is opened', !got.before, got.before
 check('opening the tab shows the site\'s /films page', got.active && got.after === 'https://energylabgreen.com/films', got);
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
+// Share requests from the films frame (2026-10-05): acted on only from the site itself, and only
+// for links to its own /videos. --selftest drops the origin check, so the stranger's request
+// below gets through and the check fails.
+const share = await page.evaluate(async (SELF) => {
+  const opened = [], sent = [];
+  window.openExternal = (u) => opened.push(u);
+  window.waDo = (body) => { sent.push(body); return Promise.resolve(); };
+  if (SELF) { window.removeEventListener('message', onFilmShare); window.addEventListener('message', (e) => onFilmShare({ data: e.data, origin: 'https://energylabgreen.com' })); }
+  const post = (origin, data) => window.dispatchEvent(new MessageEvent('message', { origin, data }));
+  const page = 'https://energylabgreen.com/videos/brand', mp4 = 'https://energylabgreen.com/videos/brand-9x16.mp4';
+  post('https://energylabgreen.com', { gp: 'film-share', action: 'share', title: 'Green Power — הסיפור', page });
+  post('https://energylabgreen.com', { gp: 'film-share', action: 'send-me', title: 'Green Power — הסיפור', mp4 });
+  post('https://evil.example', { gp: 'film-share', action: 'share', title: 'x', page });
+  post('https://energylabgreen.com', { gp: 'film-share', action: 'send-me', title: 'x', mp4: 'https://evil.example/x.mp4' });
+  await new Promise((r) => setTimeout(r, 50));
+  return { opened, sent };
+}, SELFTEST);
+check('"שתף" opens WhatsApp with the film\'s page', share.opened.length === 1 && share.opened[0].startsWith('https://wa.me/?text=')
+  && decodeURIComponent(share.opened[0]).includes('https://energylabgreen.com/videos/brand'), share.opened);
+check('"שלח לי" asks the bot for the upright film, by its own address', share.sent.length === 1 && share.sent[0].op === 'sendfile'
+  && share.sent[0].url === 'https://energylabgreen.com/videos/brand-9x16.mp4', share.sent);
+
 await browser.close();
 srv.close();
 process.exit(finish());
