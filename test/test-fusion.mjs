@@ -65,7 +65,16 @@ await page.waitForFunction(() => typeof window.renderFusion === 'function', null
 if (SELFTEST) await page.evaluate(() => { window.escPunch = (s) => String(s == null ? '' : s); });
 
 const text = () => page.evaluate(() => document.getElementById('fusionBody').innerText);
-const show = async (body, status = 200) => { RESP = { status, body }; await page.evaluate(() => renderFusion()); return text(); };
+// The sections below the state are folded (2026-10-05); the content checks open them first, and the
+// folding is checked on its own (the faults open by themselves, the rest folded).
+let folds = [];
+const show = async (body, status = 200) => {
+  RESP = { status, body };
+  await page.evaluate(() => renderFusion());
+  folds = await page.evaluate(() => [...document.querySelectorAll('#fusionBody details.fold')].map((d) => [d.dataset.fold, d.open]));
+  await page.evaluate(() => document.querySelectorAll('#fusionBody details.fold').forEach((d) => { d.open = true; }));
+  return text();
+};
 
 // logged out: nothing is asked
 await page.evaluate(() => { Sync.session = null; Sync.userId = null; navigateTo('fusion'); });
@@ -85,7 +94,8 @@ t = await show({ snapshot: SNAP, receivedAt: iso(Date.now() - 60000) });
 check('the bot trading now', /הבוט סוחר עכשיו/.test(t) && /חשבון דמו \(Paper\)/.test(t) && /רץ על fusion-cloud/.test(t), t.slice(0, 300));
 check('the account: value, today, positions', t.includes('$1,002,346') && t.includes('−$120.4') && /פוזיציות\s*3/.test(t), t.slice(0, 600));
 check('what waits for his approval in the bot', /2 עסקאות מחכות לאישור/.test(t) && /1 תיקונים מחכים לאישור/.test(t), '');
-check('the faults, and a position without a stop called out', /תקלות שהבוט מזהה \(1\)/.test(t) && /פוזיציות בלי סטופ: NVDA/.test(t) && /בלי סטופ/.test(t), '');
+check('the sections start folded, the faults open by themselves', folds.length === 5 && folds.every(([id, open]) => open === (id === 'fu-faults')), folds);
+check('the faults, and a position without a stop called out', /תקלות שהבוט מזהה\s*2/.test(t) && /פוזיציות בלי סטופ: NVDA/.test(t) && /בלי סטופ/.test(t), '');
 const order = await page.evaluate(() => [...document.querySelectorAll('#fusionBody .fu-sym')].map((e) => e.textContent));
 check('positions from the best to the worst', order.indexOf('NVDA') < order.indexOf('AMD'), order);
 check('nothing from the bot runs as markup', await page.evaluate(() => window.__xss === undefined && !document.querySelector('#fusionBody img')), '');

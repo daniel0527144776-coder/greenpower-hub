@@ -68,6 +68,9 @@ await page.waitForFunction(() => typeof window.renderWaBot === 'function', null,
 if (SELFTEST) await page.evaluate(() => { window.escPunch = (s) => String(s == null ? '' : s); window.waNum = (c) => String(c); });
 
 const text = () => page.evaluate(() => document.getElementById('wabotBody').innerText);
+// Everything below the state is folded (2026-10-05, "שכל הקטגוריות יהיו מקופלות"): the content checks
+// open every section first, and the folding is checked on its own.
+const openAll = () => page.evaluate(() => document.querySelectorAll('#wabotBody details.fold').forEach((d) => { d.open = true; }));
 // Wait for the WHOLE save, not just its POST: waDo then re-reads the page (a GET) and only then
 // shows its notice. Closing the notice on the POST alone let that late '✅ נשמרו' land on top of the
 // next check's warning — 1 run in 6 failed 'no day at all' that way (2026-10-05).
@@ -91,19 +94,29 @@ await page.evaluate(async () => {
   Sync.userId = 'u1';
   await renderWaBot();
 });
+const folds = await page.evaluate(() => [...document.querySelectorAll('#wabotBody details.fold')].map((d) => [d.dataset.fold, d.open]));
+const shut = await text();
+check('every section starts folded except the questions that wait for him', folds.length >= 7 && folds.every(([id, open]) => open === (id === 'q'))
+  && !/שקט אחרי שאתה עונה/.test(shut) && /הבוט שאל אותך/.test(shut), folds);
+check('a folded section shows its count beside its title', /🚫 חסומים\s*1/.test(shut) && /🔇 שותק עכשיו\s*1/.test(shut), shut.slice(0, 400));
+await openAll();
 const t1 = await text();
 check('it asks the bot with his login', gets.length === 1 && /^Bearer tok\./.test(gets[0]), gets);
 check('the state, the week\'s counts and the connection', /הבוט עונה עכשיו ללקוחות/.test(t1) && /מחובר לוואטסאפ/.test(t1) && /ענה השבוע\s*5/.test(t1) && /12 שיחות נקראו/.test(t1), t1.slice(0, 300));
 check('nothing a customer wrote runs as markup', await page.evaluate(() => window.__xss === undefined && !document.querySelector('#wabotBody img')), '');
 check('it is shown as text instead', t1.includes('כמה עולה <img src=x') && t1.includes('יש מטען 84V? <img'), '');
 check('numbers in the local form', t1.includes('050-123-4567') && t1.includes('050-444-4444'), '');
-check('only the open question waits for him', (t1.match(/הבוט שאל אותך/g) || []).length === 1 && /מחכות לך \(1\)/.test(t1), '');
+check('only the open question waits for him', (t1.match(/הבוט שאל אותך/g) || []).length === 1 && /שאלות שמחכות לך\s*1/.test(t1), '');
 check('the log, with why it did or did not answer', /✅ ענה/.test(t1) && /שתק — ענית בעצמך/.test(t1), '');
 check('including a message too late to answer, and a chat it could not place', /הגיעה באיחור — לא נענתה/.test(t1) && /שיחה שהבוט לא זיהה/.test(t1), '');
 
-// the settings
+// the settings — worked in with only that section open
+await page.evaluate(() => document.querySelectorAll('#wabotBody details.fold').forEach((d) => { d.open = d.dataset.fold === 'settings'; }));
+await page.waitForTimeout(50);
 await page.evaluate(() => { document.getElementById('wbPause').value = '3'; document.getElementById('wbModel').value = 'saving'; document.getElementById('wbVoice').checked = false; waSaveSettings(); });
 let p = await lastPost(1);
+check('the section he saved in is still open after the page re-draws, the others folded again',
+  await page.evaluate(() => { const o = Object.fromEntries([...document.querySelectorAll('#wabotBody details.fold')].map((d) => [d.dataset.fold, d.open])); return o.settings === true && o.log === false && o.know === false && o.blocked === false; }), '');
 check('saving the settings sends what he set', p && p.op === 'settings' && p.settings.pauseHours === 3 && p.settings.model === 'saving' && p.settings.voice === false
   && p.settings.shabbat === true && p.settings.israelOnly === true && p.settings.hours === 'always' && p.settings.custom.days.length === 7, p);
 await page.evaluate(() => { document.getElementById('wbHours').value = 'custom'; for (let i = 0; i < 7; i++) document.getElementById('wbDay' + i).checked = false; waSaveSettings(); });
