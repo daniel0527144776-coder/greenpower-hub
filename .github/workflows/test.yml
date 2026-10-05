@@ -172,6 +172,11 @@ jobs:
       - name: The Google review request
         run: node test/test-review-ask.mjs
 
+      # The pop-up alerts (2026-10-05): the bot's open questions, stuck work, the backup, the sync —
+      # each exactly when its condition holds, new ones only, never over a window he has open.
+      - name: The hub's pop-up alerts
+        run: node test/test-alerts.mjs
+
       # FUSION, his trading bot (2026-10-05): read with his login only, never "trading" when it has
       # stopped reporting, is down or lost IBKR, and nothing from the bot runs as markup.
       - name: The trading bot's page
