@@ -207,7 +207,8 @@ const landed = await page.evaluate(() => {
   const idx = customerSpendIndex();
   const c = (Store.get('customers') || []).find((x) => x.phone === '0500000777');
   navigateTo('warranties');
-  const w = document.getElementById('page-warranties').innerText;
+  // textContent: the register is folded by month since 2026-10-05
+  const w = document.getElementById('page-warranties').textContent;
   return { onCard: c ? Math.round(idx(c).spent) : -1, inWarranties: /לקוח E2E/.test(w) };
 });
 check('the repair reaches the customer card', landed.onCard === repair.price, landed);
@@ -239,6 +240,7 @@ const money = await page.evaluate(() => {
   const expected = inc.reduce((s, r) => s + (+r.amount || 0), 0)
                  + jobs.reduce((s, j) => s + (+j.price || 0), 0)
                  + sales.reduce((s, o) => s + (+o.total || 0), 0);
+  document.querySelectorAll('#page-finances details.fold').forEach((d) => { d.open = true; });   // "כל החודשים" folds since 2026-10-05
   const shown = document.getElementById('page-finances').innerText;
   const m = shown.match(/סה"כ הכנסות\s*₪([\d,]+)/);
   return { expected: Math.round(expected), shown: m ? Number(m[1].replace(/,/g, '')) : null };

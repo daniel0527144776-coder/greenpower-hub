@@ -130,7 +130,8 @@ const findable = await page.evaluate(() => {
   const box = document.getElementById('custPickRows') || document.querySelector('.cust-pick-rows');
   const rows = box ? box.querySelectorAll('.cust-pick-row').length : 0;
   navigateTo('customers');
-  const listed = ((document.getElementById('customersList') || {}).innerText || '').match(/📱/g) || [];
+  // textContent: the list is folded by month since 2026-10-05
+  const listed = ((document.getElementById('customersList') || {}).textContent || '').match(/📱/g) || [];
   return { name: target.name, rows, listed: listed.length };
 });
 check('the OLDEST imported customer is findable by search', findable.rows > 0, findable);

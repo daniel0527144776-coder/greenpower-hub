@@ -428,6 +428,15 @@ body { min-height: 100vh; }
   details.fold[open] > summary { border-bottom: 1px solid var(--border); }
   details.fold > .fold-body { padding: 12px 16px 16px; }
   details.fold > .fold-body > .card { box-shadow: none; padding: 0; margin: 0; background: none; }
+  /* כל הטאבים (2026-10-05, דניאל: "תעשה שבכל הטאבים אז יהיה הכל מקופל"). fold-sum: מה שהכותרת אומרת
+     בלי לפתוח (סכום החודש) — לא מספר פריטים. fold.sub: מקטע בתוך כרטיס, שטוח, קו מפריד במקום מסגרת. */
+  details.fold > summary .fold-sum { font-size: 11.5px; font-weight: 600; color: var(--text-muted); text-align: end; }
+  details.fold.has-sum > summary .fold-title { flex: 0 0 auto; white-space: nowrap; }
+  details.fold.has-sum > summary .fold-sum { flex: 1; }
+  details.fold.sub { background: none; box-shadow: none; border: none; border-bottom: 1px solid var(--border); border-radius: 0; margin: 0; }
+  details.fold.sub > summary { padding: 12px 2px; }
+  details.fold.sub[open] > summary { border-bottom: none; }
+  details.fold.sub > .fold-body { padding: 0 0 10px; }
   /* בוט וואטסאפ (2026-10-04) */
   .wb-state { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
   .wb-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
@@ -1509,10 +1518,11 @@ body { min-height: 100vh; }
     <h3 class="card-title">📥 דיווחים מהטלפון של העובדים — מחכים לאישור שלך</h3>
     <div id="punchList"></div>
   </div>
-  <div class="card" id="wageDebtCard" style="display:none;">
-    <h3 class="card-title">👷 עובדים — מי חייב כמה</h3>
-    <div id="wageDebtList"></div>
-  </div>
+  <!-- A fold since 2026-10-05 (every tab folded): the total rides in the title, the workers inside. -->
+  <details class="fold has-sum" id="wageDebtCard" data-fold="worktime-debt" style="display:none;" ontoggle="foldToggled(this)">
+    <summary><span class="fold-title">👷 עובדים — מי חייב כמה</span><span class="fold-sum" id="wageDebtSum"></span></summary>
+    <div class="fold-body"><div id="wageDebtList"></div></div>
+  </details>
   <div class="card">
     <h3 class="card-title">📝 שעות אחרונות</h3>
     <div id="worktimeList"></div>
@@ -1689,8 +1699,10 @@ body { min-height: 100vh; }
   </div>
   <!-- What he writes down as missing (Daniel, 2026-10-05: "מקום שאני כותב איזה חלקי עבודה חסרים לי
        בשביל להזמין"). Free text, not a stock row: half of what runs out is never counted. -->
-  <div class="card" id="needCard">
-    <div style="font-weight:800;margin-bottom:8px;">📝 חסר להזמנה</div>
+  <!-- A fold since 2026-10-05 (every tab folded). "📝 חסר להזמנה" on the home page opens it. -->
+  <details class="fold" id="needCard" data-fold="need" ontoggle="foldToggled(this)">
+    <summary><span class="fold-title">📝 חסר להזמנה</span></summary>
+    <div class="fold-body">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
       <input id="needText" class="form-input-wide" style="flex:1 1 200px;width:auto;" placeholder="מה חסר? למשל: ניקל 0.15, שרינק 300 מ&quot;מ" onkeydown="if(event.key==='Enter')addNeed()">
       <input id="needQty" class="form-input-wide" style="flex:0 0 90px;width:90px;" placeholder="כמות" onkeydown="if(event.key==='Enter')addNeed()">
@@ -1699,7 +1711,8 @@ body { min-height: 100vh; }
       <button class="btn btn-primary btn-sm" onclick="addNeed()">➕ הוסף</button>
     </div>
     <div id="needList" style="margin-top:8px;"></div>
-  </div>
+    </div>
+  </details>
   <div id="inventoryLowAlert"></div>
   <div class="card">
     <div id="inventoryList"></div>
@@ -2720,7 +2733,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v409';
+const HUB_BUILD = 'v410';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3742,7 +3755,16 @@ function renderCustomers() {
   }
   renderDupeBanner();
   const spendOf = customerSpendIndex();
-  list.innerHTML = filtered.map((c, idx) => `
+  // Folded by the month of the last visit, the order the list is already in (2026-10-05, every tab
+  // folded); a search opens them.
+  const byMonth = new Map();
+  for (const c of filtered) {
+    const k = isNaN(new Date(c.lastVisit).getTime()) ? '' : monthKeyOf(c.lastVisit);
+    if (!byMonth.has(k)) byMonth.set(k, { k, list: [] });
+    byMonth.get(k).list.push(c);
+  }
+  list.innerHTML = [...byMonth.values()].sort((a, b) => (b.k || '0').localeCompare(a.k || '0')).map((m) => fold('cust-' + (m.k || 'none'), m.k ? monthLabelHe(m.k) : 'בלי תאריך ביקור', custRows(m.list), { open: !!search, sub: true })).join('');
+  function custRows(arr) { return arr.map((c, idx) => `
     <div class="list-item" onclick="openCustomerDetails(${customers.indexOf(c)})">
       <div class="list-item-header">
         <div>
@@ -3757,7 +3779,7 @@ function renderCustomers() {
       ${c.notes ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">📝 ${c.notes}</div>` : ''}
       <div style="font-size: 11px; color: var(--text-light); margin-top: 4px;">ביקור אחרון: ${new Date(c.lastVisit).toLocaleDateString('he-IL')}</div>
     </div>
-  `).join('');
+  `).join(''); }
 }
 
 // Everything this person ever did, from all four places it can be recorded, newest first.
@@ -4195,7 +4217,13 @@ function renderWarranties() {
     return;
   }
 
-  list.innerHTML = filtered.map(j => {
+  // Folded by the month the warranty ends — the list is already in that order (2026-10-05, every tab
+  // folded). "פגות בקרוב" is opened: the home banner sends him there to call those customers.
+  const byEnd = new Map();
+  for (const j of filtered) { const k = monthKeyOf(j.end); if (!byEnd.has(k)) byEnd.set(k, []); byEnd.get(k).push(j); }
+  list.innerHTML = [...byEnd].map(([k, arr]) => fold('war-' + k, 'מסתיימת ב' + monthLabelHe(k), warRows(arr),
+    { open: state.warrantyTab === 'expiring', sub: true })).join('');
+  function warRows(arr) { return arr.map(j => {
     const end = new Date(j.end);
     const days = Math.ceil((end.getTime() - now) / (24 * 60 * 60 * 1000));
     let badgeCls = 'warranty-active', badgeText = `${days} ימים`;
@@ -4232,7 +4260,7 @@ function renderWarranties() {
         </div>
       </div>
     `;
-  }).join('');
+  }).join(''); }
 }
 
 // ============================================================
@@ -5437,9 +5465,17 @@ function renderCatalog() {
   }
   catCatKeys = plan.filter((p) => p.cat).map((p) => p.cat);
   const forceOpen = !!q || !!cat;
-  let html = '', ci = -1;
+  // Each topic is a fold (2026-10-05, "בכל הטאבים … הכל מקופל"): the page opens as five lines. Its
+  // title keeps the price-series class, so the order of topics, voltages and categories reads the
+  // same off the DOM as before. A search or a chosen category opens them.
+  let out = '', html = '', ci = -1, topic = null;
+  const topics = [...byTopic.keys()];
+  const flushTopic = () => {
+    if (topic !== null) out += fold('cat-topic-' + topics.indexOf(topic), '<span class="price-series">' + topic + '</span>', html, { open: forceOpen, sub: true });
+    html = '';
+  };
   for (const p of plan) {
-    if (p.head) { html += `<div class="price-series"><span>${p.head}</span></div>`; continue; }
+    if (p.head) { flushTopic(); topic = p.head; continue; }
     if (p.volt !== undefined) { html += `<div class="price-volt"><span>${p.volt}V</span></div>`; continue; }
     {
     const c = p.cat;
@@ -5490,8 +5526,9 @@ function renderCatalog() {
     });
     }
   }
+  flushTopic();
   renderCatRoute();
-  document.getElementById('catalogList').innerHTML = html || '<div class="empty-state"><div class="empty-state-text">לא נמצאו מוצרים</div></div>';
+  document.getElementById('catalogList').innerHTML = out || '<div class="empty-state"><div class="empty-state-text">לא נמצאו מוצרים</div></div>';
 }
 // Index, not name: the category strings carry quotes, slashes and · — interpolating them
 // into an inline onclick is a broken handler waiting to happen (same as toggleSupCat).
@@ -5504,6 +5541,8 @@ function toggleCatCat(i) {
 }
 function catExpandAll(open) {
   catOpenCats = open ? new Set(catCatKeys) : new Set();
+  // the topics too: "פתח הכל" that left them folded would open nothing you can see
+  document.querySelectorAll('#catalogList details.fold').forEach((d) => { const id = d.getAttribute('data-fold'); if (open) foldOpen.add(id); else foldOpen.delete(id); });
   renderCatalog();
 }
 
@@ -6018,18 +6057,17 @@ function renderOrders() {
     return money + (t.quoted ? ` <span style="font-weight:400;opacity:.75;">+ ${shek(t.quoted)} בהצעות</span>` : '');
   };
   const shown = all.slice(0, salesLimit);
-  let html = '', lastKey = null;
+  // Each month is a fold, its money in the title (2026-10-05, "בכל הטאבים … הכל מקופל"). A search
+  // or a chosen filter opens them: then the filter is what decides what is on the screen.
+  const forceOpen = !!q || salesFilter !== 'all';
+  let html = '';
+  const months = [];
   for (const x of shown) {
     const k = monthKeyOf(x.date);
-    if (k !== lastKey) {
-      lastKey = k;
-      const t = totals.get(k);
-      html += `<div class="price-cat" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:14px;flex-wrap:wrap;">
-        <span>${monthLabelHe(k)}</span>
-        <span style="font-weight:600;opacity:.85;font-size:11.5px;">${monthSummary(t)}</span></div>`;
-    }
-    html += x.kind === 'sale' ? saleRow(x.raw) : repairRow(x.raw);
+    if (!months.length || months[months.length - 1].k !== k) months.push({ k, rows: [] });
+    months[months.length - 1].rows.push(x.kind === 'sale' ? saleRow(x.raw) : repairRow(x.raw));
   }
+  for (const m of months) html += fold('orders-' + m.k, monthLabelHe(m.k), m.rows.join(''), { sum: monthSummary(totals.get(m.k)), open: forceOpen });
   if (all.length > shown.length) {
     html += `<button class="btn btn-secondary btn-block" style="margin-top:10px;" onclick="salesShowMore()">⬇️ הצג עוד (נותרו ${all.length - shown.length})</button>`;
   }
@@ -7392,6 +7430,8 @@ function renderWageDebt() {
   if (!ledgers.length) { card.style.display = 'none'; return; }
   card.style.display = 'block';
   const owed = ledgers.reduce((s, L) => s + Math.max(0, L.balance), 0);
+  const sum = document.getElementById('wageDebtSum');
+  if (sum) sum.textContent = owed < 0.5 ? '₪0' : shek(owed);
   list.innerHTML =
     `<div class="wt-debt-line wt-debt-total"><span>סה"כ חייב לעובדים</span><b${owed < 0.5 ? ' style="color:var(--success);"' : ''}>${owed < 0.5 ? '₪0' : shek(owed)}</b></div>`
     + ledgers.map((L, i) => `<div class="wt-acct">
@@ -9219,13 +9259,16 @@ function renderVehiclePacks() {
   let html = '';
   const own = dims.filter((d) => !known.has(String(d.model || '').trim().toLowerCase())
     && (!q || String(d.model || '').toLowerCase().includes(q)));
+  // Each group is a fold (2026-10-05, every tab folded); a search opens them.
+  const sec = (id, title, body) => fold('dims-' + id, title, body, { open: !!q, sub: true });
   if (own.length) {
-    html += '<div style="font-weight:800;color:var(--primary);margin:4px 0 6px;font-size:13px;">המדידות שלי</div>';
+    let mine = '';
     for (const d of own.slice().sort((a, b) => String(a.model).localeCompare(String(b.model)))) {
-      html += `<div class="list-item mine" onclick="useVehiclePack(${arg(d.model)})" style="cursor:pointer;">
+      mine += `<div class="list-item mine" onclick="useVehiclePack(${arg(d.model)})" style="cursor:pointer;">
         <span style="display:flex;align-items:center;gap:8px;">${vehIcon({ g: '', m: '' })}<strong class="list-item-title">${esc(d.model)}</strong></span>
         ${mineLine(d)}</div>`;
     }
+    html += sec('mine', 'המדידות שלי', mine);
   }
   const hit = VEHICLE_PACKS.filter((v) => !q || v.m.toLowerCase().includes(q) || v.g.toLowerCase().includes(q));
   const findMine = (v) => dims.find((x) => String(x.model || '').trim().toLowerCase() === v.m.trim().toLowerCase());
@@ -9234,7 +9277,9 @@ function renderVehiclePacks() {
   // without go to its end (2026-10-04: hidden for an hour, then "למה אני לא רואה את כל הכלים").
   const groups = [...new Set(hit.map((v) => v.g))];
   const ordered = groups.flatMap((g) => { const vs = hit.filter((v) => v.g === g); return vs.filter(sized).concat(vs.filter((v) => !sized(v))); });
-  let group = '';
+  let group = '', body = '';
+  const allGroups = [...new Set(VEHICLE_PACKS.map((v) => v.g))];   // a stable id, whatever the search left
+  const flush = () => { if (group) html += sec(allGroups.indexOf(group), group, body); body = ''; };
   for (const v of ordered) {
     // The card is the vehicle and its tray, nothing more (2026-09-27: "כדי שלא יהיה עמוס"). The
     // builds, the maximum per voltage, the OEM pack and the counted holders all come after the
@@ -9245,19 +9290,20 @@ function renderVehiclePacks() {
     const sd = !d && !tb && v.side ? v.side : null;
     // An e-bike case shows the case (the Silver Fish).
     const cs = !d && !tb && !sd && v.case ? v.case : null;
-    if (v.g !== group) { group = v.g; html += `<div style="font-weight:800;color:var(--primary);margin:12px 0 6px;font-size:13px;">${group}</div>`; }
+    if (v.g !== group) { flush(); group = v.g; }
     const ok = tubMeasured(v) ? '<span style="color:#34d399;font-weight:700;">✓ נמדד</span> ' : '';
     const tray = tb ? `${ok}<bdi dir="ltr">${tb.L}×${tb.W}${tb.H ? '×' + tb.H : ''}</bdi> מ"מ`
       : sd ? `${ok}<bdi dir="ltr">${sd.L}×${sd.H}×${sd.across}</bdi> מ"מ`
       : cs ? `${ok}<bdi dir="ltr">${cs.L}×${cs.W}×${cs.H}</bdi> מ"מ`
       : '<span style="opacity:.7;">אין מידות</span>';
-    html += `<div class="list-item${d ? ' mine' : ''}" onclick="useVehiclePack(${arg(v.m)})" style="cursor:pointer;">
+    body += `<div class="list-item${d ? ' mine' : ''}" onclick="useVehiclePack(${arg(v.m)})" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
         <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong class="list-item-title">${v.m}</strong></span>${d ? '' : `<span style="font-size:11px;color:var(--text-muted);flex:none;">${tray}</span>`}
       </div>
       ${d ? mineLine(d) : ''}
     </div>`;
   }
+  flush();
   box.innerHTML = html || '<div class="empty-state"><div class="empty-state-text">אין דגם כזה</div></div>';
 }
 
@@ -9700,9 +9746,12 @@ function waWhen(ms) { return ms ? new Date(ms).toLocaleString('he-IL', { day: '2
 // A folded section (2026-10-05): closed unless he opened it — a page re-drawn after a save keeps
 // the one he was working in open. `count` shows beside the title; `hot` marks one that waits for him.
 const foldOpen = new Set();
-function fold(id, title, body, { count = null, hot = false, open = false } = {}) {
+// `sum` is a line the title carries while folded (a month's money), never a count of rows; `sub`
+// is a section inside a card (2026-10-05, every tab folded).
+function fold(id, title, body, { count = null, hot = false, open = false, sum = '', sub = false } = {}) {
   const isOpen = foldOpen.has(id) || open;
-  return '<details class="fold" data-fold="' + id + '"' + (isOpen ? ' open' : '') + ' ontoggle="foldToggled(this)"><summary><span class="fold-title">' + title + '</span>'
+  return '<details class="fold' + (sub ? ' sub' : '') + (sum ? ' has-sum' : '') + '" data-fold="' + id + '"' + (isOpen ? ' open' : '') + ' ontoggle="foldToggled(this)"><summary><span class="fold-title">' + title + '</span>'
+    + (sum ? '<span class="fold-sum">' + sum + '</span>' : '')
     + (count === null ? '' : '<span class="fold-count' + (hot ? ' hot' : '') + '">' + count + '</span>') + '</summary><div class="fold-body">' + body + '</div></details>';
 }
 function foldToggled(el) { const id = el.getAttribute('data-fold'); if (el.open) foldOpen.add(id); else foldOpen.delete(id); }
@@ -10538,7 +10587,12 @@ function renderStickerLog() {
   if (q) items = items.filter(s => `${s.client || ''} ${s.sku || ''} ${s.model || ''} ${s.ref || ''}`.toLowerCase().includes(q));
   const list = document.getElementById('stickerlogList');
   if (items.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🗂️</div><div class="empty-state-text">אין מדבקות בקטגוריה זו.<br>צור מדבקה בעורך והיא תופיע כאן.</div></div>'; return; }
-  list.innerHTML = items.map(s => {
+  // Folded by month (2026-10-05, every tab folded); a search opens them. Records without a date last.
+  const byMonth = new Map();
+  for (const s of items) { const k = s.date && !isNaN(new Date(s.date).getTime()) ? monthKeyOf(s.date) : ''; if (!byMonth.has(k)) byMonth.set(k, []); byMonth.get(k).push(s); }
+  list.innerHTML = [...byMonth].sort((a, b) => (b[0] || '0').localeCompare(a[0] || '0'))
+    .map(([k, arr]) => fold('stk-' + (k || 'none'), k ? monthLabelHe(k) : 'בלי תאריך', stkRows(arr), { open: !!q, sub: true })).join('');
+  function stkRows(arr) { return arr.map(s => {
     const isRep = s.type === 'repair';
     const spec = isRep ? (s.model || '') : `${s.voltage || ''} ${s.capacity || ''} ${s.cells || ''}`.trim();
     // The delete button carries the index in the UNFILTERED array. Using the position in
@@ -10556,7 +10610,7 @@ function renderStickerLog() {
       </div>
       ${spec ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">🔋 ${spec}</div>` : ''}
     </div>`;
-  }).join('');
+  }).join(''); }
 }
 // Deleting a sticker record does NOT delete the job, the customer or the warranty — this
 // log is a record of what was printed. Says so in the prompt, because "מחק" on a screen
@@ -11026,6 +11080,8 @@ function seedCellStockOnce() {
 function getNeeds() { const v = Store.get('need_list'); return Array.isArray(v) ? v : []; }
 function openNeedList() {
   navigateTo('inventory');
+  const card = document.getElementById('needCard');
+  if (card) card.open = true;
   setTimeout(() => { const el = document.getElementById('needText'); if (el) el.focus(); }, 60);
 }
 function addNeed() {
@@ -11754,6 +11810,7 @@ function boot() {
   // not in init(), which waits for the login.
   foldStatic('settings');
   foldStatic('worktime');
+  foldStatic('finances');
   tuckNotes();
   showBuildTag();
   try {
