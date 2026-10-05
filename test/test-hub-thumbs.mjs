@@ -121,6 +121,55 @@ console.log('3. the bytes actually decode');
   }
   check('and the rendered ones are real, not the broken signature', shown.every((x) => x.w > 0 && !x.broken), shown);
 }
+
+console.log('3b. no picture is the filter\'s "sent for review" placeholder');
+{
+  // A picture can decode perfectly and still be nothing: NetFree answers an image it has not
+  // approved with a grey mosaic of it plus a paper-plane mark. Five catalogue thumbnails were
+  // exactly that until 2026-10-05, baked from site photos that a 2026-06-12 commit had
+  // replaced (00f85bf). Same score as the site's test-no-filter-placeholders.mjs: outside the
+  // central mark, the share of edge strength on the ten strongest columns plus rows. The
+  // placeholders score 0.98-1.00, real pictures at most ~0.78. Vehicle photos are included —
+  // they were downloaded on the PC, behind the same filter.
+  // --selftest swaps a real placeholder (test/fixtures) in for one thumbnail.
+  const planted = SELFTEST
+    ? 'data:image/jpeg;base64,' + fs.readFileSync(path.join(HERE, 'fixtures', 'netfree-placeholder.jpg')).toString('base64')
+    : null;
+  const r = await p.evaluate(async (planted) => {
+    const srcs = new Set(Object.values(THUMBS));
+    const walk = (v) => { if (typeof v === 'string') { if (v.startsWith('data:image/')) srcs.add(v); } else if (v && typeof v === 'object') Object.values(v).forEach(walk); };
+    if (typeof VEH_PHOTOS !== 'undefined') walk(VEH_PHOTOS);
+    if (planted) srcs.add(planted);
+    const N = 128, c = document.createElement('canvas');
+    c.width = c.height = N;
+    const g2 = c.getContext('2d', { willReadFrequently: true });
+    g2.imageSmoothingEnabled = false;
+    const out = [];
+    for (const src of srcs) {
+      const img = new Image();
+      img.src = src;
+      try { await img.decode(); } catch { continue; }
+      g2.fillStyle = '#fff'; g2.fillRect(0, 0, N, N);
+      g2.drawImage(img, 0, 0, N, N);
+      const d = g2.getImageData(0, 0, N, N).data;
+      const y = new Float64Array(N * N);
+      for (let i = 0; i < N * N; i++) y[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+      const col = new Float64Array(N), row = new Float64Array(N);
+      let total = 0;
+      const inMark = (x, yy) => x > N * 0.3 && x < N * 0.7 && yy > N * 0.3 && yy < N * 0.7;
+      for (let yy = 0; yy < N; yy++) for (let x = 0; x < N; x++) {
+        if (inMark(x, yy)) continue;
+        if (x + 1 < N) { const v = Math.abs(y[yy * N + x] - y[yy * N + x + 1]); if (v > 6) { col[x] += v; total += v; } }
+        if (yy + 1 < N) { const v = Math.abs(y[yy * N + x] - y[(yy + 1) * N + x]); if (v > 6) { row[yy] += v; total += v; } }
+      }
+      const top10 = (a) => [...a].sort((p, q) => q - p).slice(0, 10).reduce((s, v) => s + v, 0);
+      out.push(total < 50 ? 0 : (top10(col) + top10(row)) / total);
+    }
+    return { n: out.length, hits: out.filter((s) => s >= 0.9).length, max: Math.max(...out.filter((s) => s < 0.9)) };
+  }, planted);
+  check('pictures were scored, thumbnails and vehicle photos both', r.n > 40, r.n);
+  check('none of them is the placeholder mosaic', r.hits === 0, `${r.hits} of ${r.n}; highest real score ${r.max.toFixed(2)}`);
+}
 console.log('4. the technical spec line');
 {
   // Categories are COLLAPSED by default — 788 rows in one scroll was the reason — so a
