@@ -862,6 +862,18 @@ check('every vehicle: its nickel cards and drawings, the label = the chosen card
 // בשורה כדי שיהיה מקום ל-BMS" = 120 = 20S6P, 30Ah. Square only ("אין אלכסון בסילבר פיש"), its height
 // not judged ("המארז מתגמש"), and no build history on the page. --selftest takes the case away,
 // which sends the row down the scooter path: three cards, no case line, "הערכת AI" on the chip.
+// 132 cells of 21700 is the case's limit (Daniel, 2026-10-05): a 48V 13S10P (130) goes in, laid out in
+// his rows within the 850, and 13S11P (143) does not. --selftest puts the old 120 back.
+const fishMax = await page.evaluate((SELF) => {
+  const v = { ...VEHICLE_PACKS.find((x) => x.m === 'סילבר פיש 72V') };
+  if (SELF) v.max = 120;
+  const c = DIM_CELLS['21700-50e'];
+  const t = (S, P) => { const d = document.createElement('div'); d.innerHTML = caseHtml(v, c, 21700, 48, S, P, S * P).html; return d.textContent; };
+  return { max: v.max, ten: t(13, 10), eleven: t(13, 11) };
+}, SELFTEST);
+check('the case takes 132: 48V 50Ah (13S10P, 130 cells) goes in, 13S11P does not',
+  fishMax.max === 132 && /✅ נכנסת — 13S10P · 50Ah, 130 תאים/.test(fishMax.ten) && /מקסימום במארז\s*48V: 13S10P · 50Ah/.test(fishMax.ten)
+  && /⛔ גדולה מדי — 13S11P · 55Ah, 143 תאים · במארז נכנסים 132/.test(fishMax.eleven), [fishMax.ten.slice(0, 120), fishMax.eleven.slice(0, 120)]);
 const fish = await page.evaluate((SELF) => {
   const name = 'סילבר פיש 72V';
   const v = VEHICLE_PACKS.find((x) => x.m === name);
@@ -884,8 +896,8 @@ const fish = await page.evaluate((SELF) => {
            chip: document.getElementById('dimVehChip').textContent,
            card: card ? card.textContent.replace(/\s+/g, ' ') : null, kind: v ? vehType(v) : '' };
 }, SELFTEST);
-check('the Silver Fish opens on its 72V pack: 20S6P, 30Ah, 120 cells, the most the case takes',
-  /✅ נכנסת — 20S6P · 30Ah, 120 תאים · המקסימום/.test(fish.text), fish.text.slice(0, 160));
+check('the Silver Fish opens on its 72V pack: 20S6P, 30Ah, 120 cells — the most 72V takes in it',
+  /✅ נכנסת — 20S6P · 30Ah, 120 תאים/.test(fish.text) && /מקסימום במארז\s*72V: 20S6P · 30Ah/.test(fish.text), fish.text.slice(0, 260));
 check('with the case he measured, its height not judged, and no ⛔',
   /גודל מארז\s*850 × 95 × 70 מ"מ · הגובה לא נבדק/.test(fish.text) && !/לא נכנס|⛔/.test(fish.text), fish.text.slice(0, 220));
 check('one card only, the 23 square: no diagonal in a Silver Fish', fish.cards === 'square-23', fish.cards);
