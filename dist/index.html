@@ -2700,7 +2700,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v401';
+const HUB_BUILD = 'v402';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -8815,7 +8815,9 @@ const VEHICLE_PACKS = [
   // holders (74 for a 21700), and the case flexes ("המארז מתגמש — לא לבדוק גובה"). `lanes` across,
   // and the last `bmsRows` rows one short, the BMS beside them — see casePlan.
   // hubOnly before the nested objects: gen-fit-data reads a row only up to its first '}'.
-  { g: 'אופניים חשמליים', m: 'סילבר פיש 72V', src: 'נמדד', p: 23, s60: 0, p60: 0, s72: 20, p72: 6, max: 120,
+  // max 132: "בסילבר פיש אפשר לשים מקסימום 132 תאי 21700" (Daniel, 2026-10-05). 72V stays 20S6P —
+  // 20S7P is 140 — but 48V 13S10P (130), 52V 14S9P (126) and 60V 16S8P (128) go in.
+  { g: 'אופניים חשמליים', m: 'סילבר פיש 72V', src: 'נמדד', p: 23, s60: 0, p60: 0, s72: 20, p72: 6, max: 132,
     hubOnly: true,
     case: { L: 850, W: 95, H: 70, holder: 'square-23', lanes: 4, bmsRows: 8 } },
   // From the WhatsApp thread with Oral Paiman, 24.8.2025: a 72V 40Ah pack for a delivery
