@@ -1,0 +1,588 @@
+// Drives the real hub page in Chromium and exercises edit/delete on a saved repair and a
+// saved sale. Exits non-zero on any failure. --selftest breaks one expectation on purpose
+// to prove the checks can go red.
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { checker } from './diag.mjs';
+
+// playwright is a dependency of the React site, not of this folder, and there is no
+// reason to install a second copy. `import` cannot take a Windows drive path
+// (ERR_UNSUPPORTED_ESM_URL_SCHEME) — createRequire can, and playwright's entry is CJS.
+// CI installs playwright; locally nothing is installed for the hub, so fall back to the
+// copy the retail site already carries rather than duplicating a browser download.
+const require_ = createRequire(import.meta.url);
+const { chromium } = (() => {
+  try { return require_('playwright'); }
+  catch { return require_('F:/מחול/Green Power/כלים-קלוד/אתר ומחירונים/GreenPowerSite-private/node_modules/playwright/index.js'); }
+})();
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const DIST = path.join(HERE, '..', 'dist');
+const HUB = process.argv.includes('--source')
+  ? 'F:\\מחול\\Green Power\\כלים-קלוד\\אתר מעבדה\\‏‏תיקיה חדשה\\לוח בקרה מרכזי.html'
+  : path.join(DIST, 'index.html');
+const SELFTEST = process.argv.includes('--selftest');
+
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.webp': 'image/webp', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.pdf': 'application/pdf' };
+const server = http.createServer((req, res) => {
+  const url = req.url.split('?')[0];
+  const file = url === '/' ? HUB : path.join(DIST, decodeURIComponent(url));
+  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end('no'); }
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' });
+  res.end(fs.readFileSync(file));
+});
+await new Promise(r => server.listen(4199, r));
+
+const { check, finish } = checker();
+
+const JOB = {
+  id: 'j1', date: '2026-08-01T09:00:00.000Z', dateDisplay: '1.8.2026, 12:00',
+  customerName: 'דני', customerPhone: '050-1111111', customerNotes: 'לא טוען',
+  isBusiness: false, businessName: '', vehicle: 'bike', voltage: '48', capacity: '20',
+  cellType: '', jobs: ['bms'], price: 500, cost: 200, profit: 300, hours: 1,
+  bmsBrand: 'daly', bmsAmps: '60', photoBefore: null, photoAfter: null,
+  warrantyMonths: 6, warrantyEnd: '2027-01-28T09:00:00.000Z',
+};
+const QUICK = { id: 'j2', date: '2026-08-05T09:00:00.000Z', dateDisplay: '5.8.2026', customerName: 'רון', customerPhone: '050-2222222', customerNotes: 'החלפת BMS', jobs: [], quickRepair: 'החלפת BMS', price: 300, cost: 0, profit: 300, voltage: '', capacity: '', vehicle: '', warrantyMonths: 6, warrantyEnd: '2027-02-01T09:00:00.000Z' };
+const CUSTOMERS = [
+  { id: 'c1', name: 'דני', phone: '050-1111111', totalSpent: 500, visitCount: 1, firstVisit: JOB.date, lastVisit: JOB.date },
+  { id: 'c2', name: 'רון', phone: '050-2222222', totalSpent: 300, visitCount: 1, firstVisit: QUICK.date, lastVisit: QUICK.date },
+];
+// An item whose catalog row no longer exists — the case that used to vanish on edit.
+const ORDER = { id: 'o1', date: '2026-08-02T09:00:00.000Z', customer: 'שרה', phone: '050-3333333', bms: '', isBusiness: false, status: 'שולם', total: 300, items: [{ name: 'דגם שנמחק מהקטלוג', cat: 'קטגוריה שנעלמה', qty: 2, unit: 150 }] };
+
+const browser = await chromium.launch();
+const page = await browser.newPage();
+// Records rather than accepts. A native dialog draws NOTHING in the Android WebView the
+// hub runs in, so a delete that needs one is a delete that never happens on the phone —
+// which is what every confirm() in this file used to be. Asserted at the end: if one comes
+// back, this list is not empty.
+const dialogs = [];
+page.on('dialog', d => { dialogs.push(d.message()); d.dismiss(); });
+
+// Deletes ask in the page now. Press the אישור button the way a finger would.
+const confirmNotice = async () => {
+  await page.waitForSelector('#noticeBackdrop.active', { timeout: 5000 });
+  await page.click('#noticeFooter button.btn-primary');
+  await page.waitForSelector('#noticeBackdrop.active', { state: 'detached', timeout: 5000 })
+    .catch(() => page.waitForFunction(() => !document.querySelector('#noticeBackdrop.active'), { timeout: 5000 }));
+};
+const errors = [];
+page.on('pageerror', e => errors.push(String(e)));
+await page.addInitScript(([j, q, c, o]) => {
+  localStorage.setItem('gp_jobs', j); localStorage.setItem('gp_customers', c); localStorage.setItem('gp_orders', o);
+  void q;
+}, [JSON.stringify([JOB, QUICK]), '', JSON.stringify(CUSTOMERS), JSON.stringify([ORDER])]);
+await page.goto('http://127.0.0.1:4199/', { waitUntil: 'domcontentloaded' });
+await page.waitForFunction(() => typeof window.openJobEditor === 'function');
+
+console.log('\n1. the sales list offers edit + delete on a repair');
+const rowHtml = await page.evaluate(() => { renderOrders(); return document.getElementById('ordersList').innerHTML; });
+check('repair row has an edit button', rowHtml.includes("openJobEditor('j1'"));
+check('repair row has a delete button', rowHtml.includes("deleteJob('j1'"));
+check('sale row still has its own', rowHtml.includes("openOrderEditor('o1'") && rowHtml.includes("deleteOrder('o1'"));
+
+console.log('\n2. editing a repair: price, date, warranty, job types');
+const edit = await page.evaluate(() => {
+  openJobEditor('j1', 'orders');
+  document.getElementById('jePrice').value = '650';
+  document.getElementById('jeCost').value = '250';
+  document.getElementById('jeDate').value = '2026-07-15';
+  document.getElementById('jeWarranty').value = '12';
+  document.getElementById('jeReason').value = 'לא מחזיק טעינה';
+  document.querySelector('[data-jek="rows"]').classList.add('checked');
+  saveJobEdit('j1');
+  const j = JSON.parse(localStorage.getItem('gp_jobs')).find(x => x.id === 'j1');
+  const c = JSON.parse(localStorage.getItem('gp_customers')).find(x => x.phone === '050-1111111');
+  return { j, c };
+});
+check('price saved', edit.j.price === 650, edit.j.price);
+check('profit recomputed from price - cost', edit.j.profit === 400, edit.j.profit);
+check('date moved to July', edit.j.date.slice(0, 7) === '2026-07', edit.j.date);
+check('dateDisplay follows the date', /15/.test(edit.j.dateDisplay), edit.j.dateDisplay);
+check('warranty end re-derived from the new date', edit.j.warrantyEnd.slice(0, 7) === '2027-07', edit.j.warrantyEnd);
+check('job types kept + added', edit.j.jobs.includes('bms') && edit.j.jobs.includes('rows'), edit.j.jobs);
+check('reason saved', edit.j.reason === 'לא מחזיק טעינה', edit.j.reason);
+check('customer total follows the price delta (500 -> 650)', edit.c.totalSpent === 650, edit.c.totalSpent);
+check('visit count unchanged', edit.c.visitCount === 1, edit.c.visitCount);
+
+console.log('\n3. moving a repair to a different customer');
+const moved = await page.evaluate(() => {
+  openJobEditor('j1', 'orders');
+  document.getElementById('jePhone').value = '050-9999999';
+  document.getElementById('jeName').value = 'משה';
+  saveJobEdit('j1');
+  const cs = JSON.parse(localStorage.getItem('gp_customers'));
+  return { old: cs.find(x => x.phone === '050-1111111'), neu: cs.find(x => x.phone === '050-9999999') };
+});
+check('old customer loses the money', moved.old.totalSpent === 0, moved.old.totalSpent);
+check('old customer loses the visit', moved.old.visitCount === 0, moved.old.visitCount);
+check('new customer record created with it', moved.neu && moved.neu.totalSpent === 650 && moved.neu.visitCount === 1, moved.neu);
+
+console.log('\n4. a quick-pricer repair (no voltage, no vehicle) edits too');
+const quick = await page.evaluate(() => {
+  openJobEditor('j2', 'orders');
+  const hasQuickField = !!document.getElementById('jeQuick');
+  document.getElementById('jeQuick').value = 'החלפת BMS + איזון';
+  document.getElementById('jePrice').value = '380';
+  saveJobEdit('j2');
+  const j = JSON.parse(localStorage.getItem('gp_jobs')).find(x => x.id === 'j2');
+  const c = JSON.parse(localStorage.getItem('gp_customers')).find(x => x.phone === '050-2222222');
+  return { hasQuickField, j, c };
+});
+check('free-text work description offered for a quick repair', quick.hasQuickField);
+check('description saved', quick.j.quickRepair === 'החלפת BMS + איזון', quick.j.quickRepair);
+check('customer total follows (300 -> 380)', quick.c.totalSpent === 380, quick.c.totalSpent);
+
+console.log('\n5. the customer card shows the repair without "undefined"');
+const card = await page.evaluate(() => { openCustomerDetails(1); return document.getElementById('modalBody').innerHTML; });
+check('no undefined in the row', !card.includes('undefined'), card.includes('undefined'));
+check('card offers edit + delete', card.includes("openJobEditor('j2'") && card.includes("deleteJob('j2'"));
+await page.evaluate(() => closeModal());
+
+console.log('\n6. deleting a repair takes its money with it');
+await page.evaluate(() => deleteJob('j2', 'orders'));
+await confirmNotice();
+const del = await page.evaluate(() => ({
+  jobs: JSON.parse(localStorage.getItem('gp_jobs')).map(j => j.id),
+  c: JSON.parse(localStorage.getItem('gp_customers')).find(x => x.phone === '050-2222222'),
+}));
+check('job removed', !del.jobs.includes('j2'), del.jobs);
+check('customer total back to 0', del.c.totalSpent === 0, del.c.totalSpent);
+check('visit count back to 0', del.c.visitCount === 0, del.c.visitCount);
+
+console.log('\n7. editing a sale keeps a line whose catalog row is gone');
+const sale = await page.evaluate(() => {
+  openOrderEditor('o1');
+  document.getElementById('ordName').value = 'שרה כהן';
+  document.getElementById('ordDate').value = '2026-06-20';
+  saveOrder();
+  return JSON.parse(localStorage.getItem('gp_orders')).find(o => o.id === 'o1');
+});
+check('the orphaned line survived', sale.items.length === 1, sale.items);
+check('its price survived', sale.total === (SELFTEST ? 999 : 300), sale.total);
+check('name edited', sale.customer === 'שרה כהן', sale.customer);
+check('date edited', sale.date.slice(0, 7) === '2026-06', sale.date);
+check('status untouched by the edit', sale.status === 'שולם', sale.status);
+
+console.log('\n8. deleting a sale');
+await page.evaluate(() => deleteOrder('o1'));
+await confirmNotice();
+const delSale = await page.evaluate(() => JSON.parse(localStorage.getItem('gp_orders')).length);
+check('sale removed', delSale === 0, delSale);
+
+console.log('\n9. the sales page organises a realistic pile');
+// 90 sales + 90 repairs spread over 5 months, a third of the sales left as open quotes.
+const org = await page.evaluate(() => {
+  const orders = [], jobs = [];
+  for (let i = 0; i < 90; i++) {
+    const d = new Date(2026, 3 + (i % 5), 1 + (i % 27), 12).toISOString();
+    orders.push({ id: 'so' + i, date: d, customer: 'לקוח ' + i, phone: '050-000' + i, isBusiness: false,
+      status: i % 3 === 0 ? 'הצעה' : 'שולם', total: 100, items: [{ name: 'פריט', cat: 'סוללות אופניים - 48V PRO', qty: 1, unit: 100 }] });
+    jobs.push({ id: 'sj' + i, date: d, customerName: 'מתקן ' + i, customerPhone: '052-000' + i,
+      jobs: ['bms'], price: 200, cost: 50, profit: 150, voltage: '48', capacity: '20', vehicle: 'bike' });
+  }
+  // one needle to find by search
+  jobs[0].customerName = 'אברהם ייחודי';
+  localStorage.setItem('gp_orders', JSON.stringify(orders));
+  localStorage.setItem('gp_jobs', JSON.stringify(jobs));
+  setSalesFilter('all');
+  // The summary CARD is gone — it repeated the first month header underneath it. The figures
+  // moved into the headers, where they answer for every month instead of only this one.
+  const headerMoney = [...document.querySelectorAll('#ordersList .price-cat')]
+    .map((e) => e.textContent.replace(/\s+/g, ' ').trim());
+  const monthHeaders = (document.getElementById('ordersList').innerHTML.match(/price-cat/g) || []).length;
+  const rows = document.querySelectorAll('#ordersList .list-item').length;
+  const more = document.getElementById('ordersList').innerHTML.includes('salesShowMore');
+  const pendingShown = document.getElementById('salesPending').style.display !== 'none';
+  const chips = [...document.querySelectorAll('#salesFilterBar .sub-tab')].map(e => e.textContent);
+  return { headerMoney, monthHeaders, rows, more, pendingShown, chips };
+});
+check('every month header carries its own money', org.headerMoney.every((h) => /₪/.test(h)), org.headerMoney[0]);
+check('and it is a split, not one lump', /🛒|🔧/.test(org.headerMoney[0] || ''), org.headerMoney[0]);
+check('four filter chips incl. open quotes', org.chips.length === 4 && org.chips[3].includes('הצעות'), org.chips);
+check('open-quotes banner is showing', org.pendingShown);
+check('list is capped, not all 180 rows', org.rows === 60, org.rows);
+check('a "show more" button appears', org.more);
+check('rows are grouped under month headers', org.monthHeaders >= 2, org.monthHeaders);
+
+const org2 = await page.evaluate(() => {
+  salesShowMore();
+  const after = document.querySelectorAll('#ordersList .list-item').length;
+  setSalesFilter('quote');
+  const quoteRows = [...document.querySelectorAll('#ordersList .list-item')];
+  const allQuotes = quoteRows.every(r => r.textContent.includes('הצעה'));
+  setSalesFilter('all');
+  document.getElementById('salesSearch').value = 'אברהם ייחודי';
+  renderOrders();
+  const hits = document.querySelectorAll('#ordersList .list-item').length;
+  document.getElementById('salesSearch').value = '';
+  renderOrders();
+  return { after, allQuotes, quoteRows: quoteRows.length, hits };
+});
+check('"show more" grows the list', org2.after === 120, org2.after);
+check('the quotes filter shows only quotes', org2.allQuotes && org2.quoteRows > 0, org2);
+check('search narrows to the one match', org2.hits === 1, org2.hits);
+
+// The quick pricer was deleted 2026-08-17 (Daniel). Assert it is GONE rather than dropping
+// the check — a half-removed feature leaves live onclick handlers calling functions that no
+// longer exist, and that fails silently in the console instead of on this page.
+const gone = await page.evaluate(() => ({
+  card: !!document.getElementById('qpBody'),
+  toggle: typeof window.toggleQuickPricer,
+  init: typeof window.qpInit,
+  handlers: document.body.innerHTML.includes('qpCreateJob') || document.body.innerHTML.includes('qpFillItems'),
+  title: (document.querySelector('#page-orders .page-title') || {}).textContent || '',
+}));
+check('the quick-price card is gone', !gone.card, gone.card);
+check('no toggleQuickPricer left', gone.toggle === 'undefined', gone.toggle);
+check('no qpInit left', gone.init === 'undefined', gone.init);
+check('no dangling qp* onclick handlers', !gone.handlers, gone.handlers);
+check('page renamed to מכירות ותיקונים', gone.title.includes('מכירות ותיקונים'), gone.title);
+
+console.log('\n10. a battery SOLD is under warranty, not just one repaired');
+// The warranty page read `jobs` and only jobs, so a pack that went out through the sales
+// flow carried a 12-month promise that nothing in the hub recorded. Repairs were covered,
+// sales were not, and the page gave no sign of the difference.
+const war = await page.evaluate(() => {
+  const day = 86400000;
+  localStorage.setItem('gp_jobs', JSON.stringify([{
+    id: 'wj', date: new Date(Date.now() - 10 * day).toISOString(), customerName: 'תיקון דני',
+    customerPhone: '050-1', jobs: ['bms'], price: 400,
+    warrantyMonths: 6, warrantyEnd: new Date(Date.now() + 170 * day).toISOString() }]));
+  localStorage.setItem('gp_orders', JSON.stringify([
+    { id: 'wo1', date: new Date(Date.now() - 5 * day).toISOString(), customer: 'קונה סוללה', phone: '050-2',
+      status: 'נמסר', total: 3200, items: [{ name: 'סוללה 60V 20Ah', cat: 'סוללות קורקינטים וקולנועיות - 60V PRO', qty: 1, unit: 3200 }] },
+    // A quote is not a sale: nothing was handed over, so nothing is covered.
+    { id: 'wo2', date: new Date(Date.now() - 3 * day).toISOString(), customer: 'רק הצעה', phone: '050-3',
+      status: 'הצעה', total: 999, items: [{ name: 'סוללה 48V', cat: 'סוללות אופניים - 48V CLASSIC', qty: 1, unit: 999 }] },
+    // A lab service carries 6 months, not 12 — same rule the warranty policy is written in.
+    { id: 'wo3', date: new Date(Date.now() - 2 * day).toISOString(), customer: 'שירות בלבד', phone: '050-4',
+      status: 'שולם', total: 180, items: [{ name: 'שעת עבודה', cat: 'שירותי מעבדה', qty: 1, unit: 180, svc: true }] },
+  ]));
+  const rows = warrantyEntries();
+  setWarrantyTab('active');
+  const html = document.getElementById('warrantiesList').innerHTML;
+  const byId = Object.fromEntries(rows.map(r => [r.id, r]));
+  const months = (r) => r ? Math.round((new Date(r.end) - new Date(r.date)) / (30 * day)) : null;
+  return { ids: rows.map(r => r.id), html,
+           saleMonths: months(byId.wo1), svcMonths: months(byId.wo3), repairMonths: months(byId.wj) };
+});
+check('the sold battery is in the register', war.ids.includes('wo1'), war.ids);
+check('the repair still is', war.ids.includes('wj'), war.ids);
+check('a quote is NOT', !war.ids.includes('wo2'), war.ids);
+check('the sold battery gets 12 months', war.saleMonths === (SELFTEST ? 99 : 12), war.saleMonths);
+check('a lab service gets 6', war.svcMonths === 6, war.svcMonths);
+check('the repair keeps its own 6', war.repairMonths === 6, war.repairMonths);
+check('the page shows the buyer', war.html.includes('קונה סוללה'), war.html.slice(0, 80));
+
+console.log('\n11. the home page warns about warranties about to run out');
+const rem = await page.evaluate(() => {
+  const day = 86400000;
+  localStorage.setItem('gp_jobs', JSON.stringify([
+    { id: 'r1', date: new Date(Date.now() - 160 * day).toISOString(), customerName: 'נגמר בקרוב',
+      customerPhone: '050-1', jobs: ['bms'], price: 400,
+      warrantyEnd: new Date(Date.now() + 12 * day).toISOString() },
+    // Comfortably in the future: must NOT be counted.
+    { id: 'r2', date: new Date().toISOString(), customerName: 'רחוק', customerPhone: '050-2',
+      jobs: ['bms'], price: 400, warrantyEnd: new Date(Date.now() + 300 * day).toISOString() },
+    // Already expired: also must not, or the banner nags about work that is closed.
+    { id: 'r3', date: new Date(Date.now() - 400 * day).toISOString(), customerName: 'פג', customerPhone: '050-3',
+      jobs: ['bms'], price: 400, warrantyEnd: new Date(Date.now() - 5 * day).toISOString() },
+  ]));
+  // A SALE expiring soon has to count too — the whole point of warrantyEntries().
+  localStorage.setItem('gp_orders', JSON.stringify([
+    { id: 'o9', date: new Date(Date.now() - 355 * day).toISOString(), customer: 'קונה ותיק', phone: '050-4',
+      status: 'נמסר', total: 3000, items: [{ name: 'סוללה', cat: 'סוללות אופניים - 48V PRO', qty: 1, unit: 3000 }] },
+  ]));
+  refreshHome();
+  const el = document.getElementById('warrantyReminder');
+  return { shown: el.style.display !== 'none', text: el.innerText.replace(/\s+/g, ' ').trim() };
+});
+check('the banner appears', rem.shown, rem);
+check('it counts both the repair and the sale', /\b2\b/.test(rem.text) === !SELFTEST, rem.text);
+check('it names them', rem.text.includes('נגמר בקרוב') && rem.text.includes('קונה ותיק'), rem.text);
+check('it ignores far-off and expired cover', !rem.text.includes('רחוק') && !rem.text.includes('פג'), rem.text);
+
+console.log('\n12. the sticker opens FILLED from the repair or the sale it was opened from');
+{
+  // Asked directly: "תבדוק שבאמת המדבקה ממולאת לפי התיקון או המכירה". It was not.
+  //
+  // applyStickerJob set voltage, capacity, cells and BMS — every one of which lives in
+  // #new-battery-specs, which repair mode HIDES — plus a client name that was removed from
+  // the artboard in August. So a repair label came up with דגם סוללה reading "---" and both
+  // repair panels blank, over a date stamped TODAY rather than the day of the work. It
+  // looked filled. That is the whole failure mode, and it is why this asserts on the fields
+  // that PRINT rather than on the ones that were being set.
+  const read = async () => {
+    await page.waitForTimeout(2500);
+    return page.evaluate(() => {
+      const d = document.getElementById('stickerFrame').contentWindow.document;
+      const t = (id) => { const e = d.getElementById(id); return e ? (e.innerText || '').trim() : null; };
+      return {
+        repair: !d.getElementById('repaired-battery-specs-on-sticker').classList.contains('hidden'),
+        model: t('battery-model-display'), date: t('repair-date-display'),
+        fault: t('fault-description-display'), details: t('repair-details-display'),
+        cells: t('cells-value'), volt: t('voltage-value'), cap: t('capacity-value'),
+        sku: t('sku-value'),
+        prodDate: t('production-date-value'),
+      };
+    });
+  };
+  await page.evaluate(() => {
+    const jobs = JSON.parse(localStorage.getItem('gp_jobs') || '[]');
+    jobs.push({ id: 'j-st1', date: '2026-08-20T09:00:00.000Z', customerName: 'אבי', customerPhone: '050-7777777',
+                jobs: ['bms', 'rows'], vehicle: 'bike', voltage: '60', capacity: '20', cellType: '21700-50e',
+                bmsBrand: 'DALY', bmsAmps: '40', warrantyMonths: 6, reason: 'לא נטענת, שורה 7 נפולה',
+                customerNotes: 'לקוח חוזר, OXO 60V' });
+    localStorage.setItem('gp_jobs', JSON.stringify(jobs));
+  });
+
+  await page.evaluate(() => window.openStickerFor('job', 'j-st1'));
+  const r1 = await read();
+  check('a repair opens the repair side of the label', r1.repair === true, r1);
+  check('the model is filled, not "---"', r1.model === 'אופניים חשמליים 60V 20Ah', r1.model);
+  check('the date is the day of the WORK, not of the printing', r1.date === '20/08/2026', r1.date);
+  // `reason` — "סיבת הכניסה" in the job editor — not customerNotes, whose own placeholder is
+  // "לקוח חוזר, OXO 60V". The first version read the wrong one, filled, and looked right.
+  check('the fault is סיבת הכניסה, not the note about the customer',
+    r1.fault === 'לא נטענת, שורה 7 נפולה', r1.fault);
+  check('and the customer note stays off the label entirely',
+    !r1.fault.includes('לקוח חוזר'), r1.fault);
+  check('the work done is listed from the boxes that were ticked',
+    r1.details.includes('החלפת BMS') && r1.details.includes('החלפת שורות'), r1.details);
+
+  // The second job records no fault. setVal leaves a field alone when the new value is
+  // empty, so this used to keep the FIRST customer's complaint — printed on someone else's
+  // battery.
+  await page.evaluate(() => {
+    const jobs = JSON.parse(localStorage.getItem('gp_jobs') || '[]');
+    jobs.push({ id: 'j-st2', date: '2026-08-22T09:00:00.000Z', customerName: 'רון', customerPhone: '050-8888888',
+                jobs: [], quickRepair: 'החלפת מחבר טעינה', warrantyMonths: 6 });
+    localStorage.setItem('gp_jobs', JSON.stringify(jobs));
+  });
+  await page.evaluate(() => window.openStickerFor('job', 'j-st2'));
+  const r2 = await read();
+  // A job saved through the old quick pricer carries `quickRepair` as a name and an EMPTY
+  // jobs array. Reading `jobs` alone put nothing on the label for that whole class of record;
+  // jobTypeLabel() is where the hub's own rule for this lives.
+  check('a quick-pricer job still describes the work it did',
+    r2.details.includes('החלפת מחבר טעינה'), r2.details);
+  check('and it carries its own date', r2.date === '22/08/2026', r2.date);
+  check('the model is left blank rather than filled with the work — that is not a model',
+    r2.model === '' || r2.model === '---', r2.model);
+  check("and does NOT keep the previous customer's fault", r2.fault === '', r2.fault);
+  check('nor their repair details', !r2.details.includes('שורות'), r2.details);
+
+  // A build at a voltage and a capacity the sticker's own dropdowns do not carry. The lists
+  // are 48/52/60/72 and multiples of five; the hub offers 12-84V and a FREE capacity input
+  // whose default is 21. setSel required an exact option and silently kept the default, so
+  // this pack printed 60V 20Ah and a GP-60V-20A- SKU — not a blank label, a confident wrong
+  // one. Reported as 'ממלא בצורה חלקית'.
+  await page.evaluate(() => {
+    const jobs = JSON.parse(localStorage.getItem('gp_jobs') || '[]');
+    jobs.push({ id: 'j-st3', date: '2026-08-23T09:00:00.000Z', customerName: 'נועה', customerPhone: '050-5555555',
+                jobs: ['full'], vehicle: 'bike', voltage: '36', capacity: '21', cellType: '21700-50sg',
+                bmsBrand: 'DALY', bmsAmps: '40', warrantyMonths: 12 });
+    localStorage.setItem('gp_jobs', JSON.stringify(jobs));
+  });
+  await page.evaluate(() => window.openStickerFor('job', 'j-st3'));
+  const r4 = await read();
+  check('a voltage the dropdown never listed still reaches the label',
+    r4.volt === (SELFTEST ? '60V' : '36V'), r4.volt);
+  check('and an odd capacity does too — 21 is the hub default, not an edge case',
+    r4.cap === '21Ah', r4.cap);
+  check('and the SKU follows both rather than the leftovers',
+    r4.sku && r4.sku.includes('36V') && r4.sku.includes('21A'), r4.sku);
+
+  // A sale has no cellType field, so the editor stayed on its default: a 72V 35Ah PRO
+  // printed EVE 21700 50E and 2C/3C — the CLASSIC cell, on a pack built from 50PL at
+  // 25C/36C. A wrong spec on a customer-facing label, and nothing said so.
+  await page.evaluate(() => {
+    const orders = JSON.parse(localStorage.getItem('gp_orders') || '[]');
+    orders.push({ id: 'o-st1', date: '2026-08-21T09:00:00.000Z', customer: 'שרה', phone: '050-6666666',
+                  status: 'שולם', total: 3200, bmsBrand: 'DALY', bmsAmps: '60',
+                  items: [{ name: 'סוללת ליתיום 72V 35Ah PRO', cat: 'סוללות', qty: 1, unit: 3200 }] });
+    localStorage.setItem('gp_orders', JSON.stringify(orders));
+  });
+  await page.evaluate(() => window.openStickerFor('order', 'o-st1'));
+  const r3 = await read();
+  check('a sale opens the new-battery side', r3.repair === false, r3);
+  check('with the numbers read out of the line', r3.volt === '72V' && r3.cap === '35Ah', r3);
+  check('and the cell the TIER says, not the default',
+    r3.cells === (SELFTEST ? 'EVE 21700 50E' : 'EVE 21700 50PL'), r3.cells);
+  check('dated the day of the sale', r3.prodDate === '21/08/2026', r3.prodDate);
+}
+
+console.log('\n13. work that another job drags in is priced once, and only when it is not asked for');
+{
+  // Daniel, 2026-08-24: some repairs have to be done together — replace a row and the pack
+  // also needs balancing and re-wrapping. They were independent checkboxes, so the same
+  // physical job quoted ₪460 or ₪810 depending on how many got ticked, and the cheaper
+  // number was the one you got by clicking less.
+  //
+  // Three properties, and the middle one is the one that is easy to get wrong.
+  const hoursFor = (jobs) => page.evaluate((jobs) => {
+    setVehicle('bike');
+    state.jobs = new Set();
+    document.querySelectorAll('[data-job]').forEach((e) => e.classList.remove('checked'));
+    jobs.forEach((j) => toggleJob(j));
+    recalc();
+    return parseFloat(document.getElementById('hoursDisplay').textContent.trim());
+  }, jobs);
+  await page.evaluate(() => navigateTo('calc'));
+
+  const rows = await hoursFor(['rows']);
+  const bms = await hoursFor(['bms']);
+  const both = await hoursFor(['rows', 'bms']);
+  const rowsExplicit = await hoursFor(['rows', 'balance']);
+
+  // 1. it is actually added — a row swap carries a balance and a re-wrap it never charged for
+  check('a row swap now carries the work it always required',
+    rows > 1.5 + (SELFTEST ? 99 : 0), rows);
+
+  // 2. ONCE. You do not balance a pack twice because you also changed the BMS. If the
+  //    marginal figures were summed instead of maxed, this would be 0.4h higher.
+  // Exact constants, not a loose tolerance that happens to absorb them: basePrep 0.3 is
+  // counted once, and BMS gives up its own 0.3 balance to the row swap's larger 0.4.
+  check('two jobs that both imply a balance are charged one balance',
+    Math.abs(both - (rows + bms - 0.3 - 0.3)) < 0.06, { rows, bms, both });
+
+  // 3. and asking for the full standalone job outright replaces the marginal one rather
+  //    than stacking on top of it — that would be the double-charge this exists to avoid.
+  check('an explicit איזון תאים replaces the marginal one, it does not stack',
+    Math.abs(rowsExplicit - (rows - 0.4 + 1.5)) < 0.06, { rows, rowsExplicit });
+
+  // 4. and it says so. A number that appears in a quote with no reason beside it is one the
+  //    customer asks about and nobody can answer.
+  // Two elements, two textContents. The note was first appended to #priceBreakdown as
+  // `<br><span>…`, and that element is written with textContent — so the quote read literally
+  // "עבודה: ₪225<br><span style=...". Daniel sent a screenshot of it within the hour.
+  await hoursFor(['rows']);   // read the note in the state it is about, not whatever ran last
+  const note = await page.evaluate(() => ({
+    implied: (document.getElementById('priceImplied') || {}).textContent || '',
+    brk: (document.getElementById('priceBreakdown') || {}).textContent || '',
+  }));
+  check('the added work is named in the quote, not folded in silently',
+    note.implied.includes('איזון תאים'), note.implied);
+  check('and it is TEXT — no markup leaking into a line that shows a price',
+    !/<br>|<span|<\//.test(note.brk + note.implied), note.brk);
+}
+
+// ---- 12. the sales page says each thing once ----
+// Daniel, 2026-08-31: "בטאב מכירות ותיקונים יש דברים כפולים". There were five, and four of
+// them are the kind that only a rendered page shows: the h2 and the active tab carried the
+// same string one line apart, two controls led to page-calc, a quote said "הצעה" three ways
+// in one row, and the month total appeared in a summary card and again in the header below it.
+// These are assertions about what is ON SCREEN, because that is where the duplication was.
+{
+  await page.evaluate(() => {
+    const today = new Date().toISOString();
+    localStorage.setItem('gp_orders', JSON.stringify([
+      { id: 'dup1', date: today, customer: 'בדיקה', status: 'הצעה', total: 2400, items: [{ name: 'x', cat: 'y' }] },
+      { id: 'dup2', date: today, customer: 'בדיקה ג', status: 'שולם', total: 1800, items: [{ name: 'x', cat: 'y' }] },
+    ]));
+    localStorage.setItem('gp_jobs', JSON.stringify([
+      { id: 'dupj', date: today, customerName: 'בדיקה ב', price: 650, jobs: ['bms'] },
+    ]));
+    navigateTo('orders');
+  });
+  await page.waitForTimeout(200);
+  const sales = await page.evaluate(() => {
+    const sec = document.getElementById('page-orders');
+    const seen = (el) => {
+      // A clipped heading is still in innerText, so visibility has to be measured.
+      const r = el.getBoundingClientRect();
+      return r.width > 2 && r.height > 2;
+    };
+    const title = sec.querySelector('.page-title');
+    const tabs = [...sec.querySelectorAll('.page-group-tabs .sub-tab')];
+    const toCalc = [...sec.querySelectorAll('.page-header button, .page-header .sub-tab')]
+      .filter((b) => /navigateTo\('calc'\)/.test(b.getAttribute('onclick') || ''));
+    const row = [...sec.querySelectorAll('#ordersList .list-item')].find((r) => /מכירה/.test(r.textContent));
+    return {
+      titleVisible: seen(title),
+      titleText: title.textContent.trim(),
+      activeTab: (tabs.find((t) => t.classList.contains('active')) || {}).textContent || '',
+      calcRoutes: toCalc.length,
+      quoteMentions: (row.textContent.match(/הצעה/g) || []).length,
+      cycleLabel: (row.querySelector('button[onclick^="cycleOrderStatus"]') || {}).textContent || '',
+      statsCard: !!sec.querySelector('#salesStats'),
+      monthHeads: [...sec.querySelectorAll('#ordersList .price-cat')].map((e) => e.textContent.replace(/\s+/g, ' ').trim()),
+    };
+  });
+  check('the page does not print its own name twice', !sales.titleVisible, sales.titleText + ' / ' + sales.activeTab);
+  check('and the tab strip still names it', /עבודות/.test(sales.activeTab), sales.activeTab);
+  // Two buttons to one page is the duplicate you only notice on the phone, where they touch.
+  check('one route to the calculator, not two', sales.calcRoutes === 1, String(sales.calcRoutes));
+  // The pill says הצעה. The button used to say it again, and a third line said 'לא בהכנסות'.
+  check('a quote row says הצעה once', sales.quoteMentions === 1, String(sales.quoteMentions));
+  check('and the button says what it DOES', /סמן/.test(sales.cycleLabel), sales.cycleLabel);
+  check('the month total lives in one place', !sales.statsCard, sales.statsCard ? 'summary card is back' : 'ok');
+  check('and the month header carries the split', /🛒/.test(sales.monthHeads[0]) && /🔧/.test(sales.monthHeads[0]), sales.monthHeads[0] || 'none');
+  // Counts came out of this app on purpose; the header is read after scrolling, not before.
+  check('with no row count on it', !/^[^0-9]*\d+ ·/.test(sales.monthHeads[0].replace(/^[^ ]+ \d{4}/, '')), sales.monthHeads[0]);
+}
+// ---- 13. one customer, one timeline ----
+// Everything this person did used to be spread over three screens: repairs on the customer
+// card, purchases on the sales list, receipts nowhere at all. The card shows all four sources
+// in one strip now, and the total is DERIVED from those rows rather than read off the
+// accumulated `totalSpent` — which was wrong the moment an order existed, and which the
+// accounting import deliberately writes 0 into rather than inventing a figure.
+{
+  const led = await page.evaluate(() => {
+    const n = new Date();
+    const mk = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0');
+    const d = (day) => new Date(mk + '-' + day + 'T10:00:00').toISOString();
+    localStorage.setItem('gp_customers', JSON.stringify([
+      { id: 'lc', name: 'לקוח ציר', phone: '0509998888', isBusiness: false, totalSpent: 999999, firstVisit: d('01') },
+    ]));
+    localStorage.setItem('gp_jobs', JSON.stringify([
+      { id: 'lj', date: d('05'), customerName: 'לקוח ציר', customerPhone: '0509998888', price: 650, jobs: ['bms'],
+        warrantyEnd: new Date(Date.now() + 86400000 * 100).toISOString() },
+    ]));
+    localStorage.setItem('gp_orders', JSON.stringify([
+      { id: 'lo', date: d('06'), customer: 'לקוח ציר', phone: '0509998888', status: 'שולם', total: 2850, items: [{ name: 'סוללה', cat: 'סוללות אופניים' }] },
+      { id: 'lq', date: d('07'), customer: 'לקוח ציר', phone: '0509998888', status: 'הצעה', total: 900, items: [{ name: 'מטען', cat: 'מטענים' }] },
+    ]));
+    localStorage.setItem('gp_incomes', JSON.stringify([
+      { id: 'lb', date: '2022-04-10T07:00:00.000Z', amount: 1000, cat: 'תיקונים ומכירות', note: 'קבלה ישנה',
+        customer: 'לקוח ציר', phone: '0509998888', invoice: '700227', src: 'books', locked: true },
+    ]));
+    const c = (Store.get('customers') || [])[0];
+    const l = customerLedger(c);
+    return {
+      kinds: l.rows.map((r) => r.kind),
+      spent: l.spent,
+      visits: l.visits,
+      oldestFirstDate: l.rows.length ? l.rows[l.rows.length - 1].date.slice(0, 4) : '',
+      stored: c.totalSpent,
+    };
+  });
+  check('the timeline holds all four kinds of record', led.kinds.length === 4, led.kinds.join(','));
+  check('newest first, oldest last', led.oldestFirstDate === '2022', led.oldestFirstDate);
+  // 650 + 2850 + 1000. The ₪900 quote is money offered, not money taken.
+  check('the total excludes an open quote', led.spent === 4500, String(led.spent));
+  check('and it ignores the stored totalSpent entirely', led.stored === 999999 && led.spent !== led.stored, String(led.stored));
+
+  const shown = await page.evaluate(() => {
+    openCustomerDetails(0);
+    const m = document.querySelector('.modal-body') || document.body;
+    const txt = m.innerText || '';
+    const close = document.querySelector('.modal .btn-secondary');
+    if (close) close.click();
+    return txt;
+  });
+  check('the card shows the imported receipt with its invoice number', /700227/.test(shown), 'ok');
+  check('and tags what is still under warranty', /באחריות עוד/.test(shown), 'ok');
+  check('and marks the quote as a quote', /הצעה/.test(shown), 'ok');
+}
+check('no JS errors on the page', errors.length === 0, errors);
+check('and nothing asked through a dialog the phone cannot draw', dialogs.length === 0, dialogs);
+
+await browser.close();
+server.close();
+process.exit(finish());

@@ -1,0 +1,128 @@
+// Bakes the sticker editor — libraries, fonts and all — into the hub's own document.
+//
+//   node tools/inline-sticker-editor.mjs [--check]
+//
+// Why this exists, in one line: on Daniel's phone a second URL is a second thing that can be
+// refused, and stickers.html was refused. The hub's own document is allowed; nothing else
+// about the two files differs. So the editor stops being a file the page asks for and becomes
+// part of the page — one request, the one that already works.
+//
+// It stays an IFRAME, fed by srcdoc rather than by a URL. Two reasons it is not injected into
+// the hub's DOM directly: the editor loads the Tailwind runtime, which scans the document it
+// is in and would restyle the whole hub; and the editor owns ids like #main-title that the hub
+// also uses. A srcdoc frame is a separate document with the SAME ORIGIN, which keeps the two
+// things that depend on that — gp_sticker_history is written where renderStickerLog() reads
+// it, and the APK's window.GPPrint is reachable from inside the frame.
+//
+// --check compares without writing, for CI: the baked copy and stickers.html are two copies of
+// one thing, and this repo has been bitten by exactly that shape before (hub source vs dist).
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const DIST = path.join(HERE, '..', 'dist');
+const CHECK = process.argv.includes('--check');
+
+const MIME_FONT = 'font/woff2';
+
+function readDist(rel) {
+  const p = path.join(DIST, rel.replace(/^\.?\//, ''));
+  if (!fs.existsSync(p)) throw new Error('missing asset: ' + rel);
+  return fs.readFileSync(p);
+}
+
+// ---- 1. build a self-contained editor document ------------------------------------
+let doc = fs.readFileSync(path.join(DIST, 'stickers.html'), 'utf8').replace(/\r\n/g, '\n');
+
+// stylesheet -> <style>, with its fonts as data-URIs. The @font-face urls are relative to the
+// css file, so they have to be resolved before the css leaves its folder.
+doc = doc.replace(/[ \t]*<link[^>]+href="([^"]+\.css)"[^>]*>\n?/g, (_m, href) => {
+  let css = readDist(href).toString('utf8');
+  css = css.replace(/url\((\.\/)?fonts\/([^)]+)\)/g, (_u, _d, file) => {
+    const b64 = readDist('vendor/fonts/' + file).toString('base64');
+    return `url(data:${MIME_FONT};base64,${b64})`;
+  });
+  return `    <style>\n${css}\n    </style>\n`;
+});
+
+// every local script -> inline. External hosts would be a bug in a page that is meant to be
+// self-contained, so they are refused loudly rather than silently left behind.
+doc = doc.replace(/[ \t]*<script src="([^"]+)"><\/script>\n?/g, (_m, src) => {
+  if (/^(https?:)?\/\//.test(src)) throw new Error('external script in stickers.html: ' + src);
+  const js = readDist(src).toString('utf8');
+  return `    <script>\n${js}\n    <\/script>\n`;
+});
+
+// Script BODIES are emptied before this check, keeping their opening tags. Without that the
+// scan reads the minified libraries it has just pasted in — jsPDF builds a <script src="…">
+// as a string at run time, and the first version of this check failed on that, which is a
+// false alarm about a page that is now perfectly self-contained.
+const skeleton = doc.replace(/(<script\b[^>]*>)[\s\S]*?(<\/script>)/gi, '$1$2');
+const left = skeleton.match(/<(script|link)[^>]*\s(src|href)="(?!data:)[^"]+"/gi);
+if (left) throw new Error('still fetching: ' + left.join(', '));
+
+// ---- 2. splice it into the hub ----------------------------------------------------
+// BASE64, and not because it is elegant.
+//
+// The first version escaped </script to <\/script and undid that at run time. It shipped, and
+// the editor came up as a wall of source code on Daniel's phone, because jsPDF's own minified
+// source contains this, verbatim:
+//
+//     '<script src="'+o+'"'+s+'><\/script><script >PDFObject.embed(...)<\/script>'
+//
+// Un-escaping turned jsPDF's OWN <\/script> into a real one, which closed the block 46,753
+// characters in and dumped the remaining 300KB into the document as text. The escape was not
+// reversible: two different inputs mapped to the same output.
+//
+// Base64 ends the argument rather than winning it. The payload becomes [A-Za-z0-9+/=] and
+// carries no <, no </script, no <!--, and nothing else the HTML tokenizer reacts to — so no
+// reasoning about parser states is required from whoever reads this next. It costs ~33%,
+// which on a file the service worker caches once is the cheaper half of the trade.
+const payload = Buffer.from(doc, 'utf8').toString('base64').replace(/(.{120})/g, '$1\n');
+
+const HUB = path.join(DIST, 'index.html');
+let hub = fs.readFileSync(HUB, 'utf8');
+const crlf = /\r\n/.test(hub);
+hub = hub.replace(/\r\n/g, '\n');
+
+const OPEN = '<script type="text/plain" id="sticker-doc">';
+const CLOSE = '<\/script>\n<!-- /sticker-doc -->';
+const START_MARK = '<!-- sticker-doc: generated by tools/inline-sticker-editor.mjs — do not edit by hand -->\n';
+const block = START_MARK + OPEN + '\n' + payload + '\n' + CLOSE;
+
+// Every replacement below passes a FUNCTION, never the string. A replacement string treats
+// $&, $` and $' as patterns, and the payload is a megabyte of minified library code that
+// contains all three — the first version of this silently produced a 3.4MB index.html,
+// exactly double, because $` pasted the entire preceding document back in.
+const re = /<!-- sticker-doc: generated[\s\S]*?<!-- \/sticker-doc -->/;
+let next;
+if (re.test(hub)) {
+  next = hub.replace(re, () => block);
+} else {
+  const anchor = '</body>';
+  if (!hub.includes(anchor)) throw new Error('no </body> in the hub');
+  next = hub.replace(anchor, () => block + '\n' + anchor);
+}
+
+// ---- 3. the label printer's language, for the hub's own labels ----------------------
+// The pack-layout label (2026-09-25) is printed from the hub document itself, not from the
+// editor frame, so the hub needs TSPL too. It gets the SAME file, baked in by this same tool and
+// checked by the same --check — not a second copy that would have to be kept in step by hand.
+const tspl = readDist('tspl.js').toString('utf8').replace(/\r\n/g, '\n');
+if (/<\/script|<!--/i.test(tspl)) throw new Error('tspl.js contains a sequence that would close the inline block');
+const TSPL_RE = /<!-- tspl: generated[\s\S]*?<!-- \/tspl -->/;
+const tsplBlock = '<!-- tspl: generated by tools/inline-sticker-editor.mjs from dist/tspl.js — do not edit by hand -->\n<script>\n' + tspl + '\n<\/script>\n<!-- /tspl -->';
+if (TSPL_RE.test(next)) next = next.replace(TSPL_RE, () => tsplBlock);
+else next = next.replace(START_MARK, () => tsplBlock + '\n' + START_MARK);
+
+if (CHECK) {
+  const same = next === hub;
+  console.log(same
+    ? 'ok — the baked editor and TSPL match dist/stickers.html and dist/tspl.js'
+    : 'STALE — dist/index.html carries a different editor or TSPL than dist/');
+  process.exit(same ? 0 : 1);
+}
+
+fs.writeFileSync(HUB, crlf ? next.replace(/\n/g, '\r\n') : next, 'utf8');
+console.log(`baked ${(payload.length / 1024).toFixed(0)}KB of editor into dist/index.html`);

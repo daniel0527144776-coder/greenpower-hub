@@ -1,0 +1,306 @@
+# Runs the hub's own checks on every push.
+#
+# Until now nothing did. The three suites below existed in a repo with no remote, so they
+# only ran when someone remembered to type the command — and a hub deploy was push-and-hope.
+# Cloudflare publishes this repo on push regardless of what happens here; treat a red run as
+# "roll it back", not "it never went out".
+#
+# No package.json in this repo on purpose: it holds static assets that Cloudflare serves
+# directly, and adding one risks changing how the deploy is detected. Playwright is
+# installed into a scratch directory instead.
+name: hub tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Reading a run log needs a token and there isn't one, so a red build could only ever
+      # say which STEP failed. The suites write the labels of the checks that failed here,
+      # and the last step turns them into an ARTIFACT NAME — artifact names come back from
+      # the public API, so the name is the diagnosis. See test/diag.mjs.
+      # A literal path, not ${{ runner.temp }}: the `runner` context does not exist yet when
+      # job-level env is evaluated, and using it there does not fail the step — it fails the
+      # whole workflow before a single job is created, which reads from the API as an
+      # ordinary red build with no steps at all.
+      GP_DIAG: /tmp/failing-checks.txt
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright + Chromium
+        run: |
+          npm init -y --silent
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+
+      # The inline script is ~5,000 lines in one HTML file, so a syntax error takes the whole
+      # app down at once. Cheapest possible check, run before anything expensive.
+      - name: Inline scripts parse
+        run: |
+          node -e "
+          const fs=require('fs');
+          for (const f of ['dist/index.html','dist/stickers.html']) {
+            // The baked sticker editor is carried in a <script type=\"text/plain\"> and holds
+          // literal <script> OPENING tags of its own (only </script is escaped, which is all
+          // the HTML parser needs). A scan for <script>...</script> therefore reads a megabyte
+          // of HTML as if it were JavaScript and fails on a page that is perfectly valid.
+          // The block is delimited on purpose; drop it before scanning. Its contents are
+          // checked anyway, as dist/stickers.html, which is the same bytes.
+          const t=fs.readFileSync(f,'utf8').replace(/<!-- sticker-doc: generated[\s\S]*?<!-- \/sticker-doc -->/, '');
+            const parts=[...t.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(s=>s.trim());
+            fs.writeFileSync('/tmp/'+f.replace(/[^a-z]/gi,'_')+'.js', parts.join('\n;\n'));
+            console.log(f, parts.length, 'inline block(s)');
+          }"
+          for f in /tmp/*.js; do node --check "$f"; done
+
+      # The network here rewrites pages in flight; one such page was saved and committed,
+      # and its injected scripts reached production. Cheap, and it runs before the browser.
+      - name: Pages load nothing from outside their origin
+        run: node test/test-self-contained.mjs
+
+      # The pack-size estimator answers "will it fit in the scooter", and the previous
+      # version spaced cells at diameter+1mm against real brackets of 21.4-23mm.
+      - name: Pack size — bracket pitch, honeycomb, fit check
+        run: node test/test-pack-dims.mjs
+
+      - name: Hub — edit/delete, sales page, warranty register
+        run: node test/test-hub-jobedit.mjs
+
+      # A dropped punch is a day worked for free, and worker_punches is the one table an
+      # anonymous stranger can write to.
+      - name: Worker clock — offline queue and the approval gate
+        run: node test/test-worker-clock.mjs
+
+      # The import rebuilt every row from four fields, so a weight in the file never reached
+      # storage and the landed cost quietly fell back to a percentage — ₪960 where the answer
+      # was ₪1313. Nothing failed; it just costed the motor 27% light.
+      - name: Supplier import — every field in the file survives
+        run: node test/test-supplier-import.mjs
+
+      # Inlined, not linked: the phone is behind a filter that can hold a fetched image
+      # forever. Decodes every distinct thumbnail, because a sample of six left a corrupted
+      # seventh green.
+      - name: Catalogue thumbnails decode, and nothing is fetched
+        run: node test/test-hub-thumbs.mjs
+
+
+      # The import writes 144 customers and six years of income over data he typed himself.
+      # Both protections are invisible on screen and fail silently.
+      # Topic grouping, and the click-by-index invariant it could break silently.
+      - name: The price list groups, and the explanations hide
+        run: node test/test-catalog-ui.mjs
+
+      # Four rules that hold a WRONG answer back rather than producing a right one,
+      # and all four fail silently.
+      - name: The pack calculator rules
+        run: node test/test-pack-calc.mjs
+
+      # Each replaces a manual step, and a step that silently stops happening is worse
+      # than one that was never automated.
+      # A wrong deduction is silent and it compounds, so this leans on what must NOT happen.
+      - name: Stock that moves by itself
+        run: node test/test-inventory.mjs
+
+      - name: The daily-work shortcuts
+        run: node test/test-daily-work.mjs
+
+      - name: Finances and the accounting import
+        run: node test/test-finances.mjs
+
+      # The import writes 144 names into `customers` and the sales editor had no way to pick
+      # one — so a repeat customer was retyped, which is the duplicate the import exists to
+      # avoid. A search capped like the idle list would hide them all while still looking fine.
+      - name: The customer picker, in sales and in repairs
+        run: node test/test-customer-picker.mjs
+
+      # Four bugs found on 2026-09-10, every one of them silent: the saved-models editor
+      # threw on its own auto-seeded row and its delete removed nothing; the customer picker's
+      # CSS sat inside a GENERATED block that sync-prices rewrites; a refused clipboard copied
+      # nothing and said nothing; and one malformed sale blanked the whole sales page.
+      # 144 customers and six years of income "did not get in". The import was correct; a full
+      # localStorage silently dropped half of it while reporting success, and the sync retry
+      # queue did not survive a reload so the cloud never got it either. Falls back to a
+      # generated payload, because CI cannot see the tools root where the real file lives.
+      # The price list is topic -> VOLTAGE -> category for the batteries. toggleCatCat
+      # addresses a category by INDEX, so inserting headings into the render without inserting
+      # them into catCatKeys opens a different category than the one touched — silently.
+      - name: The price list groups by voltage, and still opens what you press
+        run: node test/test-catalog-voltage.mjs
+
+      # totalSpent only ever counted calculator repairs, so the customers list read ₪0 for
+      # everyone imported or sold to, and the familiar repair prices for the rest. The customer
+      # CARD had derived it correctly for months — the list and the statistics page had not.
+      - name: What a customer spent, on all three screens
+        run: node test/test-customer-spend.mjs
+
+      # Wages: the page said money was owed but only as ONE TOTAL, so finding which month
+      # meant stepping back through the picker one month at a time. And after importing the
+      # accountant's books the page showed five years of income against zero recorded cost
+      # as if it were profit.
+      - name: Wages owed by month, and months with no expense data
+        run: node test/test-money-honesty.mjs
+
+      # The board was guessed from the VOLTAGE alone, which is how a 48V pack was costed with
+      # a ₪150 BMS it never had. The picker reads the real rows from the SYNCED supplier key —
+      # index.html is public, so those prices must never be baked into it.
+      - name: Choosing the BMS, and keeping supplier prices out of a public file
+        run: node test/test-bms-pick.mjs
+
+      # The WhatsApp bot tells a customer about his own jobs from bot_index (2026-10-04). It is
+      # read by a model talking to customers, so what it must NOT hold — photos, cost, profit,
+      # notes — is checked as hard as what it must.
+      - name: The WhatsApp bot's index of jobs and orders
+        run: node test/test-bot-index.mjs
+
+      # His control page for the bot (2026-10-04). The log shows what customers wrote on a public
+      # page, so nothing from the bot may run as markup; each control must send exactly his change.
+      - name: The WhatsApp bot's page
+        run: node test/test-wabot.mjs
+
+      # Asking a customer for a Google review after a job (2026-10-05): offered on נמסר once per
+      # customer, sent through the bot only when he presses send, copyable when the bot is down.
+      - name: The Google review request
+        run: node test/test-review-ask.mjs
+
+      # FUSION, his trading bot (2026-10-05): read with his login only, never "trading" when it has
+      # stopped reporting, is down or lost IBKR, and nothing from the bot runs as markup.
+      - name: The trading bot's page
+        run: node test/test-fusion.mjs
+
+      # He asked why an e-bike cost the same as every other category at the same voltage and
+      # capacity. It did: the model had one flat materials figure and the family was not an
+      # input to the price at all. The e-bike buys a Silver Fish case; the Sur-Ron an OEM one.
+      - name: The enclosure, and why two families cost more than the rest
+        run: node test/test-enclosure.mjs
+
+      # A sold battery consumes cells and a board in the workshop. The sales path looked for
+      # a shelf row named "72V 30Ah", found nothing, and set stockTaken anyway — so the pack
+      # never came off the books at all. The repair path had always done it correctly.
+      - name: A sold battery leaves the shelf like a built one
+        run: node test/test-sale-stock.mjs
+
+      # The sweep that runs on HIS records rather than seeded ones: work with no price,
+      # money with no owner, stock gone negative, a month claiming no costs. It must NAME each
+      # one — a report that counts sends him through a year of records.
+      - name: The data check
+        run: node test/test-data-check.mjs
+
+      - name: The accountant import, and the trip to the cloud
+        run: node test/test-import-and-sync.mjs
+
+      - name: The silent failures stay fixed
+        run: node test/test-silent-failures.mjs
+
+      # Symptom in, ordered checks out. The checks that matter are that no price is typed into
+      # the draft, and that Daniel's own corrections are never seeded over.
+      - name: Fault diagnosis — nothing typed, nothing overwritten
+        run: node test/test-diagnostics.mjs
+
+
+      # The estimator run backwards from the old pack the customer brought in. The round trip
+      # against the forward estimator is what stops a second copy of the geometry appearing.
+      - name: Pack size from the old battery — round trip
+        run: node test/test-oldpack.mjs
+
+      - name: Sticker — saved layout is versioned
+        run: node test/test-sticker-state.mjs
+
+      - name: Sticker — every sticker is recorded
+        run: node test/test-sticker-history.mjs
+
+      # Stock, hours and wage payments merge row by row: an old device cannot wipe rows.
+      - name: Two devices cannot overwrite each other's rows
+        run: node test/test-row-merge.mjs
+
+      # A printed label must survive the next cloud sync; a deleted one must stay deleted.
+      - name: Sticker — history survives sync
+        run: node test/test-sticker-sync.mjs
+
+      # The site's films in a frame: loaded only when the tab is opened, never on every start.
+      - name: Films tab — the frame waits for the tab
+        run: node test/test-films-tab.mjs
+      - name: Folded sections
+        run: node test/test-folds.mjs
+
+      # A printed spec that overstates the pack is a warranty problem, not a cosmetic one.
+      - name: Sticker — printed current never exceeds the BMS
+        run: node test/test-sticker-specs.mjs
+
+      # A whole working day, in order: import the books, merge the duplicates they create,
+      # look a price up, quote a repair, sell something, and check the money that comes out is
+      # the money that went in. The unit suites each prove one thing; this proves they join up.
+      # --local so CI tests THIS checkout rather than whatever is deployed.
+      - name: End to end — a full day through the hub
+        run: node test/e2e-full-day.mjs --local
+
+      # The badge the user reads must be the build they are running.
+      - name: The shown version is the deployed version
+        run: node tools/check-build-tag.mjs
+
+      # The editor is baked into the hub document. Two copies of one thing is the shape
+      # this repo keeps getting bitten by, so CI refuses a stale bake.
+      - name: The baked editor matches stickers.html
+        run: node tools/inline-sticker-editor.mjs --check
+
+      # The vehicle photos are baked in as data-URIs from vehicle-photos/ — a stale bake is a
+      # red build rather than a missing picture.
+      - name: The baked vehicle photos match vehicle-photos/
+        run: node tools/bake-vehicle-photos.mjs --check
+
+      # The phone has no browser, so opening the editor as its own page opened a block
+      # screen instead. What is asserted is that the top-level document never changes.
+      - name: Sticker — the editor opens without leaving the app
+        run: node test/test-editor-embedded.mjs
+
+      # The bytes the phone sends to the label printer. Inverted polarity here prints a
+      # solid black label and eats a metre of ribbon, and nothing in TSPL reports it.
+      - name: Sticker — the TSPL the printer receives
+        run: node test/test-tspl.mjs
+
+      # Fails on marks overflowing the artboard, text spilling its column, or a font weight
+      # with no loaded face — all three have shipped to a printer before.
+      - name: Sticker — renders, both modes
+        env:
+          STICKER_OUT: ${{ runner.temp }}/stickers
+        run: |
+          node test/render-sticker-pdf.mjs --volt 72 --cap 60 --out ci-new
+          node test/render-sticker-pdf.mjs --repair --out ci-repair
+
+      - name: Upload the rendered stickers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sticker-renders
+          path: ${{ runner.temp }}/stickers/*.png
+          if-no-files-found: ignore
+
+      # Names the failing assertion in a place that can be read without a token.
+      - name: Name the failing assertion
+        if: failure()
+        id: diag
+        run: |
+          if [ -s "$GP_DIAG" ]; then
+            echo "slug=$(tr -d '\n' < "$GP_DIAG")" >> "$GITHUB_OUTPUT"
+          else
+            # The step that failed did not get as far as an assertion — a crash, an install,
+            # the diff, or the parse check. Say so rather than implying a passing suite.
+            echo "slug=step-failed-before-any-assertion" >> "$GITHUB_OUTPUT"
+            echo "no assertion recorded" > "$GP_DIAG"
+          fi
+
+      - name: Publish the diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FAILED--${{ steps.diag.outputs.slug }}
+          path: ${{ env.GP_DIAG }}

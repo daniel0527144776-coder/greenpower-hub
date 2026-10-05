@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icon-512.png">
+<title>שעון עבודה — Green Power</title>
+<!--
+  The employee's clock. Deliberately NOT part of the hub.
+
+  A worker needs to add one line and see nothing else — not prices, not customers, not
+  costs, not other people's hours. Giving them the hub login would give them all of it, and
+  a "worker mode" inside the hub would be a checkbox away from the rest. So this is a
+  separate page on the same origin with no login at all: it can INSERT a punch into
+  worker_punches and it cannot read a single row back, not even the ones it wrote (see
+  supabase/worker_punches.sql — that policy is the real boundary, not this page).
+
+  Nothing here becomes wages on its own. Every punch lands in an approval queue in the hub's
+  שעון עובדים page, and Daniel confirms it. That is what makes "no login" acceptable: the
+  worst a stranger with the URL can do is add a line to a queue that a human reads.
+
+  Offline first, because this is used standing at the bench where the signal is worst: a
+  punch is written to localStorage the moment the button is pressed and sent whenever the
+  network allows. The button never waits for the network to respond.
+-->
+<style>
+  :root {
+    --primary: #22d3ee; --accent: #34d399; --danger: #f87171; --warning: #fb923c;
+    --bg: #0f172a; --card: #1e293b; --card-hover: #334155;
+    --text: #e2e8f0; --text-muted: #94a3b8; --border: #334155;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text); min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 24px);
+  }
+  .wrap { max-width: 460px; margin: 0 auto; padding-top: 20px; }
+  header { text-align: center; margin-bottom: 22px; }
+  header .name { font-size: 26px; font-weight: 800; }
+  header .sub { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
+  .timer { text-align: center; font-size: 46px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+  .timer .since { display: block; font-size: 14px; font-weight: 500; color: var(--text-muted); letter-spacing: 0; margin-top: 6px; }
+  .big {
+    display: block; width: 100%; border: 0; border-radius: 16px; padding: 22px 16px;
+    font-size: 24px; font-weight: 800; color: #06202b; cursor: pointer; font-family: inherit;
+  }
+  .big.in { background: var(--accent); }
+  .big.out { background: var(--warning); }
+  .big:active { filter: brightness(0.92); }
+  label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+  input, select, textarea {
+    width: 100%; background: #0b1220; color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px; font-size: 16px; font-family: inherit;
+  }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  .btn {
+    width: 100%; border: 0; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 700;
+    background: var(--primary); color: #06202b; cursor: pointer; font-family: inherit; margin-top: 12px;
+  }
+  .btn.ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--text-muted); font-weight: 700; }
+  .entry { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .entry:last-child { border-bottom: 0; }
+  .entry .h { font-weight: 800; font-size: 16px; }
+  .entry .d { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+  .pill { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
+  .pill.sent { background: rgba(52,211,153,.14); color: var(--accent); }
+  .pill.queued { background: rgba(251,146,60,.14); color: var(--warning); }
+  .muted { color: var(--text-muted); font-size: 13px; text-align: center; padding: 10px 0; }
+  .toast {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 26px; z-index: 50;
+    background: var(--card-hover); color: var(--text); border: 1px solid var(--border);
+    padding: 12px 20px; border-radius: 999px; font-size: 14px; font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .toast.show { opacity: 1; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="setup" class="hidden">
+    <header><div class="name">שעון עבודה</div><div class="sub">Green Power</div></header>
+    <div class="card">
+      <label for="whoInput">מה השם שלך?</label>
+      <input id="whoInput" placeholder="לדוגמה: יוסי" autocomplete="name">
+      <button class="btn" id="whoSave">שמור והתחל</button>
+      <div class="muted" style="margin-top:14px;">
+        השם צריך להיות בדיוק כמו שהוא רשום במעבדה, אחרת הדיווח לא יתחבר לשעות שלך.
+      </div>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <header>
+      <div class="name" id="who"></div>
+      <div class="sub" id="todayLine"></div>
+    </header>
+
+    <div class="card">
+      <div class="timer" id="timer">00:00:00<span class="since" id="since">לא בעבודה</span></div>
+      <div style="margin-top:16px;">
+        <button class="big in" id="punch">▶️ כניסה</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>שכחת לדווח? רישום ידני</h2>
+      <div class="row">
+        <div>
+          <label for="mDate">תאריך</label>
+          <input type="date" id="mDate">
+        </div>
+        <div>
+          <label for="mHours">שעות</label>
+          <input type="number" id="mHours" step="0.25" min="0.25" max="24" inputmode="decimal" placeholder="7.5">
+        </div>
+      </div>
+      <label for="mNote" style="margin-top:12px;">הערה (לא חובה)</label>
+      <input id="mNote" placeholder="על מה עבדת">
+      <button class="btn" id="mSave">שלח דיווח</button>
+    </div>
+
+    <div class="card">
+      <h2>הדיווחים שלי</h2>
+      <div id="list"></div>
+    </div>
+
+    <button class="btn ghost" id="reset">זה לא אני — החלף שם</button>
+  </div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Same project as the hub. The key is publishable by design; the table's RLS is what
+  // limits this page to inserting (supabase/worker_punches.sql).
+  var SB_URL = 'https://vexdreijmfntkhpfbacc.supabase.co';
+  var SB_KEY = 'sb_publishable_T3iS6XDib3qSQwO2MTbGqQ_NmqyuvPZ';
+
+  var K_WORKER = 'gpclock_worker';
+  var K_ACTIVE = 'gpclock_active';
+  var K_QUEUE  = 'gpclock_queue';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var read = function (k, dflt) { try { var v = localStorage.getItem(k); return v === null ? dflt : JSON.parse(v); } catch (e) { return dflt; } };
+  var write = function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2600);
+  }
+
+  function todayISO() {
+    // Local date, not UTC: a punch at 23:30 Israel time belongs to that day, and toISOString
+    // would file it under tomorrow.
+    var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  function hhmmss(ms) {
+    var s = Math.max(0, Math.floor(ms / 1000)), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(Math.floor(s / 3600)) + ':' + p(Math.floor(s % 3600 / 60)) + ':' + p(s % 60);
+  }
+  function fmtHours(h) {
+    var m = Math.round(h * 60);
+    return Math.floor(m / 60) + ':' + ((m % 60) < 10 ? '0' : '') + (m % 60);
+  }
+  function fmtDate(iso) {
+    var p = iso.split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+
+  // ---- the queue: a punch is local the moment it is made, and sent whenever it can be ----
+  function enqueue(punch) {
+    var q = read(K_QUEUE, []);
+    q.unshift(punch);
+    write(K_QUEUE, q.slice(0, 200));
+    renderList();
+    flush();
+  }
+
+  var flushing = false;
+  function flush() {
+    if (flushing || !navigator.onLine) return;
+    var q = read(K_QUEUE, []);
+    var pending = q.filter(function (p) { return !p.sent; });
+    if (!pending.length) return;
+    flushing = true;
+    var next = function (i) {
+      if (i >= pending.length) { flushing = false; renderList(); return; }
+      var p = pending[i];
+      fetch(SB_URL + '/rest/v1/worker_punches', {
+        method: 'POST',
+        headers: {
+          apikey: SB_KEY,
+          Authorization: 'Bearer ' + SB_KEY,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal'
+        },
+        body: JSON.stringify({
+          worker: p.worker, work_date: p.work_date, hours: p.hours,
+          started_at: p.started_at || null, ended_at: p.ended_at || null,
+          note: p.note || null, source: p.source
+        })
+      }).then(function (r) {
+        if (r.ok) {
+          var all = read(K_QUEUE, []);
+          for (var j = 0; j < all.length; j++) if (all[j].id === p.id) all[j].sent = true;
+          write(K_QUEUE, all);
+        }
+        next(i + 1);
+      }).catch(function () { flushing = false; renderList(); });
+    };
+    next(0);
+  }
+
+  function submit(hours, opts) {
+    opts = opts || {};
+    var worker = read(K_WORKER, '');
+    enqueue({
+      id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6),
+      worker: worker,
+      work_date: opts.date || todayISO(),
+      hours: Math.round(hours * 100) / 100,
+      started_at: opts.started_at || null,
+      ended_at: opts.ended_at || null,
+      note: opts.note || '',
+      source: opts.source || 'clock',
+      sent: false
+    });
+  }
+
+  // ---- the clock ----
+  var tick = null;
+  function renderClock() {
+    var active = read(K_ACTIVE, null);
+    var btn = $('punch'), timer = $('timer'), since = $('since');
+    if (active && active.startedAt) {
+      var ms = Date.now() - active.startedAt;
+      timer.firstChild.nodeValue = hhmmss(ms);
+      var d = new Date(active.startedAt);
+      since.textContent = 'מאז ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      btn.textContent = '⏹ יציאה';
+      btn.className = 'big out';
+      if (!tick) tick = setInterval(renderClock, 1000);
+    } else {
+      timer.firstChild.nodeValue = '00:00:00';
+      since.textContent = 'לא בעבודה';
+      btn.textContent = '▶️ כניסה';
+      btn.className = 'big in';
+      if (tick) { clearInterval(tick); tick = null; }
+    }
+  }
+
+  function punch() {
+    var active = read(K_ACTIVE, null);
+    if (!active || !active.startedAt) {
+      write(K_ACTIVE, { startedAt: Date.now() });
+      renderClock();
+      toast('נרשמה כניסה. בהצלחה!');
+      return;
+    }
+    var started = active.startedAt, ended = Date.now();
+    var hours = (ended - started) / 3600000;
+    if (hours < 0.02) {
+      if (!confirm('פחות מדקה. לבטל את הכניסה?')) return;
+      localStorage.removeItem(K_ACTIVE); renderClock(); return;
+    }
+    // A forgotten clock-out is the normal failure of every time clock. The database refuses
+    // more than 24h, and guessing a number here would put a wrong one into the wages queue —
+    // so hand it to the person who knows, with the manual form already filled in.
+    if (hours > 24) {
+      localStorage.removeItem(K_ACTIVE);
+      renderClock();
+      $('mDate').value = new Date(started).toISOString().slice(0, 10);
+      $('mHours').focus();
+      alert('השעון רץ יותר מ‑24 שעות — כנראה שכחת לצאת.\nרשום למטה כמה שעות באמת עבדת באותו יום.');
+      return;
+    }
+    localStorage.removeItem(K_ACTIVE);
+    submit(hours, {
+      date: new Date(started).getFullYear() + '-' +
+            ('0' + (new Date(started).getMonth() + 1)).slice(-2) + '-' +
+            ('0' + new Date(started).getDate()).slice(-2),
+      started_at: new Date(started).toISOString(),
+      ended_at: new Date(ended).toISOString(),
+      source: 'clock'
+    });
+    renderClock();
+    toast('נרשמו ' + fmtHours(hours) + ' שעות');
+  }
+
+  function manual() {
+    var date = $('mDate').value || todayISO();
+    var hours = parseFloat($('mHours').value);
+    if (!hours || hours <= 0) { alert('כמה שעות עבדת?'); $('mHours').focus(); return; }
+    if (hours > 24) { alert('לא יכול להיות יותר מ‑24 שעות ביום.'); return; }
+    submit(hours, { date: date, note: $('mNote').value.trim(), source: 'manual' });
+    $('mHours').value = ''; $('mNote').value = '';
+    toast('הדיווח נשלח');
+  }
+
+  function renderList() {
+    var q = read(K_QUEUE, []);
+    var el = $('list');
+    if (!q.length) { el.innerHTML = '<div class="muted">עוד לא דיווחת שעות</div>'; return; }
+    el.innerHTML = q.slice(0, 25).map(function (p) {
+      var cls = p.sent ? 'sent' : 'queued';
+      var txt = p.sent ? 'נשלח' : 'ממתין לרשת';
+      var note = p.note ? ' · ' + p.note.replace(/</g, '&lt;') : '';
+      return '<div class="entry"><div><div class="h">' + fmtHours(p.hours) + ' שעות</div>' +
+             '<div class="d">' + fmtDate(p.work_date) + note + '</div></div>' +
+             '<span class="pill ' + cls + '">' + txt + '</span></div>';
+    }).join('');
+  }
+
+  // ---- who is this ----
+  function start(name) {
+    write(K_WORKER, name);
+    $('setup').classList.add('hidden');
+    $('app').classList.remove('hidden');
+    $('who').textContent = name;
+    $('todayLine').textContent = 'היום ' + fmtDate(todayISO());
+    $('mDate').value = todayISO();
+    renderClock();
+    renderList();
+    flush();
+  }
+
+  function boot() {
+    // The link Daniel sends carries the name: ?w=יוסי — so the worker never types it and
+    // never mistypes it. It is remembered, so the home-screen icon works without the param.
+    var param = new URLSearchParams(location.search).get('w');
+    if (param) { history.replaceState(null, '', location.pathname); }
+    var name = (param || read(K_WORKER, '') || '').trim();
+    if (name) { start(name); } else { $('setup').classList.remove('hidden'); }
+
+    $('punch').addEventListener('click', punch);
+    $('mSave').addEventListener('click', manual);
+    $('whoSave').addEventListener('click', function () {
+      var v = $('whoInput').value.trim();
+      if (!v) { $('whoInput').focus(); return; }
+      start(v);
+    });
+    $('reset').addEventListener('click', function () {
+      if (!confirm('להחליף שם? דיווחים שכבר נשלחו לא יימחקו.')) return;
+      localStorage.removeItem(K_WORKER);
+      localStorage.removeItem(K_ACTIVE);
+      location.reload();
+    });
+
+    window.addEventListener('online', flush);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { renderClock(); flush(); } });
+    setInterval(flush, 60000);
+
+    if ('serviceWorker' in navigator) {
+      // Scoped to /clock/ on purpose: this page must keep working at the bench with no
+      // signal, and it has no business controlling the hub at the root.
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+})();
+</script>
+</body>
+</html>
