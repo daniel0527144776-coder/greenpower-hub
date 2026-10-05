@@ -2700,7 +2700,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v402';
+const HUB_BUILD = 'v404';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -8931,6 +8931,13 @@ const VEHICLE_PACKS = [
     // his own build does not fit the frame it is in. It is shown in the lying section instead.
     frame: 'שרטוט היצרן: מלבן פנימי 370×200, החלל עד 450 באורך ו-265 ברוחב (צלעות 250/180/140/420) · גוף השלדה 115, המכסים 150 במרכז',
     side: { L: 393, H: 255, across: 152, rows: 11, widest: 17, perSide: 165, stacks: 2, holder: 'square-23', confirmed: true } },
+  // ── ATVs. A plastic battery tub he measured (Daniel, 2026-10-05): "מידות אמבטיה טרקטורון מארז
+  // פלסטיק גובה 13 אורך 35.5 רוחב 23" = 355 × 230 × 130. One standing layer (130 takes one 21700, not
+  // two). His way — groups across the 230, the series along the 355 — puts 48V 13S11P (143), 52V
+  // 14S11P (154, the most) and 60V 16S9P (144) in it, and no 72V: twenty groups do not fit along 355.
+  // hubOnly: "a plastic ATV tub" is not a model a customer can check, so it stays in the hub.
+  { g: 'טרקטורונים', m: 'טרקטורון — מארז פלסטיק', src: 'נמדד', p: 21.5, s60: 16, p60: 9, s72: 0, p72: 0, max: 154, hubOnly: true,
+    tub: '355×230×130 מ"מ (נמדד: אורך 35.5, רוחב 23, גובה 13) · מארז פלסטיק' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' ,
     tub: '420×155×65 מ"מ — לפי מידות הסוללה המקורית (boardstore), לא נמדד' },
   // The OX is NOT the OXO. Its tub is two rectangles — 425x165 wide plus 60x140 narrow —
@@ -8998,6 +9005,7 @@ function vehType(v) {
   if (v.g.indexOf('אופניים') === 0) return 'ebike';
   if (v.g.indexOf('אופנועים') === 0 || v.g.indexOf('ריקשות') > -1) return 'moto';
   if (v.g.indexOf('E-Moto') > -1) return 'emoto';
+  if (v.g.indexOf('טרקטורונים') === 0) return 'atv';
   return 'scooter';
 }
 const VEH_ART = {
@@ -9018,6 +9026,11 @@ const VEH_ART = {
     '<circle cx="10" cy="22" r="7"/><circle cx="38" cy="22" r="7"/>' +
     '<path d="M10 22h12l-4-11zM18 11h14l6 11M22 22l10-11"/>' +
     '<path d="M24 19l6-6" stroke-width="3.5"/><path d="M15 9h6"/><path d="M32 11l-1-4h4"/>',
+  // A quad: two fat wheels a side, seen from the side, the seat and the bars over a low body.
+  atv:
+    '<circle cx="11" cy="23" r="7"/><circle cx="37" cy="23" r="7"/><circle cx="11" cy="23" r="3"/><circle cx="37" cy="23" r="3"/>' +
+    '<path d="M5 15h38l-4 6H9z" fill="currentColor" fill-opacity=".22"/>' +
+    '<path d="M18 15l2-5h10l2 5" stroke-width="3"/><path d="M36 15l2-7h5"/>',
   moto:
     '<circle cx="10" cy="23" r="6"/><circle cx="38" cy="23" r="6"/>' +
     '<rect x="5" y="7" width="12" height="8" rx="1"/>' +

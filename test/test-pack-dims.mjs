@@ -407,7 +407,8 @@ check('and none of them is empty', art.inked, 'ok');
 // A vehType that quietly answered "scooter" for everything would still pass the count above
 // and give 29 identical pictures — which is worse than no picture, because it looks right.
 // Five since the Silver Fish (2026-10-04): an e-bike is drawn as a bicycle, not a scooter.
-check('all five vehicle kinds are drawn', art.kinds === 'bomber,ebike,emoto,moto,scooter', art.kinds);
+// Six since the ATV tub (2026-10-05): a quad is drawn as a quad.
+check('all six vehicle kinds are drawn', art.kinds === 'atv,bomber,ebike,emoto,moto,scooter', art.kinds);
 check('nothing in the list fetches an image — every photo is inline', art.imgs === 0, String(art.imgs));
 
 // The Bomber is a frame family whose versions differ by 3.5x in what they hold, so one row
@@ -874,6 +875,34 @@ const fishMax = await page.evaluate((SELF) => {
 check('the case takes 132: 48V 50Ah (13S10P, 130 cells) goes in, 13S11P does not',
   fishMax.max === 132 && /✅ נכנסת — 13S10P · 50Ah, 130 תאים/.test(fishMax.ten) && /מקסימום במארז\s*48V: 13S10P · 50Ah/.test(fishMax.ten)
   && /⛔ גדולה מדי — 13S11P · 55Ah, 143 תאים · במארז נכנסים 132/.test(fishMax.eleven), [fishMax.ten.slice(0, 120), fishMax.eleven.slice(0, 120)]);
+// ---- the ATV plastic tub (Daniel, 2026-10-05) ----
+// "מידות אמבטיה טרקטורון מארז פלסטיק גובה 13 אורך 35.5 רוחב 23" = 355 × 230 × 130, measured, one
+// standing layer. His way — groups across the 230, series along the 355 — takes 60V 16S9P (45Ah, 144
+// cells) and no 72V: 20 groups do not fit along 355. hubOnly, since "a plastic ATV tub" is no model a
+// customer can check. --selftest swaps length and height (the 130 read as the length), which is
+// the mistake a "גובה 13 אורך 35.5" order invites.
+const atv = await page.evaluate((SELF) => {
+  const name = 'טרקטורון — מארז פלסטיק';
+  const v = VEHICLE_PACKS.find((x) => x.m === name);
+  if (!v) return { missing: true };
+  if (SELF) v.tub = v.tub.replace('355×230×130', '130×230×355');
+  const tb = tubOf(v);
+  document.getElementById('dimCell').value = '21700-50e';
+  useVehiclePack(name);
+  const r60 = document.getElementById('dimResult').innerText;
+  const V60 = document.getElementById('dimV').value;
+  document.getElementById('dimV').value = '72'; onDimVoltage();
+  const r72 = document.getElementById('dimResult').innerText;
+  clearDimVehicle();
+  return { tb, type: vehType(v), hubOnly: v.hubOnly === true, measured: tubMeasured(v), V60, r60, r72 };
+}, SELFTEST);
+check('the ATV tub is in the table, measured, hub-only, drawn as a quad',
+  !atv.missing && atv.tb && atv.tb.L === 355 && atv.tb.W === 230 && atv.tb.H === 130 && atv.type === 'atv' && atv.hubOnly && atv.measured,
+  JSON.stringify(atv.missing ? atv : { tb: atv.tb, type: atv.type, hubOnly: atv.hubOnly, measured: atv.measured }));
+check('it opens on 60V 16S9P (144 cells), one layer, and says 72V does not go in',
+  !atv.missing && atv.V60 === '60' && /✅ נכנס/.test(atv.r60) && /16S 9P · 144 תאים/.test(atv.r60) && /× 74 מ"מ/.test(atv.r60)
+  && /60V: 16S9P · 45Ah/.test(atv.r60) && /72V: —/.test(atv.r60) && /⛔ לא נכנס/.test(atv.r72),
+  atv.missing ? 'missing' : [atv.V60, atv.r60.slice(0, 160), atv.r72.slice(0, 80)]);
 const fish = await page.evaluate((SELF) => {
   const name = 'סילבר פיש 72V';
   const v = VEHICLE_PACKS.find((x) => x.m === name);
