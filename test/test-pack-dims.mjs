@@ -315,9 +315,13 @@ check('and the 23mm square block is larger in area than either diagonal', nickel
 // the SAME P for both, which makes the 60V build 25% smaller in the same box — the shape of a
 // number copied across rather than recalculated. They are flagged on the row, not corrected.
 // (Read off the table itself since 2026-09-27 — the cards no longer print the builds.)
+// A row whose builds ARE the calculator's answer for its own measured tray is exempt: nothing was
+// copied, and the gap is geometry. The ATV tub (2026-10-05) takes 20S11P at 72V, a group to a row,
+// and 16S18P at 60V, a group to two rows — 220 against 288 cells, in the same box, both his way.
 const flagged = await page.evaluate(() => VEHICLE_PACKS.filter((v) => {
   const c60 = v.s60 * v.p60, c72 = v.s72 * v.p72;
-  return c60 && c72 && Math.max(c60, c72) / Math.min(c60, c72) > 1.15;
+  const own = (V, P) => { const b = tubMeasured(v) && tubBest(v, V, DIM_CELLS['21700-50e'], 21700); return !!b && b.P === P; };
+  return c60 && c72 && Math.max(c60, c72) / Math.min(c60, c72) > 1.15 && !(own(60, v.p60) && own(72, v.p72));
 }).map((v) => v.m));
 // Corrected on 2026-08-31, so nothing should be flagged now — and the check stays, because
 // its job is the NEXT row someone adds, not the four that have been fixed.
@@ -876,33 +880,40 @@ check('the case takes 132: 48V 50Ah (13S10P, 130 cells) goes in, 13S11P does not
   fishMax.max === 132 && /✅ נכנסת — 13S10P · 50Ah, 130 תאים/.test(fishMax.ten) && /מקסימום במארז\s*48V: 13S10P · 50Ah/.test(fishMax.ten)
   && /⛔ גדולה מדי — 13S11P · 55Ah, 143 תאים · במארז נכנסים 132/.test(fishMax.eleven), [fishMax.ten.slice(0, 120), fishMax.eleven.slice(0, 120)]);
 // ---- the ATV plastic tub (Daniel, 2026-10-05) ----
-// "מידות אמבטיה טרקטורון מארז פלסטיק גובה 13 אורך 35.5 רוחב 23" = 355 × 230 × 130, measured, one
-// standing layer. His way — groups across the 230, series along the 355 — takes 60V 16S9P (45Ah, 144
-// cells) and no 72V: 20 groups do not fit along 355. hubOnly, since "a plastic ATV tub" is no model a
-// customer can check. --selftest swaps length and height (the 130 read as the length), which is
-// the mistake a "גובה 13 אורך 35.5" order invites.
+// "מידות אמבטיה טרקטורון מארז פלסטיק גובה 13 אורך 34.5 רוחב 23 — תעדכן שהגובה 17cm" = 345 × 230 × 170,
+// measured. 170 takes two standing 21700, and an ATV may be folded into two layers, so it opens on
+// 72V 20S11P (220 cells, 55Ah) in two layers, and takes 60V 16S18P (90Ah) at most. hubOnly, since "a
+// plastic ATV tub" is no model a customer can check.
+// The stacking rule matched 'טרקטורון' (final nun) and so never the group 'טרקטורונים' (plain nun):
+// the row passed only because its model name happens to say טרקטורון. Any other ATV in the group
+// was held to one layer. --selftest puts that pattern back, and swaps length and height (the 170
+// read as the length), the mistake a "גובה … אורך …" order invites.
 const atv = await page.evaluate((SELF) => {
   const name = 'טרקטורון — מארז פלסטיק';
   const v = VEHICLE_PACKS.find((x) => x.m === name);
   if (!v) return { missing: true };
-  if (SELF) v.tub = v.tub.replace('355×230×130', '130×230×355');
+  if (SELF) {
+    v.tub = v.tub.replace('345×230×170', '170×230×345');
+    window.stackAllowed = (x) => !x || /אופנוע|ריקשה|E-Moto|טרקטורון/i.test((x.g || '') + ' ' + (x.m || ''));
+  }
   const tb = tubOf(v);
+  const groupStacks = stackAllowed({ g: 'טרקטורונים', m: 'Can-Am Outlander' });
   document.getElementById('dimCell').value = '21700-50e';
   useVehiclePack(name);
-  const r60 = document.getElementById('dimResult').innerText;
-  const V60 = document.getElementById('dimV').value;
-  document.getElementById('dimV').value = '72'; onDimVoltage();
   const r72 = document.getElementById('dimResult').innerText;
+  const V = document.getElementById('dimV').value;
   clearDimVehicle();
-  return { tb, type: vehType(v), hubOnly: v.hubOnly === true, measured: tubMeasured(v), V60, r60, r72 };
+  return { tb, type: vehType(v), hubOnly: v.hubOnly === true, measured: tubMeasured(v), groupStacks, V, r72 };
 }, SELFTEST);
-check('the ATV tub is in the table, measured, hub-only, drawn as a quad',
-  !atv.missing && atv.tb && atv.tb.L === 355 && atv.tb.W === 230 && atv.tb.H === 130 && atv.type === 'atv' && atv.hubOnly && atv.measured,
+check('the ATV tub is in the table, 345 × 230 × 170 measured, hub-only, drawn as a quad',
+  !atv.missing && atv.tb && atv.tb.L === 345 && atv.tb.W === 230 && atv.tb.H === 170 && atv.type === 'atv' && atv.hubOnly && atv.measured,
   JSON.stringify(atv.missing ? atv : { tb: atv.tb, type: atv.type, hubOnly: atv.hubOnly, measured: atv.measured }));
-check('it opens on 60V 16S9P (144 cells), one layer, and says 72V does not go in',
-  !atv.missing && atv.V60 === '60' && /✅ נכנס/.test(atv.r60) && /16S 9P · 144 תאים/.test(atv.r60) && /× 74 מ"מ/.test(atv.r60)
-  && /60V: 16S9P · 45Ah/.test(atv.r60) && /72V: —/.test(atv.r60) && /⛔ לא נכנס/.test(atv.r72),
-  atv.missing ? 'missing' : [atv.V60, atv.r60.slice(0, 160), atv.r72.slice(0, 80)]);
+check('any vehicle in the ATV group may be folded into two layers, not only one named טרקטורון',
+  !atv.missing && atv.groupStacks === true, String(atv.groupStacks));
+check('it opens on 72V 20S11P (220 cells) in two layers, and 60V takes 16S18P at most',
+  !atv.missing && atv.V === '72' && /✅ נכנס/.test(atv.r72) && /20S 11P · 220 תאים/.test(atv.r72) && /2 שכבות/.test(atv.r72)
+  && /60V: 16S18P · 90Ah/.test(atv.r72) && /72V: 20S11P · 55Ah/.test(atv.r72),
+  atv.missing ? 'missing' : [atv.V, atv.r72.slice(0, 200)]);
 const fish = await page.evaluate((SELF) => {
   const name = 'סילבר פיש 72V';
   const v = VEHICLE_PACKS.find((x) => x.m === name);

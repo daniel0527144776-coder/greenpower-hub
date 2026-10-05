@@ -2700,7 +2700,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v404';
+const HUB_BUILD = 'v405';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7858,9 +7858,11 @@ let dimExtraAuto = null;
 // 2026-09-01: "לקפל ל2 זה רק באופנועים וטרקטורונים אם שכבה אחת לא מספיקה"). A scooter tub is
 // too shallow, and offering two layers there produces a pack that fits on screen and not in
 // the vehicle.
+// 'טרקטור', not 'טרקטורון': the word ends in a final nun (ן) and the plural group name
+// 'טרקטורונים' has a plain one (נ), so the old pattern never matched the group (2026-10-05).
 function stackAllowed(v) {
   if (!v) return true;
-  return /אופנוע|ריקשה|E-Moto|טרקטורון/i.test((v.g || '') + ' ' + (v.m || ''));
+  return /אופנוע|ריקשה|E-Moto|טרקטור/i.test((v.g || '') + ' ' + (v.m || ''));
 }
 
 // HOW HE BUILDS (Daniel, 2026-09-25: "בונה בקבוצות מהחלק הצר לרוחב ואז עולה עם השורות לכל
@@ -8932,12 +8934,14 @@ const VEHICLE_PACKS = [
     frame: 'שרטוט היצרן: מלבן פנימי 370×200, החלל עד 450 באורך ו-265 ברוחב (צלעות 250/180/140/420) · גוף השלדה 115, המכסים 150 במרכז',
     side: { L: 393, H: 255, across: 152, rows: 11, widest: 17, perSide: 165, stacks: 2, holder: 'square-23', confirmed: true } },
   // ── ATVs. A plastic battery tub he measured (Daniel, 2026-10-05): "מידות אמבטיה טרקטורון מארז
-  // פלסטיק גובה 13 אורך 35.5 רוחב 23" = 355 × 230 × 130. One standing layer (130 takes one 21700, not
-  // two). His way — groups across the 230, the series along the 355 — puts 48V 13S11P (143), 52V
-  // 14S11P (154, the most) and 60V 16S9P (144) in it, and no 72V: twenty groups do not fit along 355.
+  // פלסטיק גובה 13 אורך 34.5 רוחב 23 — תעדכן שהגובה 17cm" = 345 × 230 × 170. (He first sent 35.5 long
+  // and 13 high; this is the corrected one.) 170 takes two standing 21700 (2 × 74), and an ATV may be
+  // folded into two layers when one will not do ("לקפל ל2 זה רק באופנועים וטרקטורונים"). His way —
+  // groups across the 230, the series along the 345 less the BMS — that is 72V 20S11P (220, 55Ah),
+  // 60V 16S18P (288, 90Ah, the most), 52V 14S18P (252) and 48V 13S18P (234), all in two layers.
   // hubOnly: "a plastic ATV tub" is not a model a customer can check, so it stays in the hub.
-  { g: 'טרקטורונים', m: 'טרקטורון — מארז פלסטיק', src: 'נמדד', p: 21.5, s60: 16, p60: 9, s72: 0, p72: 0, max: 154, hubOnly: true,
-    tub: '355×230×130 מ"מ (נמדד: אורך 35.5, רוחב 23, גובה 13) · מארז פלסטיק' },
+  { g: 'טרקטורונים', m: 'טרקטורון — מארז פלסטיק', src: 'נמדד', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 11, max: 288, hubOnly: true,
+    tub: '345×230×170 מ"מ (נמדד: אורך 34.5, רוחב 23, גובה 17) · מארז פלסטיק' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OXO', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' ,
     tub: '420×155×65 מ"מ — לפי מידות הסוללה המקורית (boardstore), לא נמדד' },
   // The OX is NOT the OXO. Its tub is two rectangles — 425x165 wide plus 60x140 narrow —
