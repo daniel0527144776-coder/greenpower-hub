@@ -2700,7 +2700,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v399';
+const HUB_BUILD = 'v400';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9552,7 +9552,9 @@ async function waAdmin(body, query) {
 const WA_RESULT = { sent: '✅ ענה', asked: '❓ העביר אליך', paused: '⏸ שתק — ענית בעצמך', rate: '⏸ יותר מדי הודעות בשעה', blocked: '🚫 מספר חסום',
   off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל', manual: '📤 נשלח ממך',
   // the two the bot used to drop without a trace (2026-10-05): over ten minutes late, and a chat it cannot tell is a person
-  stale: '⌛ הגיעה באיחור — לא נענתה', unknown: '❔ שיחה שהבוט לא זיהה' };
+  stale: '⌛ הגיעה באיחור — לא נענתה', unknown: '❔ שיחה שהבוט לא זיהה',
+  // his choice (2026-10-05): someone saved in his contacts, left to him
+  saved: '📇 איש קשר שמור — עליך' };
 const WA_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 function waNum(c) {
   const d = String(c || '').split('@')[0];
@@ -9660,6 +9662,7 @@ function waSettingsHtml() {
     + '<div class="form-row"><label>מודל</label><select class="form-select" id="wbModel">' + opt('quality', st.model, 'איכותי (Sonnet)') + opt('saving', st.model, 'חסכוני (Haiku)') + '</select></div>'
     + chk('wbShabbat', st.shabbat, '🕯 שותק בשבת ובחג')
     + chk('wbIsrael', st.israelOnly, '🇮🇱 רק מספרים ישראליים')
+    + chk('wbSaved', st.skipSaved, '📇 לא עונה לאנשי קשר שמורים — רק למספרים חדשים')
     + chk('wbVoice', st.voice, '🎤 מתמלל הודעות קוליות')
     + chk('wbMedia', st.media, '🖼 קורא תמונות ו-PDF')
     + chk('wbAsk', st.askDaniel, '❓ מה שלא יודע — שואל אותך')
@@ -9785,7 +9788,7 @@ function waSaveSettings() {
   if (hours === 'custom' && !days.length) return showNotice('בחרת "שעות שאני קובע" בלי אף יום — הבוט לא יענה אף פעם. סמן לפחות יום אחד.');
   waDo({ op: 'settings', settings: { pauseHours: Number(wbVal('wbPause')), maxPerHour: Number(wbVal('wbMax')), hours,
     custom: { days, from: wbVal('wbFrom') || '00:00', to: wbVal('wbTo') || '23:59' }, model: wbVal('wbModel'),
-    shabbat: on('wbShabbat'), israelOnly: on('wbIsrael'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
+    shabbat: on('wbShabbat'), israelOnly: on('wbIsrael'), skipSaved: on('wbSaved'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
     hubFacts: on('wbFacts'), introduce: on('wbIntro'), learn: on('wbLearn') } }, '✅ ההגדרות נשמרו');
 }
 function waSaveInstructions() {

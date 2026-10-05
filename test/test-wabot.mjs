@@ -42,7 +42,8 @@ const DATA = {
   log: [{ at: NOW - 60000, c: '972501234567@c.us', n: EVIL, in: 'כמה עולה ' + EVIL, out: 'תשובה ' + EVIL, r: 'sent' },
         { at: NOW - 120000, c: '972504444444@c.us', n: 'משה', in: 'שלום', r: 'paused' },
         { at: NOW - 180000, c: '972505555555@c.us', n: 'דוד', r: 'stale', late: 1500 },
-        { at: NOW - 240000, c: '123456789012345@lid', n: 'לקוח', r: 'unknown' }],
+        { at: NOW - 240000, c: '123456789012345@lid', n: 'לקוח', r: 'unknown' },
+        { at: NOW - 300000, c: '972506060606@c.us', n: 'משה השכן', r: 'saved' }],
   paused: [{ c: '972504444444@c.us', n: 'משה', until: NOW + 3600000, manual: false }],
   questions: [{ id: 'q1', at: NOW - 30000, c: '972501234567@c.us', n: 'יוסי', q: 'יש מטען 84V? ' + EVIL, msg: 'יש לכם מטען?', done: false },
               { id: 'q0', at: NOW - 900000, c: '972501234567@c.us', n: 'יוסי', q: 'ישנה', done: true }],
@@ -109,15 +110,17 @@ check('numbers in the local form', t1.includes('050-123-4567') && t1.includes('0
 check('only the open question waits for him', (t1.match(/הבוט שאל אותך/g) || []).length === 1 && /שאלות שמחכות לך\s*1/.test(t1), '');
 check('the log, with why it did or did not answer', /✅ ענה/.test(t1) && /שתק — ענית בעצמך/.test(t1), '');
 check('including a message too late to answer, and a chat it could not place', /הגיעה באיחור — לא נענתה/.test(t1) && /שיחה שהבוט לא זיהה/.test(t1), '');
+check('and a saved contact left to him, with the setting to choose it', /איש קשר שמור — עליך/.test(t1) && /לא עונה לאנשי קשר שמורים/.test(t1)
+  && await page.evaluate(() => document.getElementById('wbSaved').checked === false), '');
 
 // the settings — worked in with only that section open
 await page.evaluate(() => document.querySelectorAll('#wabotBody details.fold').forEach((d) => { d.open = d.dataset.fold === 'settings'; }));
 await page.waitForTimeout(50);
-await page.evaluate(() => { document.getElementById('wbPause').value = '3'; document.getElementById('wbModel').value = 'saving'; document.getElementById('wbVoice').checked = false; waSaveSettings(); });
+await page.evaluate(() => { document.getElementById('wbPause').value = '3'; document.getElementById('wbModel').value = 'saving'; document.getElementById('wbVoice').checked = false; document.getElementById('wbSaved').checked = true; waSaveSettings(); });
 let p = await lastPost(1);
 check('the section he saved in is still open after the page re-draws, the others folded again',
   await page.evaluate(() => { const o = Object.fromEntries([...document.querySelectorAll('#wabotBody details.fold')].map((d) => [d.dataset.fold, d.open])); return o.settings === true && o.log === false && o.know === false && o.blocked === false; }), '');
-check('saving the settings sends what he set', p && p.op === 'settings' && p.settings.pauseHours === 3 && p.settings.model === 'saving' && p.settings.voice === false
+check('saving the settings sends what he set', p && p.op === 'settings' && p.settings.pauseHours === 3 && p.settings.model === 'saving' && p.settings.voice === false && p.settings.skipSaved === true
   && p.settings.shabbat === true && p.settings.israelOnly === true && p.settings.hours === 'always' && p.settings.custom.days.length === 7, p);
 await page.evaluate(() => { document.getElementById('wbHours').value = 'custom'; for (let i = 0; i < 7; i++) document.getElementById('wbDay' + i).checked = false; waSaveSettings(); });
 await page.waitForTimeout(300);
