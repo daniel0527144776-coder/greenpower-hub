@@ -177,6 +177,11 @@ jobs:
       - name: The hub's pop-up alerts
         run: node test/test-alerts.mjs
 
+      # The navigation merge (2026-10-05): 8 home cards, לקוחות ועבודות in two tabs with its views,
+      # the merged cards' tabs — and every page still reachable from the home page by tapping.
+      - name: The merged tabs and cards
+        run: node test/test-nav-merge.mjs
+
       # FUSION, his trading bot (2026-10-05): read with his login only, never "trading" when it has
       # stopped reporting, is down or lost IBKR, and nothing from the bot runs as markup.
       - name: The trading bot's page
