@@ -177,6 +177,11 @@ jobs:
       - name: The customer message through the bot
         run: node test/test-wa-compose.mjs
 
+      # A discount on a repair or a sale (2026-10-06): ₪ or %, never below zero, the price stored is
+      # what is paid, shown in the quotes and messages, and never taken off twice on a re-save.
+      - name: A discount on a repair or a sale
+        run: node test/test-discount.mjs
+
       # The pop-up alerts (2026-10-05): the bot's open questions, stuck work, the backup, the sync —
       # each exactly when its condition holds, new ones only, never over a window he has open.
       - name: The hub's pop-up alerts
