@@ -64,6 +64,8 @@ await page.evaluate(() => {
   Sync._headers = async () => ({});
 });
 if (SELFTEST) await page.evaluate(() => {
+  const src = Sync.push.toString().replace(/\n\s*if \(this\._pushSeq\[key\] !== seq\) return; \/\/ superseded while reading/g, '');
+  Sync.push = (0, eval)('({' + src + '})').push;
   window.mergeRows = (k, local, server) => (Array.isArray(server) ? server : local);
   window.mergeMap = (local, server) => server || local;
 });
@@ -143,6 +145,24 @@ const r = await page.evaluate(async (LATER) => {
   await Sync.pull();
   await wait('settings');
   out.settings = Store.get('settings');
+
+  // 8. two writes of one key inside one round trip (2026-10-06). The first push reads the cloud,
+  //    and while it waits the second write lands; the first push's merge must not be written back
+  //    over it — that is how an approved hour vanished from the list.
+  Store.set('worktime', []);
+  await wait('worktime');
+  const slow = window.fetch;
+  window.fetch = async (url, opt = {}) => { if (/hub_state/.test(String(url)) && opt.method !== 'POST') await new Promise((res) => setTimeout(res, 120)); return slow(url, opt); };
+  const seen = [];
+  const set0 = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) { if (k === 'gp_worktime') seen.push(JSON.parse(v).length); return set0.call(this, k, v); };
+  Store.set('worktime', [{ id: 'wq1', workerName: 'א', hours: 1, rate: 40, date: new Date().toISOString() }]);
+  await new Promise((res) => setTimeout(res, 30));
+  Store.set('worktime', [{ id: 'wq1', workerName: 'א', hours: 1, rate: 40, date: new Date().toISOString() }, { id: 'wq2', workerName: 'א', hours: 2, rate: 40, date: new Date().toISOString() }]);
+  await wait('worktime');
+  Storage.prototype.setItem = set0;
+  window.fetch = slow;
+  out.race = { seen, after: (Store.get('worktime') || []).length, cloud: ((window.CLOUD.worktime || {}).value || []).length };
   return out;
 }, later());
 
@@ -157,6 +177,8 @@ check('customers added on two devices both survive', r.customers === 'cA,cB', r)
 check('repairs added on two devices both survive', r.jobs === 'jA,jB', r);
 check('a setting changed here reaches the cloud with its new value', r.ownEditReachedCloud === 200, r.ownEditReachedCloud);
 check('settings changed on two devices keep both changes', r.settings && r.settings.hourly === 200 && r.settings.margin === 60, r.settings);
+check('a write that lands while the previous push reads the cloud is never written over',
+  r.race && r.race.seen.indexOf(2) >= 0 && r.race.seen.slice(r.race.seen.indexOf(2)).every((n) => n === 2) && r.race.after === 2 && r.race.cloud === 2, r.race);
 check('no page errors', errs.length === 0, errs.join(' | '));
 check('no native dialogs', dialogs.length === 0, dialogs.join(' | '));
 await browser.close();
