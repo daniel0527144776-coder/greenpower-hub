@@ -1862,6 +1862,7 @@ const VEHICLE_LABELS = { bike: 'אופניים חשמליים', scooter: 'קור
 // synced `biz` record — see the migration in init(), which is what actually moves it for
 // a hub that already has data.
 const LAB_ADDRESS = 'ניסים גאון 8 (בחנייה), אלעד';
+const LAB_HOURS = "א'-ה' 11:00-19:00";   // business.json; written into the repair "ready" message
 
 // ---- Settings (with new competitive defaults) ----
 let HOURLY = 180;       // Increased from 150 (competitive)
@@ -2352,8 +2353,8 @@ function showMessageToCopy(msg, title) {
   if (box) { box.value = msg; box.focus(); box.select(); }
 }
 
-function copyMessageBox() {
-  const box = document.getElementById('waCopyBox');
+function copyMessageBox(id) {
+  const box = document.getElementById(id || 'waCopyBox');
   if (!box) return;
   box.focus();
   box.select();
@@ -2722,7 +2723,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v413';
+const HUB_BUILD = 'v414';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4137,6 +4138,80 @@ function callCustomer(phone) {
   sendWhatsApp(phone, '', 'הלקוח');
 }
 
+// The 💬 on a repair or a sale, through the bot (2026-10-06, Daniel: "תעשה שהכפתור הווטאספ בלוח
+// בקרה גם יכול לשלוח הודעה ללקוח דרך הבוט אחרי תיקון ומכירה"). It opens the message for where
+// the job stands, written and editable: a repair's "התקבלה" / "בעבודה" / "מוכנה לאיסוף" / the
+// delivered summary with its warranty, a sale's quote or summary (buildQuoteText). 📤 sends it
+// from the business WhatsApp through the bot, the review request's route (op 'send'); nothing
+// goes out before he presses it. When the bot cannot be reached the message is there to copy, as
+// it always was, and 💬 צ׳אט still opens the empty chat the repair button used to open.
+let waComposeTarget = null;
+function openWaCompose(phone, name, text, title) {
+  if (!waNumber(phone)) { showMessageToCopy(text, title); return; }
+  waComposeTarget = { phone: String(phone), name: name || '' };
+  openModal(title || ('💬 הודעה ל' + (name || 'לקוח')),
+    '<textarea id="waComposeMsg" class="form-input-wide wb-area" style="min-height:220px">' + escPunch(text) + '</textarea>'
+    + '<div class="wt-muted" style="margin-top:6px">יישלח מהוואטסאפ העסקי שלך, דרך הבוט. אפשר לערוך לפני השליחה.</div>',
+    '<button class="btn btn-primary" data-wa-send onclick="sendWaCompose()">📤 שלח דרך הבוט</button>'
+    + '<button class="btn btn-secondary" onclick="copyMessageBox(\'waComposeMsg\')">📋 העתק</button>'
+    + '<button class="btn btn-secondary" onclick="closeModal();callCustomer(waComposeTarget.phone)">💬 צ׳אט</button>');
+}
+async function sendWaCompose() {
+  const t = waComposeTarget, box = document.getElementById('waComposeMsg');
+  if (!t || !box) return;
+  const text = box.value.trim();
+  if (!text) { showNotice('ההודעה ריקה'); return; }
+  const btn = document.querySelector('[data-wa-send]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ שולח…'; }
+  try {
+    if (typeof Sync === 'undefined' || !Sync.isAuthed()) throw new Error('not logged in');
+    await waAdmin({ op: 'send', chat: t.phone, text, name: t.name });
+    closeModal();
+    showNotice('✅ ההודעה נשלחה ל' + (t.name || 'לקוח') + ' בוואטסאפ');
+  } catch (e) {
+    // the bot out of reach (offline, logged out, the plan's limit): the message to copy
+    closeModal();
+    showMessageToCopy(text, 'הבוט לא זמין — העתק ושלח בעצמך');
+  }
+}
+// What a repair's customer is told, by where the job stands. The price is his own; the warranty
+// is warrantyFor(the job's work), never the setting.
+function repairMessage(j) {
+  const B = bizDetails || {};
+  const hi = (j.customerName ? 'שלום ' + j.customerName : 'שלום') + ' 👋';
+  const spec = j.voltage && j.capacity ? j.voltage + 'V ' + j.capacity + 'Ah' : '';
+  const pack = 'הסוללה שלך' + (spec ? ' (' + spec + ')' : '');
+  const sign = ((B.name || 'Green Power') + '\n' + (B.phone || '')).trim();
+  const price = Number(j.price) || 0;
+  const st = jobStatusOf(j);
+  if (st === 'מוכן לאיסוף') {
+    return [hi, pack + ' מוכנה לאיסוף ✅',
+      '🔧 ' + jobTypeLabel(j) + (price ? '\n💰 לתשלום: ' + shek(price) : ''),
+      '📍 ' + (B.address || LAB_ADDRESS) + '\n🕐 ' + LAB_HOURS, sign].join('\n\n');
+  }
+  if (st === 'נמסר') {
+    const months = warrantyFor(Array.isArray(j.jobs) ? j.jobs : []);
+    const end = j.warrantyEnd ? new Date(j.warrantyEnd).toLocaleDateString('he-IL') : '';
+    const lines = [spec ? '🔋 ' + spec : '', '🔧 ' + jobTypeLabel(j), price ? '💰 ' + shek(price) : '',
+      months ? '🛡️ אחריות ' + months + ' חודשים' + (end ? ' (עד ' + end + ')' : '') : ''].filter(Boolean);
+    // "keep this message, it is your warranty" only where there is one: an inspection carries none
+    const thanks = months ? 'תודה שבחרת בנו! הנה סיכום התיקון. שמור את ההודעה, היא האחריות שלך.' : 'תודה שבחרת בנו! הנה סיכום הבדיקה.';
+    return [hi, thanks, lines.join('\n'), 'כל שאלה, כאן בוואטסאפ.', sign].join('\n\n');
+  }
+  if (st === 'התקבל במעבדה') return [hi, pack + ' התקבלה במעבדה. נעדכן אותך כאן כשהיא מוכנה לאיסוף.', sign].join('\n\n');
+  return [hi, pack + ' בעבודה. נעדכן אותך כאן כשהיא מוכנה לאיסוף.', sign].join('\n\n');
+}
+function jobWhatsApp(id) {
+  const j = (Store.get('jobs') || []).find((x) => String(x.id) === String(id));
+  if (!j) return;
+  openWaCompose(j.customerPhone, j.customerName, repairMessage(j));
+}
+// Marking a repair מוכן לאיסוף offers the "ready" message, the way נמסר offers the review request.
+function offerReadyMessage(j) {
+  if (!j || !waNumber(j.customerPhone)) return;
+  askConfirm('מוכן לאיסוף ✅\nלשלוח ל' + (j.customerName || 'לקוח') + ' הודעה שהסוללה מוכנה?', () => jobWhatsApp(j.id));
+}
+
 // ============================================================
 // WARRANTIES
 // ============================================================
@@ -4238,7 +4313,7 @@ function renderWarranties() {
           ${j.kind === 'sale' ? 'נמכר' : 'תיקון'}: ${new Date(j.date).toLocaleDateString('he-IL')} · אחריות עד: ${end.toLocaleDateString('he-IL')}
         </div>
         <div class="btn-group" style="margin-top: 8px;">
-          ${j.phone ? `<button class="btn btn-sm btn-secondary" style="background: #25D366; color: white; border: none;" onclick="callCustomer('${j.phone}')">💬 שלח הודעה</button>` : ''}
+          ${j.phone ? `<button class="btn btn-sm btn-secondary" style="background: #25D366; color: white; border: none;" onclick="${j.kind === 'sale' ? 'orderWhatsApp' : 'jobWhatsApp'}('${j.id}')">💬 שלח הודעה</button>` : ''}
           ${j.kind === 'sale'
             ? `<button class="btn btn-sm btn-secondary" onclick="openOrderEditor('${j.id}')">✏️ ערוך מכירה</button><button class="btn btn-sm btn-secondary" onclick="openStickerFor('order','${j.id}')">🏷️ מדבקה</button>`
             : `<button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','warranties')">✏️ ערוך</button>
@@ -6001,6 +6076,7 @@ function cycleJobStatus(id) {
   Store.set('jobs', jobs);
   renderOrders();
   if (j.jobStatus === 'נמסר') offerReviewAsk(j.customerPhone, j.customerName);
+  else if (j.jobStatus === 'מוכן לאיסוף') offerReadyMessage(j);
 }
 function repairRow(j) {
   let warr = '';
@@ -6018,7 +6094,7 @@ function repairRow(j) {
         <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div>${Number(j.profit) ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(Number(j.profit))}</div>` : ''}<div style="margin-top:3px;">${jobStatusPill(jobStatusOf(j))}</div><div class="list-item-subtitle">${warr}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
-        ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="callCustomer('${j.customerPhone}')">💬 הודעה</button>` : ''}
+        ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="jobWhatsApp('${j.id}')">💬 הודעה</button>` : ''}
         <button class="btn btn-sm btn-secondary" onclick="cycleJobStatus('${j.id}')">🔁 סמן ${nextJobStatus(jobStatusOf(j))}</button>
         <button class="btn btn-sm btn-secondary" onclick="navigateTo('warranties')">🛡️ אחריות</button>
         <button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','orders')">✏️ ערוך</button>
@@ -6223,7 +6299,7 @@ function orderItemSpec(it) {
 }
 function orderWhatsApp(id) {
   const orders = Store.get('orders') || [], o = orders.find(x => x.id === id); if (!o) return;
-  sendWhatsApp(o.phone, buildQuoteText(o), 'הלקוח');
+  openWaCompose(o.phone, o.customer, buildQuoteText(o));
 }
 // The quote used to be four lines: a name, the items, a total, "אחריות מלאה · תאי Grade A".
 // It said nothing about which cells, what BMS, what the warranty actually is, how long it
@@ -10445,6 +10521,7 @@ function saveJobEdit(jobId) {
   closeModal();
   afterJobChange();
   if (j.jobStatus === 'נמסר' && wasStatus !== 'נמסר') offerReviewAsk(phone, name);
+  else if (j.jobStatus === 'מוכן לאיסוף' && wasStatus !== 'מוכן לאיסוף') offerReadyMessage(j);
 }
 
 function deleteJob(jobId, ret) {
