@@ -124,8 +124,10 @@ check('an error is shown, with a way to try again', /לא הצלחתי להגי�
 // the way in from the home page
 RESP = { status: 200, body: { snapshot: SNAP, receivedAt: iso(Date.now()) } };
 await page.evaluate(() => navigateTo('home'));
-await page.evaluate(() => [...document.querySelectorAll('.quick-card')].find((c) => /בוט מסחר/.test(c.textContent)).click());
-check('the home page has a card for it', await page.evaluate(() => document.getElementById('page-fusion').classList.contains('active')), '');
+// one "בוטים" card since 2026-10-05 (the two bots merged); its strip's "מסחר" tab is this page
+await page.evaluate(() => [...document.querySelectorAll('.quick-card')].find((c) => /בוטים/.test(c.textContent)).click());
+await page.evaluate(() => [...document.querySelectorAll('#page-wabot .page-group-tabs .sub-tab')].find((t) => /מסחר/.test(t.textContent)).click());
+check('the home page reaches it: the בוטים card, then its מסחר tab', await page.evaluate(() => document.getElementById('page-fusion').classList.contains('active')), '');
 check('no page errors', errs.length === 0, errs.join(' | '));
 
 await browser.close();
