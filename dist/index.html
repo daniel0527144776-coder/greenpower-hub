@@ -986,7 +986,6 @@ body { min-height: 100vh; }
     <button class="btn btn-sm btn-warning" style="white-space:nowrap;" onclick="openDupeMerge()">מזג</button>
   </div>
   <div class="card">
-    <input type="text" class="form-input-wide" id="customerSearch" placeholder="🔍 חיפוש לפי שם או טלפון..." style="width: 100%; margin-bottom: 12px;" oninput="renderCustomers()">
     <div id="customersList"></div>
   </div>
 </section>
@@ -1169,7 +1168,6 @@ body { min-height: 100vh; }
   <div id="dimPane-veh">
   <div class="card">
     <p style="font-size:11px;color:var(--warning,#f59e0b);margin:0 0 8px;">⚠ הנתונים כאן מ-AI, לא נמדדו — חוץ ממה שמסומן ✓ נמדד. לחיצה על כלי מחשבת לו חבילה.</p>
-    <input type="text" class="form-input-wide" id="vpSearch" placeholder="🔍 חפש כלי…" oninput="renderVehiclePacks()" style="margin-bottom:10px;">
     <div id="vpList"></div>
     <button class="btn btn-secondary btn-block btn-sm" style="margin-top:10px;" onclick="openDimEditor(null)">➕ הוסף מדידה של מגש</button>
   </div>
@@ -1235,7 +1233,6 @@ body { min-height: 100vh; }
        open/close-all, the cell route that decides HIS cost at the top, and each cell once. -->
   <div class="card">
     <div id="supWhoChips" class="sup-row"></div>
-    <input type="text" class="form-input-wide" id="supQ" placeholder="🔍 חיפוש (תא / BMS / מטען / ניקל…)" style="width:100%;margin-bottom:6px;" oninput="renderSupplier()">
     <div id="supplierList"></div>
     <div class="btn-group" style="margin-top:12px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="openSupplierAdd()">➕ הוסף פריט</button>
@@ -1353,6 +1350,12 @@ body { min-height: 100vh; }
       <label>עלות שעת עבודה לי (₪)</label>
       <input type="number" class="form-input" id="setLabourCost" value="60" min="0" step="5" onchange="saveSettings();">
     </div>
+    <!-- Where the cells are bought (2026-10-06, Daniel: "במחירון צריך שיהיה ברירת המחדל יבוא ימי, אפשר
+         לשנות לאווירי ומקומי בהגדרות"). It moves "עלות לי" on every battery row, so it is a setting. -->
+    <div class="form-row">
+      <label>עלות תאים לפי</label>
+      <div id="setCellRouteBox" class="sup-row" style="margin:0;"></div>
+    </div>
   </div>
 
   <div class="card">
@@ -1395,7 +1398,6 @@ body { min-height: 100vh; }
       <div class="sub-tab" data-tier="PRO" onclick="setCatalogTier('PRO')">PRO</div>
       <div class="sub-tab" data-tier="OTHER" onclick="setCatalogTier('OTHER')">ללא סדרה</div>
     </div>
-    <input type="text" class="form-input-wide" id="catalogSearch" placeholder="🔍 חיפוש מוצר (72V, מטען, סברטון...)" style="width:100%; margin-bottom:10px;" oninput="renderCatalog()">
     <select class="form-select" id="catalogCat" style="width:100%; margin-bottom:10px;" onchange="renderCatalog()"></select>
     <div class="btn-group" style="margin-bottom:10px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(true)">⊕ פתח הכל</button>
@@ -1428,7 +1430,6 @@ body { min-height: 100vh; }
        horizontally-scrolling bar, which is where the least discoverable filter should
        never be. -->
   <div class="sub-tabs" id="salesFilterBar" style="flex-wrap:wrap;"></div>
-  <input type="text" class="form-input-wide" id="salesSearch" placeholder="🔍 חיפוש לפי שם, טלפון, פריט או מפרט" style="width:100%;margin-bottom:10px;" oninput="renderOrders()">
   <div id="ordersList"></div>
 </section>
 
@@ -1592,7 +1593,6 @@ body { min-height: 100vh; }
       <div class="sub-tab" data-sltab="repair" onclick="setStickerTab('repair')">תיקונים</div>
       <div class="sub-tab" data-sltab="new" onclick="setStickerTab('new')">בנייה/מכירה</div>
     </div>
-    <input type="text" class="form-input-wide" id="stickerSearch" placeholder="🔍 חיפוש (שם לקוח / מק\"ט / דגם)" style="width:100%;margin-bottom:10px;" oninput="renderStickerLog()">
     <div id="stickerlogList"></div>
   </div>
 </section>
@@ -2722,7 +2722,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v412';
+const HUB_BUILD = 'v413';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3730,10 +3730,7 @@ function toggleCalcBiz() {
 
 function renderCustomers() {
   const customers = Store.get('customers') || [];
-  const search = (document.getElementById('customerSearch')?.value || '').toLowerCase();
-  const filtered = customers.filter(c =>
-    !search || (c.name && c.name.toLowerCase().includes(search)) || (c.phone && c.phone.includes(search))
-  );
+  const filtered = customers.slice();
   filtered.sort((a, b) => new Date(b.lastVisit) - new Date(a.lastVisit));
 
 
@@ -3745,14 +3742,14 @@ function renderCustomers() {
   renderDupeBanner();
   const spendOf = customerSpendIndex();
   // Folded by the month of the last visit, the order the list is already in (2026-10-05, every tab
-  // folded); a search opens them.
+  // folded).
   const byMonth = new Map();
   for (const c of filtered) {
     const k = isNaN(new Date(c.lastVisit).getTime()) ? '' : monthKeyOf(c.lastVisit);
     if (!byMonth.has(k)) byMonth.set(k, { k, list: [] });
     byMonth.get(k).list.push(c);
   }
-  list.innerHTML = [...byMonth.values()].sort((a, b) => (b.k || '0').localeCompare(a.k || '0')).map((m) => fold('cust-' + (m.k || 'none'), m.k ? monthLabelHe(m.k) : 'בלי תאריך ביקור', custRows(m.list), { open: !!search, sub: true })).join('');
+  list.innerHTML = [...byMonth.values()].sort((a, b) => (b.k || '0').localeCompare(a.k || '0')).map((m) => fold('cust-' + (m.k || 'none'), m.k ? monthLabelHe(m.k) : 'בלי תאריך ביקור', custRows(m.list), { sub: true })).join('');
   function custRows(arr) { return arr.map((c, idx) => `
     <div class="list-item" onclick="openCustomerDetails(${customers.indexOf(c)})">
       <div class="list-item-header">
@@ -4460,7 +4457,14 @@ function setCellRoute(r) {
   const s = Store.get('settings') || {};
   s.cellRoute = r;
   Store.set('settings', s);
+  renderSettingsRoute();
   renderCatalog();
+}
+function renderSettingsRoute() {
+  const box = document.getElementById('setCellRouteBox');
+  if (!box) return;
+  const route = cellRoute();
+  box.innerHTML = CELL_ROUTES.map(([k, l]) => `<button class="sup-chip${k === route ? ' on' : ''}" onclick="setCellRoute('${k}')">${l}${k === 'sea' ? ' (ברירת מחדל)' : ''}</button>`).join('');
 }
 const CELL_CODE_SEA = { '50E': 'EVE 50E', '50SG': 'Tenpower 50SG', '50PL': 'EVE 50PL (Tabless)', '40P': 'EVE 40P', '35V': 'EVE 35V', '25P': 'EVE 25P', '26V': 'EVE 26V' };
 const cellWords = (x) => String(x || '').toLowerCase().split(/[\s\-·—()\/,|]+/);
@@ -4588,7 +4592,6 @@ function setSupWho(i) { SUP_WHO = SUP_WHOS[i] || ''; supOpenCats = new Set(); re
 function renderSupplier() {
   const el = document.getElementById('supplierList');
   if (!el) return;
-  const q = (document.getElementById('supQ') ? document.getElementById('supQ').value : '').trim().toLowerCase();
   const route = cellRoute();
 
   // The sea / air / local choice lives in the full price list now, beside "עלות לי ורווח"
@@ -4612,17 +4615,16 @@ function renderSupplier() {
   if (wc) wc.innerHTML = `<button class="sup-chip${!SUP_WHO ? ' on' : ''}" onclick="setSupWho(-1)">הכל</button>`
     + SUP_WHOS.map((w, i) => `<button class="sup-chip${w === SUP_WHO ? ' on' : ''}" onclick="setSupWho(${i})">${w}</button>`).join('');
 
-  const rows = merged.filter((r) => (!SUP_WHO || r.who === SUP_WHO)
-    && (!q || (r.who + ' ' + r.cat + ' ' + r.name).toLowerCase().includes(q)));
+  const rows = merged.filter((r) => !SUP_WHO || r.who === SUP_WHO);
   if (!rows.length) {
-    const noneImported = !(Store.get('supplier_prices') || []).length && !q;
+    const noneImported = !(Store.get('supplier_prices') || []).length;
     el.innerHTML = noneImported
       ? '<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">מחירוני הספקים עדיין לא יובאו.<br>לחץ <b>📥 ייבוא מחירון</b> ובחר את הקובץ <b>supplier-costs-import.json</b>.</div></div>'
       : '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא רכיב</div></div>';
     return;
   }
   const strip = (r) => (String(r.cat || '').startsWith(r.who + ' · ') ? r.cat.slice(r.who.length + 3) : (r.cat || 'כללי'));
-  // Grouped supplier → category, each category folded; a search opens everything it found.
+  // Grouped supplier → category, each category folded.
   const groups = new Map();
   rows.forEach((r) => { const k = r.who + '|' + strip(r); if (!groups.has(k)) groups.set(k, { who: r.who, cat: strip(r), list: [] }); groups.get(k).list.push(r); });
   supCatKeys = [...groups.keys()];
@@ -4631,7 +4633,7 @@ function renderSupplier() {
   supCatKeys.forEach((k, i) => {
     const g = groups.get(k);
     if (!SUP_WHO && g.who !== lastWho) { html += `<div class="sup-who">${g.who}</div>`; lastWho = g.who; }
-    const open = !!q || supOpenCats.has(k);
+    const open = supOpenCats.has(k);
     html += `<div class="sup-cat" onclick="toggleSupCat(${i})"><span>${open ? '▾' : '◂'} ${g.cat}</span></div>`;
     if (!open) return;
     g.list.forEach((r) => {
@@ -5389,8 +5391,9 @@ function topicOf(cat) {
   const hit = CATALOG_TOPICS.find((x) => x.re.test(cat || ''));
   return hit ? hit.title : CATALOG_TOPIC_REST;
 }
-// Where he buys his cells decides "עלות לי" on every battery row — so the choice sits here, with
-// the margin it moves, and only while the cost is shown.
+// Where he buys his cells decides "עלות לי" on every battery row. The price list SAYS which route
+// it is costing on, beside the cost it moves; the choice itself is in ⚙️ הגדרות, and the default is
+// the sea import (2026-10-06 — a tap on a chip here had left his phone on the local price for days).
 function renderCatRoute() {
   const rc = document.getElementById('catRoute'), rn = document.getElementById('catRouteNote');
   if (!rc) return;
@@ -5398,8 +5401,8 @@ function renderCatRoute() {
   if (rn) rn.hidden = true;
   if (!showCost) return;
   const route = cellRoute();
-  rc.innerHTML = '<span class="sup-lbl">עלות תאים לפי:</span>'
-    + CELL_ROUTES.map(([k, l]) => `<button class="sup-chip${k === route ? ' on' : ''}" onclick="setCellRoute('${k}')">${l}</button>`).join('');
+  rc.innerHTML = '<span class="sup-lbl">עלות תאים לפי: <b data-route-shown>' + routeLabel(route) + '</b></span>'
+    + '<button class="sup-chip" onclick="navigateTo(\'settings\')">לשינוי: ⚙️ הגדרות</button>';
   const missing = route === 'sea' ? [] : ['50E', '50SG', '50PL', '25P', '26V'].filter((c) => routeCellCostOn(c, route) == null);
   if (rn && missing.length) { rn.textContent = 'אין מחיר ' + (route === 'air' ? 'אווירי' : 'מקומי') + ' ל-' + missing.join(', ') + ' — לפי ימי.'; rn.hidden = false; }
 }
@@ -5410,16 +5413,14 @@ function renderCatalog() {
     const cats = [...new Set(PRICING.map(c => c.cat))];
     sel.innerHTML = '<option value="">כל הקטגוריות</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
   }
-  const q = (document.getElementById('catalogSearch')?.value || '').toLowerCase();
   const cat = document.getElementById('catalogCat')?.value || '';
   const items = PRICING.filter(it => (!cat || it.cat === cat)
-    && tierMatches(it)
-    && (!q || (it.name + ' ' + it.cat).toLowerCase().includes(q)));
+    && tierMatches(it));
   const groups = {};
   items.forEach(it => { (groups[it.cat] = groups[it.cat] || []).push(it); });
   // Collapsed by default, same as עלויות ספקים: 805 rows over 68 categories was a single
-  // scroll with no way to see what the categories even were. A search or a chosen category
-  // opens everything, because then the filter is what decides what you are looking at.
+  // scroll with no way to see what the categories even were. A chosen category opens
+  // everything, because then the filter is what decides what you are looking at.
   // Order the categories by series, so the DIVISION IS IN THE LIST rather than only in a
   // filter you have to know to press. catCatKeys must end up in exactly the render order —
   // toggleCatCat addresses a category by index, so reordering the render without reordering
@@ -5468,10 +5469,10 @@ function renderCatalog() {
     }
   }
   catCatKeys = plan.filter((p) => p.cat).map((p) => p.cat);
-  const forceOpen = !!q || !!cat;
+  const forceOpen = !!cat;
   // Each topic is a fold (2026-10-05, "בכל הטאבים … הכל מקופל"): the page opens as five lines. Its
   // title keeps the price-series class, so the order of topics, voltages and categories reads the
-  // same off the DOM as before. A search or a chosen category opens them.
+  // same off the DOM as before. A chosen category opens them.
   let out = '', html = '', ci = -1, topic = null;
   const topics = [...byTopic.keys()];
   const flushTopic = () => {
@@ -5926,18 +5927,6 @@ function upsertCustomerFromOrder(o) {
 const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 function monthLabelHe(key) { const p = String(key).split('-'); return `${HE_MONTHS[+p[1] - 1] || ''} ${p[0]}`; }
 
-// Everything a row can be matched on, built once per render.
-function salesHaystack(x) {
-  const o = x.raw;
-  if (x.kind === 'sale') {
-    return [o.customer, o.phone, o.status, o.bms].concat((o.items || []).flatMap(i => [i.name, i.cat]))
-      .filter(Boolean).join(' ').toLowerCase();
-  }
-  return [o.customerName, o.customerPhone, jobTypeLabel(o), o.reason, o.quickRepair, o.customerNotes,
-    (o.voltage && o.capacity) ? `${o.voltage}v ${o.capacity}ah` : '', VEHICLE_LABELS[o.vehicle]]
-    .filter(Boolean).join(' ').toLowerCase();
-}
-
 // Type-tagged pill for the unified sales+repairs list.
 function salesBadge(kind) {
   return kind === 'sale'
@@ -6067,13 +6056,11 @@ function renderOrders() {
   if (salesFilter === 'sale') all = all.filter(x => x.kind === 'sale');
   else if (salesFilter === 'repair') all = all.filter(x => x.kind === 'repair');
   else if (salesFilter === 'quote') all = all.filter(x => x.kind === 'sale' && !saleIsIncome(x.raw));
-  const q = (document.getElementById('salesSearch') ? document.getElementById('salesSearch').value : '').trim().toLowerCase();
-  if (q) all = all.filter(x => salesHaystack(x).includes(q));
   all.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const list = document.getElementById('ordersList');
   if (all.length === 0) {
-    const filtered = q || salesFilter !== 'all';
+    const filtered = salesFilter !== 'all';
     list.innerHTML = `<div class="card"><div class="empty-state"><div class="empty-state-icon">${filtered ? '🔍' : '🛒'}</div><div class="empty-state-text">${filtered ? 'אין תוצאות לסינון הזה.' : 'אין מכירות או תיקונים עדיין.<br>לחץ 🛒 מכירה חדשה או 🔧 תיקון חדש למעלה.'}</div></div></div>`;
     return;
   }
@@ -6107,9 +6094,9 @@ function renderOrders() {
     return money + (t.quoted ? ` <span style="font-weight:400;opacity:.75;">+ ${shek(t.quoted)} בהצעות</span>` : '');
   };
   const shown = all.slice(0, salesLimit);
-  // Each month is a fold, its money in the title (2026-10-05, "בכל הטאבים … הכל מקופל"). A search
-  // or a chosen filter opens them: then the filter is what decides what is on the screen.
-  const forceOpen = !!q || salesFilter !== 'all';
+  // Each month is a fold, its money in the title (2026-10-05, "בכל הטאבים … הכל מקופל"). A chosen
+  // filter opens them: then the filter is what decides what is on the screen.
+  const forceOpen = salesFilter !== 'all';
   let html = '';
   const months = [];
   for (const x of shown) {
@@ -9154,8 +9141,7 @@ const VEHICLE_PACKS = [
   // groups across the 230, the series along the 345 less the BMS — that is 72V 20S11P (220, 55Ah),
   // 60V 16S18P (288, 90Ah, the most), 52V 14S18P (252) and 48V 13S18P (234), all in two layers.
   // The model is the Tiger 2 (Daniel, 2026-10-05: "טייגר 2"; the tub measured inside). The name keeps the
-  // word טרקטורון so that a search for it finds the row: the group's plural (plain nun) does not contain
-  // it (final nun). hubOnly — his decision (2026-10-05, asked whether to publish it to the site's fit page:
+  // word טרקטורון, the word he uses for it: the group's plural (plain nun) does not contain it (final nun). hubOnly — his decision (2026-10-05, asked whether to publish it to the site's fit page:
   // "ב", only in the hub). Do not ask again.
   { g: 'טרקטורונים', m: 'טייגר 2 — טרקטורון', src: 'נמדד', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 11, max: 288, hubOnly: true,
     tub: '345×230×170 מ"מ (נמדד: אורך 34.5, רוחב 23, גובה 17) · מארז פלסטיק' },
@@ -9305,7 +9291,6 @@ let dimVehicle = null;
 function renderVehiclePacks() {
   const box = document.getElementById('vpList');
   if (!box) return;
-  const q = ((document.getElementById('vpSearch') || {}).value || '').trim().toLowerCase();
   const dims = getDims();
   const known = new Set(VEHICLE_PACKS.map((v) => v.m.trim().toLowerCase()));
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
@@ -9317,10 +9302,9 @@ function renderVehiclePacks() {
   const mineLine = (d) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
       <span style="font-size:12px;"><span style="color:#34d399;font-weight:700;">${d.measured ? '✓ נמדד' : '✓ שמור'}</span> ${size(d)}${d.notes ? ` <span style="color:var(--text-muted);font-size:11px;">· ${esc(d.notes)}</span>` : ''}</span>${tools(d)}</div>`;
   let html = '';
-  const own = dims.filter((d) => !known.has(String(d.model || '').trim().toLowerCase())
-    && (!q || String(d.model || '').toLowerCase().includes(q)));
-  // Each group is a fold (2026-10-05, every tab folded); a search opens them.
-  const sec = (id, title, body) => fold('dims-' + id, title, body, { open: !!q, sub: true });
+  const own = dims.filter((d) => !known.has(String(d.model || '').trim().toLowerCase()));
+  // Each group is a fold (2026-10-05, every tab folded).
+  const sec = (id, title, body) => fold('dims-' + id, title, body, { sub: true });
   if (own.length) {
     let mine = '';
     for (const d of own.slice().sort((a, b) => String(a.model).localeCompare(String(b.model)))) {
@@ -9330,7 +9314,7 @@ function renderVehiclePacks() {
     }
     html += sec('mine', 'המדידות שלי', mine);
   }
-  const hit = VEHICLE_PACKS.filter((v) => !q || v.m.toLowerCase().includes(q) || v.g.toLowerCase().includes(q));
+  const hit = VEHICLE_PACKS;
   const findMine = (v) => dims.find((x) => String(x.model || '').trim().toLowerCase() === v.m.trim().toLowerCase());
   const sized = (v) => !!(findMine(v) || tubOf(v) || v.side || v.case);
   // Every vehicle is listed; within each group the ones with sizes come first and the ones
@@ -10649,21 +10633,19 @@ function renderStickerLog() {
   // has no Sync layer of its own. Writing it back through Store here is what pushes those
   // records to the cloud, so opening this page is also what makes them survive a new device.
   if (arr.length) Store.set('sticker_history', arr);
-  const q = (document.getElementById('stickerSearch')?.value || '').toLowerCase();
   let items = arr.filter(s => !s.deleted && (stickerTab === 'all' || s.type === stickerTab));
-  if (q) items = items.filter(s => `${s.client || ''} ${s.sku || ''} ${s.model || ''} ${s.ref || ''}`.toLowerCase().includes(q));
   const list = document.getElementById('stickerlogList');
   if (items.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🗂️</div><div class="empty-state-text">אין מדבקות בקטגוריה זו.<br>צור מדבקה בעורך והיא תופיע כאן.</div></div>'; return; }
-  // Folded by month (2026-10-05, every tab folded); a search opens them. Records without a date last.
+  // Folded by month (2026-10-05, every tab folded). Records without a date last.
   const byMonth = new Map();
   for (const s of items) { const k = s.date && !isNaN(new Date(s.date).getTime()) ? monthKeyOf(s.date) : ''; if (!byMonth.has(k)) byMonth.set(k, []); byMonth.get(k).push(s); }
   list.innerHTML = [...byMonth].sort((a, b) => (b[0] || '0').localeCompare(a[0] || '0'))
-    .map(([k, arr]) => fold('stk-' + (k || 'none'), k ? monthLabelHe(k) : 'בלי תאריך', stkRows(arr), { open: !!q, sub: true })).join('');
+    .map(([k, arr]) => fold('stk-' + (k || 'none'), k ? monthLabelHe(k) : 'בלי תאריך', stkRows(arr), { sub: true })).join('');
   function stkRows(arr) { return arr.map(s => {
     const isRep = s.type === 'repair';
     const spec = isRep ? (s.model || '') : `${s.voltage || ''} ${s.capacity || ''} ${s.cells || ''}`.trim();
     // The delete button carries the index in the UNFILTERED array. Using the position in
-    // `items` would delete the wrong sticker whenever a tab or a search is active — the
+    // `items` would delete the wrong sticker whenever a tab is active — the
     // list you see is not the list that is stored.
     const realIdx = arr.indexOf(s);
     return `<div class="list-item">
@@ -11515,7 +11497,9 @@ function saveSettings() {
   const lc = parseFloat(document.getElementById('setLabourCost').value); LABOUR_COST = isNaN(lc) ? 60 : lc;
   // The freight field left the screen on 2026-09-25; the stored value is kept as it is.
   const fkEl = document.getElementById('setFreightKg'); if (fkEl) { const fk = parseFloat(fkEl.value); FREIGHT_USD_PER_KG = isNaN(fk) ? 24 : fk; }
-  Store.set('settings', { hourly: HOURLY, margin: MARGIN * 100, usd: USD, warranty: WARRANTY_MONTHS, warrantyBuild: WARRANTY_BUILD, costPct: COST_PCT, bizDisc: BIZ_DISCOUNT, labourCost: LABOUR_COST, freightKg: FREIGHT_USD_PER_KG });
+  // Merged INTO what is stored: rebuilt from the form alone, any field the form does not hold —
+  // the cell route above all — was wiped by the next change to an unrelated number.
+  Store.set('settings', { ...(Store.get('settings') || {}), hourly: HOURLY, margin: MARGIN * 100, usd: USD, warranty: WARRANTY_MONTHS, warrantyBuild: WARRANTY_BUILD, costPct: COST_PCT, bizDisc: BIZ_DISCOUNT, labourCost: LABOUR_COST, freightKg: FREIGHT_USD_PER_KG });
   if (typeof recalc === 'function') recalc();
   syncWarrantyLabel();
 }
@@ -11757,6 +11741,16 @@ function tuckNotes() {
 function init() {
   // 18650 scooter packs join the hub catalogue (priced from the catalogue's own margins)
   addShallowCatalogRows();
+  // The cell route goes back to the sea import once on every device (2026-10-06): the default he
+  // asked for, and his phone had been left on the local price by a tap on the old price-list chip.
+  // After this the setting is his to change in ⚙️ הגדרות, and it stays where he puts it.
+  (function seaOnce() {
+    const st = Store.get('settings') || {};
+    if (st.cellRouteSeaDefault) return;
+    st.cellRoute = 'sea'; st.cellRouteSeaDefault = 1;
+    Store.set('settings', st);
+  })();
+  renderSettingsRoute();
   // The help text used to name the catalog size. It was typed by hand and went stale —
   // "283 המוצרים" against a catalog of 784 — then derived, and now simply gone: a total
   // nobody acts on is not worth keeping correct. Same for every other page counter.

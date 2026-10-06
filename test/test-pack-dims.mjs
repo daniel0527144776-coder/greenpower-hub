@@ -384,9 +384,8 @@ check('every vehicle row carries a photo or a drawing', art.svgs === art.rows &&
 // הכלים" — with the ones that have no sizes at the end of their group; his measured trays carry
 // ✓ נמדד and the table's guesses do not; the Plus shows the side he built to.
 const lst = await page.evaluate(() => {
-  const s = document.getElementById('vpSearch');
   const rowText = (name) => { const r = [...document.querySelectorAll('#vpList .list-item')].find((x) => ((x.querySelector('.list-item-title') || {}).textContent || '').trim() === name); return r ? r.textContent : null; };
-  s.value = ''; renderVehiclePacks();
+  renderVehiclePacks();
   // Each group is a fold since 2026-10-05; per group: once an "אין מידות" card appears, no card
   // with sizes may follow it.
   let late = false, count = 0;
@@ -399,14 +398,13 @@ const lst = await page.evaluate(() => {
     }
   }
   const out = { late, count, groupsFolded: [...document.querySelectorAll('#vpList details.fold')].every((d) => !d.open), total: VEHICLE_PACKS.length, zero: rowText('Zero 10X'), talaria: rowText('Talaria'), plus: rowText('Bomber Plus 15kW'), wolfBare: rowText('Wolf Warrior') };
-  s.value = 'wolf'; renderVehiclePacks(); out.wolfSearch = rowText('Wolf Warrior');
-  s.value = ''; renderVehiclePacks();
+  out.noSearch = !document.getElementById('vpSearch');
   return out;
 });
 check('every vehicle is listed, a vehicle with no sizes too', lst.count === lst.total && lst.wolfBare != null, [lst.count, lst.total]);
 check('each vehicle group starts folded (2026-10-05, every tab folded)', lst.groupsFolded === true, lst.groupsFolded);
 check('and in each group the ones with sizes come first', !lst.late, lst.late);
-check('a search finds a vehicle with no sizes', lst.wolfSearch != null, String(lst.wolfSearch));
+check('the vehicles page has no search box (his call, 2026-10-06)', lst.noSearch, lst.noSearch);
 check('a measured tray says ✓ נמדד, a table guess does not', /✓ נמדד/.test(lst.zero || '') && !/✓ נמדד/.test(lst.talaria || ''), [lst.zero, lst.talaria]);
 check('the Plus shows the side he built to, measured', /393×\d+×152/.test(lst.plus || '') && /✓ נמדד/.test(lst.plus || ''), String(lst.plus));
 // The photos he chose (2026-09-27) are baked in; a model with none keeps its drawing.
@@ -906,10 +904,10 @@ const atv = await page.evaluate((SELF) => {
   const tb = tubOf(v);
   const name = v.m;
   const groupStacks = stackAllowed({ g: 'טרקטורונים', m: 'Can-Am Outlander' });
-  const s = document.getElementById('vpSearch');
-  const found = (q) => { s.value = q; renderVehiclePacks(); return [...document.querySelectorAll('#vpList .list-item-title')].some((t) => t.textContent.trim() === name); };
-  const byWord = found('טרקטורון'), byModel = found('טייגר');
-  s.value = ''; renderVehiclePacks();
+  // its name carries both the word he uses and the model (the search that found it by them is gone)
+  renderVehiclePacks();
+  const listed = [...document.querySelectorAll('#vpList .list-item-title')].some((t) => t.textContent.trim() === name);
+  const byWord = listed && /טרקטורון/.test(name), byModel = listed && /טייגר/.test(name);
   document.getElementById('dimCell').value = '21700-50e';
   useVehiclePack(name);
   const r72 = document.getElementById('dimResult').innerText;
@@ -920,7 +918,7 @@ const atv = await page.evaluate((SELF) => {
 check('the ATV tub is in the table, 345 × 230 × 170 measured, hub-only, drawn as a quad',
   !atv.missing && atv.tb && atv.tb.L === 345 && atv.tb.W === 230 && atv.tb.H === 170 && atv.type === 'atv' && atv.hubOnly && atv.measured,
   JSON.stringify(atv.missing ? atv : { tb: atv.tb, type: atv.type, hubOnly: atv.hubOnly, measured: atv.measured }));
-check('the Tiger 2 is found by a search for טייגר and for טרקטורון',
+check('the Tiger 2 is listed, named with טייגר and with טרקטורון',
   !atv.missing && atv.byWord && atv.byModel, atv.missing ? 'missing' : [atv.byWord, atv.byModel]);
 check('any vehicle in the ATV group may be folded into two layers, not only one named טרקטורון',
   !atv.missing && atv.groupStacks === true, String(atv.groupStacks));
