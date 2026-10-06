@@ -50,6 +50,7 @@ const DATA = {
   teach: [{ id: 't1', q: 'עובדים בשישי?', a: 'לא' }],
   knowledge: { text: 'ידע ' + EVIL, at: new Date(NOW).toISOString(), edited: false },
   learning: { on: true, chatsLearned: 12, queued: 30, hubJobs: 13 }, wa: 'authorized', configured: true,
+  photos: { waiting: 7, bytes: 2097152, last: NOW },
 };
 const gets = [], posts = [];
 let EMPTY = false;   // the bot answering 200 with no state at all
@@ -72,6 +73,7 @@ await page.route('**/rest/v1/**', (route) => route.fulfill({ status: 200, body: 
 await page.goto('http://localhost:4362/index.html', { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.renderWaBot === 'function', null, { timeout: 30000 });
 if (SELFTEST) await page.evaluate(() => { window.escPunch = (s) => String(s == null ? '' : s); window.waNum = (c) => String(c); });
+if (SELFTEST) delete DATA.photos;   // the bot's count of photos waiting, gone
 
 const text = () => page.evaluate(() => document.getElementById('wabotBody').innerText);
 // Everything below the state is folded (2026-10-05, "שכל הקטגוריות יהיו מקופלות"): the content checks
@@ -108,6 +110,7 @@ check('a folded section shows its count beside its title', /🚫 חסומים\s*
 await openAll();
 const t1 = await text();
 check('it asks the bot with his login', gets.length === 1 && /^Bearer tok\./.test(gets[0]), gets);
+check('the photos waiting for the library are counted, not shown', /📷 7 תמונות מהוואטסאפ ממתינות למאגר \(2\.0MB\)/.test(t1) && !(await page.evaluate(() => !!document.querySelector('#wabotBody img'))), t1.slice(0, 400));
 check('the state, the week\'s counts and the connection', /הבוט עונה עכשיו ללקוחות/.test(t1) && /מחובר לוואטסאפ/.test(t1) && /ענה השבוע\s*5/.test(t1) && /12 שיחות נקראו/.test(t1), t1.slice(0, 300));
 check('nothing a customer wrote runs as markup', await page.evaluate(() => window.__xss === undefined && !document.querySelector('#wabotBody img')), '');
 check('it is shown as text instead', t1.includes('כמה עולה <img src=x') && t1.includes('יש מטען 84V? <img'), '');
