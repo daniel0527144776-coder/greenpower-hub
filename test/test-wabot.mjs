@@ -218,7 +218,8 @@ const logText = await page.evaluate(() => document.getElementById('wbLog').inner
 check('"לא ענה" shows only what it did not answer', /שתק — ענית בעצמך/.test(logText) && !/כמה עולה/.test(logText), logText.slice(0, 200));
 await page.evaluate(() => navigateTo('home'));
 // clicked from inside: the hub's own login overlay covers the page in this test
-await page.evaluate(() => [...document.querySelectorAll('.quick-card')].find((c) => /בוט וואטסאפ/.test(c.textContent)).click());
+// one "בוטים" card since 2026-10-05; it opens on this page, the first of its two tabs
+await page.evaluate(() => [...document.querySelectorAll('.quick-card')].find((c) => /בוטים/.test(c.textContent)).click());
 check('the home page has a card for it', await page.evaluate(() => document.getElementById('page-wabot').classList.contains('active')), '');
 check('no page errors', errs.length === 0, errs.join(' | '));
 
