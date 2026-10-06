@@ -187,6 +187,11 @@ jobs:
       - name: The cost window on the cell route, and the spec line
         run: node test/test-cost-route.mjs
 
+      # A repair's status on its row in עבודות (2026-10-06): the pill, 🔁 to the next status, and an
+      # old repair with no status claiming nothing.
+      - name: The repair status on its row
+        run: node test/test-repair-status.mjs
+
       # FUSION, his trading bot (2026-10-05): read with his login only, never "trading" when it has
       # stopped reporting, is down or lost IBKR, and nothing from the bot runs as markup.
       - name: The trading bot's page

@@ -5985,6 +5985,34 @@ function saleRow(o) {
       </div>
     </div>`;
 }
+// A repair's status on its row (2026-10-06, Daniel: "למה בעבודות לא כתוב נמסר/שולם?"). A sale has
+// always shown its pill; a repair showed none — its status lived only inside ✏️ ערוך. A row with no
+// status that is older than the stuck-work window predates the field: it says nothing rather than
+// claim "בעבודה" about a battery that went home months ago.
+const JOB_STATUS_KNOWN_DAYS = 45;
+function jobStatusOf(j, now = Date.now()) {
+  if (j.jobStatus) return j.jobStatus;
+  return (new Date(j.date).getTime() || 0) > now - JOB_STATUS_KNOWN_DAYS * 86400000 ? 'בעבודה' : null;
+}
+function jobStatusPill(st) {
+  if (!st) return '';
+  const c = st === 'נמסר' ? '#34d399' : st === 'מוכן לאיסוף' ? 'var(--primary)' : 'var(--warning)';
+  return `<span data-job-status style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;border:1px solid ${c};color:${c};white-space:nowrap;">${st}</span>`;
+}
+// What 🔁 will do. A row whose status is unknown goes straight to נמסר: it is an old repair.
+function nextJobStatus(st) {
+  if (!st) return 'נמסר';
+  const i = JOB_STATUS.indexOf(st);
+  return JOB_STATUS[(i + 1) % JOB_STATUS.length];
+}
+function cycleJobStatus(id) {
+  const jobs = Store.get('jobs') || [], j = jobs.find((x) => String(x.id) === String(id));
+  if (!j) return;
+  j.jobStatus = nextJobStatus(jobStatusOf(j));
+  Store.set('jobs', jobs);
+  renderOrders();
+  if (j.jobStatus === 'נמסר') offerReviewAsk(j.customerPhone, j.customerName);
+}
 function repairRow(j) {
   let warr = '';
   if (j.warrantyEnd) {
@@ -5998,10 +6026,11 @@ function repairRow(j) {
         <div><div class="list-item-title">${salesBadge('repair')} ${j.customerName || 'ללא שם'} ${j.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
           <div class="list-item-subtitle">${new Date(j.date).toLocaleDateString('he-IL')}${spec ? ' · ' + spec : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${jobTypeLabel(j)}</div></div>
-        <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div>${Number(j.profit) ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(Number(j.profit))}</div>` : ''}<div class="list-item-subtitle">${warr}</div></div>
+        <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div>${Number(j.profit) ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(Number(j.profit))}</div>` : ''}<div style="margin-top:3px;">${jobStatusPill(jobStatusOf(j))}</div><div class="list-item-subtitle">${warr}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
         ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="callCustomer('${j.customerPhone}')">💬 הודעה</button>` : ''}
+        <button class="btn btn-sm btn-secondary" onclick="cycleJobStatus('${j.id}')">🔁 סמן ${nextJobStatus(jobStatusOf(j))}</button>
         <button class="btn btn-sm btn-secondary" onclick="navigateTo('warranties')">🛡️ אחריות</button>
         <button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','orders')">✏️ ערוך</button>
             <button class="btn btn-sm btn-secondary" onclick="openStickerFor('job','${j.id}')">🏷️ מדבקה</button>
