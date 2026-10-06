@@ -192,6 +192,11 @@ jobs:
       - name: The repair status on its row
         run: node test/test-repair-status.mjs
 
+      # No search boxes on the pages, and the cell route in ⚙️ הגדרות with the sea import as the default
+      # (2026-10-06); a settings save keeps the fields its form does not hold.
+      - name: No search boxes; the cell route in settings
+        run: node test/test-settings-route.mjs
+
       # FUSION, his trading bot (2026-10-05): read with his login only, never "trading" when it has
       # stopped reporting, is down or lost IBKR, and nothing from the bot runs as markup.
       - name: The trading bot's page

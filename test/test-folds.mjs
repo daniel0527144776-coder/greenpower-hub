@@ -103,9 +103,9 @@ check('"חסר להזמנה" folds, and the home card opens it', lists.need && a
 const opened = await page.evaluate(async () => {
   const out = {};
   navigateTo('orders');
-  document.getElementById('salesSearch').value = 'לקוח 0'; renderOrders();
+  setSalesFilter('sale');
   out.search = [...document.querySelectorAll('#ordersList details.fold')].every((d) => d.open);
-  document.getElementById('salesSearch').value = ''; renderOrders();
+  setSalesFilter('all');
   out.cleared = [...document.querySelectorAll('#ordersList details.fold')].every((d) => !d.open);
   const d = document.querySelector('#ordersList details.fold'); d.open = true;
   await new Promise((r) => setTimeout(r, 30));
@@ -115,17 +115,17 @@ const opened = await page.evaluate(async () => {
   navigateTo('warranties'); setWarrantyTab('expiring');
   const ex = [...document.querySelectorAll('#warrantiesList details.fold')];
   out.expiring = ex.length > 0 && ex.every((x) => x.open);
-  navigateTo('catalog'); document.getElementById('catalogSearch').value = '72V'; renderCatalog();
+  navigateTo('catalog'); document.getElementById('catalogCat').value = PRICING.find((p) => /72V/.test(p.name)).cat; renderCatalog();
   out.catSearch = [...document.querySelectorAll('#catalogList details.fold')].length > 0 && [...document.querySelectorAll('#catalogList details.fold')].every((x) => x.open);
-  document.getElementById('catalogSearch').value = ''; renderCatalog();
+  document.getElementById('catalogCat').value = ''; renderCatalog();
   catExpandAll(true); out.catAll = [...document.querySelectorAll('#catalogList details.fold')].every((x) => x.open);
   catExpandAll(false); out.catNone = [...document.querySelectorAll('#catalogList details.fold')].every((x) => !x.open);
   return out;
 });
-check('a search opens the months it found, and clearing it folds them again', opened.search && opened.cleared, opened);
+check('a filter opens the months it shows, and "הכל" folds them again', opened.search && opened.cleared, opened);
 check('a month he opened stays open when the page re-draws, its rows shown', opened.kept && opened.rowShown, opened);
 check('"פגות בקרוב" (the home banner\'s target) opens', opened.expiring === true, opened);
-check('the price list: a search opens its topics; פתח הכל / סגור הכל open and close them', opened.catSearch && opened.catAll && opened.catNone, opened);
+check('the price list: a chosen category opens its topics; פתח הכל / סגור הכל open and close them', opened.catSearch && opened.catAll && opened.catNone, opened);
 
 const twice = await page.evaluate(() => { foldStatic('settings'); foldStatic('worktime'); return document.querySelectorAll('details.fold details.fold').length; });
 check('folding again changes nothing — no section inside a section', twice === 0 && (await folds('settings')).length === 4, twice);
