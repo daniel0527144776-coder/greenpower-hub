@@ -182,6 +182,11 @@ jobs:
       - name: The merged tabs and cards
         run: node test/test-nav-merge.mjs
 
+      # The cost window on his cell route (2026-10-06): the price per cell and the route named,
+      # Save on an untouched window keeps no cost of his, and the spec line reads in order.
+      - name: The cost window on the cell route, and the spec line
+        run: node test/test-cost-route.mjs
+
       # FUSION, his trading bot (2026-10-05): read with his login only, never "trading" when it has
       # stopped reporting, is down or lost IBKR, and nothing from the bot runs as markup.
       - name: The trading bot's page
