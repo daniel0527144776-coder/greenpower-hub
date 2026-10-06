@@ -52,13 +52,14 @@ const DATA = {
   learning: { on: true, chatsLearned: 12, queued: 30, hubJobs: 13 }, wa: 'authorized', configured: true,
 };
 const gets = [], posts = [];
+let EMPTY = false;   // the bot answering 200 with no state at all
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, POST' };
 const CONTACTS = [{ p: '972501112222', n: 'אישתי המתוקה' }, { p: '972531112233', n: 'יוניפרטס חלקים' }, { p: '972541112233', n: 'אורן אספקה' }, { p: '972551112233', n: EVIL }];
 await page.route(/energylabgreen\.com\/api\/wa\/admin/, async (route) => {
   const req = route.request();
   if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
   if (req.method() === 'GET' && /contacts=1/.test(req.url())) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ contacts: CONTACTS }), headers: CORS });
-  if (req.method() === 'GET') { gets.push(req.headers()['authorization'] || ''); return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(DATA), headers: CORS }); }
+  if (req.method() === 'GET') { gets.push(req.headers()['authorization'] || ''); return route.fulfill({ status: 200, contentType: 'application/json', body: EMPTY ? '{}' : JSON.stringify(DATA), headers: CORS }); }
   const sent = JSON.parse(req.postData() || '{}');
   posts.push(sent);
   // the polish answers with the message it wrote (and what it heard, for a recording); everything else just ok
@@ -211,6 +212,15 @@ await page.evaluate(() => { waPickToggle(0); waPickToggle(1); waPickToggle(2); d
 p = await lastPost(X + 9);
 check('the picked ones are added to the blocked, an already-blocked one is not picked twice', p && p.op === 'settings' && p.settings.blocked.length === 3
   && p.settings.blocked.some((b) => b.p === '972531112233' && b.n === 'יוניפרטס חלקים') && p.settings.blocked.some((b) => b.p === '972541112233'), p && p.settings.blocked);
+
+// an answer that is not the bot's state (200, '{}'): an error card, not a TypeError on settings.enabled
+EMPTY = true;
+const errsBefore = errs.length;
+await page.evaluate(async () => { waBot = null; await renderWaBot(); });
+const emptyText = await text();
+check('a 200 with no state shows "could not reach the bot", and throws nothing', /לא הצלחתי להגיע לבוט/.test(emptyText) && errs.length === errsBefore, [emptyText.slice(0, 120), errs.slice(errsBefore)]);
+EMPTY = false;
+await page.evaluate(async () => { await renderWaBot(); });
 
 // the log's filter, and the way in from the home page
 await page.evaluate(() => waLogFilter('quiet'));
