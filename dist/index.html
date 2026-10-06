@@ -2401,9 +2401,18 @@ function sendWhatsApp(phone, msg, whoFor) {
           ' — הוסף מספר כדי שהוואטסאפ ייפתח ישירות על השיחה של הלקוח.');
     return false;
   }
-  const text = encodeURIComponent(msg);
+  launchWhatsApp(num, '');
+  return true;
+}
+// Opens WhatsApp on a chat, the text (if any) already written. whatsapp:// reaches the app from the
+// WebView APK (MainActivity hands every non-http scheme to the OS); wa.me, opened in a new tab only
+// if we are still on the page 1.2s later, is what a desktop browser needs. waLaunch is its own
+// function so the tests can see the address without leaving the page.
+function waLaunch(url) { try { location.href = url; } catch (e) {} }
+function launchWhatsApp(num, msg) {
+  const text = encodeURIComponent(msg || '');
   const t0 = Date.now();
-  try { location.href = 'whatsapp://send?phone=' + num + '&text=' + text; } catch (e) {}
+  waLaunch('whatsapp://send?phone=' + num + '&text=' + text);
   setTimeout(function () {
     if (document.hidden || Date.now() - t0 > 3000) return;  // WhatsApp took over — done
     try {
@@ -2413,6 +2422,16 @@ function sendWhatsApp(phone, msg, whoFor) {
       document.body.appendChild(a); a.click(); a.remove();
     } catch (e) {}
   }, 1200);
+}
+// The customer's chat with the status message already in the box (2026-10-06, Daniel: the
+// message should go out with its text — asked, "הוואטסאפ נפתח עם הטקסט"). He presses send in
+// WhatsApp. The text also goes to the clipboard first, so whatever a phone does with the link, the
+// message is not lost; a number that is not one shows it to copy, as before.
+function openWhatsAppWith(phone, text) {
+  const num = waNumber(phone);
+  if (!num) { showMessageToCopy(text); return false; }
+  try { const p = navigator.clipboard && navigator.clipboard.writeText(text); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  launchWhatsApp(num, text);
   return true;
 }
 
@@ -2743,7 +2762,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v415';
+const HUB_BUILD = 'v416';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4192,7 +4211,15 @@ function openWaCompose(phone, name, text, title) {
     + '<div class="wt-muted" style="margin-top:6px">יישלח מהוואטסאפ העסקי שלך, דרך הבוט. אפשר לערוך לפני השליחה.</div>',
     '<button class="btn btn-primary" data-wa-send onclick="sendWaCompose()">📤 שלח דרך הבוט</button>'
     + '<button class="btn btn-secondary" onclick="copyMessageBox(\'waComposeMsg\')">📋 העתק</button>'
-    + '<button class="btn btn-secondary" onclick="closeModal();callCustomer(waComposeTarget.phone)">💬 צ׳אט</button>');
+    + '<button class="btn btn-secondary" onclick="waComposeOpenChat()">💬 פתח בוואטסאפ</button>');
+}
+// the message as he edited it, in his own WhatsApp
+function waComposeOpenChat() {
+  const t = waComposeTarget, box = document.getElementById('waComposeMsg');
+  if (!t || !box) return;
+  const text = box.value.trim();
+  closeModal();
+  openWhatsAppWith(t.phone, text);
 }
 async function sendWaCompose() {
   const t = waComposeTarget, box = document.getElementById('waComposeMsg');
@@ -4239,10 +4266,16 @@ function repairMessage(j) {
   if (st === 'התקבל במעבדה') return [hi, pack + ' התקבלה במעבדה. נעדכן אותך כאן כשהיא מוכנה לאיסוף.', sign].join('\n\n');
   return [hi, pack + ' בעבודה. נעדכן אותך כאן כשהיא מוכנה לאיסוף.', sign].join('\n\n');
 }
+const jobOf = (id) => (Store.get('jobs') || []).find((x) => String(x.id) === String(id));
+// 💬: WhatsApp opens on the customer's chat with the message for where the job stands
 function jobWhatsApp(id) {
-  const j = (Store.get('jobs') || []).find((x) => String(x.id) === String(id));
-  if (!j) return;
-  openWaCompose(j.customerPhone, j.customerName, repairMessage(j));
+  const j = jobOf(id);
+  if (j) openWhatsAppWith(j.customerPhone, repairMessage(j));
+}
+// 🤖: the same message in the bot's window, to edit and send from the business number
+function jobBot(id) {
+  const j = jobOf(id);
+  if (j) openWaCompose(j.customerPhone, j.customerName, repairMessage(j));
 }
 // Marking a repair מוכן לאיסוף offers the "ready" message, the way נמסר offers the review request.
 function offerReadyMessage(j) {
@@ -4351,7 +4384,7 @@ function renderWarranties() {
           ${j.kind === 'sale' ? 'נמכר' : 'תיקון'}: ${new Date(j.date).toLocaleDateString('he-IL')} · אחריות עד: ${end.toLocaleDateString('he-IL')}
         </div>
         <div class="btn-group" style="margin-top: 8px;">
-          ${j.phone ? `<button class="btn btn-sm btn-secondary" style="background: #25D366; color: white; border: none;" onclick="${j.kind === 'sale' ? 'orderWhatsApp' : 'jobWhatsApp'}('${j.id}')">💬 שלח הודעה</button>` : ''}
+          ${j.phone ? `<button class="btn btn-sm btn-secondary" style="background: #25D366; color: white; border: none;" onclick="${j.kind === 'sale' ? 'orderWhatsApp' : 'jobWhatsApp'}('${j.id}')">💬 שלח הודעה</button><button class="btn btn-sm btn-secondary" style="background:#0f766e;color:#fff;border:none;" title="שליחה דרך הבוט" onclick="${j.kind === 'sale' ? 'orderBot' : 'jobBot'}('${j.id}')">🤖</button>` : ''}
           ${j.kind === 'sale'
             ? `<button class="btn btn-sm btn-secondary" onclick="openOrderEditor('${j.id}')">✏️ ערוך מכירה</button><button class="btn btn-sm btn-secondary" onclick="openStickerFor('order','${j.id}')">🏷️ מדבקה</button>`
             : `<button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','warranties')">✏️ ערוך</button>
@@ -6108,7 +6141,7 @@ function saleRow(o) {
         <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div>${Number(o.discount) ? `<div data-discount style="font-size:10.5px;color:var(--accent);">הנחה ${shek(o.discount)}</div>` : ''}${(() => { const pr = saleProfit(o); return pr ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(pr.profit)}</div>` : ''; })()}<div style="margin-top:3px;">${saleStatusPill(o.status)}${quoteAgePill(o)}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
-        <button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="orderWhatsApp('${o.id}')">💬 שלח</button>
+        <button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="orderWhatsApp('${o.id}')">💬 שלח</button><button class="btn btn-sm btn-secondary" style="background:#0f766e;color:#fff;border:none;" title="שליחה דרך הבוט" onclick="orderBot('${o.id}')">🤖</button>
         <button class="btn btn-sm btn-secondary" onclick="cycleOrderStatus('${o.id}')">🔁 סמן ${nextSaleStatus(o.status)}</button>
         <button class="btn btn-sm btn-secondary" onclick="openOrderEditor('${o.id}')">✏️</button>
         <button class="btn btn-sm btn-secondary" onclick="openStickerFor('order','${o.id}')">🏷️ מדבקה</button>
@@ -6161,7 +6194,7 @@ function repairRow(j) {
         <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div>${Number(j.discount) ? `<div data-discount style="font-size:10.5px;color:var(--accent);">הנחה ${shek(j.discount)}</div>` : ''}${Number(j.profit) ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(Number(j.profit))}</div>` : ''}<div style="margin-top:3px;">${jobStatusPill(jobStatusOf(j))}</div><div class="list-item-subtitle">${warr}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
-        ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="jobWhatsApp('${j.id}')">💬 הודעה</button>` : ''}
+        ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="jobWhatsApp('${j.id}')">💬 הודעה</button><button class="btn btn-sm btn-secondary" style="background:#0f766e;color:#fff;border:none;" title="שליחה דרך הבוט" onclick="jobBot('${j.id}')">🤖</button>` : ''}
         <button class="btn btn-sm btn-secondary" onclick="cycleJobStatus('${j.id}')">🔁 סמן ${nextJobStatus(jobStatusOf(j))}</button>
         <button class="btn btn-sm btn-secondary" onclick="navigateTo('warranties')">🛡️ אחריות</button>
         <button class="btn btn-sm btn-secondary" onclick="openJobEditor('${j.id}','orders')">✏️ ערוך</button>
@@ -6365,7 +6398,11 @@ function orderItemSpec(it) {
   return { fit: m[1], tier: m[2] || '', spec: TIER_SPEC[m[2]] || null };
 }
 function orderWhatsApp(id) {
-  const orders = Store.get('orders') || [], o = orders.find(x => x.id === id); if (!o) return;
+  const o = (Store.get('orders') || []).find(x => x.id === id); if (!o) return;
+  openWhatsAppWith(o.phone, buildQuoteText(o));
+}
+function orderBot(id) {
+  const o = (Store.get('orders') || []).find(x => x.id === id); if (!o) return;
   openWaCompose(o.phone, o.customer, buildQuoteText(o));
 }
 // The quote used to be four lines: a name, the items, a total, "אחריות מלאה · תאי Grade A".
@@ -10007,6 +10044,9 @@ function waStatusHtml() {
   return '<div class="card"><div class="wb-state">' + now + '</div>'
     + '<div class="stats-grid">' + box('ענה השבוע', b.stats && b.stats.sent) + box('העביר אליך', b.stats && b.stats.asked) + box('שתק', b.stats && b.stats.quiet) + '</div>'
     + '<div class="wb-sub">' + wa + ' · ' + learn + '</div>'
+    // the photo inbox (2026-10-06): every photo in his WhatsApp is kept for the photo library; counted
+    // here, never shown (nothing in the hub fetches an image)
+    + (b.photos ? '<div class="wb-sub" data-wa-photos>📷 ' + (n(b.photos.waiting) ? n(b.photos.waiting) + ' תמונות מהוואטסאפ ממתינות למאגר (' + (n(b.photos.bytes) / 1048576).toFixed(1) + 'MB)' : 'כל התמונות מהוואטסאפ כבר במאגר') + '</div>' : '')
     + '<div class="wb-inline" style="margin-top:10px"><button class="btn ' + (st.enabled ? 'btn-danger' : 'btn-primary') + '" onclick="waToggle()">'
     + (st.enabled ? '⏻ כבה' : '▶ הפעל') + '</button>'
     + '<button class="btn btn-secondary" onclick="renderWaBot()">🔄 רענן</button></div></div>';
