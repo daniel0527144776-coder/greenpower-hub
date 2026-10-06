@@ -950,6 +950,14 @@ body { min-height: 100vh; }
       <button class="btn btn-secondary btn-sm" onclick="clearOverride()">↺</button>
     </div>
     <div class="result-warranty" id="overrideNote" style="display:none;"></div>
+    <!-- A discount, off the price above (calculated or typed), in ₪ or %. The profit line and the
+         below-cost alert read the price after it. -->
+    <div class="result-warranty" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">
+      <span>🏷️ הנחה</span>
+      <input type="number" class="price-override" id="calcDiscount" min="0" step="1" placeholder="0" oninput="recalc()">
+      <select class="form-select" id="calcDiscountUnit" style="width:64px;" onchange="recalc()"><option value="nis">₪</option><option value="pct">%</option></select>
+    </div>
+    <div class="result-warranty" id="discountNote" style="display:none;"></div>
     <div class="result-warranty" id="calcWarrantyBox">🛡️ אחריות מלאה <b>6</b> חודשים</div>
   </div>
 
@@ -1881,6 +1889,18 @@ let COST_PCT = 60;      // default supplier cost as % of retail (for resold item
 // six shops paid exactly what a walk-in paid. Applied to the final figure, parts and
 // labour alike (Daniel, 2026-08-02): one number he can quote and a shop can check.
 let BIZ_DISCOUNT = 15;
+// A discount he gives (2026-10-06, Daniel: "תוסיף במכירה או בתיקון אפשרות להנחה בלוח בקרה"), off
+// the price that would otherwise be charged, in ₪ or %. One function for a repair and a sale, so
+// the two cannot round differently: never below zero, never more than the price, whole shekels.
+// The amount is stored beside the price (j.discount / o.discount) and the price stored is what
+// the customer pays, so income, profit and the ledgers need nothing new.
+function discountOff(base, val, unit) {
+  const b = Math.max(0, Number(base) || 0), v = Math.max(0, Number(val) || 0);
+  if (!b || !v) return 0;
+  return Math.min(b, Math.round(unit === 'pct' ? (b * Math.min(v, 100)) / 100 : v));
+}
+// "הנחה: −₪150 (10%)" — the line a quote, a message and an invoice show
+function discountLine(amount, pct) { return 'הנחה: −' + shek(amount) + (pct ? ' (' + pct + '%)' : ''); }
 let LABOUR_COST = 60;   // ₪/hr the work COSTS (vs HOURLY = ₪180/hr charged)
 
 // ---- State ----
@@ -2723,7 +2743,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v414';
+const HUB_BUILD = 'v415';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3209,7 +3229,17 @@ function recalc() {
   const ovRaw = document.getElementById('priceOverride') ? document.getElementById('priceOverride').value.trim() : '';
   const ov = ovRaw === '' ? null : Math.max(0, Math.round(parseFloat(ovRaw)));
   const overridden = ov != null && !isNaN(ov);
-  const rounded = overridden ? ov : auto;
+  const listPrice = overridden ? ov : auto;
+  const discEl = document.getElementById('calcDiscount'), discUnitEl = document.getElementById('calcDiscountUnit');
+  const discUnit = discUnitEl ? discUnitEl.value : 'nis', discVal = discEl ? parseFloat(discEl.value) || 0 : 0;
+  const disc = discountOff(listPrice, discVal, discUnit);
+  const rounded = listPrice - disc;
+  state.calcDiscount = disc ? { amount: disc, pct: discUnit === 'pct' ? Math.min(discVal, 100) : null, before: listPrice } : null;
+  const discNote = document.getElementById('discountNote');
+  if (discNote) {
+    discNote.style.display = disc ? '' : 'none';
+    discNote.textContent = disc ? 'לפני הנחה ' + shek(listPrice) + ' · ' + discountLine(disc, state.calcDiscount.pct) : '';
+  }
   const profit = rounded - totalNet - travel + diagCredit;
 
   const ovEl = document.getElementById('overrideNote');
@@ -3219,7 +3249,7 @@ function recalc() {
       ovEl.style.display = '';
       const marg = rounded > 0 ? Math.round(profit / rounded * 100) : 0;
       const below = profit < 0;
-      const diff = rounded - auto;
+      const diff = listPrice - auto;
       ovEl.innerHTML = `<span style="color:${below ? '#fecaca' : 'inherit'};">`
         + (below ? '⚠️ מתחת לעלות! ' : '')
         + `מחושב היה ₪${auto} · ${diff >= 0 ? '+' : '−'}₪${Math.abs(diff)} · רווח ₪${Math.round(profit)} (${marg}%)</span>`;
@@ -3388,6 +3418,8 @@ function saveJob() {
     cellType: document.getElementById('cellType').value,
     jobs: Array.from(state.jobs),
     price: priceNum,
+    // the amount off (₪), and the % when it was given as one; price is after it
+    ...(state.calcDiscount ? { discount: state.calcDiscount.amount, ...(state.calcDiscount.pct ? { discountPct: state.calcDiscount.pct } : {}) } : {}),
     cost: parseFloat(document.getElementById('costDisplay').textContent.replace(/[^\d]/g, '')),
     // Keep the sign (2026-10-04): stripping every non-digit turned "₪-5" into a ₪5 PROFIT — a
     // repair quoted under cost (25.8.2026: ₪200 against ₪205) was booked as money made.
@@ -3505,7 +3537,7 @@ function generateWhatsApp() {
   // Hebrew renders as "+Grade A". No <bdi> to reach for in a plain-text message.
   const cellsInvolved = ['full', 'rows', 'surgical', 'swelling'].some((k) => state.jobs.has(k));
   const cellLine = cellsInvolved ? '\n🔧 תאי Grade A+\u200E — נבדקים וממוינים במפעל' : '';
-  const msg = `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך: ${v}V ${cap}Ah\n\n📋 מה יבוצע:\n${selected}\n\n📦 ${delivery}\n\n💰 *מחיר סופי: ${price}*\n\n${warrantyFor() ? '✅ אחריות ' + warrantyFor() + ' חודשים על העבודה והחלקים' : 'ℹ️ אבחון בלבד — ללא אחריות'}${cellLine}\n\nאשמח לקבוע מועד.\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
+  const msg = `שלום ${custName || ''} 👋\n\nעברתי על הסוללה שלך: ${v}V ${cap}Ah\n\n📋 מה יבוצע:\n${selected}\n\n📦 ${delivery}\n\n${state.calcDiscount ? '💰 מחיר: ' + shek(state.calcDiscount.before) + '\n🏷️ ' + discountLine(state.calcDiscount.amount, state.calcDiscount.pct) + '\n' : ''}💰 *מחיר סופי: ${price}*\n\n${warrantyFor() ? '✅ אחריות ' + warrantyFor() + ' חודשים על העבודה והחלקים' : 'ℹ️ אבחון בלבד — ללא אחריות'}${cellLine}\n\nאשמח לקבוע מועד.\n\n${bizDetails.name || 'Green Power'}\n${bizDetails.phone || ''}`;
 
   const ta = document.getElementById('whatsappPreview');
   ta.textContent = msg;
@@ -3585,6 +3617,10 @@ function generateInvoice() {
       </table>
     </div>
 
+    ${state.calcDiscount ? `<div style="font-size: 13px; margin: 0 4px 10px; line-height: 1.8;">
+      <div style="display: flex; justify-content: space-between;"><span>מחיר</span><span>${shek(state.calcDiscount.before)}</span></div>
+      <div style="display: flex; justify-content: space-between; color: #15803d; font-weight: 600;"><span>הנחה${state.calcDiscount.pct ? ' (' + state.calcDiscount.pct + '%)' : ''}</span><span>−${shek(state.calcDiscount.amount)}</span></div>
+    </div>` : ''}
     <div style="background: linear-gradient(135deg, #1F4E79 0%, #0D2C4A 100%); color: white; padding: 18px; border-radius: 10px; text-align: center; margin-bottom: 16px;">
       <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">סה"כ לתשלום</div>
       <div style="font-size: 36px; font-weight: 700;">${price}</div>
@@ -3618,6 +3654,8 @@ function resetCalc() {
   // A manual price is for ONE quote. Leaving it set would silently carry the last
   // customer's negotiated number onto the next job.
   document.getElementById('priceOverride').value = '';
+  document.getElementById('calcDiscount').value = '';
+  document.getElementById('calcDiscountUnit').value = 'nis';
   document.getElementById('custName').value = '';
   document.getElementById('custPhone').value = '';
   document.getElementById('custNotes').value = '';
@@ -4186,13 +4224,13 @@ function repairMessage(j) {
   const st = jobStatusOf(j);
   if (st === 'מוכן לאיסוף') {
     return [hi, pack + ' מוכנה לאיסוף ✅',
-      '🔧 ' + jobTypeLabel(j) + (price ? '\n💰 לתשלום: ' + shek(price) : ''),
+      '🔧 ' + jobTypeLabel(j) + (price ? '\n💰 לתשלום: ' + shek(price) + (Number(j.discount) ? ' (אחרי הנחה של ' + shek(j.discount) + ')' : '') : ''),
       '📍 ' + (B.address || LAB_ADDRESS) + '\n🕐 ' + LAB_HOURS, sign].join('\n\n');
   }
   if (st === 'נמסר') {
     const months = warrantyFor(Array.isArray(j.jobs) ? j.jobs : []);
     const end = j.warrantyEnd ? new Date(j.warrantyEnd).toLocaleDateString('he-IL') : '';
-    const lines = [spec ? '🔋 ' + spec : '', '🔧 ' + jobTypeLabel(j), price ? '💰 ' + shek(price) : '',
+    const lines = [spec ? '🔋 ' + spec : '', '🔧 ' + jobTypeLabel(j), price ? '💰 ' + shek(price) + (Number(j.discount) ? ' (כולל הנחה של ' + shek(j.discount) + ')' : '') : '',
       months ? '🛡️ אחריות ' + months + ' חודשים' + (end ? ' (עד ' + end + ')' : '') : ''].filter(Boolean);
     // "keep this message, it is your warranty" only where there is one: an inspection carries none
     const thanks = months ? 'תודה שבחרת בנו! הנה סיכום התיקון. שמור את ההודעה, היא האחריות שלך.' : 'תודה שבחרת בנו! הנה סיכום הבדיקה.';
@@ -5785,6 +5823,7 @@ function openOrderEditor(id) {
   const o = id ? orders.find(x => x.id === id) : null;
   if (o) {
     orderDraft = { id: o.id, date: o.date, customer: o.customer, phone: o.phone, custQuery: '', bms: o.bms || '', bmsBrand: o.bmsBrand || '', bmsAmps: o.bmsAmps || '', isBusiness: o.isBusiness, status: o.status,
+      discVal: o.discountPct || Number(o.discount) || '', discUnit: o.discountPct ? 'pct' : 'nis',
       items: (o.items || []).map(it => {
         if (it.custom) return { custom: true, name: it.name, unit: it.unit, qty: it.qty };
         const ci = PRICING.findIndex(c => c.cat === it.cat && c.name === it.name);
@@ -5794,7 +5833,7 @@ function openOrderEditor(id) {
         return ci >= 0 ? { ci, qty: it.qty } : { custom: true, name: it.name, unit: Number(it.unit) || 0, qty: it.qty };
       }) };
   } else {
-    orderDraft = { id: null, date: new Date().toISOString(), customer: '', phone: '', custQuery: '', bms: '', bmsBrand: '', bmsAmps: '', isBusiness: false, status: 'הצעה', items: [] };
+    orderDraft = { id: null, date: new Date().toISOString(), customer: '', phone: '', custQuery: '', bms: '', bmsBrand: '', bmsAmps: '', isBusiness: false, status: 'הצעה', items: [], discVal: '', discUnit: 'nis' };
   }
   renderOrderModal();
 }
@@ -5804,7 +5843,26 @@ function syncOrderFields() { const n = document.getElementById('ordName'); if (n
   // The date decides which month a sale counts as income in — editable for the same
   // reason the price is: a sale entered a week late was landing on the wrong month.
   const dt = document.getElementById('ordDate'); if (dt && dt.value) orderDraft.date = mergeCalendarDate(dt.value, orderDraft.date);
-  const cq = document.getElementById('ordCustSearch'); if (cq) orderDraft.custQuery = cq.value; }
+  const cq = document.getElementById('ordCustSearch'); if (cq) orderDraft.custQuery = cq.value;
+  const dv = document.getElementById('ordDisc'); if (dv) orderDraft.discVal = dv.value;
+  const du = document.getElementById('ordDiscUnit'); if (du) orderDraft.discUnit = du.value; }
+// The sale's sum, its discount and what is paid, from the draft (the modal and the save both read it).
+function orderSums(items, mode) {
+  const sub = items.reduce((s, it) => s + orderItemInfo(it, mode).unit * it.qty, 0);
+  const disc = discountOff(sub, orderDraft.discVal, orderDraft.discUnit);
+  return { sub, disc, total: sub - disc, pct: disc && orderDraft.discUnit === 'pct' ? Math.min(Number(orderDraft.discVal) || 0, 100) : null };
+}
+function orderTotalHtml(t) {
+  return t.disc
+    ? `<div style="font-size:12px;color:var(--text-muted);">לפני הנחה ${shek(t.sub)} · <span style="color:var(--accent);">${discountLine(t.disc, t.pct)}</span></div>סה"כ: ${shek(t.total)}`
+    : `סה"כ: ${shek(t.total)}`;
+}
+// Typing a discount redraws only the total, never the modal: a redraw would take the focus out of the box.
+function onOrderDisc() {
+  syncOrderFields();
+  const box = document.getElementById('ordTotal');
+  if (box) box.innerHTML = orderTotalHtml(orderSums(orderDraft.items, orderDraft.isBusiness ? 'b2b' : 'retail'));
+}
 // The BMS is picked from BMS_PRICES — the same brands and amp ratings the repair
 // calculator already prices — instead of being typed. Free text meant a quote could
 // promise a rating the lab does not stock, and it never reached the sale record.
@@ -5843,7 +5901,7 @@ function renderOrderModal() {
     const tag = it.custom ? ' <span style="font-size:9px;color:var(--accent);">(מותאם)</span>' : '';
     return `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);padding:6px 8px;border-radius:6px;margin-bottom:4px;font-size:12px;"><span>${info.name}${tag} ×${it.qty}</span><span>${shek(info.unit * it.qty)} <span onclick="removeOrderItem(${i})" style="color:var(--danger);cursor:pointer;margin-right:6px;">✕</span></span></div>`;
   }).join('');
-  const total = orderDraft.items.reduce((s, it) => s + orderItemInfo(it, mode).unit * it.qty, 0);
+  const sums = orderSums(orderDraft.items, mode);
   const body = `
     <div class="form-row"><label>לקוח קיים</label><input type="search" class="form-input-wide" id="ordCustSearch" value="${custPickEsc(orderDraft.custQuery || '')}" placeholder="חפש שם או טלפון" style="width:170px;" oninput="onOrderCustSearch()"></div>
     <div class="cust-pick" id="ordCustList"></div>
@@ -5867,7 +5925,9 @@ function renderOrderModal() {
     <div class="form-row"><label>מחיר ₪</label><input type="number" class="form-input" id="ordCustPrice" min="0" placeholder="0"></div>
     <button class="btn btn-secondary btn-block btn-sm" onclick="addCustomOrderItem()">➕ הוסף פריט מותאם</button>
     <div style="margin-top:10px;">${lines || '<div style="font-size:12px;color:var(--text-muted);text-align:center;">לא נוספו פריטים</div>'}</div>
-    <div style="text-align:left;font-weight:700;color:var(--primary);margin-top:8px;">סה"כ: ${shek(total)}</div>`;
+    <div class="form-row" style="margin-top:8px;"><label>🏷️ הנחה</label><span style="display:inline-flex;gap:6px;align-items:center;"><input type="number" class="form-input" id="ordDisc" min="0" value="${orderDraft.discVal === '' || orderDraft.discVal == null ? '' : Number(orderDraft.discVal)}" placeholder="0" style="width:80px;" oninput="onOrderDisc()">
+      <select class="form-select" id="ordDiscUnit" style="width:64px;" onchange="onOrderDisc()"><option value="nis">₪</option><option value="pct"${orderDraft.discUnit === 'pct' ? ' selected' : ''}>%</option></select></span></div>
+    <div id="ordTotal" style="text-align:left;font-weight:700;color:var(--primary);margin-top:8px;">${orderTotalHtml(sums)}</div>`;
   openModal(orderDraft.id ? 'עריכת הזמנה' : 'הזמנה חדשה', body,
     `<button class="btn btn-primary" onclick="saveOrder()">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
   onOrderCustSearch();
@@ -5922,13 +5982,20 @@ function saveOrder() {
     const p = PRICING[it.ci];
     return { name: p.name, cat: p.cat, qty: it.qty, unit: p[mode] };
   });
-  const total = items.reduce((s, it) => s + it.unit * it.qty, 0);
+  // total is what the customer pays — income, profit and every ledger read it — and the
+  // discount is kept beside it, so a quote can show the price, the discount and the total
+  const sums = orderSums(orderDraft.items, mode);
+  const total = sums.total;
+  const disc = sums.disc ? { discount: sums.disc, ...(sums.pct ? { discountPct: sums.pct } : {}) } : {};
   const orders = Store.get('orders') || [];
   if (orderDraft.id) {
     const idx = orders.findIndex(o => o.id === orderDraft.id);
-    if (idx >= 0) orders[idx] = { ...orders[idx], date: orderDraft.date || orders[idx].date, customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total };
+    if (idx >= 0) {
+      const { discount: _d, discountPct: _p, ...rest } = orders[idx];
+      orders[idx] = { ...rest, date: orderDraft.date || orders[idx].date, customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total, ...disc };
+    }
   } else {
-    orders.unshift({ id: 'o' + Date.now(), date: orderDraft.date || new Date().toISOString(), customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total, status: 'הצעה' });
+    orders.unshift({ id: 'o' + Date.now(), date: orderDraft.date || new Date().toISOString(), customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total, ...disc, status: 'הצעה' });
   }
   Store.set('orders', orders);
   upsertCustomerFromOrder(orders.find((o) => o.id === (orderDraft.id || orders[0].id)) || orders[0]);
@@ -6038,7 +6105,7 @@ function saleRow(o) {
         <div><div class="list-item-title">${salesBadge('sale')} ${o.customer || 'ללא שם'} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
           <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')} · ${(o.items || []).length === 1 ? 'פריט אחד' : (o.items || []).length + ' פריטים'}${o.bms ? ' · BMS ' + o.bms : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${saleCats(o)}</div></div>
-        <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div>${(() => { const pr = saleProfit(o); return pr ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(pr.profit)}</div>` : ''; })()}<div style="margin-top:3px;">${saleStatusPill(o.status)}${quoteAgePill(o)}</div></div>
+        <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div>${Number(o.discount) ? `<div data-discount style="font-size:10.5px;color:var(--accent);">הנחה ${shek(o.discount)}</div>` : ''}${(() => { const pr = saleProfit(o); return pr ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(pr.profit)}</div>` : ''; })()}<div style="margin-top:3px;">${saleStatusPill(o.status)}${quoteAgePill(o)}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
         <button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="orderWhatsApp('${o.id}')">💬 שלח</button>
@@ -6091,7 +6158,7 @@ function repairRow(j) {
         <div><div class="list-item-title">${salesBadge('repair')} ${j.customerName || 'ללא שם'} ${j.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
           <div class="list-item-subtitle">${new Date(j.date).toLocaleDateString('he-IL')}${spec ? ' · ' + spec : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${jobTypeLabel(j)}</div></div>
-        <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div>${Number(j.profit) ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(Number(j.profit))}</div>` : ''}<div style="margin-top:3px;">${jobStatusPill(jobStatusOf(j))}</div><div class="list-item-subtitle">${warr}</div></div>
+        <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div>${Number(j.discount) ? `<div data-discount style="font-size:10.5px;color:var(--accent);">הנחה ${shek(j.discount)}</div>` : ''}${Number(j.profit) ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(Number(j.profit))}</div>` : ''}<div style="margin-top:3px;">${jobStatusPill(jobStatusOf(j))}</div><div class="list-item-subtitle">${warr}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
         ${j.customerPhone ? `<button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="jobWhatsApp('${j.id}')">💬 הודעה</button>` : ''}
@@ -6359,7 +6426,9 @@ function buildQuoteText(o) {
   const pct = B.depositPct != null ? B.depositPct : 50;
   const deposit = Math.round((o.total * pct) / 100 / 50) * 50;
   const balance = o.total - deposit;
-  const acct = ['*חשבון:*', `• *מחיר סופי:* ${money(o.total)}${o.isBusiness ? ' (מחיר עסקי)' : ''}`];
+  const acct = ['*חשבון:*'];
+  if (Number(o.discount) > 0) acct.push(`• מחיר: ${money(o.total + Number(o.discount))}`, `• ${discountLine(Number(o.discount), o.discountPct)}`);
+  acct.push(`• *מחיר סופי:* ${money(o.total)}${o.isBusiness ? ' (מחיר עסקי)' : ''}`);
   // A deposit and a balance are things still to be paid. Once the sale is money they are
   // history, and on a delivered pack they are noise — the first version printed both on a
   // battery the customer was already riding on.
@@ -10458,7 +10527,9 @@ function openJobEditor(jobId, ret) {
     <div class="form-row"><label>שם לקוח</label><input class="form-input-wide" id="jeName" value="${esc(j.customerName)}" style="width:170px;"></div>
     <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="jePhone" value="${esc(j.customerPhone)}" style="width:170px;"></div>
     <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="jeDate" value="${dateInputValue(j.date)}" style="width:150px;"></div>
-    <div class="form-row"><label>מחיר ₪</label><input type="number" class="form-input" id="jePrice" value="${Number(j.price) || 0}" min="0"></div>
+    <div class="form-row"><label>מחיר ₪</label><input type="number" class="form-input" id="jePrice" value="${(Number(j.price) || 0) + (Number(j.discount) || 0)}" min="0"></div>
+    <div class="form-row"><label>🏷️ הנחה</label><span style="display:inline-flex;gap:6px;align-items:center;"><input type="number" class="form-input" id="jeDiscount" value="${j.discountPct || Number(j.discount) || ''}" min="0" placeholder="0" style="width:80px;">
+      <select class="form-select" id="jeDiscountUnit" style="width:64px;"><option value="nis">₪</option><option value="pct"${j.discountPct ? ' selected' : ''}>%</option></select></span></div>
     <div class="form-row"><label>עלות ₪</label><input type="number" class="form-input" id="jeCost" value="${Number(j.cost) || 0}" min="0"></div>
     <div class="form-row"><label>מתח V</label><input type="number" class="form-input" id="jeVolt" value="${esc(j.voltage)}" style="width:70px;">
       <label style="margin-right:10px;">קיבולת Ah</label><input type="number" class="form-input" id="jeCap" value="${esc(j.capacity)}" style="width:70px;"></div>
@@ -10485,7 +10556,14 @@ function saveJobEdit(jobId) {
   if (i < 0) return;
   const j = jobs[i];
   const oldPrice = Number(j.price) || 0, oldPhone = j.customerPhone || '';
-  const price = Math.max(0, parseFloat(document.getElementById('jePrice').value) || 0);
+  const before = Math.max(0, parseFloat(document.getElementById('jePrice').value) || 0);
+  const dEl = document.getElementById('jeDiscount'), dUnit = (document.getElementById('jeDiscountUnit') || {}).value || 'nis';
+  const dVal = dEl ? parseFloat(dEl.value) || 0 : 0;
+  const disc = discountOff(before, dVal, dUnit);
+  // the price stored is what the customer pays; the discount sits beside it
+  const price = before - disc;
+  if (disc) { j.discount = disc; if (dUnit === 'pct') j.discountPct = Math.min(dVal, 100); else delete j.discountPct; }
+  else { delete j.discount; delete j.discountPct; }
   const cost = Math.max(0, parseFloat(document.getElementById('jeCost').value) || 0);
   const name = document.getElementById('jeName').value.trim();
   const phone = document.getElementById('jePhone').value.trim();
