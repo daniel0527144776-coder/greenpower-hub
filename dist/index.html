@@ -282,6 +282,7 @@ body { min-height: 100vh; }
 .price-series.t-OTHER    { background: linear-gradient(90deg, #334155, #475569); }
 .price-item { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 7px 0; font-size: 13px; border-bottom: 1px solid rgba(0,0,0,0.04); }
 .price-item-name { color: var(--text); }
+.spec-f { white-space: nowrap; }
 .price-item-cost { color: var(--text-muted); font-size: 11px; }
 .price-item-final { color: var(--accent); font-weight: 700; font-size: 14px; min-width: 70px; text-align: left; }
 
@@ -2721,7 +2722,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v411';
+const HUB_BUILD = 'v412';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4473,6 +4474,7 @@ function routeCellCostOn(code, route) {
   return hit ? Number(hit.ils) : null;
 }
 // What a cell costs HIM now, on the route he chose; the sea cost where that route has none.
+function routeLabel(r) { const x = CELL_ROUTES.find(([k]) => k === r); return x ? x[1] : r; }
 function routeCellCost(code) {
   const r = cellRoute();
   const v = r === 'sea' ? null : routeCellCostOn(code, r);
@@ -5146,6 +5148,12 @@ function batteryCostParts(it, b2b = false) {
   const codeP = powerTool ? '25P' : /PRO/.test(it.cat) ? '50PL' : /ADVANCED/.test(it.cat) ? '50SG' : '50E';
   const routedP = typeof routeCellCost === 'function' ? routeCellCost(codeP) : null;
   const cellPrice = routedP != null ? routedP : seaCellP;
+  // Which route that price came from. On 2026-10-06 his phone was on 🏪 מקומי, a 50E cost
+  // ₪14.80 instead of ₪6.43, and the window said only "96 תאים ₪1,421" — a number that looked
+  // like a bug, on a pack that looked like it was sold under cost.
+  const chosen = typeof cellRoute === 'function' ? cellRoute() : 'sea';
+  const onRoute = chosen !== 'sea' && typeof routeCellCostOn === 'function' ? routeCellCostOn(codeP, chosen) : null;
+  const route = onRoute != null ? chosen : 'sea', fellBack = chosen !== 'sea' && onRoute == null;
   const cellAh = powerTool ? 2.5 : 5;
   const S = seriesForV(V);
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
@@ -5178,14 +5186,14 @@ function batteryCostParts(it, b2b = false) {
   const hours = cells * 0.0061 + (powerTool ? 0.75 : 1.68);
   const labour = hours * 45;
   const parts = [
-    { k: cells + ' תאים', v: cells * cellPrice },
+    { k: cells + ' תאים × ₪' + cellPrice.toFixed(2), v: cells * cellPrice },
     { k: picked ? 'BMS · ' + picked.name : 'BMS', v: bms, picked: !!picked, freightBasis: picked && picked.freightBasis },
     { k: 'ניקל', v: nickel },
     { k: 'שרינק, חיווט ומחברים', v: materials },
     { k: /^סוללות אופניים/.test(it.cat) ? (Ah >= 30 ? 'מארז קומפלט 85 ס"מ' : 'מארז סילבר פיש') : 'מארז מקורי Sur-Ron', v: enclosure },
   ].filter((x) => x.v > 0);
   const materialsTotal = parts.reduce((s, x) => s + x.v, 0);
-  return { parts, materialsTotal, hours, labour, total: materialsTotal + labour, S, P, cells };
+  return { parts, materialsTotal, hours, labour, total: materialsTotal + labour, S, P, cells, cellPrice, route, chosen, fellBack, code: codeP };
 }
 // ---- choosing the BMS per product -------------------------------------------------
 // The board was guessed from the VOLTAGE alone, which is how a 48V 20Ah pack came to be
@@ -5293,12 +5301,20 @@ function setBmsPick(i, name) {
   updateCostProfit(i);
   const box = document.getElementById('costBreakdown');
   if (box) box.innerHTML = costBreakdownHtml(it);
+  const src = document.getElementById('costSource');
+  if (src) src.innerHTML = costSourceHtml(it);
 }
 
 function productCost(it, b2b = false) {
   const costs = getCosts();
   const k = catKey(it);
   if (costs[k] != null) return costs[k];                 // manual override (exact)
+  return productEstimate(it, b2b);
+}
+// What a row costs by the model alone — cells on the route he buys on, the BMS, the supplier
+// quote — with no saved override. The cost window shows both, so he can see when a cost he
+// typed months ago no longer matches what the parts cost today.
+function productEstimate(it, b2b = false) {
   if (it.cell18650) return estimateBatteryCost(it, b2b, { price: routeCellCost(it.cell18650), ah: it.cellAh });
   if (/סוללות/.test(it.cat)) {
     const est = estimateBatteryCost(it, b2b);             // batteries: estimate from cells
@@ -5505,7 +5521,7 @@ function renderCatalog() {
       // PRICING includes EXTRA_SERVICES, which are hand-written rows, and a stray < in one
       // would otherwise close this div and swallow the rest of the category.
       const sp = typeof specOf === 'function' ? specOf(it) : null;
-      const specLine = sp ? `<div style="font-size:10.5px;color:var(--text-muted);line-height:1.45;">${escPunch(sp)}</div>` : '';
+      const specLine = sp ? `<div style="font-size:10.5px;color:var(--text-muted);line-height:1.45;">${specHtml(sp)}</div>` : '';
       html += `<div class="price-item" style="cursor:pointer;" onclick="openCostEditor(${PRICING.indexOf(it)})">
         <div class="price-item-name">${it.name}${specLine}${extra}</div>
         <div class="price-item-cost">${priceMode === 'retail' ? 'פרטי' : 'עסקי'}</div>
@@ -5544,6 +5560,8 @@ function costBreakdownHtml(it) {
     + '<span>' + k + '</span><span>' + shek(Math.round(v)) + '</span></div>';
   return '<div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;">'
     + '<div style="font-size:10.5px;color:var(--text-muted);margin-bottom:4px;">ממה מורכב האומדן (' + b.S + 'S' + b.P + 'P)</div>'
+    + '<div data-cell-route="' + b.route + '" style="font-size:10.5px;color:var(--text-muted);margin-bottom:4px;">תאים לפי מסלול: ' + routeLabel(b.route)
+    + (b.fellBack ? ' — ל-' + b.code + ' אין מחיר ב' + routeLabel(b.chosen) : '') + '</div>'
     + b.parts.map((p) => row(p.k, p.v, true)).join('')
     + '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;">'
     + '<span>סה\"כ חומרים</span><span>' + shek(Math.round(b.materialsTotal)) + '</span></div>'
@@ -5620,6 +5638,7 @@ function openCostEditor(i) {
   openModal('עלות ספק / בנייה',
     `<div style="font-size:13px;margin-bottom:8px;">${it.cat}<br><b>${it.name}</b></div>
      <div class="form-row"><label>עלות לי ₪</label><input type="number" class="form-input" id="costInput" value="${cur}" min="0" step="10" oninput="updateCostProfit(${i})"></div>
+     <div id="costSource" style="font-size:11px;color:var(--text-muted);margin-top:4px;">${costSourceHtml(it)}</div>
      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">פרטי: ${typeof it.retail === 'number' ? shek(it.retail) : it.retail} · עסקי: ${typeof it.b2b === 'number' ? shek(it.b2b) : it.b2b}</div>
      <div id="costProfit" style="margin-top:8px;"></div>
      ${bmsPickerHtml(i)}
@@ -5664,7 +5683,21 @@ function updateCostProfit(i) {
     '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">הרווח שלי</div>' +
     line('פרטי', it.retail) + line('עסקי', it.b2b) + '</div>';
 }
-function saveCost(i) { const it = PRICING[i], v = parseFloat(document.getElementById('costInput').value), costs = getCosts(); if (!isNaN(v)) costs[catKey(it)] = v; Store.set('costs', costs); closeModal(); renderCatalog(); }
+// Saving the number the window opened with used to store the ESTIMATE as his own cost — so the
+// cost of the route he happened to be on (₪14.80 a cell locally) stayed on that row for good,
+// whatever route or price came after. An untouched estimate is not a cost he entered.
+function saveCost(i) {
+  const it = PRICING[i], v = parseFloat(document.getElementById('costInput').value), costs = getCosts(), k = catKey(it);
+  if (!isNaN(v) && !(costs[k] == null && v === productEstimate(it))) costs[k] = v;
+  Store.set('costs', costs); closeModal(); renderCatalog();
+}
+function costSourceHtml(it) {
+  const saved = getCosts()[catKey(it)], est = productEstimate(it);
+  const b = typeof batteryCostParts === 'function' && /סוללות/.test(it.cat) ? batteryCostParts(it) : null;
+  const via = b ? ' · תאים ' + routeLabel(b.route) : '';
+  if (saved != null) return 'עלות שהזנת' + (est != null && Math.round(est) !== Math.round(saved) ? ' · לפי האומדן היום: ' + shek(Math.round(est)) + via : '') + '. "איפוס" חוזר לאומדן.';
+  return est != null ? 'אומדן' + via + ' — נשמר כעלות קבועה רק אם משנים אותו.' : '';
+}
 function clearCost(i) { const it = PRICING[i], costs = getCosts(); delete costs[catKey(it)]; Store.set('costs', costs); closeModal(); renderCatalog(); }
 
 // ============================================================
@@ -7127,6 +7160,16 @@ async function fetchPunches() {
 // The punch's `worker` and `note` are the only strings in the hub an anonymous stranger can
 // write. The `esc` used elsewhere in this file is local to another function and handles
 // quotes only, so these get their own.
+// A spec line is a run of Latin fields in a Hebrew line ("88V · 20Ah · 1,760Wh · 24S4P (96 תאים) · EVE 50E …").
+// As one string the bidi algorithm glued the Latin fields into one left-to-right block, so the
+// line read 24S4P first and "(96 תאים)" landed beside 88V; and the separators were partly
+// no-break spaces, so it wrapped INSIDE a field — "EVE" at the end of one line, "50E" on the
+// next (Daniel's screenshot, 2026-10-06). Each field is its own right-to-left island now, kept
+// whole, and the line may break only between fields.
+function specHtml(sp) {
+  return String(sp).split(/\s*·\s*/).filter(Boolean)
+    .map((f) => '<bdi dir="rtl" class="spec-f">' + escPunch(f) + '</bdi>').join(' · ');
+}
 function escPunch(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
