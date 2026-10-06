@@ -9776,7 +9776,14 @@ async function renderWaBot(reload = true) {
   }
   if (reload || !waBot) {
     if (!waBot) box.innerHTML = '<div class="card"><div class="empty-state-text">טוען את הבוט…</div></div>';
-    try { waBot = await waAdmin(); _waOpenQuestions = (waBot.questions || []).filter((x) => !x.done).length; }
+    // An answer with no settings is not the bot's state (an error page, a proxy, an empty body):
+    // say we could not reach it, rather than throw on settings.enabled (2026-10-05, found when the
+    // בוטים card began opening this page first).
+    try {
+      const got = await waAdmin();
+      if (!got || typeof got.settings !== 'object' || !got.settings) throw new Error('תשובה לא צפויה מהבוט');
+      waBot = got; _waOpenQuestions = (waBot.questions || []).filter((x) => !x.done).length;
+    }
     catch (e) {
       box.innerHTML = '<div class="card"><div class="empty-state-text">⚠ לא הצלחתי להגיע לבוט: ' + escPunch(e.message) + '</div>'
         + '<button class="btn btn-secondary btn-block" style="margin-top:8px" onclick="renderWaBot()">🔄 נסה שוב</button></div>';
