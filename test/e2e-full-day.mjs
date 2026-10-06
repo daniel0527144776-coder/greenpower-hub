@@ -129,23 +129,22 @@ check('NOT ONE SHEKEL moves when they are merged',
 check('the list and the customer card still agree', merged.disagree === 0, merged.disagree);
 
 // ---------------------------------------------------------------- 3. looking a price up
-// In the catalogue's own search: the home page's "מחיר מהיר" box was removed at his request
-// (2026-09-28).
+// By its category: the home page's "מחיר מהיר" box was removed at his request (2026-09-28), and
+// every search box in the hub on 2026-10-06 ("תמחוק את כל כלי החיפוש שיש בלוח הבקרה").
 const price = await page.evaluate(() => {
   navigateTo('catalog');
-  const el = document.getElementById('catalogSearch');
-  el.value = '72v 30ah';
-  renderCatalog();
-  const out = document.getElementById('catalogList');
   const row = PRICING.find((p) => /72V 30Ah/.test(p.name) && /PRO/.test(p.cat));
-  const text = out.innerText;
-  el.value = ''; renderCatalog();
-  return { found: /72V 30Ah/.test(text), gone: !document.getElementById('homePrice'),
+  const sel = document.getElementById('catalogCat');
+  sel.value = row.cat; renderCatalog();
+  const text = document.getElementById('catalogList').innerText;
+  sel.value = ''; renderCatalog();
+  return { found: /72V 30Ah/.test(text), gone: !document.getElementById('homePrice'), noSearch: !document.getElementById('catalogSearch'),
            matchesCatalogue: !!row && text.includes(row.retail.toLocaleString('he-IL')) };
 });
-check('a size typed in the catalogue search finds packs', price.found, price);
+check('choosing its category shows the pack', price.found, price);
 check('and the price shown is the catalogue price', price.matchesCatalogue, price);
 check('the home page has no quick-price box any more (his call)', price.gone, price);
+check('the price list has no search box (his call, 2026-10-06)', price.noSearch, price);
 
 // ---------------------------------------------------------------- 4. the price list
 const cat = await page.evaluate(() => {

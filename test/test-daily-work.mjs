@@ -40,20 +40,20 @@ await page.waitForTimeout(200);
 
 // ---- 1. the home page's price box is gone ----
 // It was added 2026-09-01 ("checking a price is what I do most") and removed at his request on
-// 2026-09-28 ("תוריד מחיר מהיר"). A price is found in the catalogue's search; this checks the box
-// did not come back with a copy of the old search, and that the catalogue still answers.
+// 2026-09-28 ("תוריד מחיר מהיר"), and the hub's search boxes on 2026-10-06. A price is found by
+// choosing its category; this checks the box did not come back, and that the catalogue answers.
 const price = await page.evaluate(() => {
   const gone = !document.getElementById('homePrice') && typeof homePriceSearch === 'undefined';
   navigateTo('catalog');
-  const el = document.getElementById('catalogSearch');
-  el.value = '72v 30ah';
-  renderCatalog();
+  const row = PRICING.find((p) => /72V 30Ah/.test(p.name));
+  const sel = document.getElementById('catalogCat');
+  sel.value = row.cat; renderCatalog();
   const found = /72V 30Ah/.test(document.getElementById('catalogList').innerText);
-  el.value = ''; renderCatalog(); navigateTo('home');
+  sel.value = ''; renderCatalog(); navigateTo('home');
   return { gone, found };
 });
 check('the home page has no quick-price box (his call, 2026-09-28)', price.gone, price);
-check('the catalogue search still finds a size', price.found, price);
+check('choosing a category in the catalogue still shows its sizes', price.found, price);
 
 // ---- 2. a build takes cells off the shelf ----
 const stock = await page.evaluate(() => {
