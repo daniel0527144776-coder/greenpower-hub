@@ -137,10 +137,11 @@ const still = await page.evaluate(() => {
   const openAll = catOpenCats.size;
   catExpandAll(false);
   const closedAll = catOpenCats.size;
-  document.getElementById('catalogSearch').value = '72V 30';
+  const sel = document.getElementById('catalogCat');
+  sel.value = PRICING.find((p) => /72V 30Ah/.test(p.name)).cat;
   renderCatalog();
   const hits = document.getElementById('catalogList').querySelectorAll('.price-item').length;
-  document.getElementById('catalogSearch').value = '';
+  sel.value = '';
   setCatalogTier('PRO');
   const proCats = [...document.getElementById('catalogList').querySelectorAll('.price-cat')].map((e) => e.textContent);
   setCatalogTier('');
@@ -149,7 +150,7 @@ const still = await page.evaluate(() => {
 });
 check('open-all still opens every category', still.openAll === clicks.total, `${still.openAll} vs ${clicks.total}`);
 check('close-all still closes them', still.closedAll === 0, still.closedAll);
-check('search still finds rows', still.hits > 0, still.hits);
+check('a chosen category still shows its rows', still.hits > 0, still.hits);
 check('the tier filter still filters', still.proOnly && still.proCount > 0, still);
 
 if (SELFTEST) console.log('\n[selftest] catCatKeys was shifted out of step with the render;\n[selftest] the click-by-index check must have gone red.');

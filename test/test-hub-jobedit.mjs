@@ -219,16 +219,13 @@ const org2 = await page.evaluate(() => {
   const quoteRows = [...document.querySelectorAll('#ordersList .list-item')];
   const allQuotes = quoteRows.every(r => r.textContent.includes('הצעה'));
   setSalesFilter('all');
-  document.getElementById('salesSearch').value = 'אברהם ייחודי';
-  renderOrders();
-  const hits = document.querySelectorAll('#ordersList .list-item').length;
-  document.getElementById('salesSearch').value = '';
-  renderOrders();
-  return { after, allQuotes, quoteRows: quoteRows.length, hits };
+  // the page's search box went on 2026-10-06 ("תמחוק את כל כלי החיפוש שיש בלוח הבקרה")
+  const noSearch = !document.getElementById('salesSearch');
+  return { after, allQuotes, quoteRows: quoteRows.length, noSearch };
 });
 check('"show more" grows the list', org2.after === 120, org2.after);
 check('the quotes filter shows only quotes', org2.allQuotes && org2.quoteRows > 0, org2);
-check('search narrows to the one match', org2.hits === 1, org2.hits);
+check('the jobs page has no search box (his call, 2026-10-06)', org2.noSearch, org2);
 
 // The quick pricer was deleted 2026-08-17 (Daniel). Assert it is GONE rather than dropping
 // the check — a half-removed feature leaves live onclick handlers calling functions that no
