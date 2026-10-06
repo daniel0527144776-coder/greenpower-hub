@@ -177,6 +177,8 @@ body { min-height: 100vh; }
 .page-header.grouped { flex-wrap: wrap; gap: 8px; }
 .page-header.grouped .page-title { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .page-header.grouped .page-group-tabs { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.view-chips { margin-bottom: 12px; }
+.view-chips:empty { display: none; }
 @media (max-width: 560px) { .page-header.grouped .page-group-tabs { flex-basis: 100%; order: -1; } }
 .page-subtitle { font-size: 12px; color: var(--text-muted); margin: 0; }
 
@@ -559,13 +561,12 @@ body { min-height: 100vh; }
       <div class="quick-card" onclick="navigateTo('customers')">
         <span class="quick-card-icon">👥</span>
         <div class="quick-card-title">לקוחות ועבודות</div>
-        <div class="quick-card-desc">לקוחות · מכירות · תיקונים · אחריות</div>
+        <div class="quick-card-desc">לקוחות · מכירות · תיקונים · אחריות · מדבקות</div>
       </div>
-
       <div class="quick-card" onclick="navigateTo('catalog')">
         <span class="quick-card-icon">🏷️</span>
-        <div class="quick-card-title">מחירון מלא</div>
-        <div class="quick-card-desc">מוצרים · תיקונים · פרטי · עסקי</div>
+        <div class="quick-card-title">מחירון</div>
+        <div class="quick-card-desc">מחירי מכירה · עלויות ספקים</div>
       </div>
       <div class="quick-card" onclick="navigateTo('finances')">
         <span class="quick-card-icon">💰</span>
@@ -577,58 +578,20 @@ body { min-height: 100vh; }
         <div class="quick-card-title">שעון עובדים</div>
         <div class="quick-card-desc">כניסה · יציאה · שעות</div>
       </div>
-
-      <div class="quick-card" onclick="navigateTo('wabot')">
-        <span class="quick-card-icon">🤖</span>
-        <div class="quick-card-title">בוט וואטסאפ</div>
-        <div class="quick-card-desc">הגדרות · שאלות · יומן</div>
-      </div>
-
-      <div class="quick-card" onclick="navigateTo('fusion')">
-        <span class="quick-card-icon">📈</span>
-        <div class="quick-card-title">בוט מסחר</div>
-        <div class="quick-card-desc">מצב · פוזיציות · עסקאות</div>
-      </div>
-
-      <div class="quick-card" onclick="navigateTo('dims')">
-        <span class="quick-card-icon">📐</span>
-        <div class="quick-card-title">מידות סוללה</div>
-        <div class="quick-card-desc">לפי כלי · מדבקה לעובד</div>
-      </div>
-
-      <div class="quick-card" onclick="navigateTo('calcs')">
-        <span class="quick-card-icon">🧰</span>
-        <div class="quick-card-title">מחשבונים</div>
-        <div class="quick-card-desc">טווח · טעינה · מהירות</div>
-      </div>
-
-      <div class="quick-card" onclick="navigateTo('diag')">
-        <span class="quick-card-icon">🩺</span>
-        <div class="quick-card-title">אבחון תקלות</div>
-        <div class="quick-card-desc">תסמין → סדר בדיקות</div>
-      </div>
-
       <div class="quick-card" onclick="navigateTo('inventory')">
         <span class="quick-card-icon">📦</span>
         <div class="quick-card-title">מלאי</div>
-        <div class="quick-card-desc">תאים · BMS · חלקים</div>
+        <div class="quick-card-desc">תאים · BMS · חסר להזמנה</div>
       </div>
-
-      <div class="quick-card" onclick="openNeedList()">
-        <span class="quick-card-icon">📝</span>
-        <div class="quick-card-title">חסר להזמנה</div>
-        <div class="quick-card-desc">לכתוב מה חסר · לשלוח לספק</div>
+      <div class="quick-card" onclick="navigateTo('dims')">
+        <span class="quick-card-icon">🧰</span>
+        <div class="quick-card-title">כלים טכניים</div>
+        <div class="quick-card-desc">מידות · מחשבונים · אבחון</div>
       </div>
-
-      <div class="quick-card" onclick="navigateTo('supplier')">
-        <span class="quick-card-icon">🔒</span>
-        <div class="quick-card-title">עלויות ספקים</div>
-        <div class="quick-card-desc">כל הספקים · תאים · BMS</div>
-      </div>
-      <div class="quick-card" onclick="navigateTo('stickerlog')">
-        <span class="quick-card-icon">🗂️</span>
-        <div class="quick-card-title">מדבקות</div>
-        <div class="quick-card-desc">היסטוריית מדבקות שהונפקו</div>
+      <div class="quick-card" onclick="navigateTo('wabot')">
+        <span class="quick-card-icon">🤖</span>
+        <div class="quick-card-title">בוטים</div>
+        <div class="quick-card-desc">וואטסאפ · מסחר</div>
       </div>
       <div class="quick-card" onclick="navigateTo('films')">
         <span class="quick-card-icon">🎬</span>
@@ -1015,6 +978,7 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">👥 לקוחות</h2>
   </div>
+  <div class="sub-tabs view-chips" data-views="customers"></div>
   <div id="dupeBanner" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
     <span style="font-size:18px;">👥</span>
     <div style="flex:1;" id="dupeBannerText"></div>
@@ -1031,6 +995,7 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">🛡️ אחריות פעילה</h2>
   </div>
+  <div class="sub-tabs view-chips" data-views="orders"></div>
   <div class="card">
     <div class="sub-tabs">
       <div class="sub-tab active" data-wtab="active" onclick="setWarrantyTab('active')">פעילות</div>
@@ -1447,9 +1412,11 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">🛒 מכירות ותיקונים</h2>
     <div class="btn-group">
+      <button class="btn btn-primary btn-sm" onclick="navigateTo('calc')">🔧 תיקון חדש</button>
       <button class="btn btn-primary btn-sm" onclick="openOrderEditor()">🛒 מכירה חדשה</button>
     </div>
   </div>
+  <div class="sub-tabs view-chips" data-views="orders"></div>
 
   <!-- The month summary card that used to sit here was the same figure as the first month
        header in the list below it. The header carries the split now — it was always the
@@ -1592,6 +1559,7 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">🏢 תיעוד תיקונים — עסקי</h2>
   </div>
+  <div class="sub-tabs view-chips" data-views="customers"></div>
   <div class="info-banner"><span>💡</span><div>סמן תיקון כ<strong>"לקוח עסקי"</strong> במחשבון התמחור — וכל התיקונים יתועדו כאן לכל בית עסק. 📋 מעתיק סיכום לקבוצת הוואטסאפ של החנות, עם <b>היתרה מחושבת מהחיובים והתשלומים</b> ולא מהזיכרון.</div></div>
   <div class="card" id="bizdocsListCard">
     <div id="bizdocsList"></div>
@@ -1615,6 +1583,7 @@ body { min-height: 100vh; }
       <button class="btn btn-primary btn-sm" onclick="navigateTo('stickers')">🏷️ פתח עורך</button>
     </div>
   </div>
+  <div class="sub-tabs view-chips" data-views="orders"></div>
   <div class="info-banner"><span>💡</span><div>כל מדבקה שנוצרת ב<strong>עורך המדבקות</strong> נשמרת לכאן אוטומטית ומסונכרנת — מסווגת לפי <strong>תיקון</strong> או <strong>בנייה/מכירה</strong>.</div></div>
   <div class="card">
     <div class="sub-tabs" style="margin-bottom:10px;">
@@ -2467,26 +2436,45 @@ function openExternal(url) {
 // Five pages lost their own home card and became tabs of a related page (Daniel,
 // 2026-08-02): 15 cards was more choices than the hub has distinct jobs. Nothing moved —
 // each page is still its own <section>; they just share an entry point and a tab strip.
+// Merged on 2026-10-05 (Daniel: "בלקוחות ועבודות יש 5 טאבים בדוק מה אפשר לאחד וגם בכל הלוח בקרה
+// … שלא יהיה עומס"; he chose each merge). לקוחות ועבודות went from five tabs to two: warranties and
+// the sticker log are views inside עבודות, business accounts a view inside לקוחות, and the repair
+// calculator a "🔧 תיקון חדש" button. The home page went from 14 cards to 8: the technical tools,
+// the two price lists and the two bots each became one card with tabs, and "חסר להזמנה" is inside
+// מלאי. `under` maps a view to the tab it lives in — the strip lights that tab while it is shown.
 const PAGE_GROUPS = [
-  // Both pages price the same visit — one a repair, one a product. The orders page already
-  // carried a "🧮 מחשבון מפורט" button to reach the other, which is a tab pair written the
-  // long way; that button is now the strip.
-  { tabs: [['customers', '👥 לקוחות'], ['orders', '📋 עבודות'], ['warranties', '🛡️ אחריות'],
-           ['bizdocs', '🏢 עסקי'], ['calc', '🧮 מחשבון']] },
+  { tabs: [['customers', '👥 לקוחות'], ['orders', '📋 עבודות']],
+    under: { bizdocs: 'customers', warranties: 'orders', stickerlog: 'orders', calc: 'orders' } },
+  { tabs: [['catalog', '🏷️ מחירי מכירה'], ['supplier', '🔒 עלויות ספקים']] },
+  { tabs: [['dims', '📐 מידות'], ['calcs', '🧰 מחשבונים'], ['diag', '🩺 אבחון']] },
+  { tabs: [['wabot', '🤖 וואטסאפ'], ['fusion', '📈 מסחר']] },
 ];
+// The views inside a tab, as one row of chips at the top of each of them.
+const PAGE_VIEWS = {
+  orders: [['orders', '📋 כל העבודות'], ['warranties', '🛡️ אחריות'], ['stickerlog', '🏷️ מדבקות']],
+  customers: [['customers', '👥 כל הלקוחות'], ['bizdocs', '🏢 עסקיים']],
+};
+function renderViewChips(page) {
+  document.querySelectorAll('[data-views]').forEach((box) => {
+    const views = PAGE_VIEWS[box.dataset.views] || [];
+    box.innerHTML = views.map(([p, l]) => `<div class="sub-tab${p === page ? ' active' : ''}" data-view="${p}" onclick="navigateTo('${p}')">${l}</div>`).join('');
+  });
+}
 function renderPageTabs(page) {
   document.querySelectorAll('.page-group-tabs').forEach((e) => e.remove());
   // The class has to come off every header too, or a page visited once keeps a hidden
   // title forever and renders with no name at all.
   document.querySelectorAll('.page-header.grouped').forEach((e) => e.classList.remove('grouped'));
-  const g = PAGE_GROUPS.find((x) => x.tabs.some((t) => t[0] === page));
+  renderViewChips(page);
+  const g = PAGE_GROUPS.find((x) => x.tabs.some((t) => t[0] === page) || (x.under && x.under[page]));
   if (!g) return;
+  const lit = (g.under && g.under[page]) || page;
   const sec = document.getElementById('page-' + page);
   const hdr = sec && sec.querySelector('.page-header');
   if (!hdr) return;
   const bar = document.createElement('div');
   bar.className = 'sub-tabs page-group-tabs';
-  bar.innerHTML = g.tabs.map(([p, l]) => `<div class="sub-tab${p === page ? ' active' : ''}" onclick="navigateTo('${p}')">${l}</div>`).join('');
+  bar.innerHTML = g.tabs.map(([p, l]) => `<div class="sub-tab${p === lit ? ' active' : ''}" onclick="navigateTo('${p}')">${l}</div>`).join('');
   hdr.classList.add('grouped');
   hdr.insertAdjacentElement('afterbegin', bar);
 }
@@ -2733,7 +2721,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v410';
+const HUB_BUILD = 'v411';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6024,7 +6012,7 @@ function renderOrders() {
   const list = document.getElementById('ordersList');
   if (all.length === 0) {
     const filtered = q || salesFilter !== 'all';
-    list.innerHTML = `<div class="card"><div class="empty-state"><div class="empty-state-icon">${filtered ? '🔍' : '🛒'}</div><div class="empty-state-text">${filtered ? 'אין תוצאות לסינון הזה.' : 'אין מכירות או תיקונים עדיין.<br>לחץ 🛒 מכירה חדשה, או עבור ל🧮 מחשבון מפורט לתיקון.'}</div></div></div>`;
+    list.innerHTML = `<div class="card"><div class="empty-state"><div class="empty-state-icon">${filtered ? '🔍' : '🛒'}</div><div class="empty-state-text">${filtered ? 'אין תוצאות לסינון הזה.' : 'אין מכירות או תיקונים עדיין.<br>לחץ 🛒 מכירה חדשה או 🔧 תיקון חדש למעלה.'}</div></div></div>`;
     return;
   }
 
@@ -9788,7 +9776,14 @@ async function renderWaBot(reload = true) {
   }
   if (reload || !waBot) {
     if (!waBot) box.innerHTML = '<div class="card"><div class="empty-state-text">טוען את הבוט…</div></div>';
-    try { waBot = await waAdmin(); _waOpenQuestions = (waBot.questions || []).filter((x) => !x.done).length; }
+    // An answer with no settings is not the bot's state (an error page, a proxy, an empty body):
+    // say we could not reach it, rather than throw on settings.enabled (2026-10-05, found when the
+    // בוטים card began opening this page first).
+    try {
+      const got = await waAdmin();
+      if (!got || typeof got.settings !== 'object' || !got.settings) throw new Error('תשובה לא צפויה מהבוט');
+      waBot = got; _waOpenQuestions = (waBot.questions || []).filter((x) => !x.done).length;
+    }
     catch (e) {
       box.innerHTML = '<div class="card"><div class="empty-state-text">⚠ לא הצלחתי להגיע לבוט: ' + escPunch(e.message) + '</div>'
         + '<button class="btn btn-secondary btn-block" style="margin-top:8px" onclick="renderWaBot()">🔄 נסה שוב</button></div>';
