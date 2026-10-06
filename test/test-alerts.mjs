@@ -8,7 +8,7 @@
 // whose status moved yesterday is not stuck, a row older than the status field is not stuck, a push
 // in flight is not a sync alert; the list pops up only when it is new (the same list waits for the
 // next day), never over a window he has open or the login; a customer's name is text, not markup;
-// each button goes where it says; the phone, which cannot download, is never told to back up.
+// each button goes where it says; the backup speaks only after a week without the daily cloud one.
 import { chromium } from 'playwright';
 import http from 'http';
 import fs from 'fs';
@@ -121,7 +121,11 @@ let a = await page.evaluate(() => hubAlerts().find((x) => x.id === 'backup'));
 check('a backup eight days old is an alert, with its age', a && /8 ימים/.test(a.text), a);
 await page.evaluate(() => localStorage.removeItem('gp_lastBackup'));
 a = await page.evaluate(() => hubAlerts().find((x) => x.id === 'backup'));
-check('no backup ever is an alert', a && /עוד לא נעשה גיבוי/.test(a.text), a);
+check('a device with no backup yet is not nagged — the automatic one runs seconds after the login', !a, a);
+await page.evaluate(({ DAY }) => { localStorage.setItem('gp_lastBackup', JSON.stringify(Date.now() - 30 * DAY)); localStorage.setItem('gp_lastCloudBackup', JSON.stringify(Date.now() - DAY)); }, { DAY });
+a = await page.evaluate(() => hubAlerts().find((x) => x.id === 'backup'));
+check('the daily cloud backup counts: a file a month old is no alert while yesterday\'s cloud backup ran', !a, a);
+await page.evaluate(() => localStorage.removeItem('gp_lastCloudBackup'));
 
 // the sync: a push in flight is not an alert, one still owed two minutes later is
 await page.evaluate(() => { Sync.pending = () => ['jobs', 'customers']; });
@@ -196,10 +200,11 @@ check('the 🔔 with nothing on it says so, and the dot goes off', await page.ev
 check('the 🔔 is in the header', await page.evaluate(() => !!document.querySelector('header #alertBell, .header #alertBell, #alertBell')), '');
 await page.close();
 
-// the phone: no backup alert, since its WebView cannot save a file
+// the phone (2026-10-06): the backup is the cloud one now, which the phone runs like any device — so
+// a week without it IS an alert there, and its button backs up to the cloud, never the file it cannot save
 const phone = await open({ native: true });
-const pa = await phone.evaluate(() => { localStorage.removeItem('gp_lastBackup'); return hubAlerts().map((x) => x.id); });
-check('on the phone a missing backup is not an alert — it could not act on it', !pa.includes('backup'), pa);
+const pa = await phone.evaluate((DAY) => { localStorage.setItem('gp_lastBackup', JSON.stringify(Date.now() - 9 * DAY)); return hubAlerts().find((x) => x.id === 'backup') || null; }, DAY);
+check('on the phone a week without a backup is an alert, and its button is the cloud backup', !!pa && pa.go === 'backupNow()', pa);
 await phone.close();
 
 check('no page errors', errs.length === 0, errs);
