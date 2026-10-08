@@ -1,9 +1,10 @@
-// The range calculator (v423, Daniel 2026-10-08: "חישוב טווח מקצועי ביותר, מדויק הכי ביותר לכל סוגי
+// The calculators (v423 range, Daniel 2026-10-08: "חישוב טווח מקצועי ביותר, מדויק הכי ביותר לכל סוגי
 // הכלים … לכל סוגי הבטריות"), driven in a browser.
 //
 //   node test/test-range.mjs
-//   node test/test-range.mjs --selftest     takes the air out and makes ATV tyres roll like a road
-//                                           bike's: the reference vehicles must leave their bands
+//   node test/test-range.mjs --selftest     takes the air out, makes ATV tyres roll like a road bike's
+//                                           and lets a cell take any charger: the reference vehicles
+//                                           must leave their bands and the charge warning must go
 //
 // The old calculator divided watt-hours by a fixed Wh/km. A physical model can be wrong in ways a
 // table cannot: a sign, a unit, a term that never reaches the total. So this checks it four ways:
@@ -43,7 +44,7 @@ await page.goto('http://localhost:4231/index.html');
 await page.evaluate((st) => {
   document.getElementById('loginOverlay').style.display = 'none';
   if (typeof init === 'function') init();
-  if (st) { RANGE_PHYS.rho0 = 0; RANGE_TIRES.atv.crr = 0.004; }
+  if (st) { RANGE_PHYS.rho0 = 0; RANGE_TIRES.atv.crr = 0.004; RANGE_CELLS['21700-50sg'].chg = [5, 10]; }
   navigateTo('calcs');
   setCalcTab('range');
 }, SELFTEST);
@@ -163,20 +164,29 @@ check('lead says it is computed to its usable depth', /עופרת/.test(warn.lea
 check('a climb it cannot make says so', /לא מטפס/.test(warn.stall), warn.stall);
 check('a speed above the top speed says so', /מעל המהירות המקסימלית/.test(warn.tooFast), warn.tooFast);
 
-// ---- 5. the page ----
+// ---- 5. the page: simple first (Daniel, 2026-10-08: "שלא יהיה מסובך מידי כי יש נתונים שרק
+// מקצועניים בתחום יודעים") ----
 const ui = await page.evaluate(() => {
   const opts = (id) => [...document.querySelectorAll('#' + id + ' option')].map((o) => o.textContent);
+  const labels = (fold) => [...document.querySelectorAll('[data-fold="' + fold + '"] label')].map((l) => (l.childNodes[0] || {}).textContent || '');
+  const isOpen = (fold) => !!document.querySelector('[data-fold="' + fold + '"]')?.open;
   return {
     vehicles: opts('rg_veh'), tires: opts('rg_tire'), motors: opts('rg_motor'), ctrls: opts('rg_ctrl'), cells: opts('rg_cell'),
-    labels: [...document.querySelectorAll('#rangeForm label')].map((l) => l.textContent).join(' | '),
+    basic: labels('rg-basic'), known: labels('rg-known'), pro: labels('rg-pro'),
+    open: { basic: isOpen('rg-basic'), known: isOpen('rg-known'), pro: isOpen('rg-pro') },
     result: document.getElementById('rangeResult')?.textContent || '',
   };
 });
 check('the vehicle list has ATVs', ui.vehicles.some((x) => /טרקטורון/.test(x)), ui.vehicles.join(', '));
 check('and golf carts, buggies, mobility scooters, wheelchairs', ['גולף', 'באגי', 'קלנועית', 'כיסא גלגלים'].every((w) => ui.vehicles.some((x) => x.includes(w))), ui.vehicles.join(', '));
-check('it asks for the wheel size', /קוטר גלגל/.test(ui.labels), ui.labels);
-check('the motor: type, power, count, top speed, KV', ['סוג מנוע', 'הספק נומינלי', 'מספר מנועים', 'מהירות מקסימלית', 'KV'].every((w) => ui.labels.includes(w)), ui.labels);
-check('the controller: type and current', ['סוג בקר', 'זרם בקר'].every((w) => ui.labels.includes(w)) && ui.ctrls.length >= 3, ui.ctrls.join(', '));
+// the open part asks at most eight things, and none of them is a technician's
+const PRO_WORDS = /KV|CdA|Crr|בקר|ניתוק|BMS|יחס העברה|רגנרטיב|S\)|צמיג|תנוחת/;
+check('the open section asks at most eight questions', ui.basic.length >= 6 && ui.basic.length <= 8, ui.basic.join(' | '));
+check('and none of them is a professional\'s', !ui.basic.some((l) => PRO_WORDS.test(l)), ui.basic.join(' | '));
+check('it is the only section open', ui.open.basic && !ui.open.known && !ui.open.pro, JSON.stringify(ui.open));
+check('the owner\'s section asks the motor\'s watts and the wheel', ['הספק המנוע', 'גודל גלגל'].every((w) => ui.known.some((l) => l.includes(w))), ui.known.join(' | '));
+check('the professional section has the motor, the controller, KV, CdA and the tyre', ['סוג מנוע', 'סוג בקר', 'זרם בקר', 'KV', 'CdA', 'צמיג', 'ניתוק'].every((w) => ui.pro.some((l) => l.includes(w))), ui.pro.join(' | '));
+check('the controller: type and current', ui.ctrls.length >= 3, ui.ctrls.join(', '));
 check('every battery family is there', ['50PL', '50SG', '50E', 'LiFePO4', 'LTO', 'NiMH', 'עופרת', 'LiPo'].every((w) => ui.cells.some((x) => x.includes(w))), ui.cells.join(', '));
 check('the page shows a range', /^\d+(–\d+)? ק"מ$/.test(ui.result.trim()), ui.result);
 
@@ -218,6 +228,92 @@ const wa = await page.evaluate(() => {
   return decodeURIComponent(url.replace(/^[^?]*\?text=/, ''));
 });
 check('the WhatsApp text carries the range and the battery', /טווח צפוי: \d+–\d+ ק"מ/.test(wa) && /72V 50/.test(wa), wa);
+
+// "where do you ride" is one question that sets the stops AND the surface
+await page.selectOption('#rg_veh', 'atv');
+await page.selectOption('#rg_where', 'sand');
+const where = await page.evaluate(() => ({ use: rangeState.use, surface: rangeState.surface, shown: document.getElementById('rg_surface').value, km: rangeLast.band.mid.km }));
+await page.selectOption('#rg_where', 'dirt');
+const dirtKm = await page.evaluate(() => rangeLast.band.mid.km);
+check('"where" sets the surface and the stops, and the professional fields follow', where.use === 'trail' && where.surface === 'sand' && where.shown === 'sand', JSON.stringify(where));
+check('and sand rides shorter than a dirt road', where.km < dirtKm, `${where.km.toFixed(0)} / ${dirtKm.toFixed(0)}`);
+
+// ---- 6. the five smaller calculators, on the same engine ----
+const small = await page.evaluate(() => {
+  const ch = (o) => calcChargeModel({ V: 48, cell: '21700-50e', from: 0, to: 100, ...o });
+  const sp = (o) => calcSpeedModel(o);
+  const presets = Object.keys(RANGE_VEHICLES).map((k) => { const s = sp({ veh: k }); return [k, s.top / RANGE_VEHICLES[k].top]; });
+  const up = (o) => calcUpgradeModel(o);
+  return {
+    // a 15Ah pack on a 2A charger takes a night; 20Ah from 10% on 5A an afternoon
+    night: ch({ ah: 15, A: 2 }).hours, afternoon: ch({ ah: 20, A: 5, from: 10 }).hours,
+    to80: ch({ ah: 20, A: 5, to: 80 }).hours, to100: ch({ ah: 20, A: 5 }).hours,
+    lead: ch({ ah: 50, A: 5, cell: 'lead', V: 24 }).hours, li: ch({ ah: 50, A: 5, cell: '21700-50e', V: 24 }).hours,
+    tooFast: ch({ ah: 10, A: 15, cell: '21700-50sg' }).notes.map((n) => n.lvl + ':' + n.t).join(' | '),
+    normal: ch({ ah: 20, A: 5 }).notes.filter((n) => n.lvl !== 'info').length,
+    // the speeds: the classic questions, and every class reproducing the top speed the range page uses
+    bike1000: sp({ veh: 'ebike', V: 48, power: 1000, wheel: 20 }).top,
+    m365: sp({ veh: 'scooter', V: 36, power: 350, wheel: 8.5 }).top,
+    heavy: sp({ veh: 'moped', rider: 140 }).top <= sp({ veh: 'moped', rider: 70 }).top,
+    voltUp: sp({ veh: 'scooter', V: 60 }).top > sp({ veh: 'scooter', V: 48 }).top,
+    presets,
+    // a voltage upgrade: faster and further on a scooter; 36V to 72V on a 350W bike is not a plan
+    scoot: up({ veh: 'scooter', fromV: 48, toV: 60, ah: 15, power: 500 }),
+    wild: up({ veh: 'ebike', fromV: 36, toV: 72, ah: 15, power: 350 }),
+    // running cost
+    cost: calcCostModel({ veh: 'ebike', km: 20 }),
+    costAtv: calcCostModel({ veh: 'atv', km: 20 }),
+    // health, and a winter measurement on a healthy pack
+    h1: calcHealthModel({ orig: 60, curr: 40, years: 2 }),
+    hw: calcHealthModel({ orig: 60, curr: 52, years: 1, season: 'winter' }),
+    hs: calcHealthModel({ orig: 60, curr: 52, years: 1 }),
+  };
+});
+check('charge: 15Ah on a 2A charger takes 7-10 hours', inBand(small.night, 7, 10), small.night.toFixed(2));
+check('charge: 20Ah from 10% on 5A takes 3.5-5.5 hours', inBand(small.afternoon, 3.5, 5.5), small.afternoon.toFixed(2));
+check('charge: to 80% is well under to 100% (the slow end)', small.to80 < small.to100 * 0.85, `${small.to80.toFixed(2)} / ${small.to100.toFixed(2)}`);
+check('charge: lead is slower than lithium on the same charger', small.lead > small.li * 1.2, `${small.lead.toFixed(1)} / ${small.li.toFixed(1)}`);
+check('charge: a charger past the cell\'s maximum is called out', /^bad:.*מעל המקסימום/m.test(small.tooFast.split(' | ').join('\n')), small.tooFast);
+check('charge: a normal charger draws no warning', small.normal === 0, String(small.normal));
+check('speed: 48V 1000W on 20" wheels does 38-48 km/h', inBand(small.bike1000, 38, 48), small.bike1000.toFixed(1));
+check('speed: a 36V 350W scooter on 8.5" does 20-28 km/h', inBand(small.m365, 20, 28), small.m365.toFixed(1));
+check('speed: a heavier rider is not faster', small.heavy);
+check('speed: more volts on the same scooter is faster', small.voltUp);
+const offTop = small.presets.filter(([, r]) => Math.abs(r - 1) > 0.03);
+check('speed: every vehicle class reaches the top speed the range page uses (±3%)', offTop.length === 0, offTop.map(([k, r]) => `${k} ${(r * 100).toFixed(0)}%`).join(', '));
+check('upgrade: 48→60V on a scooter is faster and goes further', small.scoot.s1.top > small.scoot.s0.top * 1.05 && small.scoot.km1 > small.scoot.km0 && small.scoot.feasible, `${small.scoot.s0.top.toFixed(0)}→${small.scoot.s1.top.toFixed(0)} km/h, ${small.scoot.km0.toFixed(0)}→${small.scoot.km1.toFixed(0)} km`);
+check('upgrade: 36→72V on a 350W bike is refused, with the reason', !small.wild.feasible && small.wild.notes.some((n) => n.lvl === 'bad'), small.wild.notes.map((n) => n.t).join(' | '));
+check('cost: an e-bike costs ₪0.3-3 per 100km of electricity', inBand(small.cost.elec100, 0.3, 3), small.cost.elec100.toFixed(2));
+check('cost: and saves against a car', small.cost.saveMonth > 0, small.cost.saveMonth.toFixed(0));
+check('cost: an ATV uses more per km than an e-bike', small.costAtv.whKm > small.cost.whKm * 3, `${small.costAtv.whKm.toFixed(0)} / ${small.cost.whKm.toFixed(0)}`);
+check('health: 40 of 60km is 67% — a spot repair', small.h1.pct === 67 && small.h1.key === 'spot', `${small.h1.pct} ${small.h1.key}`);
+check('health: the same reading in winter is a healthier pack', small.hw.pct > small.hs.pct + 4, `${small.hw.pct} / ${small.hs.pct}`);
+
+// the five pages themselves: picking a vehicle fills it in, the answer is a number, never NaN
+const pages = {};
+for (const [tab, box] of [['charge', 'chResult'], ['health', 'heResult'], ['speed', 'spResult'], ['cost', 'coResult'], ['upgrade', 'upResult']]) {
+  await page.evaluate((t) => setCalcTab(t), tab);
+  pages[tab] = await page.evaluate((b) => document.getElementById(b).textContent, box);
+}
+check('the charge page answers in hours', /\d+:\d\d שעות/.test(pages.charge) && !/NaN|undefined/.test(pages.charge), pages.charge.slice(0, 120));
+check('the health page answers in %', /\d+% בריאות/.test(pages.health) && !/NaN|undefined/.test(pages.health), pages.health.slice(0, 120));
+check('the speed page answers in km/h', /\d+ קמ"ש/.test(pages.speed) && !/NaN|undefined/.test(pages.speed), pages.speed.slice(0, 120));
+check('the cost page answers in ₪ and dates its prices', /₪[\d,]+ לחודש/.test(pages.cost) && /2026/.test(pages.cost) && !/NaN|undefined/.test(pages.cost), pages.cost.slice(0, 160));
+check('the upgrade page answers', /מהירות|לא מומלץ/.test(pages.upgrade) && !/NaN|undefined/.test(pages.upgrade), pages.upgrade.slice(0, 120));
+await page.evaluate(() => setCalcTab('speed'));
+await page.selectOption('#spVeh', 'surron');
+const surronSp = await page.evaluate(() => ({ V: document.getElementById('spV').value, W: document.getElementById('spW').value, wheel: document.getElementById('spWheel').value, out: document.getElementById('spResult').textContent }));
+check('picking a Sur-Ron fills its voltage, motor and wheel', surronSp.V === '60' && surronSp.W === '4000' && surronSp.wheel === '19', JSON.stringify(surronSp).slice(0, 160));
+const sweep2 = [];
+for (const v of vehs) {
+  for (const [tab, sel, box] of [['speed', 'spVeh', 'spResult'], ['cost', 'coVeh', 'coResult'], ['upgrade', 'upVeh', 'upResult']]) {
+    await page.evaluate((t) => setCalcTab(t), tab);
+    await page.selectOption('#' + sel, v);
+    const t = await page.evaluate((b) => document.getElementById(b).textContent, box);
+    if (/NaN|Infinity|undefined/.test(t) || !/\d/.test(t)) sweep2.push(`${tab}/${v}`);
+  }
+}
+check('speed, cost and upgrade render for every vehicle class', sweep2.length === 0, sweep2.slice(0, 6).join(' | '));
 
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
