@@ -2771,7 +2771,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v421';
+const HUB_BUILD = 'v422';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -8443,7 +8443,7 @@ function standPlan(o) {
   const outline = tr ? [[0, 0], [tr.L, 0], [tr.L, tail.y0], [tr.L + tr.nx.L, tail.y0], [tr.L + tr.nx.L, tail.y0 + tr.nx.W],
     [tr.L, tail.y0 + tr.nx.W], [tr.L, tr.W], [0, tr.W]].map(([x, y]) => [x - w0, y - w0]) : null;
   const notes = [layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : '',
-    tail && !o.quiet ? `קבוצות ${tail.from + 1}–${sPer} בחלק הצר` : '', o.bmsUp ? 'ה-BMS מעל התאים — בקצה אין לו מקום' : ''].filter(Boolean);
+    tail && !o.quiet ? `קבוצות ${tail.from + 1}–${sPer} בחלק הצר` : ''].filter(Boolean);
   return { cells, dia, wMM, hMM, groups: true, outline,
     bms: bms ? (tr ? { x: wMM + 2, y: tail.y0 - w0, w: Math.max(1, bms - 2), h: tr.nx.W } : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
     split: layers > 1, note: notes.join(' · ') };
@@ -8597,9 +8597,10 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
 // on the bracket's own grid — one bracket, so the grid does not shift where the tray narrows. They
 // are laid in the order the series runs, row by row and snaking, so a group there may turn a
 // corner (five across the narrow part, two in the next row) and still weld as one. On the OX at
-// 72V on the square 23 that is groups 19 and 20 in three rows of five, one place spare: 140 of
-// 141, where his own count says 140. Until then the calculator saw only the 425×165 and said
-// "⛔ לא נכנס — 17S מתוך 20S" over the build he counted.
+// 72V on the square 23 with a 15mm BMS after them that is groups 19 and 20 in two rows of five
+// (20S5P). With no BMS at all, 20S7P would fill 140 of the 141 places, which is what he counted —
+// but the BMS sits at the end (his word, 2026-10-08), so 20S7P does not go in on any nickel; the
+// most at 72V is 20S6P on ניקל א׳ or ב׳, in the wide part, the BMS in the narrow one.
 // Measured from the tray's walls; the narrow part sits centred across the far end.
 function tailFit(tub, lay, orient, cStep, aStep, half, P, sPer, pitch, rowPitch, dia) {
   const B = orient === 'B', stag = rowPitch < pitch - 0.01;
@@ -8682,9 +8683,7 @@ function holderTakes(v, tub, fmt, h, S, P, c, maxLayers) {
   const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
   if (!p) return 0;
   if (v && v.caps && v.caps[h] != null && S * P > v.caps[h]) return 0;
-  const l = layersFor(tub, S, P, maxLayers, p, rp, c.dia);
-  // the end of a two-part tray has no room for the BMS: on top of the cells (bmsUpOk)
-  return l || !bmsUpOk(v, tub) ? l : layersFor(tub.whole, S, P, maxLayers, p, rp, c.dia);
+  return layersFor(tub, S, P, maxLayers, p, rp, c.dia);
 }
 // The biggest P a holder takes in this tray at this voltage, his way (0 when nothing fits).
 // Used to say, per nickel and per voltage, how much goes in (Daniel, 2026-09-27: "תכתוב מה
@@ -8802,16 +8801,10 @@ function calcPackDims() {
   const shown = (HOLDERS_SHOWN[fmt] || HOLDERS_SHOWN[21700]).concat(holder === 'custom' ? ['custom'] : []);
   const cardFor = (h) => {
     const [p, rp] = pairOf(h);
-    let layersH = 1, lay = groupLayout(S, P, 1, Infinity), fits = null, bmsUp = false, tubH = tub;
+    let layersH = 1, lay = groupLayout(S, P, 1, Infinity), fits = null;
     if (judged) {
-      layersH = layersFor(tub, S, P, maxLayers, p, rp, c.dia);
-      // No room for the BMS at the end of a two-part tray, and room for the cells: it goes on top.
-      if (!layersH && bmsUpOk(dimVehicle, tub)) {
-        const l2 = layersFor(tub.whole, S, P, maxLayers, p, rp, c.dia);
-        if (l2) { layersH = l2; bmsUp = true; tubH = tub.whole; }
-      }
-      layersH = layersH || 1;
-      lay = hisFit(tubH, S, P, layersH, p, rp, c.dia);
+      layersH = layersFor(tub, S, P, maxLayers, p, rp, c.dia) || 1;
+      lay = hisFit(tub, S, P, layersH, p, rp, c.dia);
       // Where he COUNTED this holder in this tray (the OX), his count is a ceiling as well.
       fits = lay.fits && !(dimVehicle.caps && dimVehicle.caps[h] != null && N > dimVehicle.caps[h]);
     } else if (tub) fits = false;
@@ -8832,14 +8825,12 @@ function calcPackDims() {
     // 19.5mm holds 21.15mm cells because the nearest cell in the next row sits half a pitch over.
     const stagger = rp < p - 0.01 && (orient === 'A' ? rows > 1 : cols > 1);
     const tight = Math.min(p, stagger ? Math.sqrt((p / 2) ** 2 + rp ** 2) : rp);
-    // The block's L runs into the narrow part with the cells; a BMS on top adds to no side we know.
-    // A card that does not take the build says nothing about where its BMS would go.
-    if (!fits) bmsUp = false;
-    return { h, p, rp, lay, orient, rows, cols, fits, tight, layers: layersH, bmsUp,
-      L: Math.round(alongMM + (bmsTop || bmsUp ? 0 : extra)), W: Math.round(acrossMM),
+    // The block's L runs into the narrow part with the cells, and the BMS sits after them.
+    return { h, p, rp, lay, orient, rows, cols, fits, tight, layers: layersH,
+      L: Math.round(alongMM + (bmsTop ? 0 : extra)), W: Math.round(acrossMM),
       H: Math.round(layersH * (c.len + DIM_CAP) + (bmsTop ? extra : 0)),
-      plan: standPlan({ cols, rows, pitch: p, rowPitch: rp, dia: c.dia, N, P, layers: layersH, extra: bmsTop || bmsUp ? 0 : extra, orient, bands: lay.bands,
-        tail: lay.tail, tray: tubAll, bmsUp, quiet: !fits }) };
+      plan: standPlan({ cols, rows, pitch: p, rowPitch: rp, dia: c.dia, N, P, layers: layersH, extra: bmsTop ? 0 : extra, orient, bands: lay.bands,
+        tail: lay.tail, tray: tubAll, quiet: !fits }) };
   };
   const cards = shown.map(cardFor);
   const sel = cards.find((k) => k.h === holder) || cards[0];
@@ -8868,7 +8859,7 @@ function calcPackDims() {
       const ok = !overCount && fitsTray;
       const tl = sel.lay && sel.lay.tail;
       if (ok) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` — בקיפול ל-${layers} שכבות` : ''}`
-        + (tl ? ` — קבוצות ${tl.from + 1}–${Math.ceil(S / layers)} בחלק הצר` : '') + (sel.bmsUp ? ', ה-BMS מעל התאים' : '') + '</div>';
+        + (tl ? ` — קבוצות ${tl.from + 1}–${Math.ceil(S / layers)} בחלק הצר` : '') + '</div>';
       else {
         // Say WHY in his terms: how many series groups the length takes, against how many he needs.
         let across = 0, g = 1, sFit = 0;
@@ -8910,7 +8901,7 @@ function calcPackDims() {
     return iso(`${vv}V: ${mp ? seriesForV(vv) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah' : '—'}`);
   }).join('<br>');
   const cardHtml = (k) => {
-    const badge = k.fits == null ? '' : `<span class="dim-badge ${k.fits ? 'ok' : 'no'}">${k.fits ? '✓ נכנס' + (k.layers > 1 ? ` ב-${k.layers} שכבות` : '') + (k.bmsUp ? ' · BMS מעל' : '') : '✗ לא נכנס'}</span>`;
+    const badge = k.fits == null ? '' : `<span class="dim-badge ${k.fits ? 'ok' : 'no'}">${k.fits ? '✓ נכנס' + (k.layers > 1 ? ` ב-${k.layers} שכבות` : '') : '✗ לא נכנס'}</span>`;
     // 0.1mm of margin (2026-09-27). It was 0.2, which condemned his own 18.5 bracket for an
     // 18.35mm 18650 — 0.15mm, the clearance real brackets are built to. What it exists to catch is
     // the 50SG (21.35) in a 21.4 bracket: 0.05mm, and that is still flagged.
@@ -8931,7 +8922,7 @@ function calcPackDims() {
       : 'רוחב ' + P + 'P' + (gRows > 1 ? ' (' + gRows + ' שורות)' : '') + ' · אורך ' + sPer + 'S') + (layers > 1 ? ' · ' + layers + ' שכבות' : '')
       + ' · ' + (sel.h === 'custom' ? 'מותאם אישית' : HOLDER_NAME[sel.h]),
     foot: 'גודל סוללה ' + L + '×' + W + '×' + H + ' מ״מ' + (layers > 1 ? ' · שכבה 1: קבוצות 1–' + sPer + ' · שכבה 2: קבוצות ' + (sPer + 1) + '–' + S : '')
-      + (sel.lay && sel.lay.tail ? ' · קבוצות ' + (sel.lay.tail.from + 1) + '–' + sPer + ' בחלק הצר' : '') + (sel.bmsUp ? ' · BMS מעל התאים' : '') };
+      + (sel.lay && sel.lay.tail ? ' · קבוצות ' + (sel.lay.tail.from + 1) + '–' + sPer + ' בחלק הצר' : '') };
   let html;
   // A Bomber is built lying, and an e-bike case is his own layout (2026-10-04) — each has its own
   // cards, below; everything else is the standing pack.
@@ -8944,7 +8935,7 @@ function calcPackDims() {
       // height nobody measured is written as '?' and said — the height was not checked.
       + (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ`
         + (tubAll.nx ? ` + חלק צר <bdi dir="ltr">${tubAll.nx.L} × ${tubAll.nx.W}</bdi>` : '')
-        + (tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ${sel.bmsUp ? ' ועוד עובי ה-BMS' : ''}` : '') : ' · גובה לא ידוע, לא נבדק')) : '')
+        + (tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` : '') : ' · גובה לא ידוע, לא נבדק')) : '')
       + rec + `<div class="dim-nks">${cards.map(cardHtml).join('')}</div>`;
   }
   // With no vehicle chosen, check the build against his saved trays — turned either way,
@@ -9402,14 +9393,14 @@ function caseHtml(v, c, fmt, V, S, P, N) {
 // The part of a tray the cells get: the BMS allowance comes off its long side.
 //
 // A TWO-PART TRAY (the OX, 2026-10-08): the pack ends in the narrow part, so the BMS comes off
-// that first. `whole` is the same tray with the BMS somewhere else — on top of the cells — which
-// holderTakes and the cards try when the end has no room for it (bmsUpOk).
+// that first. It sits AT THE END, never on top of the cells (Daniel, the same evening: "ה-BMS יושב
+// בסוף לא מעל התאים"). v421 put it on top when the end had no room, and so said 20S7P went in.
 function cellTub(tb, extra) {
   if (!tb) return null;
   const e = extra || 0;
   if (!tb.nx) return { ...tb, L: Math.max(0, tb.L - e) };
   const left = tb.nx.L - e;
-  const t = { ...tb, whole: tb };
+  const t = { ...tb };
   if (left > 0) t.nx = { ...tb.nx, L: left };
   else { delete t.nx; t.L = Math.max(0, tb.L + left); }
   return t;
@@ -9431,9 +9422,6 @@ function tubOf(v) {
   if (mn && +mn[1] > 0 && +mn[2] > 0 && +mn[2] < tb.W) tb.nx = { L: +mn[1], W: +mn[2] };
   return tb;
 }
-// The BMS may go on top of the cells when the end of a two-part tray has no room for it — in a
-// tray that is raised anyway, where it adds its thickness to the riser.
-function bmsUpOk(v, tub) { return !!(tub && tub.whole && needsRiser(v)); }
 // A table row whose tray was measured — by him or a customer — or whose pack side he confirmed.
 // The same reading of the tub text as gen-fit-data (negation first: /נמדד/ matches inside "לא
 // נמדד"), without its hubOnly cut — that one decides what is published, this one what he sees.
@@ -9827,8 +9815,9 @@ const VEHICLE_PACKS = [
   // number wins; the geometry is for the vehicles nobody has counted yet.
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', src: 'AI', p: 21.5, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
     // Height 65mm, Daniel 2026-09-27: "גובה אמבטיה 65 מ"מ חייב להשים מגביה". The narrow 60×140 part
-    // is counted since 2026-10-08 (tubOf's nx, tailFit): 60 along, 140 across, centred — his 20S7P
-    // on the square 23 is groups 1-18 in the main part and 19-20 in the narrow one.
+    // is counted since 2026-10-08 (tubOf's nx, tailFit): 60 along, 140 across, centred. The BMS sits
+    // at its end (Daniel: "ה-BMS יושב בסוף לא מעל התאים"), so 20S7P does not go in: 72V is 20S6P on
+    // ניקל א׳ or ב׳, in the wide part. His counts (caps) are cells alone, without the BMS.
     tub: '425×165×65 מ"מ + צר 60×140', caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 21.5, s60: 16, p60: 4, s72: 20, p72: 3, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 72, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' ,
     tub: '455×134×58 מ"מ פנימי (נמדד 22.9.2026) · רדוד — אף תא לא עומד בו' },

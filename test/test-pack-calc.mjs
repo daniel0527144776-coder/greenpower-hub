@@ -121,8 +121,8 @@ const rec = await page.evaluate(() => {
   const order = holdersFor(21700).slice();
   // and the OX: his count is a ceiling, not a layout. 60V 40Ah is 16S8P, 128 cells, under the 140
   // he counted on the square — but eight do not go across its 165mm, a group takes two rows, and
-  // the length runs out. (This used to be 72V 20S7P, which said ⛔ only because the narrow part was
-  // not counted; it goes in since 2026-10-08, groups 19-20 in the narrow part.)
+  // the length runs out. (This used to be 72V 20S7P. With the BMS at the end — Daniel,
+  // 2026-10-08: "ה-BMS יושב בסוף לא מעל התאים" — that one does not go in either, asserted below.)
   document.getElementById('dimExtra').value = '22';
   useVehiclePack('Inokim OX', 60);
   document.getElementById('dimHolder').value = 'square-23';
@@ -141,7 +141,7 @@ check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), 
 check('and it only recommends one that fits', rec.cards.length === 3 && /^diag-b:✓ נכנס:.*מומלץ/.test(rec.cards.find((k) => k.startsWith('diag-b')) || '')
   && /^diag-a:✗ לא נכנס:(?!.*מומלץ)/.test(rec.cards.find((k) => k.startsWith('diag-a')) || '') && /^square-23:✗ לא נכנס/.test(rec.cards.find((k) => k.startsWith('square-23')) || ''), rec.cards);
 check('a counted tray is still judged by the layout, not the count alone', /16S 8P · 128 תאים/.test(rec.ox) && /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.ox), rec.ox.slice(0, 120));
-check('and the build he counted, 20S7P on the square, goes in', /^✅ נכנס ל-Inokim OX/.test(rec.ox72.trim()) && /20S 7P · 140 תאים/.test(rec.ox72), rec.ox72.slice(0, 120));
+check('and 20S7P on the square, with the 26mm BMS at the end, does not go in either', /^⛔/.test(rec.ox72.trim()) && /20S 7P · 140 תאים/.test(rec.ox72), rec.ox72.slice(0, 120));
 
 // ---- 4b. the tray HEIGHT, which was stored and never read until 2026-09-22 ----
 // A 21700 is 70.15mm long. A tray shallower than that cannot take a standing cell, and the
