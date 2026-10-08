@@ -105,6 +105,11 @@ jobs:
       - name: The pack calculator rules
         run: node test/test-pack-calc.mjs
 
+      # A physical model can be wrong in ways a table cannot: a sign, a unit, a term that never
+      # reaches the total. Reference vehicles, direction, energy balance, the warnings, the page.
+      - name: The range calculator
+        run: node test/test-range.mjs
+
       # Each replaces a manual step, and a step that silently stops happening is worse
       # than one that was never automated.
       # A wrong deduction is silent and it compounds, so this leans on what must NOT happen.
