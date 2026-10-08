@@ -182,6 +182,16 @@ jobs:
       - name: A discount on a repair or a sale
         run: node test/test-discount.mjs
 
+      # Wages paid on the 1st, and a report changed by hand (2026-10-06): past months due now, this month
+      # on the next 1st, an alert from the 1st until it is paid; a report corrected before or after approval.
+      - name: Wages on the 1st, and editing a report
+        run: node test/test-wage-month.mjs
+
+      # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
+      # reminder only after a week without it; a restore that only adds what is missing.
+      - name: The daily cloud backup
+        run: node test/test-backup.mjs
+
       # The pop-up alerts (2026-10-05): the bot's open questions, stuck work, the backup, the sync —
       # each exactly when its condition holds, new ones only, never over a window he has open.
       - name: The hub's pop-up alerts
