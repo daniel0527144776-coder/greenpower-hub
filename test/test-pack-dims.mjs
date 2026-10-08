@@ -148,7 +148,51 @@ const ox = await page.evaluate(() => {
 });
 check('the OX fills its own 20S7P build', /20S 7P/.test(ox.filled), ox.filled.slice(0, 60));
 check('140 cells is over the 126 counted on the diagonal holder', /⛔|⚠/.test(ox.overDiag) && /126/.test(ox.overDiag) && /חורג/.test(ox.overDiag), ox.overDiag.slice(-70));
-check('and not over the 140 counted on the square one', !/⚠/.test(ox.okSquare), ox.okSquare.slice(-70));
+// It used to test only for ⚠, and passed for two weeks over "⛔ לא נכנס ל-Inokim OX — 17S מתוך 20S":
+// the verdict on the build he counted. The answer itself is asserted now.
+check('and fits on the square one, with no ⛔ and no ⚠', /✅ נכנס ל-Inokim OX/.test(ox.okSquare) && !/⛔|⚠/.test(ox.okSquare), ox.okSquare.slice(0, 120));
+
+// ---- the OX's narrow part (2026-10-08) ----
+// Daniel: "תבדוק איך להכניס לאינוקים 20S7P 21700 חלק רחב 42.5×16.5 חלק צר 6×14". The calculator saw
+// only the 425×165, so 18 groups fitted and the build he counted (140 on the square 23) read "⛔ לא
+// נכנס". With the narrow part, 60 along and 140 across, centred: groups 1-18 across the main part,
+// 19 and 20 in three rows of five past them, one place spare. The 26mm BMS has no room at the end
+// then, and the tray is raised anyway, so it goes on top: the riser line says so. 60V is unchanged
+// (16S7P on the square), and the diagonals stay held to his counts. --selftest takes the narrow part
+// away.
+const oxn = await page.evaluate((SELF) => {
+  const real = window.tailFit;
+  if (SELF) window.tailFit = () => null;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  document.getElementById('dimCell').value = '21700-50e';
+  document.getElementById('dimExtra').value = '26'; dimExtraTouched = true;   // the allowance he opens it on at 72V
+  useVehiclePack('Inokim OX');
+  set('dimHolder', 'square-23'); calcPackDims();
+  const res = document.getElementById('dimResult').innerText;
+  const card = document.querySelector('#dimResult .dim-nk.sel');
+  const svg = card && card.querySelector('svg.pack-svg');
+  const v = vehicleByName('Inokim OX'), c = DIM_CELLS['21700-50e'], tb = tubOf(v);
+  const max = (h, V) => maxPFor(v, cellTub(tb, dimExtraFor(V)), 21700, h, V, c);
+  const out = { res, tb, cells: svg ? svg.querySelectorAll('circle').length : 0, outline: !!(svg && svg.querySelector('.pack-outline')),
+    label: dimLast ? { n: dimLast.plan.cells.length, foot: dimLast.foot } : null,
+    m72: max('square-23', 72), m60: max('square-23', 60), a72: max('diag-a', 72), b72: max('diag-b', 72),
+    list: (() => { renderVehiclePacks(); const r = [...document.querySelectorAll('#vpList .list-item')].find((x) => ((x.querySelector('.list-item-title') || {}).textContent || '').trim() === 'Inokim OX'); return r ? r.textContent.replace(/\s+/g, ' ') : ''; })() };
+  clearDimVehicle();
+  window.tailFit = real;
+  return out;
+}, SELFTEST);
+check('the OX tub is read with its narrow part, 60 along and 140 across',
+  oxn.tb && oxn.tb.L === 425 && oxn.tb.W === 165 && oxn.tb.H === 65 && oxn.tb.nx && oxn.tb.nx.L === 60 && oxn.tb.nx.W === 140, JSON.stringify(oxn.tb));
+check('72V 20S7P on the square 23: ✅, groups 19-20 in the narrow part, the BMS on top',
+  /✅ נכנס ל-Inokim OX — קבוצות 19–20 בחלק הצר, ה-BMS מעל התאים/.test(oxn.res) && !/⛔/.test(oxn.res), oxn.res.slice(0, 120));
+check('the tray row names the narrow part, and the riser takes the BMS too',
+  /425 × 165 × 65 מ"מ \+ חלק צר 60 × 140 · צריך מגביה של לפחות 10 מ"מ ועוד עובי ה-BMS/.test(oxn.res), oxn.res.slice(0, 260));
+check('the square 23 takes 20S7P at 72V and still 16S7P at 60V; the diagonals stay at 20S6P by his counts',
+  oxn.m72 === 7 && oxn.m60 === 7 && oxn.a72 === 6 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
+check('the drawing has all 140 cells and the tray round them; the label too, and it says where 19-20 go',
+  oxn.cells === 140 && oxn.outline && oxn.label && oxn.label.n === 140 && /קבוצות 19–20 בחלק הצר · BMS מעל התאים/.test(oxn.label.foot),
+  [oxn.cells, oxn.outline, JSON.stringify(oxn.label)]);
+check('the vehicle list shows both parts of the tub', /425×165×65 \+ 60×140/.test(oxn.list), oxn.list);
 
 // The drawing is the answer to "how do I lay it out", so it has to BE the layout: one circle
 // per cell, in the grid the numbers above it describe. A picture that disagrees with the
@@ -878,11 +922,14 @@ const ox18 = await page.evaluate((SELF) => {
   return { best, ah: c.ah, max19, max185, fits12, orient: lay10.orient, bands: lay10.bands, res, nums: nums.length, label, r21along: /קבוצה לאורך/.test(r21) };
 }, SELFTEST);
 check('the EVE 26V is counted at its rated 2.6Ah', ox18.ah === 2.6, ox18.ah);
-check('the OX takes 16S10P of 18650 on the square 19 and the 18.5 diagonal — the OX Super\'s own pack', ox18.max19 === 10 && ox18.max185 === 10, [ox18.max19, ox18.max185]);
+// 16S11P since 2026-10-08: the BMS sits in the OX's narrow part now (cellTub takes it off there
+// first), so the main part's whole 425mm is the cells' — eleven in a line, two bands, 420mm. It
+// was 16S10P on the 403 the BMS used to leave, which is also Inokim's own OX Super pack.
+check('the OX takes 16S11P of 18650 on the square 19 and the 18.5 diagonal, the BMS in the narrow part', ox18.max19 === 11 && ox18.max185 === 11, [ox18.max19, ox18.max185]);
 check('laid along the tray: ten in a line, two bands', ox18.orient === 'C' && ox18.bands === 2, [ox18.orient, ox18.bands]);
-check('16S12P still does not go in, and the best offered for it is 16S10P', !ox18.fits12 && ox18.best === '16S10P', [ox18.fits12, ox18.best]);
-check('the card says 16S10P fits, 26Ah, and how it is laid; each group numbered once; the label says it too',
-  /✅ נכנס ל-Inokim OX/.test(ox18.res) && /16S 10P · 160 תאים/.test(ox18.res) && /60V: 16S10P · 26Ah/.test(ox18.res) && /קבוצה לאורך 10P · 8 קבוצות לרוחב · 2 גושים/.test(ox18.res)
+check('16S12P still does not go in, and the best offered for it is 16S11P', !ox18.fits12 && ox18.best === '16S11P', [ox18.fits12, ox18.best]);
+check('the card says 16S10P fits, the most is 16S11P, and how it is laid; each group numbered once; the label says it too',
+  /✅ נכנס ל-Inokim OX/.test(ox18.res) && /16S 10P · 160 תאים/.test(ox18.res) && /60V: 16S11P · 28.6Ah/.test(ox18.res) && /קבוצה לאורך 10P · 8 קבוצות לרוחב · 2 גושים/.test(ox18.res)
   && ox18.nums === 16 && /קבוצה לאורך 10P/.test(ox18.label || ''), [ox18.res.slice(0, 300), ox18.nums, ox18.label]);
 check('the 21700 in the same tray is still laid his way', !ox18.r21along, ox18.r21along);
 
