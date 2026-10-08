@@ -56,7 +56,9 @@ const base = await page.evaluate(() => ({
   text: document.getElementById('page-diag').innerText,
 }));
 check('every symptom renders a card', base.cards === base.symptoms && base.cards >= 8, `${base.cards} cards / ${base.symptoms} symptoms`);
-check('the page says plainly that it is a draft to correct', /טיוטה/.test(base.text), base.text.slice(0, 60));
+// The "draft — go over it" note was asked for once and removed on 2026-10-08 with the rest of the
+// hub's explanations (Daniel: "תמחוק את כל הטקסטים המיותרים … יש הרבה הערות שלא נצרכות").
+check('the page carries no explanatory note above the symptoms', !/טיוטה|עברו עליה ותקנו/.test(base.text), base.text.slice(0, 80));
 
 const open = await page.evaluate(() => {
   toggleDiag('range');
