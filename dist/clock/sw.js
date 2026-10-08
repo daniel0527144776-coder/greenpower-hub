@@ -3,7 +3,7 @@
 // Separate from the hub's root sw.js on purpose. This page is used at the bench with a bad
 // signal and must open offline; it also has no business controlling the hub at the root, and
 // the hub has no business caching this.
-const CACHE = 'gp-clock-v1';
+const CACHE = 'gp-clock-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', '../icon-512.png'];
 
 self.addEventListener('install', (e) => {

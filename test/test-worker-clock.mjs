@@ -91,7 +91,7 @@ console.log('\n2. no network: the punch is kept, not lost');
   const p = await clockPage(ctx);
   await p.goto(`${BASE}/clock/?w=${encodeURIComponent('דנה')}`, { waitUntil: 'domcontentloaded' });
   await p.waitForSelector('#app:not(.hidden)');
-  await p.fill('#mHours', '7.5');
+  await p.fill('#mHours', '7.30');   // hours.minutes: seven and a half (2026-10-08)
   await p.fill('#mNote', 'הרכבת סוללות');
   await p.click('#mSave');
   await p.waitForTimeout(400);
@@ -469,6 +469,140 @@ console.log('\n7. the clock link beside each worker (2026-10-04)');
   await c.waitForTimeout(300);
   check('opening the link names the worker on the clock', ((await c.textContent('#who').catch(() => '')) || '').trim() === 'יוסי כהן', path);
   check('and nothing went through a dialog', dialogs.length === 0, dialogs);
+  await ctx.close();
+}
+
+console.log('\n9. hours and minutes, hours taken off, a break (2026-10-08)');
+{
+  // Daniel: "העובד עבד 3 שעות ו-40, אז 3.40 … זה 40 דקות … לא 40 חלקי 100"; "גם שיהיה אפשר להוריד שעות
+  // לעובד"; "הפסקה לעובד" (he chose a הפסקה button in the shift). In the hub and on the worker's own
+  // clock: what is after the point is minutes, a typo of 79 minutes is refused, a deduction lowers what
+  // is owed, and a break is not paid. --selftest reads the point as a fraction again and makes ⏸ do
+  // nothing, in both pages. (No service worker here: a page it serves from its cache is out of reach
+  // of the route that swaps the clock under --selftest.)
+  const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  const p = await ctx.newPage();
+  const dialogs = [];
+  p.on('dialog', d => { dialogs.push(d.message()); d.dismiss(); });
+  await p.route('**/rest/v1/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await p.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
+  await p.waitForFunction(() => typeof window.parseHM === 'function', { timeout: 30000 });
+  if (SELFTEST) await p.evaluate(() => { window.parseHM = (v) => parseFloat(v); window.shiftBreak = () => {}; });
+  const r = await p.evaluate(() => {
+    const out = {};
+    out.parse = ['3.40', '3:40', '3.4', '3', '0.45', '3.79'].map((v) => { const h = parseHM(v); return Number.isNaN(h) ? 'NaN' : fmtHM(h); });
+    localStorage.setItem('gp_workers', JSON.stringify([{ id: 'wk9', name: 'אבי', rate: 40 }]));
+    localStorage.setItem('gp_worktime', JSON.stringify([]));
+    localStorage.setItem('gp_wage_payments', JSON.stringify([]));
+    const g = document.getElementById('loginOverlay'); if (g) g.remove();
+    navigateTo('worktime');
+    toggleWtAdd(true);
+    document.getElementById('wtWorker').value = 'wk9';
+    const hrs = document.getElementById('wtHours');
+    hrs.value = '3.40'; hrs.dispatchEvent(new Event('input'));
+    out.say = document.getElementById('wtHoursSay').textContent;
+    addWorktime();
+    const row = (Store.get('worktime') || [])[0] || {};
+    out.added = { hours: row.hours, wage: Math.round(wtWage(row)), title: (document.querySelector('#worktimeList .wt-row-title') || {}).textContent || '' };
+    // a typo: 79 minutes
+    hrs.value = '3.79'; addWorktime();
+    out.typo = { rows: (Store.get('worktime') || []).length, notice: (document.getElementById('noticeBody') || {}).textContent || '' };
+    closeNotice();
+    // taking off an hour and a half
+    document.getElementById('wtSign').value = '-';
+    hrs.value = '1.30'; addWorktime();
+    closeNotice();
+    const off = (Store.get('worktime') || [])[0] || {};
+    out.off = { hours: off.hours, note: off.note, balance: Math.round(workerLedger('אבי').balance),
+      title: (document.querySelector('#worktimeList .wt-row-title') || {}).textContent || '', sign: document.getElementById('wtSign').value };
+    // the editor shows hours:minutes and reads them back the same way
+    editWorktime(row.id);
+    out.opened = document.getElementById('wteHours').value;
+    document.getElementById('wteHours').value = '2.15';
+    saveWorktimeEdit(row.id);
+    out.edited = (Store.get('worktime') || []).find((x) => x.id === row.id).hours;
+    return out;
+  });
+  check('after the point come minutes: 3.40, 3:40 and 3.4 are 3:40; 0.45 is 45 minutes; 3.79 is refused',
+    r.parse.join(' ') === '3:40 3:40 3:40 3:00 0:45 NaN', r.parse);
+  check('the form reads it back in words before it is saved', r.say === '= 3 שעות ו-40 דקות', r.say);
+  check('3.40 is saved as 3 hours 40 minutes: ₪147 at ₪40', Math.abs(r.added.hours - 3 - 40 / 60) < 0.001 && r.added.wage === 147, r.added);
+  check('and listed as 3:40', r.added.title.includes('3:40 שעות'), r.added.title);
+  check('3.79 saves nothing, and says why in the page', r.typo.rows === 1 && /דקות, עד 59/.test(r.typo.notice), r.typo);
+  check('➖ 1.30 takes an hour and a half off: ₪147 − ₪60 owed', r.off.hours === -1.5 && r.off.balance === 87 && r.off.note === 'הורדת שעות', r.off);
+  check('the deduction is listed in words, and the form goes back to ➕', r.off.title.includes('הורדה 1:30 שעות') && r.off.sign === '+', r.off);
+  check('the editor opens on 3:40 and 2.15 saves 2 hours 15 minutes', r.opened === '3:40' && r.edited === 2.25, [r.opened, r.edited]);
+
+  // the break, in the hub's shift card: three hours since כניסה, 45 minutes of them on a break
+  const sh = await p.evaluate(() => {
+    const out = {};
+    localStorage.setItem('gp_worktime', JSON.stringify([]));
+    shiftIn('wk9');
+    const set = (f) => { const w = getWorkers(); f(w[0]); Store.set('workers', w); };
+    set((w) => { w.shiftStart = new Date(Date.now() - 3 * 3600e3).toISOString(); });
+    renderShifts();
+    out.btn = [...document.querySelectorAll('#shiftList button')].map((x) => x.textContent.trim()).join(' | ');
+    shiftBreak('wk9');
+    set((w) => { if (w.breakStart) w.breakStart = new Date(Date.now() - 45 * 60e3).toISOString(); });
+    renderShifts();
+    out.onBreak = { text: document.getElementById('shiftList').textContent, back: [...document.querySelectorAll('#shiftList button')].some((x) => /חזרה/.test(x.textContent)) };
+    shiftBreak('wk9');
+    out.ms = Math.round((getWorkers()[0].breakMs || 0) / 60e3);
+    shiftOut('wk9');
+    closeNotice();
+    const e = (Store.get('worktime') || [])[0] || {};
+    out.row = { hours: e.hours, note: e.note };
+    out.cleared = !getWorkers()[0].shiftStart && !getWorkers()[0].breakStart && !getWorkers()[0].breakMs;
+    return out;
+  });
+  check('a running shift offers ⏸ הפסקה beside יציאה', /הפסקה/.test(sh.btn) && /יציאה/.test(sh.btn), sh.btn);
+  check('on a break it says so and offers ▶ חזרה', /בהפסקה מ-/.test(sh.onBreak.text) && sh.onBreak.back, sh.onBreak);
+  check('▶ חזרה closes the break: 45 minutes', sh.ms === 45, sh.ms);
+  check('יציאה writes the hours less the break: 3:00 − 0:45 = 2:15', Math.abs((sh.row.hours || 0) - 2.25) < 0.01, sh.row);
+  check('and the row says how long the break was', /הפסקה 0:45/.test(sh.row.note || ''), sh.row.note);
+  check('the clock is cleared, break and all', sh.cleared);
+
+  // the worker's own clock: the same two things, on the page with no login
+  const c = await ctx.newPage();
+  c.on('dialog', d => { dialogs.push(d.message()); d.dismiss(); });
+  await c.route('**/rest/v1/worker_punches*', (route) => route.abort());
+  if (SELFTEST) await c.route(/\/clock\/(index\.html)?(\?.*)?$/, async (route) => {
+    const resp = await route.fetch();
+    const html = (await resp.text())
+      .replace('function parseHM(v) {', 'function parseHM(v) { return parseFloat(v); }\n  function parseHM_(v) {')
+      .replace('function takeBreak() {', 'function takeBreak() { return; }\n  function takeBreak_() {');
+    return route.fulfill({ response: resp, body: html });
+  });
+  await c.goto(`${BASE}/clock/?w=${encodeURIComponent('אבי')}`, { waitUntil: 'domcontentloaded' });
+  await c.waitForSelector('#app:not(.hidden)');
+  check('no break button while not at work', await c.locator('#brk').isHidden());
+  await c.evaluate(() => localStorage.setItem('gpclock_active', JSON.stringify({ startedAt: Date.now() - 3 * 3600e3 })));
+  await c.reload({ waitUntil: 'domcontentloaded' });
+  await c.waitForSelector('#app:not(.hidden)');
+  check('at work, a ⏸ הפסקה button', (await c.textContent('#brk')).includes('הפסקה') && await c.locator('#brk').isVisible());
+  await c.click('#brk');
+  // the break began 45 minutes ago
+  await c.evaluate(() => { const a = JSON.parse(localStorage.getItem('gpclock_active')); if (a.breakAt) a.breakAt = Date.now() - 45 * 60e3; localStorage.setItem('gpclock_active', JSON.stringify(a)); });
+  await c.waitForTimeout(1200);
+  check('on a break the clock stops and says so', /בהפסקה/.test(await c.textContent('#since')) && (await c.textContent('#brk')).includes('חזרה'),
+    await c.textContent('#since'));
+  check('it shows the hours worked, not the hours since כניסה', /^02:1[45]:/.test((await c.textContent('#timer')).trim()), await c.textContent('#timer'));
+  await c.click('#brk');
+  await c.click('#punch');
+  const q = await c.evaluate(() => JSON.parse(localStorage.getItem('gpclock_queue') || '[]'));
+  check('יציאה sends the hours less the break: 2:15', q[0] && Math.abs(q[0].hours - 2.25) < 0.02, q[0]);
+  check('with the break in the note, for the hub to see', q[0] && /הפסקה 0:4[45]/.test(q[0].note), q[0] && q[0].note);
+  // the manual report on the clock: hours.minutes too
+  await c.fill('#mHours', '3.40');
+  await c.dispatchEvent('#mHours', 'input');
+  const say = await c.textContent('#mHoursSay');
+  await c.click('#mSave');
+  const q2 = await c.evaluate(() => JSON.parse(localStorage.getItem('gpclock_queue') || '[]'));
+  check('a manual 3.40 is 3 hours 40 minutes, said back before it is sent', q2[0] && q2[0].hours === 3.67 && say === '= 3 שעות ו-40 דקות', [q2[0] && q2[0].hours, say]);
+  await c.fill('#mHours', '3.79');
+  await c.click('#mSave');
+  const q3 = await c.evaluate(() => JSON.parse(localStorage.getItem('gpclock_queue') || '[]'));
+  check('and 3.79 is refused, not sent', q3.length === q2.length && dialogs.some((d) => /עד 59/.test(d)), [q3.length, dialogs]);
   await ctx.close();
 }
 

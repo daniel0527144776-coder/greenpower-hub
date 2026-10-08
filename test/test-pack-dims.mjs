@@ -844,6 +844,48 @@ check('the regular Bomber reads what his builds prove (364×125×192), not the m
 check('the Plus is not judged against its frame standing (no "does not fit" on his own build)',
   !lying.plusTub && !/לא נכנס ל-Bomber Plus/.test(lying.plus), [lying.plusTub, lying.plus.slice(0, 80)]);
 
+// ---- the 18650 laid along the tray (C), and its rated capacity (2026-10-07) ----
+// Daniel, on the Inokim OX in EVE 26V at 60V 30Ah: "יש כאן טעות הוא לא מחשב נכון גם הקיבולת לא נכונה עבור
+// 18650". With the group only across the tray, 8 go across its 165mm and from 9P a group took two rows,
+// so the most was 16S9P / 22.9Ah — while Inokim's own OX Super pack is 16S10P of 18650 in that tray,
+// 60V 26Ah. With the group along the tray, ten in a line, eight lines across, two bands, it is 16S10P,
+// 26Ah at the cell's rated 2.6Ah. 16S12P still does not go in. The 21700 is left on his method.
+// --selftest takes the layout away.
+const ox18 = await page.evaluate((SELF) => {
+  if (SELF) window.fitAlong = () => null;
+  navigateTo('dims');
+  document.getElementById('dimExtra').value = '22'; dimExtraTouched = true;   // the allowance he opens it on at 60V
+  document.getElementById('dimCell').value = '18650-26v';
+  useVehiclePack('Inokim OX', 60);
+  document.getElementById('dimHolder').value = 'sq-19'; calcPackDims();
+  const v = vehicleByName('Inokim OX'), c = DIM_CELLS['18650-26v'];
+  const tub = cellTub(tubOf(v), 22);
+  const max19 = maxPFor(v, tub, 18650, 'sq-19', 60, c), max185 = maxPFor(v, tub, 18650, 'diag-185', 60, c);
+  const fits12 = holderTakes(v, tub, 18650, 'sq-19', 16, 12, c, 1) > 0;
+  const lay10 = hisFit(tub, 16, 10, 1, 19, 19, c.dia);
+  // his own numbers: 60V 30Ah (16S12P) does not go in, and the best offered is 16S10P
+  document.getElementById('dimAh').value = '30'; calcPackDims();
+  const best = dimBest ? dimBest.S + 'S' + dimBest.P + 'P' : '';
+  // 25Ah is 10P of 2.6Ah: it goes in, laid along
+  document.getElementById('dimAh').value = '25'; calcPackDims();
+  const res = document.getElementById('dimResult').innerText;
+  const nums = [...document.querySelectorAll('#dimResult .dim-nk.sel svg .pack-group')].map((e) => e.textContent);
+  const label = dimLast && dimLast.line;
+  // and the 21700 in the same tray is unchanged: no group laid along
+  document.getElementById('dimCell').value = '21700-50e'; calcPackDims();
+  const r21 = document.getElementById('dimResult').innerText;
+  clearDimVehicle();
+  return { best, ah: c.ah, max19, max185, fits12, orient: lay10.orient, bands: lay10.bands, res, nums: nums.length, label, r21along: /קבוצה לאורך/.test(r21) };
+}, SELFTEST);
+check('the EVE 26V is counted at its rated 2.6Ah', ox18.ah === 2.6, ox18.ah);
+check('the OX takes 16S10P of 18650 on the square 19 and the 18.5 diagonal — the OX Super\'s own pack', ox18.max19 === 10 && ox18.max185 === 10, [ox18.max19, ox18.max185]);
+check('laid along the tray: ten in a line, two bands', ox18.orient === 'C' && ox18.bands === 2, [ox18.orient, ox18.bands]);
+check('16S12P still does not go in, and the best offered for it is 16S10P', !ox18.fits12 && ox18.best === '16S10P', [ox18.fits12, ox18.best]);
+check('the card says 16S10P fits, 26Ah, and how it is laid; each group numbered once; the label says it too',
+  /✅ נכנס ל-Inokim OX/.test(ox18.res) && /16S 10P · 160 תאים/.test(ox18.res) && /60V: 16S10P · 26Ah/.test(ox18.res) && /קבוצה לאורך 10P · 8 קבוצות לרוחב · 2 גושים/.test(ox18.res)
+  && ox18.nums === 16 && /קבוצה לאורך 10P/.test(ox18.label || ''), [ox18.res.slice(0, 300), ox18.nums, ox18.label]);
+check('the 21700 in the same tray is still laid his way', !ox18.r21along, ox18.r21along);
+
 // ---- the worker's plate for a lying build (2026-10-06) ----
 // Daniel, holding the first plate: a number on every row, how many go in it, which cells are in
 // parallel and in series — and, asked, "כל שורה = קבוצה". The Plus at 72V on the 23 square, in his

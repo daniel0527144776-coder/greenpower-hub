@@ -53,6 +53,10 @@
   }
   .big.in { background: var(--accent); }
   .big.out { background: var(--warning); }
+  .big.brk { background: var(--card-hover); color: var(--text); font-size: 20px; padding: 16px; margin-top: 10px; }
+  .big.brk.on { background: var(--accent); color: #06202b; }
+  .say { font-size: 13px; color: var(--text-muted); margin-top: 6px; min-height: 1em; }
+  .say.bad { color: var(--danger); }
   .big:active { filter: brightness(0.92); }
   label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
   input, select, textarea {
@@ -110,6 +114,7 @@
       <div class="timer" id="timer">00:00:00<span class="since" id="since">לא בעבודה</span></div>
       <div style="margin-top:16px;">
         <button class="big in" id="punch">▶️ כניסה</button>
+        <button class="big brk hidden" id="brk">⏸ הפסקה</button>
       </div>
     </div>
 
@@ -121,10 +126,11 @@
           <input type="date" id="mDate">
         </div>
         <div>
-          <label for="mHours">שעות</label>
-          <input type="number" id="mHours" step="0.25" min="0.25" max="24" inputmode="decimal" placeholder="7.5">
+          <label for="mHours">שעות.דקות</label>
+          <input type="text" id="mHours" inputmode="decimal" autocomplete="off" placeholder="7.30">
         </div>
       </div>
+      <div class="say" id="mHoursSay">7.30 = 7 שעות ו-30 דקות</div>
       <label for="mNote" style="margin-top:12px;">הערה (לא חובה)</label>
       <input id="mNote" placeholder="על מה עבדת">
       <button class="btn" id="mSave">שלח דיווח</button>
@@ -178,6 +184,32 @@
     var m = Math.round(h * 60);
     return Math.floor(m / 60) + ':' + ((m % 60) < 10 ? '0' : '') + (m % 60);
   }
+  // Hours as people write them (2026-10-08): after the point come MINUTES. "3.40" and "3:40" are 3 hours
+  // 40 minutes, "3.4" the same, "7" seven hours. Minutes of 60 or more are a typo: NaN. The same rule as
+  // the hub's parseHM — the hours he approves are the hours that were meant.
+  function parseHM(v) {
+    var s = String(v == null ? '' : v).replace(/^\s+|\s+$/g, '').replace(',', '.');
+    var m = s.match(/^(\d{1,2})?(?:[.:](\d{0,2}))?$/);
+    if (!m || (m[1] == null && !m[2])) return NaN;
+    var min = m[2] ? Number(m[2].length === 1 ? m[2] + '0' : m[2]) : 0;
+    if (min >= 60) return NaN;
+    return Number(m[1] || 0) + min / 60;
+  }
+  function saySoFar() {
+    var v = $('mHours').value.replace(/^\s+|\s+$/g, ''), h = parseHM(v), out = $('mHoursSay');
+    if (!v) { out.textContent = '7.30 = 7 שעות ו-30 דקות'; out.className = 'say'; return; }
+    if (isNaN(h)) { out.textContent = 'אחרי הנקודה כותבים דקות, עד 59'; out.className = 'say bad'; return; }
+    var t = Math.round(h * 60), hh = Math.floor(t / 60), mm = t % 60;
+    var hs = hh === 1 ? 'שעה' : hh === 2 ? 'שעתיים' : hh ? hh + ' שעות' : '';
+    var ms = mm === 1 ? 'דקה' : mm ? mm + ' דקות' : '';
+    out.textContent = '= ' + ([hs, ms].filter(Boolean).join(' ו-') || '0');
+    out.className = 'say';
+  }
+  // A break is not paid (2026-10-08, Daniel: "הפסקה לעובד"). The running clock remembers when it
+  // started, how long the closed breaks were, and when the open one began.
+  function breakMs(a, now) { return (a.breakMs || 0) + (a.breakAt ? Math.max(0, now - a.breakAt) : 0); }
+  function workedMs(a, now) { return Math.max(0, now - a.startedAt - breakMs(a, now)); }
+
   function fmtDate(iso) {
     var p = iso.split('-');
     return p[2] + '/' + p[1] + '/' + p[0];
@@ -247,22 +279,37 @@
   var tick = null;
   function renderClock() {
     var active = read(K_ACTIVE, null);
-    var btn = $('punch'), timer = $('timer'), since = $('since');
+    var btn = $('punch'), timer = $('timer'), since = $('since'), brk = $('brk');
+    var hm = function (t) { var d = new Date(t); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); };
     if (active && active.startedAt) {
-      var ms = Date.now() - active.startedAt;
-      timer.firstChild.nodeValue = hhmmss(ms);
-      var d = new Date(active.startedAt);
-      since.textContent = 'מאז ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      var now = Date.now(), b = breakMs(active, now);
+      timer.firstChild.nodeValue = hhmmss(workedMs(active, now));
+      since.textContent = active.breakAt
+        ? 'בהפסקה מאז ' + hm(active.breakAt) + ' · השעון עצר'
+        : 'מאז ' + hm(active.startedAt) + (b >= 60000 ? ' · הפסקות ' + fmtHours(b / 3600000) : '');
       btn.textContent = '⏹ יציאה';
       btn.className = 'big out';
+      brk.textContent = active.breakAt ? '▶️ חזרה מהפסקה' : '⏸ הפסקה';
+      brk.className = 'big brk' + (active.breakAt ? ' on' : '');
       if (!tick) tick = setInterval(renderClock, 1000);
     } else {
       timer.firstChild.nodeValue = '00:00:00';
       since.textContent = 'לא בעבודה';
       btn.textContent = '▶️ כניסה';
       btn.className = 'big in';
+      brk.className = 'big brk hidden';
       if (tick) { clearInterval(tick); tick = null; }
     }
+  }
+
+  function takeBreak() {
+    var a = read(K_ACTIVE, null);
+    if (!a || !a.startedAt) return;
+    var now = Date.now();
+    if (a.breakAt) { a.breakMs = breakMs(a, now); a.breakAt = null; toast('חזרת לעבודה'); }
+    else { a.breakAt = now; toast('הפסקה — השעון עוצר'); }
+    write(K_ACTIVE, a);
+    renderClock();
   }
 
   function punch() {
@@ -290,13 +337,19 @@
       alert('השעון רץ יותר מ‑24 שעות — כנראה שכחת לצאת.\nרשום למטה כמה שעות באמת עבדת באותו יום.');
       return;
     }
+    // Breaks are not paid; an open one ends with the shift.
+    var b = breakMs(active, ended);
+    hours = workedMs(active, ended) / 3600000;
     localStorage.removeItem(K_ACTIVE);
+    // The table refuses 0 hours; a punch it refuses would sit in the queue as "waiting" for ever.
+    if (Math.round(hours * 100) < 1) { renderClock(); toast('לא נרשמו שעות — פחות מדקה של עבודה'); return; }
     submit(hours, {
       date: new Date(started).getFullYear() + '-' +
             ('0' + (new Date(started).getMonth() + 1)).slice(-2) + '-' +
             ('0' + new Date(started).getDate()).slice(-2),
       started_at: new Date(started).toISOString(),
       ended_at: new Date(ended).toISOString(),
+      note: b >= 60000 ? 'הפסקה ' + fmtHours(b / 3600000) : '',
       source: 'clock'
     });
     renderClock();
@@ -305,11 +358,12 @@
 
   function manual() {
     var date = $('mDate').value || todayISO();
-    var hours = parseFloat($('mHours').value);
+    var hours = parseHM($('mHours').value);
+    if (isNaN(hours)) { alert('אחרי הנקודה כותבים דקות, עד 59.\nלמשל 7.30 = 7 שעות ו-30 דקות.'); $('mHours').focus(); return; }
     if (!hours || hours <= 0) { alert('כמה שעות עבדת?'); $('mHours').focus(); return; }
     if (hours > 24) { alert('לא יכול להיות יותר מ‑24 שעות ביום.'); return; }
     submit(hours, { date: date, note: $('mNote').value.trim(), source: 'manual' });
-    $('mHours').value = ''; $('mNote').value = '';
+    $('mHours').value = ''; $('mNote').value = ''; saySoFar();
     toast('הדיווח נשלח');
   }
 
@@ -349,6 +403,8 @@
     if (name) { start(name); } else { $('setup').classList.remove('hidden'); }
 
     $('punch').addEventListener('click', punch);
+    $('brk').addEventListener('click', takeBreak);
+    $('mHours').addEventListener('input', saySoFar);
     $('mSave').addEventListener('click', manual);
     $('whoSave').addEventListener('click', function () {
       var v = $('whoInput').value.trim();
