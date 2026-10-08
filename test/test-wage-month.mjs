@@ -102,7 +102,7 @@ check('every row of hours has a ✏️', split.pencils === 2, split.pencils);
 const edit = await page.evaluate(() => {
   editWorktime('w2');
   const opened = { h: document.getElementById('wteHours').value, r: document.getElementById('wteRate').value };
-  document.getElementById('wteHours').value = '6.5';
+  document.getElementById('wteHours').value = '6.30';   // hours.minutes: six and a half
   document.getElementById('wteRate').value = '42';
   document.getElementById('wteNote').value = 'תוקן בטלפון';
   saveWorktimeEdit('w2');
@@ -111,11 +111,11 @@ const edit = await page.evaluate(() => {
   const listed = document.getElementById('worktimeList').textContent;
   return { opened, row: { hours: row.hours, rate: row.rate, reported: row.reported, note: row.note }, month: L.thisMonth, listed };
 });
-check('the editor opens on the row as it is', edit.opened.h === '5' && edit.opened.r === '40', edit.opened);
+check('the editor opens on the row as it is', edit.opened.h === '5:00' && edit.opened.r === '40', edit.opened);
 check('saved: the new hours and rate, and what was reported kept beside them',
   edit.row.hours === 6.5 && edit.row.rate === 42 && edit.row.reported === 5 && edit.row.note === 'תוקן בטלפון', edit.row);
 check('this month follows: 6.5 × ₪42', edit.month === 273, edit.month);
-check('the row says what was reported', edit.listed.includes('דווח 5 שע׳'), edit.listed.slice(0, 200));
+check('the row says what was reported', edit.listed.includes('דווח 5:00 שע׳'), edit.listed.slice(0, 200));
 
 // a row a closing already settled: the change is kept, the balance does not move, and it says so
 const closed = await page.evaluate(() => {
@@ -151,7 +151,7 @@ const punch = await page.evaluate((id) => {
 }, PUNCH);
 await page.waitForFunction(() => (Store.get('worktime') || []).length > 0, null, { timeout: 5000 }).catch(() => {});
 const landed = await page.evaluate(() => (Store.get('worktime') || [])[0] || null);
-check('a waiting report has a ✏️ beside ✓', punch.pencil && punch.opened === '6', punch);
+check('a waiting report has a ✏️ beside ✓', punch.pencil && punch.opened === '6:00', punch);
 check('approved as corrected: 5 hours on the 4th, at the hub\'s rate, the reported 6 kept',
   landed && landed.hours === 5 && landed.reported === 6 && landed.rate === 40 && landed.note === 'יצא מוקדם'
   && new Date(landed.date).getDate() === 4, landed);

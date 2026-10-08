@@ -150,7 +150,10 @@ const heights = await page.evaluate(() => {
   // A 71mm tray of his own (not on the riser list): an 18650 stands, a 21700 does not.
   localStorage.setItem('gp_dims', JSON.stringify([
     { id: 'd71', model: 'מגש 71 ארוך', l: 470, w: 150, h: 71, measured: true },
-    { id: 'd71s', model: 'מגש 71 קצר', l: 340, w: 150, h: 71, measured: true }]));
+    // 32 wide (2026-10-07): since the 18650 may also be laid along the tray in bands (C, fitAlong), a
+    // 150-wide tray takes 20S in three bands; the case this checks — the cell stands, the string reaches
+    // in no layout at all — needs a tray one line wide.
+    { id: 'd71s', model: 'מגש 71 קצר', l: 340, w: 32, h: 71, measured: true }]));
   const out = { shallow: read('Mantis King'), mid: read60('מגש 71 ארוך'), mid72: (() => { useVehiclePack('מגש 71 קצר', 72); calcPackDims(); return document.getElementById('dimResult').innerHTML; })(),
     deep: read('Nami Klima'), compound: read('Inokim OX'), riserZero: read('Zero 10X') };
   localStorage.setItem('gp_dims', '[]');

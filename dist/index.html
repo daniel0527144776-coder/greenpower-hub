@@ -1153,7 +1153,7 @@ body { min-height: 100vh; }
         <option value="21700-40p">21700 EVE 40P — 4.0Ah</option>
         <option value="18650-35v">18650 EVE 35V — 3.5Ah</option>
         <option value="18650-jp30">18650 Ampace JP30P1 — 3.0Ah</option>
-        <option value="18650-26v">18650 EVE 26V — 2.55Ah</option>
+        <option value="18650-26v">18650 EVE 26V — 2.6Ah</option>
         <option value="18650-25p">18650 EVE 25P — 2.5Ah</option>
       </select>
     </div>
@@ -1507,12 +1507,14 @@ body { min-height: 100vh; }
     <div id="worktimeList"></div>
   </div>
   <div class="card">
-    <button class="btn btn-secondary btn-block" id="wtAddToggle" onclick="toggleWtAdd()">➕ הוספת שעות ידנית</button>
+    <button class="btn btn-secondary btn-block" id="wtAddToggle" onclick="toggleWtAdd()">➕➖ הוספה או הורדה של שעות</button>
     <div id="wtAddBody" hidden style="margin-top:10px;">
       <div class="form-row"><label>עובד</label>
         <select class="form-select" id="wtWorker"></select>
       </div>
-      <div class="form-row"><label>כמה שעות</label><input type="number" class="form-input" id="wtHours" placeholder="0" min="0" step="0.5"></div>
+      <div class="form-row"><label>הוספה או הורדה</label><select class="form-select" id="wtSign" style="width:auto;"><option value="+">➕ שעות עבודה</option><option value="-">➖ להוריד שעות</option></select></div>
+      <div class="form-row"><label>כמה שעות</label><input type="text" inputmode="decimal" autocomplete="off" class="form-input" id="wtHours" placeholder="3.40" oninput="hmHint(this)"></div>
+      <div class="wt-muted" id="wtHoursSay" style="margin:-4px 0 8px;">שעות.דקות — 3.40 = 3 שעות ו-40 דקות</div>
       <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="wtDate" style="width:auto;direction:ltr;"></div>
       <div class="form-row"><label>מה עשה</label><input type="text" class="form-input" id="wtNote" placeholder="לא חובה"></div>
       <button class="btn btn-primary btn-block" style="margin-top:8px;" onclick="addWorktime()">💾 שמור שעות</button>
@@ -2773,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v417';
+const HUB_BUILD = 'v418';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7236,6 +7238,69 @@ function fmtElapsed(h) {
   const total = Math.round(h * 60);
   return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0');
 }
+// A break is not paid (2026-10-08, Daniel: "תן לי אפשרות לעשות בשעון עובדים הפסקה לעובד"; he chose a
+// הפסקה button in the shift). ⏸ stops the clock and ▶ runs it again; the shift's hours are the time
+// since כניסה less every break, and the row's note says how long the breaks were.
+function shiftBreakMs(w, now = Date.now()) {
+  return (Number(w.breakMs) || 0) + (w.breakStart ? Math.max(0, now - new Date(w.breakStart).getTime()) : 0);
+}
+function shiftWorkedHours(w, now = Date.now()) {
+  const ms = now - new Date(w.shiftStart).getTime() - shiftBreakMs(w, now);
+  return ms > 0 ? ms / 3600000 : 0;
+}
+
+// Hours the way he types them (2026-10-08, Daniel: "העובד עבד 3 שעות ו-40, אז 3.40 … זה 40 דקות … לא
+// 40 חלקי 100"). After the point come MINUTES: "3.40" and "3:40" are 3 hours 40 minutes, "3.4" the same
+// (the 0 dropped), "3" is three hours, "0.45" forty-five minutes. Minutes of 60 or more are a typo, not
+// more hours: refused (NaN), and the form says why. A row still stores real hours (3:40 → 3.6667), so
+// the wage is hours × rate as before; only what is typed and what is shown changed.
+function parseHM(v) {
+  const s = String(v == null ? '' : v).trim().replace(',', '.').replace(/^[−–]/, '-');
+  const m = s.match(/^(-)?\s*(\d{1,3})?(?:[.:](\d{0,2}))?$/);
+  if (!m || (m[2] == null && !m[3])) return NaN;
+  const min = m[3] ? Number(m[3].length === 1 ? m[3] + '0' : m[3]) : 0;
+  if (min >= 60) return NaN;
+  const h = Math.round((Number(m[2] || 0) + min / 60) * 1e4) / 1e4;
+  return m[1] ? -h : h;
+}
+const HM_BAD = 'אחרי הנקודה כותבים דקות, עד 59. למשל 3.40 = 3 שעות ו-40 דקות.';
+// 3.6667 → "3:40". A deduction keeps its minus on the left inside a right-to-left line (LRI…PDI).
+function fmtHM(h) {
+  const n = Number(h) || 0, total = Math.round(Math.abs(n) * 60);
+  const s = Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0');
+  return n < 0 && total ? '⁦-' + s + '⁩' : s;
+}
+// The same in words, for the line under a field: what the hub understood before it is saved.
+function hmSay(h) {
+  const t = Math.round(Math.abs(h) * 60), hh = Math.floor(t / 60), mm = t % 60;
+  const hs = hh === 1 ? 'שעה' : hh === 2 ? 'שעתיים' : hh ? hh + ' שעות' : '';
+  const ms = mm === 1 ? 'דקה' : mm ? mm + ' דקות' : '';
+  return [hs, ms].filter(Boolean).join(' ו-') || '0';
+}
+function hmHint(el) {
+  const out = document.getElementById(el.id + 'Say');
+  if (!out) return;
+  const v = el.value.trim(), h = parseHM(v);
+  out.textContent = !v ? 'שעות.דקות — 3.40 = 3 שעות ו-40 דקות' : Number.isNaN(h) ? HM_BAD : '= ' + hmSay(h);
+  out.style.color = v && Number.isNaN(h) ? 'var(--danger)' : '';
+}
+// The hours field of a form: a ➕/➖ choice and hours.minutes, with the line that reads them back.
+function hmFieldsHtml(prefix, hours) {
+  const neg = Number(hours) < 0, val = hours == null ? '' : fmtHM(Math.abs(Number(hours) || 0));
+  return `<div class="form-row"><label>הוספה או הורדה</label><select class="form-select" id="${prefix}Sign" style="width:auto;">
+      <option value="+"${neg ? '' : ' selected'}>➕ שעות עבודה</option><option value="-"${neg ? ' selected' : ''}>➖ להוריד שעות</option></select></div>
+     <div class="form-row"><label>שעות</label><input type="text" inputmode="decimal" autocomplete="off" class="form-input-wide" id="${prefix}Hours" value="${val}" placeholder="3.40" oninput="hmHint(this)"></div>
+     <div class="wt-muted" id="${prefix}HoursSay" style="margin:-4px 0 8px;">${val ? '= ' + hmSay(Number(hours)) : 'שעות.דקות — 3.40 = 3 שעות ו-40 דקות'}</div>`;
+}
+// Reads such a form: the hours, negative for ➖, or a word why not.
+function hmFieldsRead(prefix) {
+  const typed = parseHM(document.getElementById(prefix + 'Hours').value);
+  if (Number.isNaN(typed)) return { err: HM_BAD };
+  if (!(Math.abs(typed) > 0)) return { err: 'הזן שעות.' };
+  const sign = document.getElementById(prefix + 'Sign');
+  const minus = typed < 0 || (sign && sign.value === '-');
+  return { hours: minus ? -Math.abs(typed) : typed, minus };
+}
 
 // Built by concatenation rather than nested in the row template: the ids go inside an
 // onclick attribute inside a template literal, and three levels of quoting is how a button
@@ -7245,6 +7310,9 @@ function inBtn(id) {
 }
 function outBtn(id) {
   return '<button class="btn btn-sm btn-primary" onclick="shiftOut(\'' + id + '\')">⏹️ יציאה</button>';
+}
+function breakBtn(id, onBreak) {
+  return '<button class="btn btn-sm btn-secondary" onclick="shiftBreak(\'' + id + '\')">' + (onBreak ? '▶️ חזרה' : '⏸️ הפסקה') + '</button>';
 }
 
 function renderShifts() {
@@ -7257,18 +7325,22 @@ function renderShifts() {
       + ' ואז אפשר להחתים לו כניסה ויציאה.</div>';
     return;
   }
+  const hm = (iso) => new Date(iso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   box.innerHTML = workers.map((w) => {
-    const on = !!w.shiftStart;
-    const el = on ? shiftElapsedHours(w.shiftStart) : 0;
-    const since = on ? new Date(w.shiftStart).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '';
+    const on = !!w.shiftStart, onBreak = on && !!w.breakStart;
+    const el = on ? shiftWorkedHours(w) : 0;
+    const brk = on ? shiftBreakMs(w) / 3600000 : 0;
+    const worked = '<b style="color:var(--success);"><bdi dir="ltr">' + fmtElapsed(el) + '</bdi></b> שעות';
+    const status = !on ? 'לא בעבודה'
+      : onBreak ? '<span style="color:var(--warning);" data-shift-break="1">⏸ בהפסקה מ-' + hm(w.breakStart) + '</span> · עבד ' + worked
+      : '<span style="color:var(--success);">● בעבודה מ-' + hm(w.shiftStart) + '</span> · ' + worked
+        + (brk >= 1 / 60 ? ' · הפסקות <bdi dir="ltr">' + fmtHM(brk) + '</bdi>' : '');
     return `<div class="price-item">
       <div class="price-item-name">${wtNameLink(w.name)}
         <a href="#" class="wt-clock-link" onclick="sendClockLink(${wtRef(w.name)});return false;" style="font-size:12px;color:var(--primary);margin-inline-start:6px;white-space:nowrap;">📲 קישור לשעון</a>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${on
-          ? '<span style="color:var(--success);">● בעבודה מ-' + since + '</span> · <b style="color:var(--success);"><bdi dir="ltr">' + fmtElapsed(el) + '</bdi></b> שעות'
-          : 'לא בעבודה'}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${status}</div>
       </div><div></div>
-      <div class="price-item-final">${on ? outBtn(w.id) : inBtn(w.id)}
+      <div class="price-item-final" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${on ? breakBtn(w.id, onBreak) + outBtn(w.id) : inBtn(w.id)}
       </div></div>`;
   }).join('');
 }
@@ -7296,6 +7368,17 @@ function shiftIn(id) {
   if (!w) return;
   if (w.shiftStart) { showNotice(escPunch(w.name) + ' כבר בפנים מאז ' + new Date(w.shiftStart).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })); return; }
   w.shiftStart = new Date().toISOString();
+  w.breakStart = null; w.breakMs = 0;
+  Store.set('workers', workers);
+  renderShifts();
+}
+// ⏸ and ▶ on the same button. The open break is a time; a closed one is added to breakMs.
+function shiftBreak(id) {
+  const workers = getWorkers();
+  const w = workers.find((x) => x.id === id);
+  if (!w || !w.shiftStart) return;
+  if (w.breakStart) { w.breakMs = shiftBreakMs(w); w.breakStart = null; }
+  else w.breakStart = new Date().toISOString();
   Store.set('workers', workers);
   renderShifts();
 }
@@ -7310,28 +7393,38 @@ function shiftOut(id) {
   // so does the database (check hours <= 24); guessing here would be the one place in this
   // system where a forgotten button turns into money.
   if (hours > 24) {
-    w.shiftStart = null;
+    w.shiftStart = null; w.breakStart = null; w.breakMs = 0;
     Store.set('workers', workers);
     renderShifts();
     showNotice('המשמרת נשארה פתוחה ' + Math.round(hours) + ' שעות — כנראה נשכחה.\n'
-      + 'השעון אופס ולא נרשמו שעות. רשום אותן ב"הוספת שעות ידנית" למטה.');
+      + 'השעון אופס ולא נרשמו שעות. רשום אותן ב"הוספה או הורדה של שעות" למטה.');
     toggleWtAdd(true);
     return;
   }
-  // Two decimals, because he asked for exactly how long — not a rounded quarter hour.
-  const rounded = Math.round(hours * 100) / 100;
-  const wt = Store.get('worktime') || [];
+  // To the minute, because he asked for exactly how long — not a rounded quarter hour. Breaks
+  // are not paid: an open one ends with the shift.
+  const now = Date.now();
+  const brk = shiftBreakMs(w, now);
+  const rounded = Math.round(Math.round(shiftWorkedHours(w, now) * 60) / 60 * 1e4) / 1e4;
   const t = (iso) => new Date(iso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const brkTxt = brk >= 60000 ? 'הפסקה ' + fmtHM(brk / 3600000) : '';
+  w.shiftStart = null; w.breakStart = null; w.breakMs = 0;
+  if (!(rounded > 0)) {
+    Store.set('workers', workers);
+    renderShifts();
+    showNotice(w.name + ' — לא נרשמו שעות: פחות מדקה של עבודה' + (brkTxt ? ' (השאר ' + brkTxt + ')' : '') + '.');
+    return;
+  }
+  const wt = Store.get('worktime') || [];
   wt.unshift({
-    id: 'w' + Date.now(), workerName: w.name, rate: w.rate, hours: rounded,
-    note: 'שעון: ' + t(start) + '–' + t(new Date().toISOString()),
+    id: 'w' + now, workerName: w.name, rate: w.rate, hours: rounded,
+    note: 'שעון: ' + t(start) + '–' + t(new Date(now).toISOString()) + (brkTxt ? ' · ' + brkTxt : ''),
     date: start, paid: false,
   });
   Store.set('worktime', wt);
-  w.shiftStart = null;
   Store.set('workers', workers);
   renderWorktime();
-  showNotice(w.name + ' — נרשמו ' + rounded.toFixed(2) + ' שעות (' + fmtElapsed(hours) + ')'
+  showNotice(w.name + ' — נרשמו ' + fmtHM(rounded) + ' שעות' + (brkTxt ? ' (' + brkTxt + ' לא נספרה)' : '')
     + '\nלפי ₪' + w.rate + '/שעה = ₪' + Math.round(rounded * w.rate));
 }
 
@@ -7419,7 +7512,7 @@ function renderPunches(punches) {
       ? `${new Date(p.started_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}–${new Date(p.ended_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`
       : (p.source === 'manual' ? 'ידני' : '');
     return `<div class="price-item">
-      <div class="price-item-name">${h(p.worker)} · ${p.hours} שע'${p.note ? ` · <span style="color:var(--text-muted);">${h(p.note)}</span>` : ''}
+      <div class="price-item-name">${h(p.worker)} · ${fmtHM(p.hours)} שע'${p.note ? ` · <span style="color:var(--text-muted);">${h(p.note)}</span>` : ''}
         <div style="font-size:10.5px;color:var(--text-light);">${new Date(p.work_date + 'T00:00:00').toLocaleDateString('he-IL')}${when ? ' · ' + when : ''} · ${rateNote}</div>
       </div><div></div>
       <div class="price-item-final">
@@ -7520,16 +7613,19 @@ function editPunch(id) {
   if (!p) return;
   openModal('✏️ דיווח של ' + escPunch(p.worker),
     `<div class="form-row"><label>תאריך</label><input type="date" class="form-input-wide" id="peDate" value="${escPunch(p.work_date || todayLocalISO())}"></div>
-     <div class="form-row"><label>שעות</label><input type="number" step="0.25" min="0" class="form-input-wide" id="peHours" value="${Number(p.hours) || 0}"></div>
+     <div class="form-row"><label>שעות</label><input type="text" inputmode="decimal" autocomplete="off" class="form-input-wide" id="peHours" value="${fmtHM(p.hours)}" placeholder="3.40" oninput="hmHint(this)"></div>
+     <div class="wt-muted" id="peHoursSay" style="margin:-4px 0 8px;">= ${hmSay(Number(p.hours) || 0)}</div>
      <div class="form-row"><label>הערה</label><input class="form-input-wide" id="peNote" value="${escPunch(p.note || '')}"></div>
-     <div class="wt-muted">דווח: ${Number(p.hours) || 0} שעות. התעריף נלקח מהעובד, לא מהדיווח.</div>`,
+     <div class="wt-muted">דווח: ${fmtHM(p.hours)} שעות. התעריף נלקח מהעובד, לא מהדיווח.</div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">ביטול</button><button class="btn btn-primary" onclick="approveEditedPunch('${escPunch(String(p.id))}')">✓ שמור ואשר</button>`);
 }
 function approveEditedPunch(id) {
   const p = PENDING_PUNCHES.find((x) => x.id === id);
   if (!p) { closeModal(); return; }
-  const hours = parseFloat(document.getElementById('peHours').value);
+  const typed = parseHM(document.getElementById('peHours').value);
   const day = document.getElementById('peDate').value;
+  if (Number.isNaN(typed)) { showNotice(HM_BAD); return; }
+  const hours = fmtHM(typed) === fmtHM(p.hours) ? Number(p.hours) : typed;   // untouched stays as reported
   if (!(hours > 0)) { showNotice('הזן שעות.'); return; }
   if (p.reported == null && Number(p.hours) !== hours) p.reported = Number(p.hours);
   p.hours = hours;
@@ -7661,7 +7757,11 @@ function wtDueHtml(L, now = Date.now()) {
 }
 let WT_LEDGER_NAMES = [];
 let WT_ROWS_SHOWN = 30;
-const wtHrs = (h) => (Math.round(h * 100) / 100).toLocaleString('he-IL');
+// Hours:minutes, the way he reads a clock (2026-10-08) — 6.5 hours is "6:30", never "6.5".
+const wtHrs = (h) => fmtHM(h);
+// A row's hours as a title, and its wage: a deduction says so in words, and its minus stays left.
+const wtHrsLine = (h) => (h < 0 ? 'הורדה ' + fmtHM(-h) + ' שעות' : fmtHM(h) + ' שעות');
+const shekSigned = (n) => (n <= -0.5 ? '\u2066-' + shek(-n) + '\u2069' : shek(n));
 const wtDay = (d) => new Date(d).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' });
 // The one sentence that says where a worker stands. Used on the list, his page and the forms.
 function wtStatusHtml(L) {
@@ -7701,10 +7801,10 @@ function renderWorktime() {
       const isOpen = open.get(wtName(e)).has(String(e.id));
       return `<div class="wt-row">
         <div class="wt-row-main">
-          <div class="wt-row-title">${wtNameLink(wtName(e))} · ${wtHrs(Number(e.hours) || 0)} שעות</div>
+          <div class="wt-row-title">${wtNameLink(wtName(e))} · ${wtHrsLine(Number(e.hours) || 0)}</div>
           <div class="wt-muted">${day}${note ? ' · ' + note : ''}</div>
         </div>
-        <div class="wt-row-side"><b>${shek(wtWage(e))}</b><span class="wt-tag ${isOpen ? 'open' : 'done'}">${isOpen ? 'לא שולם' : '✓ שולם'}</span></div>
+        <div class="wt-row-side"><b>${shekSigned(wtWage(e))}</b><span class="wt-tag ${isOpen ? 'open' : 'done'}">${isOpen ? 'לא שולם' : '✓ שולם'}</span></div>
         <button class="wt-del" onclick="editWorktime('${e.id}')" aria-label="ערוך רישום" title="ערוך שעות, תאריך, תעריף">✏️</button>
         <button class="wt-del" onclick="deleteWorktime('${e.id}')" aria-label="מחק רישום" title="מחק רישום (עובר לסל)">🗑</button>
       </div>`;
@@ -7804,10 +7904,10 @@ function renderWorkerPage() {
     const isOpen = L.openIds.has(String(e.id));
     return head + `<div class="wt-row">
       <div class="wt-row-main">
-        <div class="wt-row-title">${wtHrs(Number(e.hours) || 0)} שעות × ₪${Number(e.rate) || 0}</div>
+        <div class="wt-row-title">${wtHrsLine(Number(e.hours) || 0)} × ₪${Number(e.rate) || 0}</div>
         <div class="wt-muted">${new Date(e.date).toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'numeric' })}${note ? ' · ' + note : ''}</div>
       </div>
-      <div class="wt-row-side"><b>${shek(wtWage(e))}</b><span class="wt-tag ${isOpen ? 'open' : 'done'}">${isOpen ? 'לא שולם' : '✓ שולם'}</span></div>
+      <div class="wt-row-side"><b>${shekSigned(wtWage(e))}</b><span class="wt-tag ${isOpen ? 'open' : 'done'}">${isOpen ? 'לא שולם' : '✓ שולם'}</span></div>
       <button class="wt-del" onclick="editWorktime('${e.id}')" aria-label="ערוך רישום" title="ערוך שעות, תאריך, תעריף">✏️</button>
         <button class="wt-del" onclick="deleteWorktime('${e.id}')" aria-label="מחק רישום" title="מחק רישום (עובר לסל)">🗑</button>
     </div>`;
@@ -8004,7 +8104,7 @@ function editWorktime(id) {
   const day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   openModal('✏️ ' + escPunch(wtName(e)) + ' — עריכת שעות',
     `<div class="form-row"><label>תאריך</label><input type="date" class="form-input-wide" id="wteDate" value="${day}"></div>
-     <div class="form-row"><label>שעות</label><input type="number" step="0.25" min="0" class="form-input-wide" id="wteHours" value="${Number(e.hours) || 0}"></div>
+     ${hmFieldsHtml('wte', Number(e.hours) || 0)}
      <div class="form-row"><label>₪ לשעה</label><input type="number" min="0" class="form-input-wide" id="wteRate" value="${Number(e.rate) || 0}"></div>
      <div class="form-row"><label>הערה</label><input class="form-input-wide" id="wteNote" value="${escPunch(e.note || '')}"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">ביטול</button><button class="btn btn-primary" onclick="saveWorktimeEdit('${escPunch(String(e.id))}')">💾 שמור</button>`);
@@ -8013,10 +8113,12 @@ function saveWorktimeEdit(id) {
   const wt = Store.get('worktime') || [];
   const e = wt.find((x) => String(x.id) === String(id));
   if (!e) { closeModal(); return; }
-  const hours = parseFloat(document.getElementById('wteHours').value);
+  const got = hmFieldsRead('wte');
+  if (got.err) { showNotice(got.err); return; }
+  // The field shows whole minutes; saved untouched, a row of 3.33 hours stays 3.33, not 3:20 = 3.3333.
+  const hours = fmtHM(got.hours) === fmtHM(e.hours) ? Number(e.hours) : got.hours;
   const rate = parseFloat(document.getElementById('wteRate').value);
   const day = document.getElementById('wteDate').value;
-  if (!(hours > 0)) { showNotice('הזן שעות.'); return; }
   if (!(rate >= 0)) { showNotice('הזן תעריף.'); return; }
   const wasOpen = workerLedger(wtName(e)).openIds.has(String(e.id));
   if (e.reported == null && Number(e.hours) !== hours) e.reported = Number(e.hours);
@@ -8150,17 +8252,25 @@ function toggleWorktimePaid(id) {
   Store.set('worktime', wt);
   renderWorktime();
 }
+// Hours added by hand, or taken off (2026-10-08, Daniel: "גם שיהיה אפשר להוריד שעות לעובד"). A
+// deduction is a row of negative hours at the worker's rate: it lowers what is owed by exactly its
+// wage, stays in the list with its own date and note, and is edited or deleted like any other row.
 function addWorktime() {
   const workers = getWorkers(), wid = document.getElementById('wtWorker').value, w = workers.find(x => x.id === wid);
-  if (!w) { alert('הוסף עובד תחילה (כפתור "ניהול עובדים")'); return; }
-  const hours = parseFloat(document.getElementById('wtHours').value);
-  if (!hours || hours <= 0) { alert('הזן שעות'); return; }
-  const date = document.getElementById('wtDate').value || todayLocalISO(), note = document.getElementById('wtNote').value;
+  if (!w) { showNotice('הוסף עובד תחילה (כפתור "עובדים ותעריף לשעה")'); return; }
+  const got = hmFieldsRead('wt');
+  if (got.err) { showNotice(got.err); return; }
+  const hours = got.hours;
+  const date = document.getElementById('wtDate').value || todayLocalISO();
+  const note = document.getElementById('wtNote').value.trim() || (got.minus ? 'הורדת שעות' : '');
   const wt = Store.get('worktime') || [];
   wt.unshift({ id: 'w' + Date.now(), workerName: w.name, rate: w.rate, hours, note, date: new Date(date).toISOString(), paid: false });
-  Store.set('worktime', wt);
+  if (!Store.set('worktime', wt)) return;
   document.getElementById('wtHours').value = ''; document.getElementById('wtNote').value = '';
+  document.getElementById('wtSign').value = '+';
+  hmHint(document.getElementById('wtHours'));
   renderWorktime();
+  if (got.minus) showNotice(w.name + ' — הורדו ' + fmtHM(-hours) + ' שעות (' + shek(-hours * w.rate) + ' פחות בחוב).');
 }
 function manageWorkers() {
   const workers = getWorkers();
@@ -8204,7 +8314,9 @@ const DIM_CELLS = {
   '21700-40p':  { label: '21700 EVE 40P',        ah: 4.0,  dia: 21.15, len: 70.15, g: 70 },
   '18650-35v':  { label: '18650 EVE 35V',        ah: 3.5,  dia: 18.35, len: 65.0,  g: 47 },
   '18650-jp30': { label: '18650 Ampace JP30P1',  ah: 3.0,  dia: 18.35, len: 65.0,  g: 45 },
-  '18650-26v':  { label: '18650 EVE 26V',        ah: 2.55, dia: 18.35, len: 65.0,  g: 45 },
+  // 2.6, the rated capacity like every other cell in this table (2026-10-07: it carried the 2.55 minimum,
+  // so a 16S10P read 25.5Ah where the Inokim OX Super's own pack of the same cells is sold as 26Ah).
+  '18650-26v':  { label: '18650 EVE 26V',        ah: 2.6,  dia: 18.35, len: 65.0,  g: 45 },
   '18650-25p':  { label: '18650 EVE 25P',        ah: 2.5,  dia: 18.35, len: 65.0,  g: 44.5 },
 };
 // A single bracket from the Wellgo catalogue is not unlimited: 21700 tops out at 10x15 holes
@@ -8271,6 +8383,7 @@ const DIM_CAP = 4;           // holder caps above and below the cell
 // of the bracket across the pack's width, and the series climbs left to right. Orientation B (the
 // bracket's straight rows along the length) puts the half-pitch offset on the length; A across.
 function standPlan(o) {
+  if (o.orient === 'C') return alongPlan(o);
   const { cols, rows, pitch, rowPitch, dia, N, P, layers } = o;
   const B = o.orient === 'B';
   const stagger = rowPitch < pitch - 0.01 && (B ? cols > 1 : rows > 1);
@@ -8296,6 +8409,28 @@ function standPlan(o) {
     bms: bms ? { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM } : null,
     split: layers > 1, note: layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : '' };
 }
+// The drawing for C: each group a line along the block, the lines side by side, band after band,
+// the series snaking so that one band's last group lies beside the next band's first. The group's
+// number goes in its first cell (`numIn`): a band's groups share their x, so numbers above would sit
+// on top of each other.
+function alongPlan(o) {
+  const { cols, pitch, rowPitch, dia, N, P, layers } = o;
+  const stag = rowPitch < pitch - 0.01 && cols > 1;
+  const groups = Math.ceil(N / P / (layers || 1)), bands = Math.max(1, Math.ceil(groups / cols));
+  const cells = [];
+  for (let k = 0; k < groups; k++) {
+    const b = Math.floor(k / cols), i = k % cols, line = b % 2 ? cols - 1 - i : i;
+    for (let j = 0; j < P; j++) {
+      cells.push({ x: (b * P + j) * pitch + (stag && line % 2 ? pitch / 2 : 0) + dia / 2, y: line * rowPitch + dia / 2, g: k, first: j === 0 });
+    }
+  }
+  const wMM = (bands * P - 1) * pitch + dia + (stag ? pitch / 2 : 0);
+  const hMM = (cols - 1) * rowPitch + dia;
+  const bms = Math.max(0, o.extra || 0);
+  return { cells, dia, wMM, hMM, groups: true, numIn: true,
+    bms: bms ? { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM } : null,
+    split: layers > 1, note: layers > 1 ? `שכבה 1 מתוך ${layers}` : '' };
+}
 // The plan on screen. The numbers over the cells are the groups; B− and B+ are the two ends of
 // the series. Sizes are not printed in the drawing: they are the card's own rows, said once
 // (2026-09-27: "למה המידות כתובות כפול?").
@@ -8320,7 +8455,9 @@ function packSvg(plan) {
       + (bw >= 24 ? txt((bx + bw / 2).toFixed(1), (by + bh / 2 + 3.5).toFixed(1), 'BMS', ' font-weight="700"')
         : `<g transform="translate(${(bx + bw / 2 + 3.5).toFixed(1)},${(by + bh / 2).toFixed(1)}) rotate(-90)">` + txt(0, 0, 'BMS', ' font-weight="700"') + '</g>');
   }
-  if (plan.groups) {
+  if (plan.groups && plan.numIn) {
+    for (const c of plan.cells) if (c.first) g += `<text x="${X(c.x)}" y="${(PT + c.y * sc + 3.5).toFixed(1)}" fill="var(--text)" font-size="${Math.max(7, Math.min(10, plan.dia * sc * 0.6)).toFixed(0)}" font-weight="700" text-anchor="middle" class="pack-group">${c.g + 1}</text>`;
+  } else if (plan.groups) {
     // Each group's number over its middle: every one where there is room, else every other or
     // every fifth, and always the last, so the far end of the series is never unnumbered.
     const xs = [];
@@ -8403,7 +8540,27 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
     if (r.fits) return r;
     if (!first) first = r;
   }
-  return first;
+  // For the 18650 only, for now (2026-10-07): that is where his complaint and the evidence are. On the
+  // 21700 his own method and his measured builds are the rule, and C would move 27 maxima of his trays.
+  const c = dia < DIM_ALONG_BELOW ? fitAlong(tub, S, P, layers, pitch, rowPitch, dia) : null;
+  return c && c.fits ? c : first;
+}
+// C, the third way round (2026-10-07): each group a straight line ALONG the tray, the groups side by
+// side across it, the series snaking back in bands. Tried only when A and B do not take the build,
+// which keep his way first. Daniel, on the Inokim OX in 18650 ("יש כאן טעות הוא לא מחשב נכון"): A
+// and B can put at most 8 across its 165mm, so from 9P a group went to two rows and the length ran
+// out at 16S9P — while Inokim's own OX Super pack is 16S10P of 18650 in that tray (60V 26Ah). On the
+// square 19, ten in a line is 190mm; eight lines across, two bands, 382mm in the 403 the BMS leaves.
+const DIM_ALONG_BELOW = 20;   // mm: a cell narrower than this (the 18650) may be laid along (C)
+function fitAlong(tub, S, P, layers, pitch, rowPitch, dia) {
+  const lines = acrossFit(tub.W, rowPitch, dia);
+  if (lines < 1) return null;
+  const sPer = Math.ceil(S / layers);
+  const per = Math.min(sPer, lines), bands = Math.ceil(sPer / lines);
+  const stag = rowPitch < pitch - 0.01 && per > 1;
+  const alongMM = (bands * P - 1) * pitch + dia + 2 * DIM_WALL + (stag ? pitch / 2 : 0);
+  const acrossMM = (per - 1) * rowPitch + dia + 2 * DIM_WALL;
+  return { orient: 'C', inRow: per, g: 1, rowsAlong: bands * P, bands, fits: acrossMM <= tub.W + 0.5 && alongMM <= tub.L + 0.5 };
 }
 // The fewest layers that take the build (1 if none do — the verdict then says why).
 function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia) {
@@ -8573,17 +8730,22 @@ function calcPackDims() {
     // there), W is across the groups, H is the standing cells and their holders alone.
     const half = staggerAdd(orient, p, rp);
     const aStep = orient === 'B' ? p : rp, cStep = orient === 'B' ? rp : p;
-    const alongMM = (rows - 1) * aStep + c.dia + 2 * DIM_WALL + (cols > 1 ? half.B : 0);
-    const acrossMM = (cols - 1) * cStep + c.dia + 2 * DIM_WALL + (rows > 1 ? half.A : 0);
+    let alongMM = (rows - 1) * aStep + c.dia + 2 * DIM_WALL + (cols > 1 ? half.B : 0);
+    let acrossMM = (cols - 1) * cStep + c.dia + 2 * DIM_WALL + (rows > 1 ? half.A : 0);
+    if (orient === 'C') {
+      // groups along: the cells of a group at the in-row pitch, the lines side by side at the row pitch
+      alongMM = (rows - 1) * p + c.dia + 2 * DIM_WALL + (cols > 1 && rp < p - 0.01 ? p / 2 : 0);
+      acrossMM = (cols - 1) * rp + c.dia + 2 * DIM_WALL;
+    }
     // A cell wider than the space it goes in cannot be assembled. The distance to check is the
     // NEAREST NEIGHBOUR, not the row pitch: in a staggered layout the rows nest, so a row pitch of
     // 19.5mm holds 21.15mm cells because the nearest cell in the next row sits half a pitch over.
-    const stagger = rp < p - 0.01 && (orient === 'B' ? cols > 1 : rows > 1);
+    const stagger = rp < p - 0.01 && (orient === 'A' ? rows > 1 : cols > 1);
     const tight = Math.min(p, stagger ? Math.sqrt((p / 2) ** 2 + rp ** 2) : rp);
     return { h, p, rp, lay, orient, rows, cols, fits, tight, layers: layersH,
       L: Math.round(alongMM + (bmsTop ? 0 : extra)), W: Math.round(acrossMM),
       H: Math.round(layersH * (c.len + DIM_CAP) + (bmsTop ? extra : 0)),
-      plan: standPlan({ cols, rows, pitch: p, rowPitch: rp, dia: c.dia, N, P, layers: layersH, extra: bmsTop ? 0 : extra, orient }) };
+      plan: standPlan({ cols, rows, pitch: p, rowPitch: rp, dia: c.dia, N, P, layers: layersH, extra: bmsTop ? 0 : extra, orient, bands: lay.bands }) };
   };
   const cards = shown.map(cardFor);
   const sel = cards.find((k) => k.h === holder) || cards[0];
@@ -8662,14 +8824,15 @@ function calcPackDims() {
       + `<div class="dim-nk-head"><b>${k.h === 'custom' ? 'מותאם אישית' : HOLDER_LABEL[k.h]}</b>`
       + (k === sel ? '<span class="dim-tag">נבחר</span>' : '') + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '') + badge + '</div>'
       + kv('גודל סוללה', `<span class="dim-size">${iso(k.L + ' × ' + k.W + ' × ' + k.H)}</span> מ"מ`)
-      + kv('פריסה', layoutText(S, P, k.layers, k.cols, k.rows, false))
+      + kv('פריסה', layoutText(S, P, k.layers, k.cols, k.rows, false, k.orient, k.lay && k.lay.bands))
       + (dimVehicle && tub && k.h !== 'custom' ? kv('מקסימום באמבטיה', maxLine(k.h)) : '')
       + warn + packSvg(k.plan) + '</div>';
   };
   // The label for the worker draws the chosen card's plan; its two text lines are said here.
   const sPer = Math.ceil(S / layers), gRows = Math.ceil(P / cols);
   let label = { plan: sel.plan,
-    line: 'רוחב ' + P + 'P' + (gRows > 1 ? ' (' + gRows + ' שורות)' : '') + ' · אורך ' + sPer + 'S' + (layers > 1 ? ' · ' + layers + ' שכבות' : '')
+    line: (sel.orient === 'C' ? 'קבוצה לאורך ' + P + 'P · ' + cols + ' קבוצות לרוחב' + (sel.lay.bands > 1 ? ' · ' + sel.lay.bands + ' גושים' : '')
+      : 'רוחב ' + P + 'P' + (gRows > 1 ? ' (' + gRows + ' שורות)' : '') + ' · אורך ' + sPer + 'S') + (layers > 1 ? ' · ' + layers + ' שכבות' : '')
       + ' · ' + (sel.h === 'custom' ? 'מותאם אישית' : HOLDER_NAME[sel.h]),
     foot: 'גודל סוללה ' + L + '×' + W + '×' + H + ' מ״מ' + (layers > 1 ? ' · שכבה 1: קבוצות 1–' + sPer + ' · שכבה 2: קבוצות ' + (sPer + 1) + '–' + S : '') };
   let html;
@@ -8821,7 +8984,15 @@ function packLabelCanvas() {
     }
     x.fillStyle = '#000'; x.textBaseline = 'alphabetic';
   }
-  if (pl.groups) {
+  if (pl.groups && pl.numIn) {
+    x.direction = 'ltr'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = 'bold ' + Math.max(14, Math.min(22, Math.round(pl.dia * sc * 0.55))) + 'px Arial, sans-serif';
+    for (const cl of pl.cells) if (cl.first) { x.fillStyle = cl.g % 2 ? '#fff' : '#000'; x.fillText(String(cl.g + 1), x0 + cl.x * sc, y0 + cl.y * sc + 1); }
+    x.fillStyle = '#000'; x.textBaseline = 'alphabetic';
+    x.font = 'bold 28px Arial, sans-serif';
+    x.textAlign = 'right'; x.fillText('B−', x0 - 6, yMid + 10);
+    if (!pl.split) { x.textAlign = 'left'; x.fillText('B+', x0 + ext * sc + 8, yMid + 10); }
+  } else if (pl.groups) {
     // group numbers over each group's middle — every one when there is room, else every other
     const xs = [];
     for (const cl of pl.cells) if (cl.g >= 0) (xs[cl.g] = xs[cl.g] || []).push(cl.x);
@@ -8893,9 +9064,11 @@ async function printPackLabel() {
 
 // The layout in S and P, in his words: the group ACROSS (לרוחב), the series ALONG (לאורך).
 // S and P stay Latin and isolated — inside Hebrew "20S 4P" reads back as "4P 20S".
-function layoutText(S, P, layers, cols, rows, derived) {
+function layoutText(S, P, layers, cols, rows, derived, orient, bands) {
   const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
   const sPer = Math.ceil(S / layers);
+  // C: the group lies along; say so, and how many lines across and bands along
+  if (orient === 'C') return `קבוצה לאורך ${iso(P + 'P')} · ${cols} קבוצות לרוחב${bands > 1 ? ` · ${bands} גושים` : ''}${layers > 1 ? ` · ${layers} שכבות` : ''}`;
   const g = Math.ceil(P / cols);
   // Short (2026-09-27: "שיהיה כתוב תמציתי יותר"): רוחב = the group, אורך = the string per layer.
   return `רוחב ${iso(P + 'P')}${g > 1 ? ` (${g} שורות)` : ''} · אורך ${iso(sPer + 'S')}${layers > 1 ? ` · ${layers} שכבות` : ''}`
