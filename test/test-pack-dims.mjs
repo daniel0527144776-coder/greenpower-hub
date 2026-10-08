@@ -142,24 +142,28 @@ const ox = await page.evaluate(() => {
   // no diagonal holder at all. A 140-cell build is over on this one and fine on the square.
   set('dimHolder', 'diag-b'); set('dimAh', 35); set('dimV', 72); calcPackDims();
   const overDiag = document.getElementById('dimResult').textContent;
+  // his count is cells alone: with no BMS allowance the square takes the 140 he counted
+  set('dimExtra', 0); dimExtraTouched = true;
   set('dimHolder', 'square-23'); calcPackDims();
   const okSquare = document.getElementById('dimResult').textContent;
   return { filled, overDiag, okSquare };
 });
 check('the OX fills its own 20S7P build', /20S 7P/.test(ox.filled), ox.filled.slice(0, 60));
 check('140 cells is over the 126 counted on the diagonal holder', /⛔|⚠/.test(ox.overDiag) && /126/.test(ox.overDiag) && /חורג/.test(ox.overDiag), ox.overDiag.slice(-70));
-// It used to test only for ⚠, and passed for two weeks over "⛔ לא נכנס ל-Inokim OX — 17S מתוך 20S":
-// the verdict on the build he counted. The answer itself is asserted now.
-check('and fits on the square one, with no ⛔ and no ⚠', /✅ נכנס ל-Inokim OX/.test(ox.okSquare) && !/⛔|⚠/.test(ox.okSquare), ox.okSquare.slice(0, 120));
+// It used to test only for ⚠, and passed for two weeks over "⛔ לא נכנס ל-Inokim OX — 17S מתוך 20S".
+// The answer itself is asserted now — for the cells alone, which is what he counted. With the BMS at
+// the end it does not go in (the narrow-part section below).
+check('and with no BMS allowance the square takes his 140, with no ⛔ and no ⚠', /✅ נכנס ל-Inokim OX/.test(ox.okSquare) && !/⛔|⚠/.test(ox.okSquare), ox.okSquare.slice(0, 120));
 
 // ---- the OX's narrow part (2026-10-08) ----
 // Daniel: "תבדוק איך להכניס לאינוקים 20S7P 21700 חלק רחב 42.5×16.5 חלק צר 6×14". The calculator saw
-// only the 425×165, so 18 groups fitted and the build he counted (140 on the square 23) read "⛔ לא
-// נכנס". With the narrow part, 60 along and 140 across, centred: groups 1-18 across the main part,
-// 19 and 20 in three rows of five past them, one place spare. The 26mm BMS has no room at the end
-// then, and the tray is raised anyway, so it goes on top: the riser line says so. 60V is unchanged
-// (16S7P on the square), and the diagonals stay held to his counts. --selftest takes the narrow part
-// away.
+// only the 425×165. With the narrow part, 60 along and 140 across, centred, the groups the main part
+// has no rows for go on into it. And the BMS sits AT THE END, never on top of the cells (his word the
+// same evening: "ה-BMS יושב בסוף לא מעל התאים") — v421 put it on top and said 20S7P went in. With the
+// 26mm allowance at the end, 20S7P does not go in on any nickel; the best offered is 20S6P on ניקל ב׳,
+// in the wide part, and the square 23 takes only 20S2P at 72V. With a 15mm BMS the square takes 20S5P,
+// groups 19 and 20 in two rows of five in the narrow part, the BMS drawn after them.
+// --selftest takes the narrow part away.
 const oxn = await page.evaluate((SELF) => {
   const real = window.tailFit;
   if (SELF) window.tailFit = () => null;
@@ -169,29 +173,39 @@ const oxn = await page.evaluate((SELF) => {
   useVehiclePack('Inokim OX');
   set('dimHolder', 'square-23'); calcPackDims();
   const res = document.getElementById('dimResult').innerText;
+  const v = vehicleByName('Inokim OX'), c = DIM_CELLS['21700-50e'], tb = tubOf(v);
+  const max = (h, V, e) => maxPFor(v, cellTub(tb, e), 21700, h, V, c);
+  // a 15mm BMS: 20S5P on the square, two groups in the narrow part
+  document.getElementById('dimExtra').value = '15';
+  set('dimAh', 25); calcPackDims();
+  const res15 = document.getElementById('dimResult').innerText;
   const card = document.querySelector('#dimResult .dim-nk.sel');
   const svg = card && card.querySelector('svg.pack-svg');
-  const v = vehicleByName('Inokim OX'), c = DIM_CELLS['21700-50e'], tb = tubOf(v);
-  const max = (h, V) => maxPFor(v, cellTub(tb, dimExtraFor(V)), 21700, h, V, c);
-  const out = { res, tb, cells: svg ? svg.querySelectorAll('circle').length : 0, outline: !!(svg && svg.querySelector('.pack-outline')),
+  const bms = dimLast && dimLast.plan.bms;
+  const out = { res, res15, tb, cells: svg ? svg.querySelectorAll('circle').length : 0, outline: !!(svg && svg.querySelector('.pack-outline')),
+    bmsDrawn: !!(svg && svg.querySelector('.pack-bms')), bmsInNarrow: !!(bms && bms.y > 5 && bms.x > 400),
     label: dimLast ? { n: dimLast.plan.cells.length, foot: dimLast.foot } : null,
-    m72: max('square-23', 72), m60: max('square-23', 60), a72: max('diag-a', 72), b72: max('diag-b', 72),
+    m72: max('square-23', 72, 26), m60: max('square-23', 60, 22), a72: max('diag-a', 72, 26), b72: max('diag-b', 72, 26), s15: max('square-23', 72, 15),
     list: (() => { renderVehiclePacks(); const r = [...document.querySelectorAll('#vpList .list-item')].find((x) => ((x.querySelector('.list-item-title') || {}).textContent || '').trim() === 'Inokim OX'); return r ? r.textContent.replace(/\s+/g, ' ') : ''; })() };
+  document.getElementById('dimExtra').value = '26';
   clearDimVehicle();
   window.tailFit = real;
   return out;
 }, SELFTEST);
 check('the OX tub is read with its narrow part, 60 along and 140 across',
   oxn.tb && oxn.tb.L === 425 && oxn.tb.W === 165 && oxn.tb.H === 65 && oxn.tb.nx && oxn.tb.nx.L === 60 && oxn.tb.nx.W === 140, JSON.stringify(oxn.tb));
-check('72V 20S7P on the square 23: ✅, groups 19-20 in the narrow part, the BMS on top',
-  /✅ נכנס ל-Inokim OX — קבוצות 19–20 בחלק הצר, ה-BMS מעל התאים/.test(oxn.res) && !/⛔/.test(oxn.res), oxn.res.slice(0, 120));
-check('the tray row names the narrow part, and the riser takes the BMS too',
-  /425 × 165 × 65 מ"מ \+ חלק צר 60 × 140 · צריך מגביה של לפחות 10 מ"מ ועוד עובי ה-BMS/.test(oxn.res), oxn.res.slice(0, 260));
-check('the square 23 takes 20S7P at 72V and still 16S7P at 60V; the diagonals stay at 20S6P by his counts',
-  oxn.m72 === 7 && oxn.m60 === 7 && oxn.a72 === 6 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
-check('the drawing has all 140 cells and the tray round them; the label too, and it says where 19-20 go',
-  oxn.cells === 140 && oxn.outline && oxn.label && oxn.label.n === 140 && /קבוצות 19–20 בחלק הצר · BMS מעל התאים/.test(oxn.label.foot),
-  [oxn.cells, oxn.outline, JSON.stringify(oxn.label)]);
+check('72V 20S7P with the BMS at the end: ⛔, and the best offered is 20S6P on ניקל ב׳',
+  /⛔ לא נכנס ל-Inokim OX/.test(oxn.res) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל ב׳/.test(oxn.res), oxn.res.slice(0, 160));
+check('nothing puts the BMS on top of the cells', !/מעל התאים|עובי ה-BMS|BMS מעל/.test(oxn.res + oxn.res15 + ((oxn.label || {}).foot || '')), oxn.res.slice(0, 260));
+check('the tray row names the narrow part and the riser',
+  /425 × 165 × 65 מ"מ \+ חלק צר 60 × 140 · צריך מגביה של לפחות 10 מ"מ/.test(oxn.res), oxn.res.slice(0, 260));
+check('maxima with the 26mm BMS at the end: square 72V 20S2P, 60V 16S7P; the diagonals 20S6P',
+  oxn.m72 === 2 && oxn.m60 === 7 && oxn.a72 === 6 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
+check('a 15mm BMS: 20S5P on the square, groups 19-20 in the narrow part', oxn.s15 === 5
+  && /✅ נכנס ל-Inokim OX — קבוצות 19–20 בחלק הצר/.test(oxn.res15), [oxn.s15, oxn.res15.slice(0, 120)]);
+check('its drawing: 100 cells, the tray round them, the BMS after them in the narrow part; the label says where 19-20 go',
+  oxn.cells === 100 && oxn.outline && oxn.bmsDrawn && oxn.bmsInNarrow && oxn.label && oxn.label.n === 100 && /קבוצות 19–20 בחלק הצר/.test(oxn.label.foot),
+  [oxn.cells, oxn.outline, oxn.bmsDrawn, oxn.bmsInNarrow, JSON.stringify(oxn.label)]);
 check('the vehicle list shows both parts of the tub', /425×165×65 \+ 60×140/.test(oxn.list), oxn.list);
 
 // The drawing is the answer to "how do I lay it out", so it has to BE the layout: one circle
