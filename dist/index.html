@@ -559,10 +559,10 @@ body { min-height: 100vh; }
       <!-- One card, not two. Both led to the same person: "what does he have" was on one
            page and "what did I charge him" on the other, and a customer on the phone asks
            them in that order without pausing. -->
-      <div class="quick-card" onclick="navigateTo('customers')">
+      <div class="quick-card" onclick="navigateTo('orders')">
         <span class="quick-card-icon">👥</span>
         <div class="quick-card-title">לקוחות ועבודות</div>
-        <div class="quick-card-desc">לקוחות · מכירות · תיקונים · אחריות · מדבקות</div>
+        <div class="quick-card-desc">מכירות · תיקונים · לקוחות · אחריות · מדבקות</div>
       </div>
       <div class="quick-card" onclick="navigateTo('catalog')">
         <span class="quick-card-icon">🏷️</span>
@@ -982,21 +982,7 @@ body { min-height: 100vh; }
   </div>
 </section>
 
-<!-- ============ CUSTOMERS PAGE ============ -->
-<section id="page-customers" class="page">
-  <div class="page-header">
-    <h2 class="page-title">👥 לקוחות</h2>
-  </div>
-  <div class="sub-tabs view-chips" data-views="customers"></div>
-  <div id="dupeBanner" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
-    <span style="font-size:18px;">👥</span>
-    <div style="flex:1;" id="dupeBannerText"></div>
-    <button class="btn btn-sm btn-warning" style="white-space:nowrap;" onclick="openDupeMerge()">מזג</button>
-  </div>
-  <div class="card">
-    <div id="customersList"></div>
-  </div>
-</section>
+<!-- The customers page was merged into לקוחות ועבודות (2026-10-08): see page-orders. -->
 
 <!-- ============ WARRANTIES PAGE ============ -->
 <section id="page-warranties" class="page">
@@ -1421,15 +1407,25 @@ body { min-height: 100vh; }
 </section>
 
 <!-- ============ ORDERS PAGE ============ -->
+<!-- לקוחות ועבודות: one page (2026-10-08, Daniel: "תאחד את לקוחות ועבודות ביחד"; he chose the jobs,
+     with the customer on every row). One search finds a customer and a job; a customer with no job
+     yet is found by it too. Warranties, stickers and business accounts are views at the top. -->
 <section id="page-orders" class="page">
   <div class="page-header">
-    <h2 class="page-title">🛒 מכירות ותיקונים</h2>
+    <h2 class="page-title">👥 לקוחות ועבודות</h2>
     <div class="btn-group">
       <button class="btn btn-primary btn-sm" onclick="navigateTo('calc')">🔧 תיקון חדש</button>
       <button class="btn btn-primary btn-sm" onclick="openOrderEditor()">🛒 מכירה חדשה</button>
     </div>
   </div>
   <div class="sub-tabs view-chips" data-views="orders"></div>
+  <div id="dupeBanner" class="alert alert-warning" style="display:none;align-items:center;gap:10px;">
+    <span style="font-size:18px;">👥</span>
+    <div style="flex:1;" id="dupeBannerText"></div>
+    <button class="btn btn-sm btn-warning" style="white-space:nowrap;" onclick="openDupeMerge()">מזג</button>
+  </div>
+  <input type="search" class="form-input-wide" id="ordSearch" placeholder="🔍 חיפוש: שם, טלפון או עבודה" oninput="ordersSearch(this.value)" style="width:100%;margin:2px 0 10px;">
+  <div id="customersList"></div>
 
   <!-- The month summary card that used to sit here was the same figure as the first month
        header in the list below it. The header carries the split now — it was always the
@@ -1573,7 +1569,7 @@ body { min-height: 100vh; }
   <div class="page-header">
     <h2 class="page-title">🏢 תיעוד תיקונים — עסקי</h2>
   </div>
-  <div class="sub-tabs view-chips" data-views="customers"></div>
+  <div class="sub-tabs view-chips" data-views="orders"></div>
   <div class="info-banner"><span>💡</span><div>סמן תיקון כ<strong>"לקוח עסקי"</strong> במחשבון התמחור — וכל התיקונים יתועדו כאן לכל בית עסק. 📋 מעתיק סיכום לקבוצת הוואטסאפ של החנות, עם <b>היתרה מחושבת מהחיובים והתשלומים</b> ולא מהזיכרון.</div></div>
   <div class="card" id="bizdocsListCard">
     <div id="bizdocsList"></div>
@@ -2496,17 +2492,16 @@ function openExternal(url) {
 // calculator a "🔧 תיקון חדש" button. The home page went from 14 cards to 8: the technical tools,
 // the two price lists and the two bots each became one card with tabs, and "חסר להזמנה" is inside
 // מלאי. `under` maps a view to the tab it lives in — the strip lights that tab while it is shown.
+// On 2026-10-08 the two tabs of לקוחות ועבודות became one page (Daniel: "תאחד את לקוחות ועבודות ביחד"):
+// the jobs, a customer on every row, one search; the customers list went, a customer is found by the search.
 const PAGE_GROUPS = [
-  { tabs: [['customers', '👥 לקוחות'], ['orders', '📋 עבודות']],
-    under: { bizdocs: 'customers', warranties: 'orders', stickerlog: 'orders', calc: 'orders' } },
   { tabs: [['catalog', '🏷️ מחירי מכירה'], ['supplier', '🔒 עלויות ספקים']] },
   { tabs: [['dims', '📐 מידות'], ['calcs', '🧰 מחשבונים'], ['diag', '🩺 אבחון']] },
   { tabs: [['wabot', '🤖 וואטסאפ'], ['fusion', '📈 מסחר']] },
 ];
 // The views inside a tab, as one row of chips at the top of each of them.
 const PAGE_VIEWS = {
-  orders: [['orders', '📋 כל העבודות'], ['warranties', '🛡️ אחריות'], ['stickerlog', '🏷️ מדבקות']],
-  customers: [['customers', '👥 כל הלקוחות'], ['bizdocs', '🏢 עסקיים']],
+  orders: [['orders', '📋 עבודות'], ['warranties', '🛡️ אחריות'], ['stickerlog', '🏷️ מדבקות'], ['bizdocs', '🏢 עסקיים']],
 };
 function renderViewChips(page) {
   document.querySelectorAll('[data-views]').forEach((box) => {
@@ -2557,6 +2552,7 @@ function onFilmShare(e) {
 window.addEventListener('message', onFilmShare);
 
 function navigateTo(page) {
+  if (page === 'customers') page = 'orders';   // merged into לקוחות ועבודות (2026-10-08); old links still land
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById('page-' + page);
   if (target) target.classList.add('active');
@@ -2775,7 +2771,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v419';
+const HUB_BUILD = 'v420';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3797,44 +3793,32 @@ function toggleCalcBiz() {
   document.getElementById('calcBizNameRow').style.display = state.calcBiz ? 'grid' : 'none';
 }
 
+// The customers the search on לקוחות ועבודות finds, above the jobs (2026-10-08): the customers list became
+// this when the two tabs merged, so a customer with no job yet is still one search away. Nothing shows
+// until something is typed; a search is never capped (the CUST_PICK_MAX rule).
 function renderCustomers() {
-  const customers = Store.get('customers') || [];
-  const filtered = customers.slice();
-  filtered.sort((a, b) => new Date(b.lastVisit) - new Date(a.lastVisit));
-
-
-  const list = document.getElementById('customersList');
-  if (filtered.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div><div class="empty-state-text">אין לקוחות שמורים עדיין.<br>שמור תיקון עם פרטי לקוח כדי להתחיל.</div></div>';
-    return;
-  }
   renderDupeBanner();
+  const list = document.getElementById('customersList');
+  if (!list) return;
+  const q = ORD_QUERY.trim();
+  if (!q) { list.innerHTML = ''; return; }
+  const { rows } = customerMatches(q);
   const spendOf = customerSpendIndex();
-  // Folded by the month of the last visit, the order the list is already in (2026-10-05, every tab
-  // folded).
-  const byMonth = new Map();
-  for (const c of filtered) {
-    const k = isNaN(new Date(c.lastVisit).getTime()) ? '' : monthKeyOf(c.lastVisit);
-    if (!byMonth.has(k)) byMonth.set(k, { k, list: [] });
-    byMonth.get(k).list.push(c);
-  }
-  list.innerHTML = [...byMonth.values()].sort((a, b) => (b.k || '0').localeCompare(a.k || '0')).map((m) => fold('cust-' + (m.k || 'none'), m.k ? monthLabelHe(m.k) : 'בלי תאריך ביקור', custRows(m.list), { sub: true })).join('');
-  function custRows(arr) { return arr.map((c, idx) => `
-    <div class="list-item" onclick="openCustomerDetails(${customers.indexOf(c)})">
+  list.innerHTML = !rows.length ? '<div class="wt-muted" style="margin:0 2px 10px;">אין לקוח בשם או במספר הזה.</div>'
+    : '<div style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin:0 2px 4px;">👥 לקוחות</div>' + rows.map(({ c, i }) => `
+    <div class="list-item" onclick="openCustomerDetails(${i})" data-cust-hit="${i}">
       <div class="list-item-header">
         <div>
-          <div class="list-item-title">${c.name}</div>
-          <div class="list-item-subtitle">📱 ${c.phone}</div>
+          <div class="list-item-title">${custPickEsc(c.name || 'ללא שם')}</div>
+          <div class="list-item-subtitle">${c.phone ? '📱 ' + custPickEsc(c.phone) : 'אין טלפון'}</div>
         </div>
         <div style="text-align: left;">
           <div class="list-item-value">₪${Math.round(spendOf(c).spent).toLocaleString('he-IL')}</div>
           <div class="list-item-subtitle">${spendOf(c).visits} ביקורים</div>
         </div>
       </div>
-      ${c.notes ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">📝 ${c.notes}</div>` : ''}
-      <div style="font-size: 11px; color: var(--text-light); margin-top: 4px;">ביקור אחרון: ${new Date(c.lastVisit).toLocaleDateString('he-IL')}</div>
-    </div>
-  `).join(''); }
+      ${c.notes ? `<div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">📝 ${custPickEsc(c.notes)}</div>` : ''}
+    </div>`).join('') + '<div style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin:12px 2px 4px;">📋 עבודות</div>';
 }
 
 // Everything this person ever did, from all four places it can be recorded, newest first.
@@ -6045,6 +6029,50 @@ function saveOrder() {
   closeModal(); renderOrders();
 }
 let salesFilter = 'all';
+// The one search on לקוחות ועבודות (2026-10-08). It finds the customers (renderCustomers) and narrows the
+// jobs to the ones it matches: the customer's name or number, an item, the spec, the kind of work.
+let ORD_QUERY = '';
+function ordersSearch(q) { ORD_QUERY = String(q || ''); salesLimit = 60; renderOrders(); }
+function jobHaystack(x) {
+  const r = x.raw;
+  const parts = x.kind === 'sale'
+    ? [r.customer, r.phone, ...(r.items || []).map((it) => it.name + ' ' + (it.cat || '')), r.bms, r.status]
+    : [r.customerName, r.customerPhone, r.voltage && r.capacity ? r.voltage + 'V ' + r.capacity + 'Ah' : '', jobTypeLabel(r), r.notes, r.jobStatus];
+  return parts.filter(Boolean).join(' ').toLowerCase();
+}
+function jobMatches(x, q) {
+  const s = q.trim().toLowerCase();
+  if (!s) return true;
+  const hay = jobHaystack(x);
+  if (hay.includes(s)) return true;
+  const d = s.replace(/[^0-9]/g, '');
+  return d.length >= 3 && String((x.kind === 'sale' ? x.raw.phone : x.raw.customerPhone) || '').replace(/[^0-9]/g, '').includes(d);
+}
+// Which customer card a row's name opens: by any of the customer's numbers, else by the name.
+function custIndexOf() {
+  const customers = Store.get('customers') || [];
+  const byPhone = new Map(), byName = new Map();
+  customers.forEach((c, i) => {
+    for (const p of custPhones(c)) { if (!byPhone.has(p)) byPhone.set(p, i); const d = p.replace(/[^0-9]/g, ''); if (d && !byPhone.has(d)) byPhone.set(d, i); }
+    const nm = String(c.name || '').trim().toLowerCase();
+    if (nm && !byName.has(nm)) byName.set(nm, i);
+  });
+  return (name, phone) => {
+    const p = String(phone || '').trim();
+    if (p && byPhone.has(p)) return byPhone.get(p);
+    const d = p.replace(/[^0-9]/g, '');
+    if (d && byPhone.has(d)) return byPhone.get(d);
+    const nm = String(name || '').trim().toLowerCase();
+    return nm && byName.has(nm) ? byName.get(nm) : -1;
+  };
+}
+let CUST_IDX = null;
+function custLinkHtml(name, phone) {
+  const i = (CUST_IDX || (CUST_IDX = custIndexOf()))(name, phone);
+  const nm = custPickEsc(name || 'ללא שם');
+  return i >= 0 ? `<a href="#" class="cust-link" data-cust="${i}" onclick="event.stopPropagation();openCustomerDetails(${i});return false;" style="color:inherit;text-decoration:underline;text-decoration-color:var(--primary);text-underline-offset:3px;">${nm}</a>` : nm;
+}
+const custPhoneHtml = (phone) => (phone ? ` · <span style="white-space:nowrap;">📱 <bdi dir="ltr">${custPickEsc(phone)}</bdi></span>` : '');
 // The list is capped and grown on demand. 500 jobs + every sale rendered as one innerHTML
 // is a visible freeze on a phone, and nobody scrolls past the first screen anyway.
 let salesLimit = 60;
@@ -6145,8 +6173,8 @@ function saleRow(o) {
   return `
     <div class="list-item">
       <div class="list-item-header">
-        <div><div class="list-item-title">${salesBadge('sale')} ${o.customer || 'ללא שם'} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
-          <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')} · ${(o.items || []).length === 1 ? 'פריט אחד' : (o.items || []).length + ' פריטים'}${o.bms ? ' · BMS ' + o.bms : ''}</div>
+        <div><div class="list-item-title">${salesBadge('sale')} ${custLinkHtml(o.customer, o.phone)} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
+          <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')}${custPhoneHtml(o.phone)} · ${(o.items || []).length === 1 ? 'פריט אחד' : (o.items || []).length + ' פריטים'}${o.bms ? ' · BMS ' + o.bms : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${saleCats(o)}</div></div>
         <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div>${Number(o.discount) ? `<div data-discount style="font-size:10.5px;color:var(--accent);">הנחה ${shek(o.discount)}</div>` : ''}${(() => { const pr = saleProfit(o); return pr ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(pr.profit)}</div>` : ''; })()}<div style="margin-top:3px;">${saleStatusPill(o.status)}${quoteAgePill(o)}</div></div>
       </div>
@@ -6198,8 +6226,8 @@ function repairRow(j) {
   return `
     <div class="list-item">
       <div class="list-item-header">
-        <div><div class="list-item-title">${salesBadge('repair')} ${j.customerName || 'ללא שם'} ${j.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
-          <div class="list-item-subtitle">${new Date(j.date).toLocaleDateString('he-IL')}${spec ? ' · ' + spec : ''}</div>
+        <div><div class="list-item-title">${salesBadge('repair')} ${custLinkHtml(j.customerName, j.customerPhone)} ${j.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
+          <div class="list-item-subtitle">${new Date(j.date).toLocaleDateString('he-IL')}${custPhoneHtml(j.customerPhone)}${spec ? ' · ' + spec : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${jobTypeLabel(j)}</div></div>
         <div style="text-align:left;"><div class="list-item-value">${shek(Number(j.price) || 0)}</div>${Number(j.discount) ? `<div data-discount style="font-size:10.5px;color:var(--accent);">הנחה ${shek(j.discount)}</div>` : ''}${Number(j.profit) ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(Number(j.profit))}</div>` : ''}<div style="margin-top:3px;">${jobStatusPill(jobStatusOf(j))}</div><div class="list-item-subtitle">${warr}</div></div>
       </div>
@@ -6214,6 +6242,8 @@ function repairRow(j) {
     </div>`;
 }
 function renderOrders() {
+  CUST_IDX = null;
+  renderCustomers();
   const orders = (Store.get('orders') || []).map(o => ({ kind: 'sale', date: o.date, raw: o }));
   const jobs = (Store.get('jobs') || []).map(j => ({ kind: 'repair', date: j.date, raw: j }));
 
@@ -6242,11 +6272,12 @@ function renderOrders() {
   if (salesFilter === 'sale') all = all.filter(x => x.kind === 'sale');
   else if (salesFilter === 'repair') all = all.filter(x => x.kind === 'repair');
   else if (salesFilter === 'quote') all = all.filter(x => x.kind === 'sale' && !saleIsIncome(x.raw));
+  if (ORD_QUERY.trim()) all = all.filter((x) => jobMatches(x, ORD_QUERY));
   all.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   const list = document.getElementById('ordersList');
   if (all.length === 0) {
-    const filtered = salesFilter !== 'all';
+    const filtered = salesFilter !== 'all' || !!ORD_QUERY.trim();
     list.innerHTML = `<div class="card"><div class="empty-state"><div class="empty-state-icon">${filtered ? '🔍' : '🛒'}</div><div class="empty-state-text">${filtered ? 'אין תוצאות לסינון הזה.' : 'אין מכירות או תיקונים עדיין.<br>לחץ 🛒 מכירה חדשה או 🔧 תיקון חדש למעלה.'}</div></div></div>`;
     return;
   }
@@ -6282,7 +6313,7 @@ function renderOrders() {
   const shown = all.slice(0, salesLimit);
   // Each month is a fold, its money in the title (2026-10-05, "בכל הטאבים … הכל מקופל"). A chosen
   // filter opens them: then the filter is what decides what is on the screen.
-  const forceOpen = salesFilter !== 'all';
+  const forceOpen = salesFilter !== 'all' || !!ORD_QUERY.trim();
   let html = '';
   const months = [];
   for (const x of shown) {
@@ -11857,6 +11888,127 @@ function restoreInventoryFromBackup(input) {
   };
   rd.readAsText(file, 'utf-8');
 }
+// The datasheet of each cell on the shelf (2026-10-08, Daniel: "תן מפרט טכני מלא של כל תא שנמצא במלאי
+// של התאים"; he chose a card on each cell in stock). Every figure is the MAKER's, read off the sheet:
+// the PDFs the site publishes (public/datasheets), and for the JP30 Ampace's own product page. A figure
+// a sheet does not state says so — it is never filled in from a shop or from memory. The 35V and the 26V
+// have no sheet from EVE itself (only distributors host one), so their card says that and shows only the
+// calculator's sizes, marked as such. Public data, safe in this public page: model names and specs, no
+// supplier or price.
+const CELL_SHEETS = {
+  '21700-50e': { model: 'EVE INR21700/50E', src: 'דאטה-שיט של EVE (PDF באתר), גרסה A, אפריל 2024', rows: [
+    ['קיבולת', '5,000mAh נומינלי · מינימום 4,950mAh'],
+    ['מתח', 'נומינלי 3.65V · טעינה מלאה 4.20V · ניתוק 2.50V'],
+    ['טעינה רגילה', '1.0A (0.2C), CCCV, ניתוק 0.1A'],
+    ['טעינה מקסימלית', '10A (2C) — "לא לאורך חיים"'],
+    ['פריקה מקסימלית', '15A (3C) עד 2.50V — "לא לאורך חיים"'],
+    ['זרם שיא (פולס)', 'לא מופיע בדאטה-שיט'],
+    ['התנגדות פנימית', '≤18mΩ (AC 1kHz)'],
+    ['משקל', '68.0±2.0 גרם'],
+    ['מידות', 'קוטר 21.15±0.10 · גובה 70.15±0.15 מ״מ'],
+    ['טמפ׳ טעינה', '0 עד 45°C (סביבה)'],
+    ['טמפ׳ פריקה', '\u2066-20\u2069 עד 60°C (סביבה)'],
+    ['מחזורים', '1,000 מחזורים ≥70% (טעינה 0.5C, פריקה 1C) · 500 מחזורים ≥70% (1C/1C)'],
+    ['קיבולת לפי זרם', '0.2C 100% · 0.5C ≥97% · 1C ≥95% · 2C ≥93% · 3C ≥90%'],
+  ] },
+  '21700-50pl': { model: 'EVE INR21700/50PL', src: 'דאטה-שיט של EVE (PDF באתר), גרסה A, נובמבר 2024', rows: [
+    ['קיבולת', '5,000mAh נומינלי · מינימום 4,800mAh'],
+    ['מתח', 'נומינלי 3.60V · טעינה מלאה 4.20V · ניתוק 2.50V'],
+    ['טעינה רגילה', '2.5A (0.5C), CCCV, ניתוק 0.1A'],
+    ['טעינה מקסימלית', '10A (2C)'],
+    ['פריקה מקסימלית', '125A (25C) עד 2.50V, עם ניתוק בטמפ׳ התא: 75°C מומלץ, 80°C מקסימום'],
+    ['זרם שיא (פולס)', '180A (36C) למשך 2 שניות'],
+    ['התנגדות פנימית', '≤7mΩ (AC 1kHz)'],
+    ['משקל', 'עד 72.0 גרם'],
+    ['מידות', 'קוטר 21.15±0.10 · גובה 70.15±0.15 מ״מ (עם השרוול)'],
+    ['טמפ׳ טעינה', '0 עד 45°C (סביבה)'],
+    ['טמפ׳ פריקה', '\u2066-20\u2069 עד 60°C (סביבה); התא עצמו עד 80°C'],
+    ['מחזורים', 'לא מופיע בדאטה-שיט'],
+    ['קיבולת לפי זרם', '0.2C ≥100% · 2C 100% · 6C ≥95% · 8C ≥95%'],
+  ] },
+  '21700-50sg': { model: 'Tenpower INR21700-50SG', src: 'דאטה-שיט של Tenpower (PDF באתר), גרסה V0.2, יוני 2025', rows: [
+    ['קיבולת', '5,000mAh נומינלי · מינימום 4,900mAh'],
+    ['מתח', 'נומינלי 3.60V · טעינה מלאה 4.20V · ניתוק 2.50V'],
+    ['טעינה רגילה', '2.5A, CCCV עד 4.2V, ניתוק 100mA'],
+    ['טעינה מקסימלית', '6A'],
+    ['פריקה מקסימלית', '20A רציף (4C)'],
+    ['זרם שיא (פולס)', 'לא מופיע בדאטה-שיט'],
+    ['התנגדות פנימית', '≤14mΩ (1kHz)'],
+    ['משקל', 'עד 71.0 גרם'],
+    ['מידות', 'קוטר עד 21.35 · גובה עד 70.60 מ״מ'],
+    ['טמפ׳ טעינה', '0 עד 45°C'],
+    ['טמפ׳ פריקה', '\u2066-20\u2069 עד 60°C'],
+    ['מחזורים', '500 מחזורים ≥70% (טעינה 6A, פריקה 20A)'],
+    ['קיבולת לפי זרם', '0.2C 100% · 0.5C 96% · 1C 94% · 2C 90%'],
+  ] },
+  '21700-40p': { model: 'EVE INR21700/40P', src: 'דאטה-שיט של EVE (PDF סרוק באתר), גרסה C, מאי 2023', rows: [
+    ['קיבולת', '4,000mAh נומינלי · מינימום 3,950mAh'],
+    ['מתח', 'נומינלי 3.60V · טעינה מלאה 4.20V · ניתוק 2.50V'],
+    ['טעינה רגילה', '2.0A (0.5C), CCCV, ניתוק 0.1A'],
+    ['טעינה מקסימלית', '6.0A (1.5C)'],
+    ['פריקה מקסימלית', '50A (12.5C) עד 2.50V, עם ניתוק בטמפ׳ התא: 75°C מומלץ, 80°C מקסימום'],
+    ['זרם שיא (פולס)', 'לא מופיע בדאטה-שיט'],
+    ['התנגדות פנימית', '≤12mΩ (AC 1kHz)'],
+    ['משקל', 'עד 70.0 גרם'],
+    ['מידות', 'קוטר 21.15±0.10 · גובה 70.15±0.15 מ״מ'],
+    ['טמפ׳ טעינה', '0 עד 45°C (סביבה)'],
+    ['טמפ׳ פריקה', '\u2066-20\u2069 עד 60°C (סביבה); התא עצמו עד 80°C'],
+    ['מחזורים', '300 מחזורים ≥60% (טעינה 1.5C, פריקה 30A)'],
+    ['קיבולת לפי זרם', '0.2C ≥100% · 2.5C 100% · 5C ≥95% · 7.5C ≥93% · 10C ≥90%'],
+  ] },
+  '18650-25p': { model: 'EVE INR18650/25P', src: 'דאטה-שיט של EVE (PDF באתר), גרסה A, ספטמבר 2018', rows: [
+    ['קיבולת', '2,500mAh נומינלי · מינימום 2,450mAh'],
+    ['מתח', 'נומינלי 3.60V · טעינה מלאה 4.20V · ניתוק 2.50V'],
+    ['טעינה רגילה', '1.25A (0.5C), CCCV, ניתוק 100mA'],
+    ['טעינה מקסימלית', '4A (1.6C), טעינה מהירה'],
+    ['פריקה מקסימלית', '30A רציף עד 2.50V'],
+    ['זרם שיא (פולס)', 'לא מופיע בדאטה-שיט'],
+    ['התנגדות פנימית', '≤18mΩ (AC 1kHz)'],
+    ['משקל', 'עד 48.0 גרם'],
+    ['מידות', 'קוטר 18.35±0.10 · גובה 65.00±0.15 מ״מ'],
+    ['טמפ׳ טעינה', '0 עד 45°C (סביבה)'],
+    ['טמפ׳ פריקה', '\u2066-20\u2069 עד 60°C (סביבה); התא עצמו עד 80°C'],
+    ['מחזורים', '300 מחזורים ≥60% (טעינה 4A, פריקה 20A)'],
+    ['קיבולת לפי זרם', '0.5A ≥100% · 2.5A ≥95% · 10A 100% · 15A ≥95% · 20A ≥95%'],
+  ] },
+  '18650-jp30': { model: 'Ampace JP30', src: 'אתר היצרן Ampace (טבלת הפרמטרים) והודעת ההשקה, דצמבר 2024', rows: [
+    ['קיבולת', '3,000mAh נומינלי (מינימום לא מפורסם)'],
+    ['מתח', 'נומינלי 3.68V · טעינה מלאה 4.25V · ניתוק 2.50V'],
+    ['טעינה רגילה', 'לא מפורסם'],
+    ['טעינה מקסימלית', '14.5A'],
+    ['פריקה מקסימלית', '56A רציף; 36A רציף עד פריקה מלאה'],
+    ['זרם שיא (פולס)', '140A למשך 5 שניות'],
+    ['התנגדות פנימית', 'לא מפורסם'],
+    ['משקל', 'עד 50 גרם'],
+    ['מידות', '18650 (מידות מדויקות לא מפורסמות)'],
+    ['טמפ׳ טעינה', '\u2066-10\u2069 עד 60°C'],
+    ['טמפ׳ פריקה', '\u2066-20\u2069 עד 80°C'],
+    ['מחזורים', 'מעל 600 מחזורים בפריקה 30A (באותו עמוד היצרן כותב סף של 60% ובמקום אחר 80%)'],
+    ['קיבולת לפי זרם', 'לא מפורסם'],
+  ] },
+};
+// The shelf names a cell freely ("תא 21700 EVE 50E", "50PL"), so the model is read off the name.
+const CELL_SHEET_KEYS = [[/50PL/i, '21700-50pl'], [/50SG/i, '21700-50sg'], [/50E(?![A-Za-z])/i, '21700-50e'], [/40P(?![A-Za-z])/i, '21700-40p'],
+  [/25P(?![A-Za-z])/i, '18650-25p'], [/35V(?![A-Za-z])/i, '18650-35v'], [/26V(?![A-Za-z])/i, '18650-26v'], [/JP30/i, '18650-jp30']];
+function cellSheetKey(name) { const hit = CELL_SHEET_KEYS.find(([re]) => re.test(String(name || ''))); return hit ? hit[1] : null; }
+function cellSheetFor(name) { const k = cellSheetKey(name); return k ? { key: k, sheet: CELL_SHEETS[k] || null } : null; }
+function openCellSheet(id) {
+  const it = getInventory().find((x) => String(x.id) === String(id));
+  const hit = it && cellSheetFor(it.name);
+  if (!hit) return;
+  const esc = custPickEsc;
+  const table = (rows) => '<table style="width:100%;border-collapse:collapse;font-size:13px;">' + rows.map(([k, v]) =>
+    `<tr><th style="text-align:right;vertical-align:top;padding:6px 4px;color:var(--text-muted);font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border);">${esc(k)}</th><td style="padding:6px 4px;border-bottom:1px solid var(--border);" data-cell-row="${esc(k)}">${esc(v)}</td></tr>`).join('') + '</table>';
+  if (hit.sheet) {
+    openModal('📄 ' + esc(hit.sheet.model), table(hit.sheet.rows)
+      + `<div class="wt-muted" style="margin-top:10px;">מקור: ${esc(hit.sheet.src)}. כל מספר כפי שהיצרן כתב; מה שלא כתוב בדאטה-שיט מסומן כך.</div>`);
+    return;
+  }
+  const d = DIM_CELLS[hit.key];
+  openModal('📄 ' + esc(d ? d.label : it.name), '<div class="alert alert-warning" data-no-sheet>אין דאטה-שיט של היצרן: EVE לא מפרסמת אותו באתר שלה, ועותקים יש רק אצל משווקים — לכן הם לא כאן.</div>'
+    + (d ? '<div class="wt-muted" style="margin:8px 0 4px;">מה שידוע מטבלת מחשבון המידות (לא מדאטה-שיט):</div>'
+      + table([['קיבולת', d.ah + 'Ah'], ['מידות', 'קוטר ' + d.dia + ' · גובה ' + d.len + ' מ״מ'], ['משקל', d.g + ' גרם']]) : ''));
+}
 function renderInvItem(i, cat) {
   const isLow = (Number(i.qty) || 0) <= 0;   // out of stock only — no 'low' marking
   let title = i.name || '';
@@ -11872,6 +12024,7 @@ function renderInvItem(i, cat) {
         </div>
       </div>
       <div class="btn-group" style="margin-top:6px;">
+        ${cat === 'תא' && cellSheetFor(i.name) ? `<button class="btn btn-sm btn-secondary" data-cell-sheet onclick="openCellSheet('${i.id}')">📄 מפרט</button>` : ''}
         <button class="btn btn-sm btn-secondary" onclick="openInventoryEditor('${i.id}')">✏️ ערוך</button>
         <button class="btn btn-sm btn-danger" onclick="deleteInventory('${i.id}')">🗑️</button>
       </div>

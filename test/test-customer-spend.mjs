@@ -89,15 +89,20 @@ if (SELFTEST) {
 }
 
 // ---------------------------------------------------------------- what the list shows
+// The customers list became the search of לקוחות ועבודות (2026-10-08): each name is looked up there.
 const list = await page.evaluate(() => {
-  navigateTo('customers');
+  navigateTo('orders');
   const out = {};
-  for (const el of document.querySelectorAll('#customersList .list-item')) {
-    // textContent: the list is folded by month since 2026-10-05, and a closed fold has no innerText
-    const name = el.querySelector('.list-item-title').textContent.trim();
-    const val = Number((el.querySelector('.list-item-value').textContent || '').replace(/[^\d]/g, '')) || 0;
-    (out[name] = out[name] || []).push(val);
+  for (const q of ['רק מהספרים', 'רק מכירה', 'רק תיקון', 'הכול ביחד', 'כפול']) {
+    ordersSearch(q);
+    for (const el of document.querySelectorAll('#customersList [data-cust-hit]')) {
+      const name = el.querySelector('.list-item-title').textContent.trim();
+      if (name !== q) continue;
+      const val = Number((el.querySelector('.list-item-value').textContent || '').replace(/[^\d]/g, '')) || 0;
+      (out[name] = out[name] || []).push(val);
+    }
   }
+  ordersSearch('');
   return out;
 });
 check('a customer known only from the books shows their books total', (list['רק מהספרים'] || [])[0] === 5000, list['רק מהספרים']);
