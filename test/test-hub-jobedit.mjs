@@ -241,7 +241,8 @@ check('the quick-price card is gone', !gone.card, gone.card);
 check('no toggleQuickPricer left', gone.toggle === 'undefined', gone.toggle);
 check('no qpInit left', gone.init === 'undefined', gone.init);
 check('no dangling qp* onclick handlers', !gone.handlers, gone.handlers);
-check('page renamed to מכירות ותיקונים', gone.title.includes('מכירות ותיקונים'), gone.title);
+// 2026-10-08: לקוחות ועבודות became one page, named for both
+check('the page is לקוחות ועבודות', gone.title.includes('לקוחות ועבודות'), gone.title);
 
 console.log('\n10. a battery SOLD is under warranty, not just one repaired');
 // The warranty page read `jobs` and only jobs, so a pack that went out through the sales
@@ -514,8 +515,8 @@ console.log('\n13. work that another job drags in is priced once, and only when 
       monthHeads: [...sec.querySelectorAll('#ordersList details.fold > summary')].map((e) => e.textContent.replace(/\s+/g, ' ').trim()),
     };
   });
-  check('the page does not print its own name twice', !sales.titleVisible, sales.titleText + ' / ' + sales.activeTab);
-  check('and the tab strip still names it', /עבודות/.test(sales.activeTab), sales.activeTab);
+  // One page since 2026-10-08: no tab strip, so the title is the one place it is named.
+  check('the page names itself once: its title, and no tab strip', sales.titleVisible && /לקוחות ועבודות/.test(sales.titleText) && !sales.activeTab, sales.titleText + ' / ' + sales.activeTab);
   // Two buttons to one page is the duplicate you only notice on the phone, where they touch.
   check('one route to the calculator, not two', sales.calcRoutes === 1, String(sales.calcRoutes));
   // The pill says הצעה. The button used to say it again, and a third line said 'לא בהכנסות'.

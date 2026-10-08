@@ -187,6 +187,11 @@ jobs:
       - name: Wages on the 1st, and editing a report
         run: node test/test-wage-month.mjs
 
+      # The datasheet card of each cell in stock (2026-10-08): the maker's figures, "not stated" where a sheet
+      # is silent, and a cell with no sheet from its maker says so.
+      - name: A cell's datasheet card
+        run: node test/test-cell-sheet.mjs
+
       # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
       # reminder only after a week without it; a restore that only adds what is missing.
       - name: The daily cloud backup

@@ -87,7 +87,6 @@ const lists = await page.evaluate(() => {
   const st = (sel) => { const d = [...document.querySelectorAll(sel + ' details.fold')]; return { n: d.length, closed: d.every((x) => !x.open), counts: d.filter((x) => x.querySelector(':scope > summary .fold-count')).length }; };
   const out = {};
   navigateTo('orders'); out.orders = st('#ordersList'); out.ordersSum = (document.querySelector('#ordersList details.fold .fold-sum') || {}).textContent || '';
-  navigateTo('customers'); out.customers = st('#customersList');
   navigateTo('warranties'); setWarrantyTab('all'); out.warranties = st('#warrantiesList');
   navigateTo('stickerlog'); out.stickers = st('#stickerlogList');
   navigateTo('dims'); out.dims = st('#vpList');
@@ -95,7 +94,7 @@ const lists = await page.evaluate(() => {
   navigateTo('inventory'); out.need = !document.getElementById('needCard').open && document.getElementById('needCard').tagName === 'DETAILS';
   return out;
 });
-for (const [k, label] of [['orders', 'jobs, by month'], ['customers', 'customers, by the month of the last visit'], ['warranties', 'warranties, by the month they end'], ['stickers', 'saved stickers, by month'], ['dims', 'vehicle sizes, by group'], ['catalog', 'the price list, by topic']]) {
+for (const [k, label] of [['orders', 'jobs, by month'], ['warranties', 'warranties, by the month they end'], ['stickers', 'saved stickers, by month'], ['dims', 'vehicle sizes, by group'], ['catalog', 'the price list, by topic']]) {
   check(label + ': folded, with no row count on a title', lists[k] && lists[k].n >= 1 && lists[k].closed && lists[k].counts === 0, lists[k]);
 }
 check('a month\'s title carries its money', /₪/.test(lists.ordersSum), lists.ordersSum);
