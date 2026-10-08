@@ -129,7 +129,6 @@ body { min-height: 100vh; }
 .result-value { font-size: 42px; font-weight: 700; line-height: 1.1; }
 .result-sub { font-size: 11px; opacity: 0.8; margin-top: 8px; }
 /* the range page (2026-10-08) */
-.rg-hint { font-size: 11px; color: var(--text-muted); font-weight: 400; margin-top: 2px; line-height: 1.35; }
 .rg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .rg-table th, .rg-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
 .rg-table th { font-size: 11px; color: var(--text-muted); font-weight: 600; }
@@ -1039,49 +1038,59 @@ body { min-height: 100vh; }
     <!-- drawn by calcRange(): the range model (2026-10-08) -->
     <div id="rangeApp"></div>
   </div>
+  <!-- The five below run on the calc-engine (2026-10-08): questions a customer can answer, the
+       rest filled from the vehicle he picks. Their pickers are filled by calcFillSelects(). -->
   <div id="calctab-charge" style="display:none;">
     <div class="card">
-      <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="chAh" value="40" min="1" oninput="calcCharge()"></div>
-      <div class="form-row"><label>זרם מטען (A)</label><input type="number" class="form-input" id="chA" value="5" min="0.1" step="0.5" oninput="calcCharge()"></div>
-      <div class="form-row"><label>אחוז נוכחי (%)</label><input type="number" class="form-input" id="chPct" value="10" min="0" max="99" oninput="calcCharge()"></div>
+      <div class="form-row"><label for="chCell">סוג סוללה</label><select class="form-select" id="chCell" data-calc-cell onchange="calcCharge()"></select></div>
+      <div class="form-row"><label for="chV">מתח</label><select class="form-select" id="chV" data-calc-volt="48" onchange="calcCharge()"></select></div>
+      <div class="form-row"><label for="chAh">קיבולת (Ah)</label><input type="number" inputmode="decimal" class="form-input" id="chAh" value="20" min="1" oninput="calcCharge()"></div>
+      <div class="form-row"><label for="chA">זרם המטען (A)</label><input type="number" inputmode="decimal" class="form-input" id="chA" value="5" min="0.1" step="0.5" oninput="calcCharge()"></div>
+      <div class="form-row"><label for="chPct">כמה יש עכשיו (%)</label><input type="number" inputmode="numeric" class="form-input" id="chPct" value="10" min="0" max="99" oninput="calcCharge()"></div>
+      <div class="form-row"><label for="chTo">לטעון עד</label><select class="form-select" id="chTo" onchange="calcCharge()"><option value="100" selected>100%</option><option value="90">90%</option><option value="80">80%</option></select></div>
       <div id="chResult" style="margin-top:10px;"></div>
     </div>
   </div>
 
   <div id="calctab-health" style="display:none;">
     <div class="card">
-      <div class="form-row"><label>טווח מקורי (ק"מ)</label><input type="number" class="form-input" id="heOrig" value="60" min="1" oninput="calcHealth()"></div>
-      <div class="form-row"><label>טווח נוכחי (ק"מ)</label><input type="number" class="form-input" id="heCurr" value="40" min="0" oninput="calcHealth()"></div>
-      <div class="form-row"><label>גיל הסוללה (שנים)</label><input type="number" class="form-input" id="heAge" value="2" min="0" step="0.5" oninput="calcHealth()"></div>
+      <div class="form-row"><label for="heOrig">טווח כשהייתה חדשה (ק"מ)</label><input type="number" inputmode="decimal" class="form-input" id="heOrig" value="60" min="1" oninput="calcHealth()"></div>
+      <div class="form-row"><label for="heCurr">טווח היום (ק"מ)</label><input type="number" inputmode="decimal" class="form-input" id="heCurr" value="40" min="0" oninput="calcHealth()"></div>
+      <div class="form-row"><label for="heAge">גיל הסוללה (שנים)</label><input type="number" inputmode="decimal" class="form-input" id="heAge" value="2" min="0" step="0.5" oninput="calcHealth()"></div>
+      <div class="form-row"><label for="heSeason">עונה</label><select class="form-select" id="heSeason" data-calc-season onchange="calcHealth()"></select></div>
       <div id="heResult" style="margin-top:10px;"></div>
     </div>
   </div>
 
   <div id="calctab-speed" style="display:none;">
     <div class="card">
-      <div class="form-row"><label>מתח (V)</label><input type="number" class="form-input" id="spV" value="48" min="1" oninput="calcSpeed()"></div>
-      <div class="form-row"><label>הספק מנוע (W)</label><input type="number" class="form-input" id="spW" value="1000" min="1" step="100" oninput="calcSpeed()"></div>
-      <div class="form-row"><label>קוטר גלגל (אינץ')</label><input type="number" class="form-input" id="spWheel" value="20" min="1" step="0.5" oninput="calcSpeed()"></div>
-      <div class="form-row"><label>משקל רוכב (ק"ג)</label><input type="number" class="form-input" id="spKg" value="75" min="20" oninput="calcSpeed()"></div>
+      <div class="form-row"><label for="spVeh">סוג כלי</label><select class="form-select" id="spVeh" data-calc-veh onchange="calcVehPicked('sp', { spV: 'V', spW: 'power', spWheel: 'wheel', spKg: 'rider' }, calcSpeed)"></select></div>
+      <div class="form-row"><label for="spV">מתח</label><select class="form-select" id="spV" data-calc-volt="48" onchange="calcSpeed()"></select></div>
+      <div class="form-row"><label for="spW">הספק המנוע (W)</label><input type="number" inputmode="numeric" class="form-input" id="spW" value="350" min="50" step="50" oninput="calcSpeed()"></div>
+      <div class="form-row"><label for="spWheel">גודל גלגל (אינץ')</label><input type="number" inputmode="decimal" class="form-input" id="spWheel" value="27.5" min="2" step="0.5" oninput="calcSpeed()"></div>
+      <div class="form-row"><label for="spKg">משקל הרוכב (ק"ג)</label><input type="number" inputmode="numeric" class="form-input" id="spKg" value="80" min="10" oninput="calcSpeed()"></div>
       <div id="spResult" style="margin-top:10px;"></div>
     </div>
   </div>
 
   <div id="calctab-cost" style="display:none;">
     <div class="card">
-      <div class="form-row"><label>מתח (V)</label><input type="number" class="form-input" id="coV" value="72" min="1" oninput="calcCost()"></div>
-      <div class="form-row"><label>קיבולת (Ah)</label><input type="number" class="form-input" id="coAh" value="40" min="1" oninput="calcCost()"></div>
-      <div class="form-row"><label>ק"מ ביום</label><input type="number" class="form-input" id="coKm" value="30" min="1" oninput="calcCost()"></div>
+      <div class="form-row"><label for="coVeh">סוג כלי</label><select class="form-select" id="coVeh" data-calc-veh onchange="calcVehPicked('co', { coV: 'V', coAh: 'ah', coAlt: (c) => CALC_FUEL_FOR[c.veh] || 'car' }, calcCost)"></select></div>
+      <div class="form-row"><label for="coV">מתח</label><select class="form-select" id="coV" data-calc-volt="48" onchange="calcCost()"></select></div>
+      <div class="form-row"><label for="coAh">קיבולת (Ah)</label><input type="number" inputmode="decimal" class="form-input" id="coAh" value="15" min="1" oninput="calcCost()"></div>
+      <div class="form-row"><label for="coKm">ק"מ ביום</label><input type="number" inputmode="decimal" class="form-input" id="coKm" value="20" min="1" oninput="calcCost()"></div>
+      <div class="form-row"><label for="coAlt">במקום</label><select class="form-select" id="coAlt" data-calc-fuel onchange="calcCost()"></select></div>
       <div id="coResult" style="margin-top:10px;"></div>
     </div>
   </div>
 
   <div id="calctab-upgrade" style="display:none;">
     <div class="card">
-      <div class="form-row"><label>מתח נוכחי (V)</label><input type="number" class="form-input" id="upFrom" value="48" min="1" oninput="calcUpgrade()"></div>
-      <div class="form-row"><label>מתח מבוקש (V)</label><input type="number" class="form-input" id="upTo" value="60" min="1" oninput="calcUpgrade()"></div>
-      <div class="form-row"><label>קיבולת נוכחית (Ah)</label><input type="number" class="form-input" id="upAh" value="20" min="1" oninput="calcUpgrade()"></div>
-      <div class="form-row"><label>הספק מנוע (W)</label><input type="number" class="form-input" id="upW" value="1000" min="1" step="100" oninput="calcUpgrade()"></div>
+      <div class="form-row"><label for="upVeh">סוג כלי</label><select class="form-select" id="upVeh" data-calc-veh onchange="calcVehPicked('up', { upFrom: 'V', upTo: calcNextVolt, upAh: 'ah', upW: 'power' }, calcUpgrade)"></select></div>
+      <div class="form-row"><label for="upFrom">מתח היום</label><select class="form-select" id="upFrom" data-calc-volt="48" onchange="calcUpgrade()"></select></div>
+      <div class="form-row"><label for="upTo">מתח מבוקש</label><select class="form-select" id="upTo" data-calc-volt="52" onchange="calcUpgrade()"></select></div>
+      <div class="form-row"><label for="upAh">קיבולת (Ah)</label><input type="number" inputmode="decimal" class="form-input" id="upAh" value="15" min="1" oninput="calcUpgrade()"></div>
+      <div class="form-row"><label for="upW">הספק המנוע (W)</label><input type="number" inputmode="numeric" class="form-input" id="upW" value="350" min="50" step="50" oninput="calcUpgrade()"></div>
       <div id="upResult" style="margin-top:10px;"></div>
     </div>
   </div>
@@ -1138,7 +1147,7 @@ body { min-height: 100vh; }
 
   <div id="dimPane-veh">
   <div class="card">
-    <p style="font-size:11px;color:var(--warning,#f59e0b);margin:0 0 8px;">⚠ הנתונים כאן מ-AI, לא נמדדו — חוץ ממה שמסומן ✓ נמדד. לחיצה על כלי מחשבת לו חבילה.</p>
+    <p style="font-size:11px;color:var(--warning,#f59e0b);margin:0 0 8px;">⚠ הנתונים מ-AI, לא נמדדו — חוץ ממה שמסומן ✓ נמדד</p>
     <div id="vpList"></div>
     <button class="btn btn-secondary btn-block btn-sm" style="margin-top:10px;" onclick="openDimEditor(null)">➕ הוסף מדידה של מגש</button>
   </div>
@@ -1255,7 +1264,6 @@ body { min-height: 100vh; }
 
     <div class="divider"></div>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">💳 פרטי תשלום להצעת מחיר</div>
-    <div class="info-banner" style="margin-bottom:8px;"><span>🔒</span><div style="font-size:11px;">נשמר בחשבון שלך בלבד, מאחורי ההתחברות — <b>לא</b> בתוך קובץ האתר. אל תכניס פרטי בנק לקוד: קובץ ה-HTML של הלוח נגיש לכל אחד שיודע את הכתובת.</div></div>
     <div class="form-row">
       <label>ביט / פייבוקס</label>
       <input type="tel" class="form-input-wide" id="bizBit" placeholder="מספר לביט" style="width: 180px;">
@@ -1547,7 +1555,6 @@ body { min-height: 100vh; }
     <h2 class="page-title">🏢 תיעוד תיקונים — עסקי</h2>
   </div>
   <div class="sub-tabs view-chips" data-views="orders"></div>
-  <div class="info-banner"><span>💡</span><div>סמן תיקון כ<strong>"לקוח עסקי"</strong> במחשבון התמחור — וכל התיקונים יתועדו כאן לכל בית עסק. 📋 מעתיק סיכום לקבוצת הוואטסאפ של החנות, עם <b>היתרה מחושבת מהחיובים והתשלומים</b> ולא מהזיכרון.</div></div>
   <div class="card" id="bizdocsListCard">
     <div id="bizdocsList"></div>
   </div>
@@ -1571,7 +1578,6 @@ body { min-height: 100vh; }
     </div>
   </div>
   <div class="sub-tabs view-chips" data-views="orders"></div>
-  <div class="info-banner"><span>💡</span><div>כל מדבקה שנוצרת ב<strong>עורך המדבקות</strong> נשמרת לכאן אוטומטית ומסונכרנת — מסווגת לפי <strong>תיקון</strong> או <strong>בנייה/מכירה</strong>.</div></div>
   <div class="card">
     <div class="sub-tabs" style="margin-bottom:10px;">
       <div class="sub-tab active" data-sltab="all" onclick="setStickerTab('all')">הכל</div>
@@ -1632,11 +1638,6 @@ body { min-height: 100vh; }
       <h2 class="page-title">🩺 אבחון תקלות</h2>
       <p class="page-subtitle">תסמין → סדר הבדיקות</p>
     </div>
-  </div>
-  <div class="info-banner" id="diagDraftNote">
-    ⚠️ <b>טיוטה — עברו עליה ותקנו.</b> הבדיקות נכתבו לפי מה שכבר רשום במערכת ולפי מה שאמרת
-    (״הכי נפוץ זה תאים שנופלים״). כל תסמין פתוח לעריכה: אפשר להוסיף בדיקות משלך ולכתוב הערה,
-    והן נשמרות ומסתנכרנות. מה שאתה מוסיף לא נמחק בעדכון.
   </div>
   <div id="diagList"></div>
 </section>
@@ -2748,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v423';
+const HUB_BUILD = 'v424';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2923,7 +2924,7 @@ async function runSelfTest() {
 
   openModal('בדיקת מערכת', '<div style="font-size:15px;line-height:2;direction:rtl;">'
     + L.map(x => '<div>' + x.replace(/</g, '&lt;') + '</div>').join('')
-    + '</div><p style="margin-top:12px;color:#64748b;font-size:12px;">הקרא את השורות האלה — הן מה שהאפליקציה באמת רואה.</p>');
+    + '</div>');
 }
 
 // ---- Notices, and why alert() is not one ----
@@ -3273,7 +3274,7 @@ function recalc() {
 
   let bomHtml = '';
   if (bom.length === 0) {
-    bomHtml = '<div style="color: var(--text-muted); text-align: center; padding: 10px; font-size: 12px;">בחר תיקון כדי לראות פירוט חלפים</div>';
+    bomHtml = '';
   } else {
     bom.forEach(i => {
       bomHtml += `<div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px;">
@@ -3903,8 +3904,7 @@ function renderDupeBanner() {
   if (!d.length) { box.style.display = 'none'; return; }
   box.style.display = 'flex';
   document.getElementById('dupeBannerText').innerHTML =
-    '<b>' + d.length + ' שמות מופיעים פעמיים ברשימת הלקוחות.</b>'
-    + '<div style="font-size:11px;opacity:.85;margin-top:2px;">קבלה בלי טלפון מתויקת לפי שם, ולכן היא נופלת על שתי הכרטיסיות.</div>';
+    '<b>' + d.length + ' שמות מופיעים פעמיים ברשימת הלקוחות.</b>';
 }
 
 function openDupeMerge() {
@@ -3930,9 +3930,7 @@ function openDupeMerge() {
       + '</div>';
   }).join('');
   openModal('מיזוג לקוחות כפולים',
-    '<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:8px;">המסומנים ימוזגו לרשומה אחת. '
-    + 'כל מספרי הטלפון נשמרים, ושום תיקון, מכירה או קבלה לא מאבד את הלקוח שלו. '
-    + '<b>אין ביטול.</b></div>' + body,
+    '<div style="font-size:11.5px;color:var(--warning);margin-bottom:8px;"><b>אין ביטול.</b></div>' + body,
     '<button class="btn btn-primary" onclick="mergeSelectedDupes()">מזג מסומנים</button>'
     + '<button class="btn btn-secondary" onclick="closeModal()">ביטול</button>');
 }
@@ -4736,7 +4734,7 @@ function renderSupplier() {
   if (!rows.length) {
     const noneImported = !(Store.get('supplier_prices') || []).length;
     el.innerHTML = noneImported
-      ? '<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">מחירוני הספקים עדיין לא יובאו.<br>לחץ <b>📥 ייבוא מחירון</b> ובחר את הקובץ <b>supplier-costs-import.json</b>.</div></div>'
+      ? '<div class="empty-state"><div class="empty-state-icon">📥</div><div class="empty-state-text">מחירוני הספקים עדיין לא יובאו.</div></div>'
       : '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא רכיב</div></div>';
     return;
   }
@@ -4796,7 +4794,7 @@ function openSupplierImport() {
     </div>
     <input type="file" id="supFile" accept=".json,application/json" class="form-input-wide" style="width:100%;margin-bottom:8px;" onchange="supFilePicked()">
     <textarea id="supJson" class="form-input-wide" style="width:100%;height:110px;font-size:11px;" placeholder='[{"who":"שם הספק","cat":"BMS","name":"JK 150A","usd":111}]'></textarea>
-    <div style="font-size:11px;color:var(--text-light);margin-top:6px;">שדות: who, cat, name, ואז usd (יומר לשקל + מע"מ) או ils (עלות סופית).</div>`,
+`,
     `<button class="btn btn-primary" onclick="importSupplierPrices(false)">📥 החלף רשימה</button>
      <button class="btn btn-secondary btn-sm" onclick="importSupplierPrices(true)">➕ הוסף לקיים</button>
      <button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
@@ -4856,7 +4854,7 @@ function openSupplierAdd() {
     <div class="form-row"><label>פריט</label><input class="form-input-wide" id="scName" placeholder="שם הדגם" style="width:170px;"></div>
     <div class="form-row"><label>מחיר $</label><input type="number" class="form-input" id="scUsd" min="0" step="0.01" placeholder="ריק אם בשקלים"></div>
     <div class="form-row"><label>או מחיר ₪ (נחת)</label><input type="number" class="form-input" id="scIls" min="0" step="0.01" placeholder="עלות סופית"></div>
-    <div style="font-size:11px;color:var(--text-light);margin-top:6px;">מחיר בדולר יומר לפי $1=₪${SUPPLIER_USD} ותתווסף לו מע"מ. מחיר בשקלים נחשב עלות סופית ולא מקבל מע"מ שוב.</div>`,
+`,
     '<button class="btn btn-primary" onclick="saveSupplierRow()">💾 שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>');
 }
 function saveSupplierRow() {
@@ -4907,91 +4905,119 @@ function setCalcTab(tab) {
   CALC_TABS[tab]();
 }
 
-// ---- The five calculators the retail site offers. Formulas are copied from
-// src/components/calculators/*.tsx so a customer who ran one on the site and then calls
-// gets the same answer, not a second opinion.
+// ---- The five smaller calculators. Their arithmetic is the calc-engine's (below) — the same text the
+// retail site runs, so a customer who ran one there and then calls gets the same answer, not a
+// second opinion. The questions are the ones a customer can answer (2026-10-08, Daniel: "שלא יהיה
+// מסובך מידי כי יש נתונים שרק מקצועניים בתחום יודעים"): the vehicle, the battery, the motor's watts,
+// the wheel. Picking the vehicle fills the rest with what is typical for it.
 const numOf = (id, dflt) => { const v = parseFloat((document.getElementById(id) || {}).value); return isNaN(v) ? dflt : v; };
+const valOf = (id) => (document.getElementById(id) || {}).value;
 const calcBox = (main, sub2, tone) =>
   `<div style="background:var(--bg);border-radius:10px;padding:14px;text-align:center;">
      <div style="font-size:26px;font-weight:800;color:${tone || 'var(--primary)'};">${main}</div>
      <div style="font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.7;">${sub2}</div></div>`;
+// warnings only: an info line is an explanation, and the hub shows none (2026-10-08)
+const calcNotes = (notes) => notes.filter((n) => n.lvl !== 'info').map((n) => `<div class="alert ${({ bad: 'alert-danger', warn: 'alert-warning' })[n.lvl] || 'alert-info'}" style="margin:8px 0 0;">${rgEsc(n.t)}</div>`).join('');
+const calcHM = (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
+const CALC_VOLTS = [12, 24, 36, 48, 52, 60, 72, 84, 96];
+// the pickers the five share, filled once from the engine's own tables
+function calcFillSelects() {
+  const fill = (attr, map, dflt) => document.querySelectorAll('select[' + attr + ']').forEach((el) => {
+    if (el.options.length) return;
+    const want = el.getAttribute(attr) || dflt;
+    el.innerHTML = Object.entries(map).map(([k, v]) => `<option value="${k}"${k === want ? ' selected' : ''}>${rgEsc(typeof v === 'string' ? v : v.label)}</option>`).join('');
+  });
+  fill('data-calc-veh', RANGE_VEHICLES, 'ebike');
+  fill('data-calc-cell', RANGE_CELLS, '21700-50e');
+  fill('data-calc-fuel', CALC_FUEL, 'car');
+  fill('data-calc-season', CALC_SEASONS, 'same');
+  fill('data-calc-volt', Object.fromEntries(CALC_VOLTS.map((v) => [String(v), v + 'V'])), '48');
+}
+// picking a vehicle fills its typical figures; he changes the ones he knows
+function calcVehPicked(prefix, fields, then) {
+  const c = rangeClass(valOf(prefix + 'Veh'));
+  for (const [id, f] of Object.entries(fields)) {
+    const el = document.getElementById(id);
+    if (el) el.value = String(typeof f === 'function' ? f(c) : c[f]);
+  }
+  then();
+}
+const calcNextVolt = (c) => CALC_VOLTS.find((v) => v > c.V) || c.V;
 
 function calcCharge() {
   const el = document.getElementById('chResult'); if (!el) return;
-  const ah = numOf('chAh', 0), amps = numOf('chA', 0);
-  const start = Math.max(0, Math.min(99, numOf('chPct', 0)));
-  if (ah <= 0 || amps <= 0) { el.innerHTML = calcBox('—', 'הזן קיבולת וזרם'); return; }
-  // Bulk to 80% at full current, then absorption at ~55% — a charger does NOT hold its
-  // rated amps to 100%, and a flat Ah/A would under-estimate the last fifth badly.
-  const toCharge = ah * ((100 - start) / 100);
-  const bulkAh = Math.max(0, Math.min(toCharge, ah * 0.8 - ah * (start / 100)));
-  const topAh = Math.max(0, toCharge - bulkAh);
-  const mins = Math.round((bulkAh / amps + (topAh > 0 ? topAh / (amps * 0.55) : 0)) * 60);
-  el.innerHTML = calcBox(`${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')} שעות`,
-    `מ-${start}% ל-100% · ${toCharge.toFixed(1)}Ah להטענה<br>כולל שלב האיטי מ-80% ומעלה`);
+  calcFillSelects();
+  const ah = numOf('chAh', 0), A = numOf('chA', 0);
+  if (ah <= 0 || A <= 0) { el.innerHTML = calcBox('—', 'הזן קיבולת וזרם מטען'); return; }
+  const c = calcChargeModel({ ah, A, V: +valOf('chV') || 48, cell: valOf('chCell'), from: numOf('chPct', 0), to: +valOf('chTo') || 100 });
+  el.innerHTML = calcBox(calcHM(c.hours) + ' שעות',
+    `מ-${Math.round(c.from * 100)}% ל-${Math.round(c.to * 100)}%`
+    + (c.tCV > 0.01 ? `<br>${calcHM(c.tCC)} בזרם מלא עד כ-${Math.round(c.socCV * 100)}%, ועוד ${calcHM(c.tCV)} בזרם יורד עד הסוף` : '')
+    + `<br>מטען של ${rgN(c.vFull, 1)}V · ${rgN(A, 1)}A · כ-${rgN(c.chargerW)}W`
+    + `<br>${rgN(c.kwh, 2)} קוט"ש מהשקע · כ-₪${rgN(c.cost, 2)}`) + calcNotes(c.notes);
 }
 
 function calcHealth() {
   const el = document.getElementById('heResult'); if (!el) return;
-  const orig = numOf('heOrig', 0), curr = numOf('heCurr', 0), yrs = numOf('heAge', 0);
-  if (orig <= 0) { el.innerHTML = calcBox('—', 'הזן טווח מקורי'); return; }
-  const pct = Math.max(0, Math.min(100, Math.round((curr / orig) * 100)));
-  let label, text, tone;
-  if (pct >= 80) { label = 'הסוללה במצב טוב'; tone = 'var(--accent)'; text = 'הקיבולת עדיין גבוהה. שווה איזון תאים עמוק לתחזוקה — אין צורך בתיקון משמעותי.'; }
-  else if (pct >= 55) { label = 'מומלץ תיקון נקודתי'; tone = 'var(--primary)'; text = 'הבעיה כנראה ממוקדת (כמה תאים חלשים או BMS). תיקון נקודתי יחזיר חלק ניכר מהטווח בעלות נמוכה.'; }
-  else if (pct >= 35) { label = 'תיקון מקיף או חידוש'; tone = 'var(--warning)'; text = 'אבדה קיבולת משמעותית. כדאי אבחון מעבדה — לרוב משתלם חידוש על פני סוללה חדשה.'; }
-  else { label = 'מומלץ חידוש/החלפה'; tone = '#ef4444'; text = 'הקיבולת נמוכה מאוד. בסוללה בת 3+ שנים חידוש מלא או סוללה חדשה משתלמים יותר מתיקון.'; }
-  el.innerHTML = calcBox(pct + '% בריאות', `<b>${label}</b><br>${text}${yrs >= 3 ? '<br>גיל ' + yrs + ' שנים — בטווח הבלאי הטבעי.' : ''}`, tone);
+  calcFillSelects();
+  const orig = numOf('heOrig', 0);
+  if (orig <= 0) { el.innerHTML = calcBox('—', 'הזן את הטווח כשהסוללה הייתה חדשה'); return; }
+  const h = calcHealthModel({ orig, curr: numOf('heCurr', 0), years: numOf('heAge', 0), season: valOf('heSeason') });
+  const tone = { good: 'var(--accent)', spot: 'var(--primary)', major: 'var(--warning)', renew: '#ef4444' }[h.key];
+  el.innerHTML = calcBox(h.pct + '% בריאות', `<b>${h.verdict.label}</b><br>${h.verdict.text}`, tone) + calcNotes(h.notes);
 }
 
 function calcSpeed() {
   const el = document.getElementById('spResult'); if (!el) return;
-  const v = numOf('spV', 0), w = numOf('spW', 0), wheel = numOf('spWheel', 0), kg = numOf('spKg', 0);
-  if (v <= 0 || w <= 0 || wheel <= 0 || kg <= 0) { el.innerHTML = calcBox('—', 'מלא את כל השדות'); return; }
-  // ~10 rpm per volt AT THE WHEEL, which is what a hub motor's Kv is quoted as. The retail
-  // site divided that by a gearRatio of 5, and a direct-drive hub has no reduction — so it
-  // told customers a 48V/1000W bike on 20" wheels does 9 km/h. It does 40-45. Fixed in both
-  // places 2026-08-02; the site's SpeedCalculator.tsx carries the same correction.
-  const rpm = v * 10;
-  const circKm = (wheel * 2.54 * Math.PI) / 100000;
-  const speed = Math.round(Math.max(0, rpm * circKm * 60 * Math.max(0.5, 1 - ((kg - 70) * 0.003)) * Math.min(w / 1000, 1.5)));
-  el.innerHTML = calcBox(speed + ' קמ"ש', 'הערכה בלבד — תלוי בבקר, בהילוך ובתנאי הדרך.<br>מעל 25 קמ"ש נדרש רישיון/ביטוח בכביש.');
+  calcFillSelects();
+  const V = numOf('spV', 0), power = numOf('spW', 0), wheel = numOf('spWheel', 0), rider = numOf('spKg', 0);
+  if (V <= 0 || power <= 0 || wheel <= 0) { el.innerHTML = calcBox('—', 'מלא מתח, הספק וגלגל'); return; }
+  const s = calcSpeedModel({ veh: valOf('spVeh'), V, power, wheel, rider });
+  el.innerHTML = calcBox(rgN(s.top) + ' קמ"ש',
+    `מהירות מקסימלית במישור, עם רוכב של ${rgN(s.p.rider)} ק"ג`
+    + `<br>בעלייה של 5%: ${s.up5 >= 1 ? rgN(s.up5) + ' קמ"ש' : 'לא עולה'} · של 10%: ${s.up10 >= 1 ? rgN(s.up10) + ' קמ"ש' : 'לא עולה'}`
+    + `<br>השיפוע הכי תלול שהוא עולה: ${rgN(s.grade.pct)}%`
+    + `<br>${s.limit === 'volt' ? 'מוגבל במתח' : 'מוגבל בהספק'}`);
 }
 
 function calcCost() {
   const el = document.getElementById('coResult'); if (!el) return;
-  const v = numOf('coV', 0), ah = numOf('coAh', 0), km = numOf('coKm', 0);
-  if (v <= 0 || ah <= 0 || km <= 0) { el.innerHTML = calcBox('—', 'מלא את כל השדות'); return; }
-  const RATE = 0.60, PETROL = 7.5, KM_L = 15, WH_KM = 20;
-  const wh = v * ah;
-  const perCharge = (wh / 1000) * RATE;
-  const rangePer = (wh * 0.9) / WH_KM;
-  const chargesMo = (km * 30) / rangePer;
-  const elecMo = chargesMo * perCharge;
-  const petrolMo = ((km * 30) / KM_L) * PETROL;
-  const save = petrolMo - elecMo;
-  el.innerHTML = calcBox('₪' + Math.round(save) + ' לחודש',
-    `חשמל ₪${elecMo.toFixed(0)} מול דלק ₪${petrolMo.toFixed(0)}<br>${chargesMo.toFixed(1)} טעינות בחודש · ₪${perCharge.toFixed(2)} לטעינה<br><b>₪${Math.round(save * 12)} בשנה</b>`,
-    'var(--accent)');
+  calcFillSelects();
+  const km = numOf('coKm', 0);
+  if (km <= 0) { el.innerHTML = calcBox('—', 'כמה ק"מ נוסעים ביום?'); return; }
+  const c = calcCostModel({ veh: valOf('coVeh'), V: +valOf('coV') || 0, ah: numOf('coAh', 0), km, alt: valOf('coAlt') });
+  el.innerHTML = calcBox((c.saveMonth >= 0 ? '₪' + rgN(c.saveMonth) : '<bdi>−₪' + rgN(-c.saveMonth) + '</bdi>') + ' לחודש',
+    `חשמל ₪${rgN(c.elecMonth)} מול דלק ₪${rgN(c.petrolMonth)} (${rgN(c.kmMonth)} ק"מ בחודש)`
+    + `<br>ל-100 ק"מ: חשמל ₪${rgN(c.elec100, 2)} · ${rgEsc(c.fuel.label)} ₪${rgN(c.petrol100, 2)}`
+    + `<br>${rgN(c.chargesMonth, 1)} טעינות בחודש · ₪${rgN(c.perCharge, 2)} לטעינה מלאה`
+    + `<br><b>₪${rgN(c.saveYear)} בשנה</b>`
+    + `<br>חשמל ₪${c.kwh} לקוט"ש, בנזין 95 ₪${c.petrol} לליטר (${CALC_PRICES.asOf})`,
+    c.saveMonth >= 0 ? 'var(--accent)' : '#ef4444');
 }
 
 function calcUpgrade() {
   const el = document.getElementById('upResult'); if (!el) return;
-  const from = numOf('upFrom', 0), to = numOf('upTo', 0), ah = numOf('upAh', 0), w = numOf('upW', 0);
-  if (from <= 0 || to <= 0 || w <= 0) { el.innerHTML = calcBox('—', 'מלא את כל השדות'); return; }
-  const vInc = Math.round(((to - from) / from) * 100);
-  const sInc = Math.round(vInc * 0.9);
-  const motorSafe = (to <= 72 && w >= 1000) || (to <= 60 && w >= 500);
-  const feasible = vInc <= 50 && motorSafe;
-  const notes = [];
-  if (to > from) notes.push('בקר: נדרש בקר שתומך ב-' + to + 'V');
-  if (to !== from) notes.push('BMS: נדרש BMS מתאים ל-' + seriesForV(to) + 'S');
-  notes.push(motorSafe ? 'מנוע: מתאים למתח המבוקש' : '⚠️ מנוע ' + w + 'W עלול לא לעמוד ב-' + to + 'V');
-  if (vInc > 50) notes.push('⚠️ קפיצה של ' + vInc + '% — מעל המומלץ');
-  el.innerHTML = calcBox(feasible ? '+' + sInc + '% מהירות' : 'לא מומלץ',
-    `הספק +${vInc}% · אנרגיה ${Math.round(from * ah)}Wh → ${Math.round(to * ah)}Wh<br>${notes.join('<br>')}`,
-    feasible ? 'var(--accent)' : '#ef4444');
+  calcFillSelects();
+  const fromV = +valOf('upFrom') || 0, toV = +valOf('upTo') || 0, ah = numOf('upAh', 0), power = numOf('upW', 0);
+  if (fromV <= 0 || toV <= 0 || ah <= 0 || power <= 0) { el.innerHTML = calcBox('—', 'מלא את כל השדות'); return; }
+  if (toV <= fromV) { el.innerHTML = calcBox('—', 'המתח המבוקש צריך להיות גבוה מהנוכחי'); return; }
+  const u = calcUpgradeModel({ veh: valOf('upVeh'), fromV, toV, ah, power });
+  const c = rangeClass(valOf('upVeh'));
+  const pct = (a, b) => Math.round((b / a - 1) * 100);
+  // "today / after" in words: arrows between numbers and units flip around in right-to-left text
+  el.innerHTML = calcBox(u.feasible ? `<bdi>+${pct(u.s0.top, u.s1.top)}%</bdi> מהירות` : 'לא מומלץ',
+    `מהירות מקסימלית: היום ${rgN(u.s0.top)}, אחרי ${rgN(u.s1.top)} קמ"ש`
+    + `<br>כוח: <bdi>+${Math.round(u.dv * 100)}%</bdi> (אותו זרם בקר, מתח גבוה יותר)`
+    + `<br>טווח ב-${c.speed} קמ"ש: היום ${rgN(u.km0)}, אחרי ${rgN(u.km1)} ק"מ`
+    + `<br>הסוללה: היום ${rgN(u.wh0)}Wh ו-${rgN(u.kg0, 1)} ק"ג, אחרי ${rgN(u.wh1)}Wh ו-${rgN(u.kg1, 1)} ק"ג`,
+    u.feasible ? 'var(--accent)' : '#ef4444') + calcNotes(u.notes);
 }
+// ==== calc-engine: begin ====
+// Everything from here to "calc-engine: end" is the calculators' model, and nothing else: no page,
+// no storage, no hub function (SERIES_FOR_V aside). The retail site runs the SAME text —
+// generate/gen-calc-engine.mjs in the tools copies it into src/lib/calcEngine.js, and its --check
+// fails sync-prices when the two differ — so a customer who ran a calculator on the site and then
+// calls gets the number the hub gives, not a second opinion (2026-10-08).
 // ============================================================
 // RANGE — a physical model of the ride (Daniel, 2026-10-08)
 // "תעשה שיהיה חישוב טווח מקצועי ביותר, מדויק הכי ביותר לכל סוגי הכלים שקיימים בעולם, לכל סוגי
@@ -5096,40 +5122,41 @@ const RANGE_CTRL = {
 // Cells. rdc = the sheet's AC resistance × 1.5 (Ω). cont/peak in C: the sticker's figures, which the
 // site and the spec line print. rate: capacity at a discharge rate, [C, share], from the sheet.
 // ahFree: a cell sold in any capacity (prismatic, lead): its resistance is rdcAh / Ah and its
-// weight gPerAh × Ah grams.
+// weight gPerAh × Ah grams. chg: [standard, maximum] charge rate in C, from the sheet (CELL_SHEETS);
+// the generic, LiFePO4, LTO, NiMH and lead rows carry their chemistry's usual figures.
 const RANGE_CELLS = {
-  '21700-50pl': { label: 'EVE 50PL · PRO',            chem: 'nmc', ah: 5,   rdc: 0.0105, cont: 25, peak: 36, g: 72, rate: [[0.2, 1], [2, 1], [6, 0.95], [8, 0.95]] },
-  '21700-50sg': { label: 'Tenpower 50SG · ADVANCED',  chem: 'nmc', ah: 5,   rdc: 0.021,  cont: 4,  peak: 10, g: 71, rate: [[0.2, 1], [0.5, 0.96], [1, 0.94], [2, 0.9]] },
-  '21700-50e':  { label: 'EVE 50E · CLASSIC',         chem: 'nmc', ah: 5,   rdc: 0.027,  cont: 2,  peak: 3,  g: 68, rate: [[0.2, 1], [0.5, 0.97], [1, 0.95], [2, 0.93], [3, 0.9]] },
-  '21700-40p':  { label: 'EVE 40P (21700)',                   chem: 'nmc', ah: 4,   rdc: 0.018,  cont: 12.5, peak: 12.5, g: 70, rate: [[0.2, 1], [2.5, 1], [5, 0.95], [7.5, 0.93], [10, 0.9]] },
-  '18650-25p':  { label: 'EVE 25P (18650)',       chem: 'nmc', ah: 2.5, rdc: 0.027,  cont: 12, peak: 12, g: 48, rate: [[0.2, 1], [4, 0.98], [8, 0.95]] },
-  'nmc-18650':  { label: '18650 כללי, 3Ah',  chem: 'nmc', ah: 3,   rdc: 0.035,  cont: 2,  peak: 3,  g: 46, rate: [[0.2, 1], [1, 0.95], [2, 0.9], [3, 0.85]] },
-  'nmc-21700':  { label: '21700 כללי, 4.5Ah',  chem: 'nmc', ah: 4.5, rdc: 0.03,   cont: 2,  peak: 3,  g: 68, rate: [[0.2, 1], [1, 0.95], [2, 0.91], [3, 0.87]] },
-  'lipo':       { label: 'LiPo פאוץ\' (RC)',         chem: 'nmc', ah: 5,   rdc: 0.004,  cont: 25, peak: 50, g: 105, rate: [[0.2, 1], [10, 0.97], [25, 0.92]] },
-  'lfp-32700':  { label: 'LiFePO4 32700',             chem: 'lfp', ah: 6,   rdc: 0.012,  cont: 3,  peak: 5,  g: 140, rate: [[0.2, 1], [1, 0.98], [3, 0.95]] },
-  'lfp-prism':  { label: 'LiFePO4 פריזמטי',          chem: 'lfp', ahFree: true, rdcAh: 0.05, cont: 1, peak: 2, gPerAh: 21, rate: [[0.2, 1], [1, 0.98], [2, 0.95]] },
-  'lto':        { label: 'LTO טיטנאט',               chem: 'lto', ahFree: true, rdcAh: 0.04, cont: 10, peak: 20, gPerAh: 30, rate: [[0.2, 1], [10, 0.97]] },
-  'nimh':       { label: 'NiMH',                     chem: 'nimh', ahFree: true, rdcAh: 0.05, cont: 1, peak: 3, gPerAh: 17, rate: [[0.2, 1], [1, 0.95], [3, 0.85]] },
-  'lead':       { label: 'עופרת (AGM / ג\'ל)',   chem: 'lead', ahFree: true, rdcAh: 0.04, cont: 1, peak: 3, gPerAh: 50, rate: [[0.05, 1]], peukert: 1.2 },
+  '21700-50pl': { label: 'EVE 50PL · PRO',            chem: 'nmc', ah: 5,   rdc: 0.0105, cont: 25, peak: 36, g: 72, rate: [[0.2, 1], [2, 1], [6, 0.95], [8, 0.95]], chg: [0.5, 2] },
+  '21700-50sg': { label: 'Tenpower 50SG · ADVANCED',  chem: 'nmc', ah: 5,   rdc: 0.021,  cont: 4,  peak: 10, g: 71, rate: [[0.2, 1], [0.5, 0.96], [1, 0.94], [2, 0.9]], chg: [0.5, 1.2] },
+  '21700-50e':  { label: 'EVE 50E · CLASSIC',         chem: 'nmc', ah: 5,   rdc: 0.027,  cont: 2,  peak: 3,  g: 68, rate: [[0.2, 1], [0.5, 0.97], [1, 0.95], [2, 0.93], [3, 0.9]], chg: [0.2, 2] },
+  '21700-40p':  { label: 'EVE 40P (21700)',                   chem: 'nmc', ah: 4,   rdc: 0.018,  cont: 12.5, peak: 12.5, g: 70, rate: [[0.2, 1], [2.5, 1], [5, 0.95], [7.5, 0.93], [10, 0.9]], chg: [0.5, 1.5] },
+  '18650-25p':  { label: 'EVE 25P (18650)',       chem: 'nmc', ah: 2.5, rdc: 0.027,  cont: 12, peak: 12, g: 48, rate: [[0.2, 1], [4, 0.98], [8, 0.95]], chg: [0.5, 1.6] },
+  'nmc-18650':  { label: '18650 כללי, 3Ah',  chem: 'nmc', ah: 3,   rdc: 0.035,  cont: 2,  peak: 3,  g: 46, rate: [[0.2, 1], [1, 0.95], [2, 0.9], [3, 0.85]], chg: [0.5, 1] },
+  'nmc-21700':  { label: '21700 כללי, 4.5Ah',  chem: 'nmc', ah: 4.5, rdc: 0.03,   cont: 2,  peak: 3,  g: 68, rate: [[0.2, 1], [1, 0.95], [2, 0.91], [3, 0.87]], chg: [0.5, 1] },
+  'lipo':       { label: 'LiPo פאוץ\' (RC)',         chem: 'nmc', ah: 5,   rdc: 0.004,  cont: 25, peak: 50, g: 105, rate: [[0.2, 1], [10, 0.97], [25, 0.92]], chg: [1, 2] },
+  'lfp-32700':  { label: 'LiFePO4 32700',             chem: 'lfp', ah: 6,   rdc: 0.012,  cont: 3,  peak: 5,  g: 140, rate: [[0.2, 1], [1, 0.98], [3, 0.95]], chg: [0.5, 1] },
+  'lfp-prism':  { label: 'LiFePO4 פריזמטי',          chem: 'lfp', ahFree: true, rdcAh: 0.05, cont: 1, peak: 2, gPerAh: 21, rate: [[0.2, 1], [1, 0.98], [2, 0.95]], chg: [0.5, 1] },
+  'lto':        { label: 'LTO טיטנאט',               chem: 'lto', ahFree: true, rdcAh: 0.04, cont: 10, peak: 20, gPerAh: 30, rate: [[0.2, 1], [10, 0.97]], chg: [1, 4] },
+  'nimh':       { label: 'NiMH',                     chem: 'nimh', ahFree: true, rdcAh: 0.05, cont: 1, peak: 3, gPerAh: 17, rate: [[0.2, 1], [1, 0.95], [3, 0.85]], chg: [0.1, 1] },
+  'lead':       { label: 'עופרת (AGM / ג\'ל)',   chem: 'lead', ahFree: true, rdcAh: 0.04, cont: 1, peak: 3, gPerAh: 50, rate: [[0.05, 1]], peukert: 1.2, chg: [0.1, 0.25] },
 };
 const RANGE_CHEM = {
-  nmc:  { label: 'ליתיום NMC/NCA', vnom: 3.6,  lvc: 3.0,  dod: 1,
+  nmc:  { label: 'ליתיום NMC/NCA', vnom: 3.6, vmax: 4.2,  lvc: 3.0,  dod: 1,
           ocv: [[0, 2.8], [0.02, 3.08], [0.04, 3.19], [0.07, 3.29], [0.1, 3.36], [0.15, 3.42], [0.2, 3.47], [0.3, 3.53], [0.4, 3.59], [0.5, 3.66], [0.6, 3.74], [0.7, 3.81], [0.8, 3.9], [0.9, 4.0], [1, 4.15]],
           temp: [[-20, 0.6, 5], [-10, 0.75, 3], [0, 0.86, 1.9], [10, 0.94, 1.4], [20, 0.98, 1.1], [25, 1, 1], [35, 1, 0.85], [45, 0.99, 0.8]],
           series: (v) => SERIES_FOR_V[v] || Math.round(v / 3.6) },
-  lfp:  { label: 'ליתיום-ברזל-פוספט', vnom: 3.2, lvc: 2.7, dod: 1,
+  lfp:  { label: 'ליתיום-ברזל-פוספט', vnom: 3.2, vmax: 3.65, lvc: 2.7, dod: 1,
           ocv: [[0, 2.5], [0.02, 2.92], [0.05, 3.06], [0.1, 3.14], [0.2, 3.18], [0.3, 3.21], [0.5, 3.24], [0.7, 3.26], [0.9, 3.29], [0.95, 3.31], [1, 3.4]],
           temp: [[-20, 0.5, 7], [-10, 0.65, 4], [0, 0.8, 2.5], [10, 0.92, 1.6], [20, 0.98, 1.15], [25, 1, 1], [35, 1, 0.85], [45, 1, 0.8]],
           series: (v) => ({ 12: 4, 24: 8, 36: 12, 48: 16, 52: 16, 60: 20, 72: 24, 84: 26, 88: 28, 96: 30 })[v] || Math.round(v / 3.2) },
-  lto:  { label: 'ליתיום-טיטנאט', vnom: 2.3, lvc: 1.8, dod: 1,
+  lto:  { label: 'ליתיום-טיטנאט', vnom: 2.3, vmax: 2.8, lvc: 1.8, dod: 1,
           ocv: [[0, 1.6], [0.05, 2.0], [0.1, 2.1], [0.3, 2.22], [0.5, 2.28], [0.7, 2.35], [0.9, 2.45], [1, 2.7]],
           temp: [[-20, 0.85, 2.5], [-10, 0.9, 1.8], [0, 0.95, 1.4], [25, 1, 1], [45, 1, 0.9]],
           series: (v) => Math.round(v / 2.3) },
-  nimh: { label: 'ניקל-מטל-הידריד', vnom: 1.2, lvc: 1.0, dod: 1,
+  nimh: { label: 'ניקל-מטל-הידריד', vnom: 1.2, vmax: 1.45, lvc: 1.0, dod: 1,
           ocv: [[0, 0.95], [0.05, 1.07], [0.1, 1.13], [0.3, 1.18], [0.5, 1.21], [0.7, 1.24], [0.9, 1.29], [1, 1.38]],
           temp: [[-20, 0.5, 4], [-10, 0.7, 2.5], [0, 0.85, 1.6], [25, 1, 1], [45, 0.95, 0.9]],
           series: (v) => Math.round(v / 1.2) },
-  lead: { label: 'עופרת-חומצה', vnom: 2.0, lvc: 1.75, dod: 0.8,
+  lead: { label: 'עופרת-חומצה', vnom: 2.0, vmax: 2.4, lvc: 1.75, dod: 0.8,
           ocv: [[0, 1.85], [0.2, 1.93], [0.4, 1.98], [0.6, 2.03], [0.8, 2.08], [1, 2.13]],
           temp: [[-20, 0.5, 3], [-10, 0.65, 2.2], [0, 0.78, 1.6], [10, 0.9, 1.25], [25, 1, 1], [40, 1.04, 0.9]],
           series: (v) => Math.round(v / 2) },
@@ -5139,14 +5166,14 @@ const RANGE_CHEM = {
 // acc: lights and display, W. The figures are typical for the class; every one is editable.
 const RANGE_VEHICLES = {
   ebike:      { label: 'אופניים חשמליים — עירוני',     mass: 20,  cda: 0.55, tire: 'city',     wheel: 27.5, motor: 'geared',  power: 350,   motors: 1, top: 32,  ctrl: 'sine',   ctrlA: 18,  regen: false, acc: 3,  V: 48, ah: 15,  cell: '21700-50e',  rider: 80, speed: 25, use: 'suburb', terrain: 'flat',  surface: 'asphalt' },
-  ebike_fat:  { label: 'אופני שטח / צמיג שמן',          mass: 28,  cda: 0.6,  tire: 'fat',      wheel: 26,   motor: 'geared',  power: 750,   motors: 1, top: 45,  ctrl: 'sine',   ctrlA: 25,  regen: false, acc: 3,  V: 48, ah: 20,  cell: '21700-50e',  rider: 80, speed: 30, use: 'suburb', terrain: 'mild',  surface: 'asphalt' },
+  ebike_fat:  { label: 'אופני שטח / צמיג שמן',          mass: 28,  cda: 0.6,  tire: 'fat',      wheel: 26,   motor: 'geared',  power: 750,   motors: 1, top: 45,  ctrl: 'sine',   ctrlA: 28,  regen: false, acc: 3,  V: 48, ah: 20,  cell: '21700-50e',  rider: 80, speed: 30, use: 'suburb', terrain: 'mild',  surface: 'asphalt' },
   ebike_mid:  { label: 'אופניים עם מנוע מרכזי',          mass: 22,  cda: 0.55, tire: 'mtb',      wheel: 27.5, motor: 'mid',     power: 750,   motors: 1, top: 40,  ctrl: 'sine',   ctrlA: 25,  regen: false, acc: 3,  V: 48, ah: 17.5, cell: '21700-50e', rider: 80, speed: 28, use: 'suburb', terrain: 'mild',  surface: 'asphalt' },
   scooter:    { label: 'קורקינט חשמלי',                  mass: 15,  cda: 0.62, tire: 'scooter',  wheel: 10,   motor: 'hub',     power: 500,   motors: 1, top: 35,  ctrl: 'sine',   ctrlA: 20,  regen: true,  acc: 4,  V: 48, ah: 15,  cell: '21700-50e',  rider: 80, speed: 25, use: 'city',   terrain: 'flat',  surface: 'asphalt' },
-  scooter_dual:{ label: 'קורקינט כבד דו-מנועי',          mass: 38,  cda: 0.65, tire: 'scooter',  wheel: 11,   motor: 'hub',     power: 1500,  motors: 2, top: 75,  ctrl: 'sine',   ctrlA: 60,  regen: true,  acc: 8,  V: 60, ah: 30,  cell: '21700-50sg', rider: 80, speed: 40, use: 'suburb', terrain: 'flat',  surface: 'asphalt' },
+  scooter_dual:{ label: 'קורקינט כבד דו-מנועי',          mass: 38,  cda: 0.65, tire: 'scooter',  wheel: 11,   motor: 'hub',     power: 1500,  motors: 2, top: 75,  ctrl: 'sine',   ctrlA: 80,  regen: true,  acc: 8,  V: 60, ah: 30,  cell: '21700-50sg', rider: 80, speed: 40, use: 'suburb', terrain: 'flat',  surface: 'asphalt' },
   mobility:   { label: 'קלנועית',                         mass: 85,  cda: 0.75, tire: 'caster',   wheel: 13,   motor: 'brushed', power: 800,   motors: 1, top: 15,  ctrl: 'square', ctrlA: 60,  regen: false, acc: 5,  V: 24, ah: 50,  cell: 'lead',       rider: 80, speed: 12, use: 'city',   terrain: 'flat',  surface: 'asphalt' },
   moped:      { label: 'קטנוע חשמלי',                     mass: 75,  cda: 0.65, tire: 'moto',     wheel: 12,   motor: 'hub',     power: 3000,  motors: 1, top: 70,  ctrl: 'sine',   ctrlA: 70,  regen: true,  acc: 25, V: 72, ah: 40,  cell: '21700-50sg', rider: 80, speed: 45, use: 'city',   terrain: 'flat',  surface: 'asphalt' },
   moto:       { label: 'אופנוע חשמלי (כביש)',             mass: 130, cda: 0.55, tire: 'moto',     wheel: 17,   motor: 'chain',   power: 8000,  motors: 1, top: 110, ctrl: 'foc',    ctrlA: 200, regen: true,  acc: 40, V: 72, ah: 80,  cell: '21700-50pl', rider: 80, speed: 70, use: 'open',   terrain: 'flat',  surface: 'asphalt' },
-  surron:     { label: 'סור-רון / טלריה', mass: 42,  cda: 0.72, tire: 'knobby',   wheel: 19,   motor: 'chain',   power: 4000,  motors: 1, top: 75,  ctrl: 'foc',    ctrlA: 90,  regen: true,  acc: 10, V: 60, ah: 40,  cell: '21700-50pl', rider: 80, speed: 40, use: 'trail',  terrain: 'mild',  surface: 'dirt' },
+  surron:     { label: 'סור-רון / טלריה', mass: 42,  cda: 0.72, tire: 'knobby',   wheel: 19,   motor: 'chain',   power: 4000,  motors: 1, top: 75,  ctrl: 'foc',    ctrlA: 100,  regen: true,  acc: 10, V: 60, ah: 40,  cell: '21700-50pl', rider: 80, speed: 40, use: 'trail',  terrain: 'mild',  surface: 'dirt' },
   enduro:     { label: 'אופנוע שטח כבד (אנדורו)',         mass: 75,  cda: 0.72, tire: 'knobby',   wheel: 21,   motor: 'chain',   power: 10000, motors: 1, top: 90,  ctrl: 'foc',    ctrlA: 200, regen: true,  acc: 15, V: 72, ah: 60,  cell: '21700-50pl', rider: 80, speed: 45, use: 'trail',  terrain: 'hilly', surface: 'dirt' },
   atv_kids:   { label: 'טרקטורון ילדים',                  mass: 60,  cda: 0.7,  tire: 'atv',      wheel: 16,   motor: 'brushed', power: 1000,  motors: 1, top: 25,  ctrl: 'square', ctrlA: 35,  regen: false, acc: 5,  V: 48, ah: 20,  cell: 'lead',       rider: 35, speed: 15, use: 'trail',  terrain: 'flat',  surface: 'dirt' },
   atv:        { label: 'טרקטורון',                        mass: 170, cda: 1.0,  tire: 'atv',      wheel: 23,   motor: 'chain',   power: 5000,  motors: 1, top: 60,  ctrl: 'sine',   ctrlA: 120, regen: true,  acc: 30, V: 72, ah: 50,  cell: '21700-50pl', rider: 90, speed: 30, use: 'trail',  terrain: 'mild',  surface: 'dirt' },
@@ -5195,8 +5222,9 @@ function rangePack(p) {
 // The drivetrain, seen from the wheel: a DC machine with a speed constant Ke (V·s/rad at the wheel,
 // the gearing included), a winding resistance R and a no-load current I0, per motor.
 //  - Ke: from the motor's KV and reduction when given, else the slowest winding that still reaches
-//    the stated top speed on the flat with an 80kg rider — the top speed means what the vehicle does,
-//    not what the motor does unloaded. So a heavier rider is a little slower, as on the road.
+//    the stated top speed on the flat with the class's usual rider (80kg; a kids' ATV's 35kg) — the top
+//    speed means what the vehicle does, not what the motor does unloaded. So a heavier rider is a
+//    little slower, as on the road.
 //  - R: from the copper loss at the rated point (80% of no-load speed, rated power), which is what is
 //    left of the type's losses after the no-load loss. R therefore scales with Ke²: a faster winding
 //    has thinner, fewer turns, the same motor quality.
@@ -5357,7 +5385,7 @@ function rangeModel(inp) {
   const wind = (p.wind || 0) / 3.6;
   const Vbus = pack.vnom * 0.97;
   const rollK = (v) => 1 + 0.5 * Math.pow(v * 3.6 / 100, 2);
-  const mRef = p.mass + pack.kg + 80 + (p.cargo || 0);
+  const mRef = p.mass + pack.kg + ((RANGE_VEHICLES[p.veh] || {}).rider || 80) + (p.cargo || 0);
   const d = rangeDrive(p, pack, (v) => crr * rollK(v) * mRef * RANGE_PHYS.g + 0.5 * rho * cda * v * v);
   const ctx = { m, crr, cda, rho, wind, d, Vbus, acc: p.acc || 0 };
   const grade = terr.grade / 100;
@@ -5487,26 +5515,211 @@ function rangeAhFor(inp, km) {
   return null;
 }
 
+// ---- a vehicle class as plain inputs, and "where do you ride" as one question ----
+function rangeClass(key) {
+  const k = RANGE_VEHICLES[key] ? key : 'ebike';
+  return { ...RANGE_DEFAULTS, cargo: 0, ...RANGE_VEHICLES[k], veh: k };
+}
+// The stops and the surface asked together (2026-10-08, Daniel: "שלא יהיה מסובך מידי"): a customer
+// knows he rides in town or on dirt; he does not know what a rolling coefficient or a stop rate is.
+const RANGE_WHERE = {
+  city:  { label: 'בעיר — רמזורים ועצירות',  use: 'city',   surface: 'asphalt' },
+  mixed: { label: 'עיר ושבילים, מעט עצירות', use: 'suburb', surface: 'asphalt' },
+  road:  { label: 'כביש פתוח',               use: 'open',   surface: 'asphalt' },
+  dirt:  { label: 'דרכי עפר',                use: 'trail',  surface: 'dirt' },
+  rough: { label: 'שטח — חצץ ודשא',          use: 'trail',  surface: 'gravel' },
+  sand:  { label: 'חול',                     use: 'trail',  surface: 'sand' },
+  track: { label: 'מסלול / מגרש',            use: 'track',  surface: 'asphalt' },
+};
+function rangeWhereOf(p) {
+  for (const [k, w] of Object.entries(RANGE_WHERE)) if (w.use === p.use && w.surface === p.surface) return k;
+  return '';
+}
+// The model's road, for a calculator that asks its own questions of it.
+function rangeCtx(r) {
+  return { m: r.m, crr: r.crr, cda: r.cda, rho: r.rho, wind: 0, d: r.d, Vbus: r.pack.vnom * 0.97, acc: 0 };
+}
+
+// ---- top speed: the motor wound as is usual for its class ----
+// Nobody asking "how fast" knows his motor's winding, and the winding is what sets the speed. The
+// class's own figures (its top speed at its voltage, wheel and power) stand for a typical one: a
+// bigger motor of the class is wound faster (∝ power^⅓ — the speed at which the air takes that
+// power), a bigger wheel carries it further (by √: the same motor on a bigger rim is faster, but
+// motors are wound for their rims), and the voltage moves it in proportion, as on any one motor.
+// The controller grows with the motor (the same battery power per motor watt). What the vehicle
+// then does on the road is the model's own answer: where the motor, the controller and the drag meet.
+function calcSpeedModel(inp) {
+  const c = rangeClass(inp.veh);
+  const V = inp.V > 0 ? inp.V : c.V, power = inp.power > 0 ? inp.power : c.power, wheel = inp.wheel > 0 ? inp.wheel : c.wheel;
+  const cell = inp.cell || c.cell, ah = inp.ah > 0 ? inp.ah : c.ah;
+  const base = rangeModel({ ...c });
+  const pack = rangePack({ ...c, V, cell, ah });
+  const vNoLoad = base.d.vNoLoad * (pack.vnom / base.pack.vnom) * Math.sqrt(wheel / c.wheel) * Math.cbrt(power / c.power);
+  const Vlim = pack.vnom * 0.97 * RANGE_PHYS.modulation, r = wheel * 0.0254 / 2;
+  const Ke = Vlim * r / (vNoLoad / 3.6);
+  const p = { ...c, V, power, wheel, cell, ah, rider: inp.rider > 0 ? inp.rider : c.rider,
+    kv: 60 / (2 * Math.PI * Ke), ratio: 1, ctrlA: c.ctrlA * (power / c.power) * (base.pack.vnom / pack.vnom) };
+  return calcSpeedOf(p);
+}
+// The speeds of one fully specified vehicle: flat, two climbs, the steepest, and what limits the top.
+function calcSpeedOf(p) {
+  const r = rangeModel({ ...p, speed: 999 });
+  const ctx = rangeCtx(r);
+  const top = r.top;
+  const over = rangeStretch(ctx, top / 3.6 + 0.3, 0);
+  const at = (pct) => rangeHold(ctx, top / 3.6, pct / 100) * 3.6;
+  const atTop = rangeStretch(ctx, Math.max(0.5, top / 3.6), 0);
+  return { p, r, top, noLoad: r.d.vNoLoad, up5: at(5), up10: at(10), grade: rangeMaxGrade(p),
+    limit: over.why === 'volt' ? 'volt' : 'power', pTop: atTop.pBat,
+    motorIn: atTop.e ? atTop.e.pMech + atTop.e.pFe + atTop.e.pCu : 0 };
+}
+
+// ---- a voltage upgrade: the SAME motor and wheel, more volts ----
+// The winding stays (it is the motor he has), so the no-load speed rises with the voltage; the
+// new controller is taken at the same amps, so its power rises with the voltage too. Whether the
+// motor survives it is read off the model: what it is asked to carry at the new top speed, against
+// what it is rated for.
+function calcUpgradeModel(inp) {
+  const s0 = calcSpeedModel({ ...inp, V: inp.fromV });
+  const p0 = s0.p;
+  const p1 = { ...p0, V: inp.toV };
+  const s1 = calcSpeedOf(p1);
+  const c = rangeClass(inp.veh);
+  const ride = (p) => rangeModel({ ...p, speed: c.speed, kv: p.kv }).km;
+  const pk0 = s0.r.pack, pk1 = s1.r.pack;
+  const dv = (pk1.vnom - pk0.vnom) / pk0.vnom;
+  const load = s1.motorIn / (p0.power * (p0.motors || 1));
+  const vmax = pk1.S * pk1.chem.vmax;
+  const notes = [];
+  if (inp.toV > inp.fromV) {
+    notes.push({ lvl: 'warn', t: `בקר: צריך בקר שעומד ב-${vmax.toFixed(1)}V (מתח של סוללה מלאה), לא רק ${inp.toV}V.` });
+    notes.push({ lvl: 'info', t: `BMS ל-${pk1.S}S ומטען של ${vmax.toFixed(1)}V — המטען הישן לא מתאים.` });
+  }
+  if (dv > 0.5) notes.push({ lvl: 'bad', t: `קפיצה של ${Math.round(dv * 100)}% במתח — מעל 50%, המנוע והבקר לא תוכננו לזה.` });
+  if (load > 3) notes.push({ lvl: 'bad', t: `במהירות המקסימלית המנוע יקבל כ-${Math.round(s1.motorIn)}W, פי ${load.toFixed(1)} מהדירוג שלו — הוא יישרף.` });
+  else if (load > 2) notes.push({ lvl: 'warn', t: `במהירות המקסימלית המנוע יקבל כ-${Math.round(s1.motorIn)}W, פי ${load.toFixed(1)} מהדירוג — יתחמם בנסיעה ארוכה במלוא המהירות.` });
+  if (/^ebike|^trike/.test(c.veh) && s1.top > 25) notes.push({ lvl: 'info', t: 'אופניים שנוסעים מעל 25 קמ"ש הם כלי רכב לכל דבר: רישוי, ביטוח וקסדה.' });
+  return { s0, s1, dv, load, vmax, feasible: dv <= 0.5 && load <= 2.5,
+    km0: ride(p0), km1: ride(p1), wh0: pk0.wh, wh1: pk1.wh, kg0: pk0.kg, kg1: pk1.kg, notes };
+}
+
+// ---- charging: constant current, then constant voltage ----
+// A charger holds its rated amps only until the pack reaches its full voltage; from there the
+// voltage is held and the current falls away, and the last stretch is the slow one. When that
+// happens depends on how hard it charges: at a fifth of the capacity per hour the switch comes at
+// ~90%, at a full C nearer 70% (NMC; LiFePO4's flat curve holds it later). The current then
+// decays exponentially to the charger's cut-off, a tenth of its rating. Lead does the same far more
+// slowly and needs ~15% more charge than it gives back; NiMH has no voltage stage at all.
+// chg in RANGE_CELLS: [standard, maximum] charge rate in C, from the cell's sheet.
+const CALC_CHARGE_EFF = { nmc: 0.87, lfp: 0.88, lto: 0.88, nimh: 0.7, lead: 0.72 };
+function calcChargeModel(inp) {
+  const cell = RANGE_CELLS[inp.cell] || RANGE_CELLS['21700-50e'], chem = RANGE_CHEM[cell.chem];
+  const ah = Math.max(0.5, inp.ah), A = Math.max(0.05, inp.A);
+  const from = Math.min(0.99, Math.max(0, (inp.from || 0) / 100)), to = Math.min(1, Math.max(from + 0.01, (inp.to || 100) / 100));
+  const pack = rangePack({ cell: inp.cell, V: inp.V, ah });
+  const C = A / ah;
+  const ce = cell.chem === 'lead' ? 1.15 : cell.chem === 'nimh' ? 1.2 : 1;
+  const q = (s) => s * ah * ce;                                   // Ah into the pack for a share s
+  let socCV = { nmc: 0.95 - 0.25 * C, lfp: 0.97 - 0.15 * C, lto: 0.95 - 0.1 * C, lead: 0.8 - 0.5 * C, nimh: 1 }[cell.chem];
+  socCV = Math.min(0.97, Math.max(0.5, socCV));
+  const iEnd = cell.chem === 'lead' ? Math.min(0.5 * A, 0.015 * ah) : 0.1 * A;
+  const tCC = Math.max(0, Math.min(to, socCV) - from) * ah * ce / A;
+  let tCV = 0;
+  if (to > socCV) {
+    const tau = q(1 - socCV) / (A - iEnd);
+    const tq = (s) => { const x = q(Math.max(0, s - socCV)) / (A * tau); return -tau * Math.log(Math.max(1e-6, 1 - Math.min(x, 1 - iEnd / A))); };
+    tCV = tq(to) - tq(Math.max(from, socCV));
+  }
+  const vFull = pack.S * chem.vmax;
+  const kwh = pack.vnom * ah * (to - from) / (CALC_CHARGE_EFF[cell.chem] || 0.85) / 1000;
+  const [cStd, cMax] = cell.chg || [0.5, 1];
+  const notes = [];
+  if (C > cMax * 1.02) notes.push({ lvl: 'bad', t: `${A}A הם ${C.toFixed(2)}C — מעל המקסימום שיצרן התא מתיר (${cMax}C, ${(cMax * ah).toFixed(1)}A לסוללה הזו).` });
+  else if (C > Math.max(cStd, 0.3) * 1.02) notes.push({ lvl: 'warn', t: `טעינה מהירה (${C.toFixed(2)}C): מותרת, אבל מקצרת את חיי הסוללה. טעינה רגילה: עד ${(Math.max(cStd, 0.3) * ah).toFixed(1)}A.` });
+  if (to >= 1 && chem !== RANGE_CHEM.lead) notes.push({ lvl: 'info', t: 'טעינה עד 80–90% ביום-יום מאריכה את חיי הסוללה. ה-20% האחרונים הם גם הארוכים.' });
+  return { hours: tCC + tCV, tCC, tCV, socCV, C, A, ah, from, to, pack, vFull, chargerW: vFull * A, kwh, cost: kwh * CALC_PRICES.kwh, notes };
+}
+
+// ---- running cost, against petrol ----
+// The Wh per km is the range model's, for the class at its usual speed, terrain and stops; what the
+// wall pays adds the charger's and the cells' losses. Prices: the regulated petrol 95 ceiling and the
+// household tariff; both move, which is why the date goes on the page.
+const CALC_PRICES = { kwh: 0.635, petrol: 8.27, asOf: 'אוקטובר 2026' };
+const CALC_FUEL = {
+  car:     { label: 'רכב פרטי',              kmL: 14 },
+  scooter: { label: 'קטנוע בנזין 125 סמ"ק',  kmL: 35 },
+  moto:    { label: 'אופנוע בנזין',          kmL: 22 },
+  dirt:    { label: 'אופנוע שטח בנזין',      kmL: 18 },
+  atv:     { label: 'טרקטורון בנזין',        kmL: 12 },
+  utv:     { label: 'באגי בנזין',            kmL: 8 },
+};
+const CALC_FUEL_FOR = { moped: 'scooter', scooter_dual: 'scooter', moto: 'moto', surron: 'dirt', enduro: 'dirt', atv: 'atv', atv_kids: 'atv', utv: 'utv' };
+function calcCostModel(inp) {
+  const c = rangeClass(inp.veh);
+  const p = { ...c, V: inp.V > 0 ? inp.V : c.V, ah: inp.ah > 0 ? inp.ah : c.ah, cell: inp.cell || c.cell };
+  const r = rangeModel(p);
+  const eff = CALC_CHARGE_EFF[r.pack.cell.chem] || 0.85;
+  const wallWhKm = r.whKm / eff;
+  const kwh = inp.kwh > 0 ? inp.kwh : CALC_PRICES.kwh, petrol = inp.petrol > 0 ? inp.petrol : CALC_PRICES.petrol;
+  const fuel = CALC_FUEL[inp.alt] || CALC_FUEL[CALC_FUEL_FOR[c.veh] || 'car'];
+  const kmMonth = Math.max(0, inp.km || 0) * (inp.days > 0 ? inp.days : 30);
+  const elec100 = 100 * wallWhKm / 1000 * kwh, petrol100 = 100 / fuel.kmL * petrol;
+  const elecMonth = kmMonth / 100 * elec100, petrolMonth = kmMonth / 100 * petrol100;
+  const chargesMonth = r.km > 0 ? kmMonth / r.km : 0;
+  return { r, whKm: r.whKm, wallWhKm, fuel, kwh, petrol, kmMonth, elec100, petrol100, elecMonth, petrolMonth,
+    saveMonth: petrolMonth - elecMonth, saveYear: (petrolMonth - elecMonth) * 12, chargesMonth, cyclesYear: chargesMonth * 12,
+    perCharge: r.pack.wh / 1000 / eff * kwh };
+}
+
+// ---- battery health from the range it gives ----
+// Range lost is capacity lost, as long as the two rides are alike. The one difference nobody
+// corrects for is the season: a cold battery gives less and cold air is denser, so a healthy pack
+// rides shorter in January. The model's own ratio for the class (12°C against 28°C) takes it out.
+const CALC_HEALTH = {
+  good:   { min: 80, label: 'הסוללה במצב טוב',    text: 'הקיבולת עדיין גבוהה. שווה לבצע איזון תאים עמוק לתחזוקה. אין צורך בתיקון משמעותי.' },
+  spot:   { min: 55, label: 'מומלץ תיקון נקודתי', text: 'הבעיה כנראה ממוקדת (כמה תאים חלשים או BMS). תיקון נקודתי במעבדה יחזיר חלק ניכר מהטווח בעלות נמוכה.' },
+  major:  { min: 35, label: 'תיקון מקיף או חידוש', text: 'איבדת חלק משמעותי מהקיבולת. כדאי אבחון מעבדה - לרוב משתלם חידוש (החלפת רוב התאים) על פני סוללה חדשה.' },
+  renew:  { min: 0,  label: 'מומלץ חידוש/החלפה',   text: 'הקיבולת נמוכה מאוד. אם הסוללה ישנה (3+ שנים) - חידוש מלא או סוללה חדשה יהיו משתלמים יותר מתיקון.' },
+};
+const CALC_SEASONS = { same: 'באותה עונה', winter: 'היום חורף, כשהייתה חדשה — קיץ', summer: 'היום קיץ, כשהייתה חדשה — חורף' };
+function calcHealthModel(inp) {
+  const orig = Math.max(0, inp.orig || 0), curr = Math.max(0, inp.curr || 0), years = Math.max(0, inp.years || 0);
+  const c = rangeClass(inp.veh || 'ebike');
+  const coldK = rangeModel({ ...c, temp: 12 }).km / rangeModel({ ...c, temp: 28 }).km;
+  const k = inp.season === 'winter' ? coldK : inp.season === 'summer' ? 1 / coldK : 1;
+  const fixed = curr / k;
+  const pct = orig > 0 ? Math.max(0, Math.min(100, Math.round(fixed / orig * 100))) : 0;
+  const key = pct >= 80 ? 'good' : pct >= 55 ? 'spot' : pct >= 35 ? 'major' : 'renew';
+  const notes = [];
+  if (k !== 1) notes.push({ lvl: 'info', t: `תוקן לעונה: בחורף אותה סוללה נותנת כ-${Math.round((1 - coldK) * 100)}% פחות טווח בלי שום בלאי.` });
+  if (pct < 70 && years > 0 && years < 2) notes.push({ lvl: 'warn', t: `ירידה חדה לסוללה בת ${years} — לרוב תא חלש אחד או BMS, לא בלאי. כאן תיקון נקודתי משתלם במיוחד.` });
+  if (years >= 3 && pct < 55) notes.push({ lvl: 'info', t: `הסוללה בת ${years} שנים - גיל מתקדם שמחזק את ההמלצה לחידוש.` });
+  return { pct, key, verdict: CALC_HEALTH[key], k, fixed, notes };
+}
+// ==== calc-engine: end ====
 // ---- the range page: a form of folded sections, filled from the vehicle's class ----
 // Picking a vehicle fills every field from its class; each one can then be changed. The page keeps
 // what he typed while he moves between tabs (rangeState lives as long as the hub is open).
+// Three levels since 2026-10-08 (Daniel: "שלא יהיה מסובך מידי כי יש נתונים שרק מקצועניים בתחום
+// יודעים"): eight questions anyone answers, open; the motor, wheel and weights an owner may know,
+// folded; and everything only a technician knows — motor and controller type, KV, CdA, tyre, cut-off
+// — folded under "למקצוענים", already filled from the vehicle.
 let rangeState = null;
 function rangePreset(key, keep) {
-  const v = RANGE_VEHICLES[key] || RANGE_VEHICLES.ebike;
-  const base = { ...RANGE_DEFAULTS, cargo: 0, ...v, veh: key, climb: null, kv: 0, ratio: 1, S: 0, posture: 'up', press: 'normal' };
+  const base = { ...rangeClass(key), climb: null, kv: 0, ratio: 1, S: 0, posture: 'up', press: 'normal' };
   // what describes the ride, not the vehicle, stays as he set it
   if (keep) for (const k of ['temp', 'wind', 'soh', 'target', 'style']) base[k] = keep[k];
   return base;
 }
 const rgEsc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-function rgSel(k, label, map, hint) {
+function rgSel(k, label, map) {
   const cur = String(rangeState[k]);
   const opts = Object.entries(map).map(([key, o]) => `<option value="${key}"${key === cur ? ' selected' : ''}>${rgEsc(typeof o === 'string' ? o : o.label)}</option>`).join('');
-  return `<div class="form-row"><label for="rg_${k}">${label}${hint ? `<div class="rg-hint">${hint}</div>` : ''}</label><select class="form-select" id="rg_${k}" data-rk="${k}" onchange="rangeInput(this)">${opts}</select></div>`;
+  return `<div class="form-row"><label for="rg_${k}">${label}</label><select class="form-select" id="rg_${k}" data-rk="${k}" onchange="rangeInput(this)">${opts}</select></div>`;
 }
-function rgNum(k, label, { step = 1, min = 0, max = 100000, hint = '', ph = '' } = {}) {
+function rgNum(k, label, { step = 1, min = 0, max = 100000, ph = '' } = {}) {
   const v = rangeState[k];
-  return `<div class="form-row"><label for="rg_${k}">${label}${hint ? `<div class="rg-hint">${hint}</div>` : ''}</label><input type="number" inputmode="decimal" class="form-input" id="rg_${k}" data-rk="${k}" value="${v == null || v === 0 && ph ? '' : v}" step="${step}" min="${min}" max="${max}"${ph ? ` placeholder="${ph}"` : ''} oninput="rangeInput(this)"></div>`;
+  return `<div class="form-row"><label for="rg_${k}">${label}</label><input type="number" inputmode="decimal" class="form-input" id="rg_${k}" data-rk="${k}" value="${v == null || v === 0 && ph ? '' : v}" step="${step}" min="${min}" max="${max}"${ph ? ` placeholder="${ph}"` : ''} oninput="rangeInput(this)"></div>`;
 }
 function rangeVehicleOptions() {
   const o = {}; for (const [k, v] of Object.entries(RANGE_VEHICLES)) o[k] = v.label; return o;
@@ -5514,62 +5727,77 @@ function rangeVehicleOptions() {
 function rangeCellOptions() {
   const o = {}; for (const [k, v] of Object.entries(RANGE_CELLS)) o[k] = v.label; return o;
 }
+const RANGE_VOLTS = [12, 24, 36, 48, 52, 60, 72, 84, 96];
 function rangeFormHtml() {
   const s = rangeState;
+  const yesNo = (k, label, yes = 'כן', no = 'לא') => `<div class="form-row"><label for="rg_${k}">${label}</label><select class="form-select" id="rg_${k}" data-rk="${k}" onchange="rangeInput(this)"><option value="0"${s[k] ? '' : ' selected'}>${no}</option><option value="1"${s[k] ? ' selected' : ''}>${yes}</option></select></div>`;
+  // a voltage typed in the professional fold that is not on the list stays on it
+  const volts = Object.fromEntries([...new Set([...RANGE_VOLTS, +s.V])].sort((a, b) => a - b).map((v) => [String(v), v + 'V']));
+  const where = rangeWhereOf(s);
+  const whereMap = where ? RANGE_WHERE : { '': { label: 'מותאם — בהגדרות למקצוענים' }, ...RANGE_WHERE };
+  rangeState.where = where;
+  // 1. what anyone can answer
   const basics = rgSel('veh', 'סוג כלי', rangeVehicleOptions())
-    + rgNum('rider', 'משקל רוכב (ק"ג)', { min: 10, max: 300 })
-    + rgNum('speed', 'מהירות נסיעה (קמ"ש)', { min: 3, max: 200, hint: 'המהירות שנוסעים בה רוב הזמן' })
-    + rgNum('V', 'מתח סוללה (V)', { min: 6, max: 200 })
+    + rgSel('V', 'מתח הסוללה', volts)
     + rgNum('ah', 'קיבולת (Ah)', { step: 0.5, min: 1, max: 1000 })
-    + rgSel('cell', 'סוג תא / סוללה', rangeCellOptions())
-    + rgSel('terrain', 'שטח', RANGE_TERRAIN)
-    + rgSel('surface', 'משטח', RANGE_SURFACES);
-  const vehicle = rgNum('mass', 'משקל הכלי בלי סוללה (ק"ג)', { min: 1, max: 3000 })
-    + rgNum('cargo', 'נוסע / מטען (ק"ג)', { min: 0, max: 1000 })
-    + rgNum('wheel', 'קוטר גלגל (אינץ\')', { step: 0.5, min: 2, max: 40, hint: 'הקוטר החיצוני של הצמיג' })
+    + rgSel('cell', 'סוג סוללה', rangeCellOptions())
+    + rgNum('rider', 'משקל הרוכב (ק"ג)', { min: 10, max: 300 })
+    + rgNum('speed', 'באיזו מהירות נוסעים (קמ"ש)', { min: 3, max: 200 })
+    + rgSel('terrain', 'עליות', RANGE_TERRAIN)
+    + rgSel('where', 'איפה נוסעים', whereMap);
+  // 2. what an owner may know, off the motor's sticker or the brochure
+  const known = rgNum('power', s.motors > 1 ? 'הספק לכל מנוע (W)' : 'הספק המנוע (W)', { step: 50, min: 50, max: 200000 })
+    + rgNum('wheel', 'גודל גלגל (אינץ\')', { step: 0.5, min: 2, max: 40 })
+    + rgNum('top', 'מהירות מקסימלית (קמ"ש)', { min: 3, max: 250 })
+    + rgNum('mass', 'משקל הכלי בלי סוללה (ק"ג)', { min: 1, max: 3000 })
+    + rgNum('cargo', 'נוסע / מטען (ק"ג)', { min: 0, max: 1000 });
+  // 3. what only a technician knows — all filled from the vehicle already
+  const pro = rgSel('motor', 'סוג מנוע', RANGE_MOTORS)
+    + rgNum('motors', 'מספר מנועים', { min: 1, max: 4 })
+    + rgSel('ctrl', 'סוג בקר', RANGE_CTRL)
+    + rgNum('ctrlA', 'זרם בקר מקסימלי (A)', { min: 1, max: 2000 })
+    + rgNum('kv', 'KV של המנוע (סל"ד לוולט)', { step: 0.5, min: 0, max: 5000, ph: 'לא ידוע' })
+    + rgNum('ratio', 'יחס העברה (מנוע : גלגל)', { step: 0.1, min: 0.1, max: 50 })
+    + yesNo('regen', 'בלימה רגנרטיבית', 'יש', 'אין')
+    + rgNum('acc', 'תאורה, צג ואביזרים (W)', { min: 0, max: 2000 })
     + rgSel('tire', 'צמיג', RANGE_TIRES)
     + rgSel('press', 'לחץ אוויר', RANGE_PRESSURE)
     + rgSel('posture', 'תנוחת רכיבה', RANGE_POSTURE)
-    + rgNum('cda', 'מקדם אוויר CdA (m²)', { step: 0.05, min: 0.1, max: 5, hint: 'שטח חזית × מקדם גרר, כולל הרוכב' })
-    + `<div class="form-row"><label for="rg_awd">הנעה בכל הגלגלים</label><select class="form-select" id="rg_awd" data-rk="awd" onchange="rangeInput(this)"><option value="0"${s.awd ? '' : ' selected'}>לא</option><option value="1"${s.awd ? ' selected' : ''}>כן</option></select></div>`;
-  const motor = rgSel('motor', 'סוג מנוע', RANGE_MOTORS)
-    + rgNum('power', 'הספק נומינלי למנוע (W)', { step: 50, min: 50, max: 200000, hint: 'הרציף, לא השיא' })
-    + rgNum('motors', 'מספר מנועים', { min: 1, max: 4 })
-    + rgNum('top', 'מהירות מקסימלית (קמ"ש)', { min: 3, max: 250, hint: 'מה שהכלי עושה במישור עם רוכב' })
-    + rgNum('kv', 'KV של המנוע (סל"ד לוולט)', { step: 0.5, min: 0, max: 5000, ph: 'לא ידוע', hint: 'אם ידוע: המהירות תחושב ממנו, מהגלגל ומההעברה' })
-    + rgNum('ratio', 'יחס העברה (מנוע : גלגל)', { step: 0.1, min: 0.1, max: 50, hint: 'מנוע גלגל = 1; שרשרת 14:52 = 3.7' })
-    + rgSel('ctrl', 'סוג בקר', RANGE_CTRL)
-    + rgNum('ctrlA', 'זרם בקר מקסימלי (A)', { min: 1, max: 2000, hint: 'זרם הסוללה, מכל המנועים יחד' })
-    + `<div class="form-row"><label for="rg_regen">בלימה רגנרטיבית</label><select class="form-select" id="rg_regen" data-rk="regen" onchange="rangeInput(this)"><option value="0"${s.regen ? '' : ' selected'}>אין</option><option value="1"${s.regen ? ' selected' : ''}>יש</option></select></div>`
-    + rgNum('acc', 'תאורה, צג ואביזרים (W)', { min: 0, max: 2000 });
-  const battery = rgNum('soh', 'בריאות הסוללה (%)', { min: 30, max: 100, hint: 'חדשה = 100' })
-    + rgNum('S', 'תאים בטור (S)', { min: 0, max: 60, ph: 'לפי המתח', hint: 'רק אם שונה מהרגיל למתח הזה' })
+    + rgNum('cda', 'מקדם אוויר CdA (m²)', { step: 0.05, min: 0.1, max: 5 })
+    + yesNo('awd', 'הנעה בכל הגלגלים')
+    + rgSel('surface', 'משטח', RANGE_SURFACES)
+    + rgSel('use', 'עצירות', RANGE_USE)
+    + rgSel('style', 'סגנון רכיבה', RANGE_STYLE)
+    + rgNum('climb', 'טיפוס (מטר לכל ק"מ)', { step: 1, min: 0, max: 300, ph: 'לפי העליות' })
+    + rgNum('temp', 'טמפרטורה (°C)', { min: -30, max: 50 })
+    + rgNum('wind', 'רוח ממוצעת (קמ"ש)', { min: 0, max: 80 })
+    + rgNum('soh', 'בריאות הסוללה (%)', { min: 30, max: 100 })
+    + rgNum('S', 'תאים בטור (S)', { min: 0, max: 60, ph: 'לפי המתח' })
     + rgNum('lvc', 'ניתוק בקר לתא (V)', { step: 0.05, min: 0, max: 4.2, ph: 'לפי הכימיה' })
     + rgNum('bmsA', 'זרם BMS מקסימלי (A)', { min: 0, max: 2000, ph: 'לא ידוע' });
-  const ride = rgSel('use', 'אופי הנסיעה', RANGE_USE)
-    + rgSel('style', 'סגנון רכיבה', RANGE_STYLE)
-    + rgNum('climb', 'טיפוס (מטר לכל ק"מ)', { step: 1, min: 0, max: 300, ph: 'לפי השטח', hint: 'סך העליות במסלול ÷ אורכו' })
-    + rgNum('temp', 'טמפרטורה (°C)', { min: -30, max: 50 })
-    + rgNum('wind', 'רוח ממוצעת (קמ"ש)', { min: 0, max: 80, hint: 'הלוך ושוב: חצי נגד וחצי עם' });
   return fold('rg-basic', '🛵 הכלי והסוללה', basics, { open: true })
-    + fold('rg-vehicle', '🛞 גלגלים, משקל ואוויר', vehicle, { sum: ' ' })
-    + fold('rg-motor', '⚙️ מנוע ובקר', motor, { sum: ' ' })
-    + fold('rg-battery', '🔋 סוללה — מתקדם', battery, { sum: ' ' })
-    + fold('rg-ride', '🗺️ תנאי נסיעה', ride, { sum: ' ' })
-    + fold('rg-target', '🎯 כמה סוללה צריך ללקוח', rgNum('target', 'כמה ק"מ הלקוח צריך?', { min: 0, max: 2000, ph: 'ק"מ', hint: 'התשובה מופיעה למטה, עם משקל הסוללה הגדולה' }), { open: !!rangeState.target });
+    + fold('rg-known', '🛞 מנוע, גלגל ומשקל — אם יודעים', known, { sum: ' ' })
+    + fold('rg-pro', '🔧 למקצוענים — לא חובה', pro, { sum: ' ' })
+    + fold('rg-target', '🎯 כמה סוללה צריך ללקוח', rgNum('target', 'כמה ק"מ הלקוח צריך?', { min: 0, max: 2000, ph: 'ק"מ' }), { open: !!rangeState.target });
 }
 function rangeSums(r) {
   const s = rangeState;
   const put = (id, t) => { const el = document.querySelector('[data-fold="' + id + '"] .fold-sum'); if (el) el.textContent = t; };
-  put('rg-vehicle', `${s.wheel}" · ${(RANGE_TIRES[s.tire] || {}).label || ''} · ${Math.round(r.m)} ק"ג בנסיעה`);
-  put('rg-motor', `${s.motors > 1 ? s.motors + '×' : ''}${s.power}W · ${Math.round(r.top)} קמ"ש · ${s.ctrlA}A`);
-  put('rg-battery', `${r.pack.S}S${r.pack.P}P · ${s.soh}%`);
-  put('rg-ride', `${(RANGE_USE[s.use] || {}).label || ''} · ${s.temp}°C`);
+  // short: a folded title that wraps to three lines is clutter, not a summary
+  put('rg-known', `${s.motors > 1 ? s.motors + '×' : ''}${s.power}W · ${s.wheel}"`);
+  put('rg-pro', 'ממולא לפי הכלי');
 }
 function rangeInput(el) {
   const k = el.getAttribute('data-rk');
   let v = el.value;
-  if (k === 'veh') { rangeState = rangePreset(v, rangeState); document.getElementById('rangeForm').innerHTML = rangeFormHtml(); calcRange(); return; }
+  const redraw = () => { document.getElementById('rangeForm').innerHTML = rangeFormHtml(); calcRange(); };
+  if (k === 'veh') { rangeState = rangePreset(v, rangeState); redraw(); return; }
+  // one question sets two of the model's inputs; and either of those, changed, changes the answer to it
+  if (k === 'where') { const w = RANGE_WHERE[v]; if (w) { rangeState.use = w.use; rangeState.surface = w.surface; } redraw(); return; }
+  if (k === 'use' || k === 'surface' || k === 'V' || k === 'motors') {
+    rangeState[k] = k === 'V' || k === 'motors' ? (parseFloat(v) || rangeState[k]) : v;
+    redraw(); return;
+  }
   if (k === 'regen' || k === 'awd') v = v === '1';
   else if (el.tagName === 'INPUT') {
     const n = parseFloat(v);
@@ -5616,20 +5844,18 @@ function calcRange() {
   const hours = r.km / Math.max(1, r.vFlat);
   const hm = `${Math.floor(hours)}:${String(Math.round((hours % 1) * 60)).padStart(2, '0')}`;
   const lvl = { bad: 'alert-danger', warn: 'alert-warning', info: 'alert-info' };
-  const notes = r.notes.map((n) => `<div class="alert ${lvl[n.lvl] || 'alert-info'}" style="margin-bottom:8px;">${rgEsc(n.t)}</div>`).join('');
+  const notes = r.notes.filter((n) => n.lvl !== 'info').map((n) => `<div class="alert ${lvl[n.lvl] || 'alert-info'}" style="margin-bottom:8px;">${rgEsc(n.t)}</div>`).join('');
   // range by speed
   const sp = rangeSpeeds(inp);
   const spRows = sp.map((x) => `<tr${Math.abs(x.speed - inp.speed) < 0.5 ? ' class="rg-here"' : ''}><td>${x.speed}</td><td><b>${rgN(x.km)}</b></td><td>${rgN(x.whKm, 1)}</td><td>${Math.floor(x.h)}:${String(Math.round((x.h % 1) * 60)).padStart(2, '0')}</td></tr>`).join('');
-  const spTable = `<table class="rg-table"><thead><tr><th>קמ"ש</th><th>ק"מ</th><th>Wh/ק"מ</th><th>שעות</th></tr></thead><tbody>${spRows}</tbody></table>`
-    + `<div class="rg-hint" style="margin-top:6px;">אותו כלי, אותו שטח, מהירות שונה. מעל ${Math.round(r.top)} קמ"ש הכלי לא נוסע.</div>`;
+  const spTable = `<table class="rg-table"><thead><tr><th>קמ"ש</th><th>ק"מ</th><th>Wh/ק"מ</th><th>שעות</th></tr></thead><tbody>${spRows}</tbody></table>`;
   // where the energy goes
   const B = r.B, total = r.whKm;
   const maxPart = Math.max(...RANGE_PARTS.map(([k]) => B[k] / 3600));
   const bars = RANGE_PARTS.filter(([k]) => B[k] / 3600 >= 0.05).map(([k, label, sign]) => {
     const wh = B[k] / 3600, w = Math.max(2, Math.round(100 * wh / maxPart));
     return `<div class="rg-bar"><div class="rg-bar-l">${label}</div><div class="rg-bar-t"><span style="width:${w}%;${sign < 0 ? 'background:var(--success,#10b981);' : ''}"></span></div><div class="rg-bar-v">${sign < 0 ? '−' : ''}${rgN(wh, 1)}</div></div>`;
-  }).join('') + `<div class="rg-bar rg-bar-sum"><div class="rg-bar-l">סה"כ מהסוללה</div><div class="rg-bar-t"></div><div class="rg-bar-v">${rgN(total, 1)}</div></div>`
-    + `<div class="rg-hint" style="margin-top:6px;">ועוד ${rgN(r.dis.heat / Math.max(1, r.km), 1)} Wh לק"מ נשרפים כחום בתוך הסוללה עצמה (התנגדות פנימית ${rgN(r.dis.R * 1000)}mΩ).</div>`;
+  }).join('') + `<div class="rg-bar rg-bar-sum"><div class="rg-bar-l">סה"כ מהסוללה</div><div class="rg-bar-t"></div><div class="rg-bar-v">${rgN(total, 1)}</div></div>`;
   // electrical
   const mg = rangeMaxGrade(inp);
   const pc = r.perCell;
@@ -5665,7 +5891,7 @@ function calcRange() {
     ${fold('rg-elec', '🔌 סוללה, זרמים וגבולות', rows)}
     ${need ? fold('rg-need', '🎯 כמה סוללה צריך ל-' + rgN(tgt) + ' ק"מ', need, { open: true }) : ''}
     <button class="btn btn-accent btn-block" style="background:#25D366;margin-bottom:10px;" onclick="rangeWhatsApp()">💬 שלח ללקוח בוואטסאפ</button>
-    <div class="alert alert-info"><strong>איך זה מחושב:</strong> כל ק"מ נרכב בשלושה חלקים (מישור, עלייה, ירידה) עם הכוחות על הגלגל — גלגול, אוויר, שיפוע, זינוקים — דרך מודל של המנוע והבקר, והסוללה נפרקת לפי הדאטה-שיט של התאים: עקומת מתח, התנגדות פנימית, קיבולת לפי זרם, טמפרטורה ובלאי. הטווח הוא טווח ולא מספר אחד: אותו חישוב עם מה שלקוח לא מספר (לחץ אוויר, המהירות שהוא באמת נוסע, עצירות) לשני הכיוונים.</div>`;
+`;
 }
 function rangeWhatsApp() {
   if (!rangeLast) return;
@@ -6360,7 +6586,7 @@ function bmsPickerHtml(i) {
   let rows;
   try { rows = bmsChoices(); } catch (e) { rows = []; }
   if (!rows.length) {
-    return '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">אין רשימת ספקים מיובאת — אפשר לייבא בדף עלויות ספקים.</div>';
+    return '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">אין רשימת ספקים מיובאת</div>';
   }
   const cur = (getBmsPicks()[catKey(it)]) || '';
   // The pack's own series count, so a board that physically cannot be wired to it is marked.
@@ -6407,9 +6633,9 @@ function bmsPickerHtml(i) {
       ? '<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ אף לוח ברשימת הספקים אינו ' + packS + 'S. כל הלוחות מוצגים — ודא התאמה לפני בחירה.</div>'
       : '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + show.length + ' לוחות מתאימים ל-' + packS + 'S, לפי יצרן.</div>')
     + (picked && picked.freightBasis === 'category'
-      ? '<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ המשלוח בשורה הזו מחושב כאחוז מהערך — שיעור שנמדד על ניקל, נחושת ושרינק ולא על BMS. הוסף משקל או מחיר משלוח בעלויות ספקים כדי לדייק.</div>'
+      ? '<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ משלוח משוער — אין לשורה משקל</div>'
       : picked && picked.freightBasis === 'typical'
-      ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">המשלוח מחושב לפי 200 גרם — המשקל הטיפוסי של לוח (150-250 גרם). שורה עם משקל משלה או עם מחיר משלוח תגבר על זה.</div>'
+      ? ''
       : '');
 }
 
@@ -6424,7 +6650,7 @@ function openCostEditor(i) {
      <div id="costProfit" style="margin-top:8px;"></div>
      ${bmsPickerHtml(i)}
      <div id="costBreakdown">${costBreakdownHtml(it)}</div>
-     <div style="font-size:11px;color:var(--text-light);margin-top:4px;">לסוללות מוצג אומדן מהתאים עד שמזינים עלות ספק מדויקת.</div>`,
+`,
     `<button class="btn btn-primary" onclick="saveCost(${i})">💾 שמור</button>
      <button class="btn btn-secondary btn-sm" onclick="clearCost(${i})">איפוס</button>
      <button class="btn btn-secondary" onclick="closeModal()">סגור</button>`);
@@ -6442,7 +6668,7 @@ function updateCostProfit(i) {
   const raw = document.getElementById('costInput').value;
   const cost = parseFloat(raw);
   if (raw === '' || isNaN(cost)) {
-    box.innerHTML = '<div style="font-size:11px;color:var(--text-light);">הזן עלות כדי לראות את הרווח</div>';
+    box.innerHTML = '';
     return;
   }
   const line = (label, price) => {
@@ -6918,7 +7144,7 @@ function renderOrders() {
   const list = document.getElementById('ordersList');
   if (all.length === 0) {
     const filtered = salesFilter !== 'all' || !!ORD_QUERY.trim();
-    list.innerHTML = `<div class="card"><div class="empty-state"><div class="empty-state-icon">${filtered ? '🔍' : '🛒'}</div><div class="empty-state-text">${filtered ? 'אין תוצאות לסינון הזה.' : 'אין מכירות או תיקונים עדיין.<br>לחץ 🛒 מכירה חדשה או 🔧 תיקון חדש למעלה.'}</div></div></div>`;
+    list.innerHTML = `<div class="card"><div class="empty-state"><div class="empty-state-icon">${filtered ? '🔍' : '🛒'}</div><div class="empty-state-text">${filtered ? 'אין תוצאות לסינון הזה.' : 'אין מכירות או תיקונים עדיין.'}</div></div></div>`;
     return;
   }
 
@@ -7658,11 +7884,11 @@ function renderSyncPending() {
   const keys = Sync.pending ? Sync.pending() : [];
   if (!keys.length) { box.style.display = 'none'; return; }
   box.style.display = 'flex';
-  const names = keys.map((k) => SYNC_LABELS[k] || k);
+  // a key is shown by its name, once: fs_settings and settings are the same thing to him
+  const names = [...new Set(keys.map((k) => SYNC_LABELS[k.replace(/^fs_/, '')] || k))];
   document.getElementById('syncPendingText').innerHTML =
     '<b>יש נתונים שעדיין לא עלו לענן.</b>' +
-    '<div style="font-size:11px;opacity:.85;margin-top:2px;">' + names.join(' · ') +
-    ' — הם קיימים במכשיר הזה בלבד, ולא יופיעו בטלפון.</div>';
+    '<div style="font-size:11px;opacity:.85;margin-top:2px;">' + names.join(' · ') + '</div>';
 }
 // ---- התראות (Daniel, 2026-10-05: "תעשה גם שקופץ התראות בלוח הבקרה אם יש על מה להתריע") ----
 // He chose four: the bot's open questions, stuck work, the backup and the sync. They pop up INSIDE the
@@ -7991,7 +8217,7 @@ function renderShifts() {
   if (!workers.length) {
     box.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">אין עובדים ברשימה. '
       + '<a href="#" onclick="manageWorkers();return false;" style="color:var(--primary);">הוסף עובד</a>'
-      + ' ואז אפשר להחתים לו כניסה ויציאה.</div>';
+      + '</div>';
     return;
   }
   const hm = (iso) => new Date(iso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
@@ -11697,9 +11923,9 @@ function openJobEditor(jobId, ret) {
     <div class="form-row"><label>הערות</label><input class="form-input-wide" id="jeNotes" value="${esc(j.customerNotes)}" style="width:170px;"></div>
     ${j.quickRepair ? `<div class="form-row"><label>תיאור העבודה</label><input class="form-input-wide" id="jeQuick" value="${esc(j.quickRepair)}" style="width:170px;"></div>` : ''}
     <div class="divider"></div>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">מה בוצע (נכנס לדו"ח החנות ולסיכום בוואטסאפ):</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">מה בוצע:</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">${types}</div>
-    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">שינוי המחיר מעדכן גם את ההכנסות בפיננסים וגם את סך ההוצאות של הלקוח. שינוי התאריך מעביר את ההכנסה לחודש אחר.</p>`,
+`,
     `<button class="btn btn-primary" onclick="saveJobEdit('${jobId}')">💾 שמור</button>
      <button class="btn btn-danger" onclick="deleteJob('${jobId}')">🗑️ מחק</button>
      <button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
@@ -11813,7 +12039,7 @@ function renderBizDocs() {
   document.getElementById('bizReportPreview').style.display = 'none';
   document.getElementById('bizdocsListCard').style.display = 'block';
   const list = document.getElementById('bizdocsList');
-  if (biz.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏢</div><div class="empty-state-text">אין לקוחות עסקיים עדיין.<br>סמן "לקוח עסקי" בעת שמירת תיקון.</div></div>'; return; }
+  if (biz.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏢</div><div class="empty-state-text">אין לקוחות עסקיים עדיין.</div></div>'; return; }
   list.innerHTML = biz.sort((a, b) => new Date(b.lastVisit) - new Date(a.lastVisit)).map(c => {
     const acc = bizAccount(c.phone);
     return `<div class="list-item" onclick="openBizReport('${c.phone}')">
@@ -11948,7 +12174,7 @@ function renderStickerLog() {
   if (arr.length) Store.set('sticker_history', arr);
   let items = arr.filter(s => !s.deleted && (stickerTab === 'all' || s.type === stickerTab));
   const list = document.getElementById('stickerlogList');
-  if (items.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🗂️</div><div class="empty-state-text">אין מדבקות בקטגוריה זו.<br>צור מדבקה בעורך והיא תופיע כאן.</div></div>'; return; }
+  if (items.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🗂️</div><div class="empty-state-text">אין מדבקות בקטגוריה זו.</div></div>'; return; }
   // Folded by month (2026-10-05, every tab folded). Records without a date last.
   const byMonth = new Map();
   for (const s of items) { const k = s.date && !isNaN(new Date(s.date).getTime()) ? monthKeyOf(s.date) : ''; if (!byMonth.has(k)) byMonth.set(k, []); byMonth.get(k).push(s); }
@@ -12301,7 +12527,7 @@ function copyOrderList() {
         <button class="btn btn-sm btn-secondary" data-wa-order="${i}" onclick="sendOrderGroup(${i})">💬 וואטסאפ</button></span></div>
       <textarea id="orderTxt${i}" class="form-input-wide" style="width:100%;height:${60 + g.lines.length * 18}px;font-size:12px;margin-top:6px;" readonly>${esc(orderGroupText(g))}</textarea>${pick}</div>`;
   }).join('');
-  openModal('🛒 מה להזמין — לפי ספק', body + '<div style="font-size:11px;color:var(--text-muted);">הודעה נפרדת לכל ספק — להעתיק ולהדביק בוואטסאפ שלו.</div>',
+  openModal('🛒 מה להזמין — לפי ספק', body,
     `<button class="btn btn-secondary" onclick="closeModal()">סגור</button>`);
 }
 
@@ -12478,7 +12704,7 @@ function renderNeedList() {
   const dl = document.getElementById('needSuppliers');
   if (dl) dl.innerHTML = invSupplierNames().map((n) => `<option value="${esc(n)}"></option>`).join('');
   const rows = getNeeds().slice().sort((a, b) => (!!a.ordered - !!b.ordered) || (Number(a.added) || 0) - (Number(b.added) || 0));
-  if (!rows.length) { box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">אין כרגע. מה שתכתוב כאן ייכנס גם להודעה של "🛒 מה להזמין".</div>'; return; }
+  if (!rows.length) { box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">אין כרגע.</div>'; return; }
   const day = (t) => new Date(Number(t)).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
   box.innerHTML = rows.map((r) => `<div class="need-row" data-need="${esc(r.id)}" style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-top:1px solid var(--border);${r.ordered ? 'opacity:.55;' : ''}">
       <div style="flex:1;min-width:0;"><b style="${r.ordered ? 'text-decoration:line-through;' : ''}">${esc(r.text)}</b>${r.qty ? ` <span style="color:var(--text-muted);">— ${esc(r.qty)}</span>` : ''}
@@ -12503,7 +12729,7 @@ function renderInventory() {
     // still drives 'מה להזמין'.
     '';
   const list = document.getElementById('inventoryList');
-  if (inv.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים. הוסף תאים, BMS, מטענים, ניקל וכו\'.</div></div>'; return; }
+  if (inv.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים.</div></div>'; return; }
   const CAT_ORDER = ['BMS', 'מטען', 'תא', 'ניקל', 'אחר'];
   const CAT_ICON = { 'BMS': '🛡️', 'מטען': '🔌', 'תא': '🔋', 'ניקל': '⚡', 'אחר': '📦' };
   const groups = {};
