@@ -129,13 +129,14 @@ const findable = await page.evaluate(() => {
   refreshCustomerSelect();
   const box = document.getElementById('custPickRows') || document.querySelector('.cust-pick-rows');
   const rows = box ? box.querySelectorAll('.cust-pick-row').length : 0;
-  navigateTo('customers');
-  // textContent: the list is folded by month since 2026-10-05
-  const listed = ((document.getElementById('customersList') || {}).textContent || '').match(/📱/g) || [];
-  return { name: target.name, rows, listed: listed.length };
+  // the customers list became the search of לקוחות ועבודות (2026-10-08)
+  navigateTo('orders'); ordersSearch(target.name);
+  const listed = [...document.querySelectorAll('#customersList [data-cust-hit]')].map((el) => el.querySelector('.list-item-title').textContent.trim());
+  ordersSearch('');
+  return { name: target.name, rows, listed: listed.includes(target.name), stored: (Store.get('customers') || []).length };
 });
 check('the OLDEST imported customer is findable by search', findable.rows > 0, findable);
-check('and the customers page lists them all', findable.listed === 146, findable.listed);
+check('all of them are kept, and the oldest is found by the search on לקוחות ועבודות', findable.stored === 146 && findable.listed, findable);
 
 // ---------------------------------------------------------------- 2. it must reach the cloud
 const cloud = await page.evaluate(async () => {
