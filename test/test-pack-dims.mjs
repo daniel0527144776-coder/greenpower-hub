@@ -844,6 +844,46 @@ check('the regular Bomber reads what his builds prove (364×125×192), not the m
 check('the Plus is not judged against its frame standing (no "does not fit" on his own build)',
   !lying.plusTub && !/לא נכנס ל-Bomber Plus/.test(lying.plus), [lying.plusTub, lying.plus.slice(0, 80)]);
 
+// ---- the worker's plate for a lying build (2026-10-06) ----
+// Daniel, holding the first plate: a number on every row, how many go in it, which cells are in
+// parallel and in series — and, asked, "כל שורה = קבוצה". The Plus at 72V on the 23 square, in his
+// PRO cell: 20S16P, 10 groups a stack. Rows 1-8 are groups 1-8, each of 16, the five rows of 17 one
+// place short at the end (✕), and 13 + 11 + 8 at the top are groups 9 and 10. His 22S15P (330 of 330,
+// no place to spare) runs its groups across rows instead, every cell used. The head names the
+// voltage, the Ah, the cell and the nickel. --selftest hands back a map with no empty places.
+const plate = await page.evaluate((SELF) => {
+  if (SELF) { const real = bomberGroups; window.bomberGroups = (cells, P, G) => real(cells, P, G + 100) || real(cells, 1, cells.length); }
+  document.getElementById('dimCell').value = '21700-50pl';
+  useVehiclePack('Bomber Plus 15kW', 72);
+  document.getElementById('dimHolder').value = 'square-23'; calcPackDims();
+  const d = dimLast || {};
+  const cells = (d.plan && d.plan.cells) || [];
+  const rows = [...new Set(cells.map((c) => Math.round(c.y)))].sort((a, b) => b - a)
+    .map((y) => cells.filter((c) => Math.round(c.y) === y).sort((a, b) => a.x - b.x));
+  const desc = rows.map((r) => r.map((c) => (c.empty ? 'x' : c.g + 1)).join(' '));
+  const sizes = {};
+  cells.forEach((c) => { if (!c.empty) sizes[c.g] = (sizes[c.g] || 0) + 1; });
+  const cv = packLabelCanvas();
+  // his 22S15P: 11 groups of 15 in 165, nothing to spare
+  const fr = bomberFrame(vehicleByName('Bomber Plus 15kW'));
+  const old = bomberGroups(bomberFill(fr, DIM_CELLS['21700-50e'], 23, 23).cells, 15, 11) || [];
+  const oldCells = old.flatMap((r) => r.cells);
+  clearDimVehicle();
+  return { head: d.head || '', line: d.line || '', foot: d.foot || '', desc, counts: (d.plan && d.plan.rowsLab || []).map((r) => r.n).join(','),
+    sizes: Object.values(sizes), empties: cells.filter((c) => c.empty).length, canvas: !!cv,
+    old: { empties: oldCells.filter((c) => c.empty).length, groups: new Set(oldCells.map((c) => c.g)).size, n: oldCells.length } };
+}, SELFTEST);
+check('the plate counts every row, bottom up: 16,16,17,17,17,17,17,16,13,11,8', plate.counts === '16,16,17,17,17,17,17,16,13,11,8', plate.counts);
+check('each of the first eight rows is one group of 16, the rows of 17 one place short at the end',
+  plate.desc.slice(0, 8).every((r, i) => { const c = r.split(' '); return c.slice(0, 16).every((g) => g === String(i + 1)) && (c.length === 16 || (c.length === 17 && c[16] === 'x')); })
+  && plate.empties === 5, plate.desc.slice(0, 8));
+check('the three short rows at the top are groups 9 and 10, and every group is 16', /^9( 9){12}$/.test(plate.desc[8] || '') && /^9 9 9( 10){8}$/.test(plate.desc[9] || '') && /^10( 10){7}$/.test(plate.desc[10] || '')
+  && plate.sizes.length === 10 && plate.sizes.every((n) => n === 16), [plate.desc.slice(8), plate.sizes]);
+check('the plate says what to build: 20S16P, 72V 80Ah, the cell, the nickel, both stacks', /20S16P/.test(plate.head) && /72V 80Ah/.test(plate.head)
+  && /320 תאי 21700 EVE 50PL/.test(plate.line) && /ריבועי 23/.test(plate.line) && /ערימה 1: 1–10/.test(plate.foot) && /ערימה 2: 11–20/.test(plate.foot) && /16 במקביל/.test(plate.foot) && plate.canvas,
+  [plate.head, plate.line, plate.foot]);
+check('his 22S15P has no place to spare: 11 groups across the rows, all 165 used', plate.old.n === 165 && plate.old.empties === 0 && plate.old.groups === 11, plate.old);
+
 // ---- every vehicle, one sweep (2026-10-04) ----
 // A card per nickel with its drawing (one, the 23 square, for the Silver Fish), the worker's label
 // drawing exactly the chosen card, and no "what I built" anywhere. --selftest puts the old build
