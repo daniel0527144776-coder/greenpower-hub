@@ -128,6 +128,21 @@ body { min-height: 100vh; }
 .result-label { font-size: 12px; opacity: 0.85; margin-bottom: 4px; }
 .result-value { font-size: 42px; font-weight: 700; line-height: 1.1; }
 .result-sub { font-size: 11px; opacity: 0.8; margin-top: 8px; }
+/* the range page (2026-10-08) */
+.rg-hint { font-size: 11px; color: var(--text-muted); font-weight: 400; margin-top: 2px; line-height: 1.35; }
+.rg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rg-table th, .rg-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.rg-table th { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+.rg-table tr.rg-here td { background: var(--bg); font-weight: 700; }
+.rg-bar { display: grid; grid-template-columns: 9.5em 1fr 3.4em; gap: 6px; align-items: center; font-size: 12px; margin-bottom: 5px; }
+.rg-bar-t { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.rg-bar-t span { display: block; height: 100%; background: var(--primary); border-radius: 4px; }
+.rg-bar-v { text-align: left; direction: ltr; font-variant-numeric: tabular-nums; }
+.rg-bar-sum { font-weight: 700; border-top: 1px solid var(--border); padding-top: 5px; }
+.rg-row { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.rg-row span { color: var(--text-muted); flex-shrink: 0; }
+.rg-row b { font-weight: 600; text-align: left; }
+.rg-need { font-size: 13px; line-height: 1.6; }
 .result-warranty { font-size: 11px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); }
 /* Simple mode is the default; toggleAdvanced() drops the class. !important because the
    hidden nodes are .card (block) and .form-row (grid) and both must lose to this. */
@@ -1021,46 +1036,8 @@ body { min-height: 100vh; }
     <div class="sub-tab" data-calctab="upgrade" onclick="setCalcTab('upgrade')">⬆️ שדרוג מתח</div>
   </div>
   <div id="calctab-range">
-<div class="card">
-    <div class="form-row">
-      <label>סוג כלי</label>
-      <select class="form-select" id="rangeVehicle" onchange="calcRange()">
-        <option value="bike">אופניים חשמליים</option>
-        <option value="ebike_fast">אופניים מהירים (45km/h)</option>
-        <option value="scooter">קורקינט רגיל</option>
-        <option value="scooter_fast">קורקינט עוצמתי</option>
-        <option value="motor">אופנוע / סור-רון</option>
-      </select>
-    </div>
-    <div class="form-row">
-      <label>מתח (V)</label>
-      <input type="number" class="form-input" id="rangeV" value="60" oninput="calcRange()">
-    </div>
-    <div class="form-row">
-      <label>קיבולת (Ah)</label>
-      <input type="number" class="form-input" id="rangeAh" value="21" oninput="calcRange()">
-    </div>
-    <div class="form-row">
-      <label>משקל רוכב (ק"ג)</label>
-      <input type="number" class="form-input" id="rangeWeight" value="75" oninput="calcRange()">
-    </div>
-    <div class="form-row">
-      <label>סגנון נהיגה</label>
-      <select class="form-select" id="rangeStyle" onchange="calcRange()">
-        <option value="eco">חסכוני</option>
-        <option value="normal" selected>רגיל</option>
-        <option value="sport">ספורט</option>
-      </select>
-    </div>
-  </div>
-  <div class="result-box">
-    <div class="result-label">טווח נסיעה משוער</div>
-    <div class="result-value" id="rangeResult">— ק"מ</div>
-    <div class="result-sub" id="rangeDetails"></div>
-  </div>
-  <div class="alert alert-info">
-    <strong>הערה:</strong> הטווח משוער ותלוי בתנאי שטח, רוח, טמפרטורה ומצב הסוללה. החישוב בוצע לפי 85% מהאנרגיה התיאורטית (פקטור בטיחות BMS).
-  </div>
+    <!-- drawn by calcRange(): the range model (2026-10-08) -->
+    <div id="rangeApp"></div>
   </div>
   <div id="calctab-charge" style="display:none;">
     <div class="card">
@@ -2771,7 +2748,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v422';
+const HUB_BUILD = 'v423';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5015,32 +4992,695 @@ function calcUpgrade() {
     `הספק +${vInc}% · אנרגיה ${Math.round(from * ah)}Wh → ${Math.round(to * ah)}Wh<br>${notes.join('<br>')}`,
     feasible ? 'var(--accent)' : '#ef4444');
 }
+// ============================================================
+// RANGE — a physical model of the ride (Daniel, 2026-10-08)
+// "תעשה שיהיה חישוב טווח מקצועי ביותר, מדויק הכי ביותר לכל סוגי הכלים שקיימים בעולם, לכל סוגי
+// הבטריות, שאני יודע בדיוק להגיד ללקוח כמה זה יספיק לו, בדיוק לפי המשקל, לפי הכל". The old
+// calculator divided watt-hours by a fixed Wh/km per vehicle (12 to 35) and knew five vehicles:
+// no ATV, no wheel, no motor, no controller.
+//
+// Now each kilometre is ridden in three parts (flat, up, down) and every number comes from that:
+//  - at the wheel: rolling (tyre × wheel size × surface × pressure), air (CdA, air density from
+//    the temperature, a round-trip wind), the climbs and what the descents pay back, and the
+//    stops, each one a launch from standstill;
+//  - the motor as a DC machine seen from the wheel. Its constants come from the top speed (which
+//    is the voltage, the winding and the gearing and the wheel size together) and its rated power
+//    and type. So a bigger wheel on the same hub needs more current for the same push, and the
+//    copper loss is I²R: a hub motor on a long climb is slow AND hot, a chain PMSM is neither;
+//  - the controller: its efficiency, its battery and phase current limits. A climb it cannot hold
+//    at speed is climbed slower; one it cannot climb at all says so;
+//  - the battery, discharged in small steps from its cells' datasheet: the open-circuit curve of
+//    its chemistry, internal resistance (sag and heat), capacity at the discharge rate, the
+//    temperature, its age, the controller's cut-off. On a climb near empty the voltage sags under
+//    the cut-off and the ride ends early — why a weak pack "dies at 20%".
+// It is a model: the band printed around the answer is the same model re-run with what a customer
+// never states (tyre pressure, the speed he really rides, the stops) moved both ways.
+//
+// Sources for the constants: the cells' own datasheets (CELL_SHEETS above: AC resistance, rate
+// capacity, continuous current); the DC resistance is NOT on the sheets and is taken as 1.5× the
+// sheet's AC figure. Rolling, CdA and motor efficiencies are typical published values per class.
+const RANGE_PHYS = {
+  g: 9.81,
+  rho0: 1.225,          // air at 15°C, sea level
+  rotMass: 0.06,        // wheels, motor rotor: their spin adds ~6% to the mass being accelerated
+  regenEff: 0.6,        // braking energy that reaches the cells: motor as generator × controller × charge
+  regenShare: 0.6,      // of each stop's braking, the part the motor does (the rest is the brakes)
+  coastStops: 0.25,     // of each stop's kinetic energy, the part spent rolling to the stop, not braked
+  modulation: 0.95,     // the most of the battery voltage the controller can put on the motor
+  rLinkPerP: 0.002,     // nickel/copper between two series groups, for one cell in parallel (Ω)
+  rExtra: 0.012,        // BMS, main wires and connectors (Ω)
+};
+const RANGE_TIRES = {
+  road:     { label: 'כביש צר (אופני כביש)',          crr: 0.0045, d: 28,  soft: 1.3 },
+  city:     { label: 'עירוני / היברידי',              crr: 0.0065, d: 28,  soft: 1.0 },
+  mtb:      { label: 'שטח עם פקקים (MTB)',            crr: 0.010,  d: 27.5, soft: 0.7 },
+  fat:      { label: 'צמיג שמן (Fat 4")',             crr: 0.014,  d: 26,  soft: 0.45 },
+  scooter:  { label: 'קורקינט, צמיג אוויר',           crr: 0.013,  d: 10,  soft: 1.3 },
+  solid:    { label: 'קורקינט, צמיג מלא',             crr: 0.02,   d: 8.5, soft: 1.5 },
+  moto:     { label: 'קטנוע / אופנוע כביש',           crr: 0.013,  d: 14,  soft: 1.0 },
+  knobby:   { label: 'אופנוע שטח (פקקים)',            crr: 0.020,  d: 19,  soft: 0.6 },
+  atv:      { label: 'טרקטורון / באגי',    crr: 0.032,  d: 23,  soft: 0.4 },
+  turf:     { label: 'רכב גולף / שירות',              crr: 0.018,  d: 18,  soft: 0.6 },
+  kart:     { label: 'קארטינג (סליק)',                crr: 0.012,  d: 11,  soft: 1.3 },
+  caster:   { label: 'קלנועית / כיסא גלגלים',         crr: 0.016,  d: 12,  soft: 1.3 },
+  urethane: { label: 'פוליאוריתן (סקייטבורד)',  crr: 0.02,   d: 3.5, soft: 2.0 },
+};
+const RANGE_SURFACES = {
+  asphalt: { label: 'אספלט',                    k: 1.0,  mu: 0.9 },
+  rough:   { label: 'אספלט גס / משתלבות', k: 1.25, mu: 0.85 },
+  dirt:    { label: 'דרך עפר כבושה',            k: 1.8,  mu: 0.65 },
+  gravel:  { label: 'חצץ',                      k: 2.6,  mu: 0.55 },
+  grass:   { label: 'דשא',                      k: 3.2,  mu: 0.45 },
+  mud:     { label: 'בוץ',                      k: 4.5,  mu: 0.3 },
+  sand:    { label: 'חול',                      k: 6.0,  mu: 0.35 },
+};
+const RANGE_PRESSURE = { low: { label: 'נמוך', k: 1.2 }, normal: { label: 'תקין', k: 1.0 }, high: { label: 'גבוה', k: 0.92 } };
+const RANGE_POSTURE = { up: { label: 'זקוף', k: 1.0 }, lean: { label: 'רכון', k: 0.86 }, tuck: { label: 'מכווץ / מגן רוח', k: 0.72 } };
+// grade: the slope of the climbs (%); share: the part of each km that climbs (the same part descends)
+const RANGE_TERRAIN = {
+  flat:     { label: 'שטוח',        grade: 1,  share: 0.25 },
+  mild:     { label: 'עליות קלות',  grade: 3,  share: 0.35 },
+  hilly:    { label: 'גבעות',       grade: 6,  share: 0.4 },
+  mountain: { label: 'הרים',        grade: 10, share: 0.45 },
+  steep:    { label: 'שטח תלול',    grade: 15, share: 0.45 },
+};
+const RANGE_USE = {
+  city:   { label: 'עירוני (רמזורים)', stops: 3 },
+  suburb: { label: 'פרברי / שבילים',           stops: 1 },
+  open:   { label: 'דרך פתוחה',                stops: 0.3 },
+  trail:  { label: 'שטח (האטות והאצות)',       stops: 2.5 },
+  track:  { label: 'מסלול / מגרש',             stops: 4 },
+};
+// acceleration in m/s², before the controller limits it
+const RANGE_STYLE = { eco: { label: 'רגוע', acc: 0.7 }, normal: { label: 'רגיל', acc: 1.2 }, sport: { label: 'ספורטיבי', acc: 2.2 } };
+// eta: the motor's best efficiency; k0: its no-load loss at top speed, as a share of its rated
+// power; gear: the transmission's efficiency; regen: whether it can brake into the battery at
+// all; freewheel: whether it spins free when not driven; shift: a gearbox lets it climb in a gear
+// this many times lower.
+const RANGE_MOTORS = {
+  hub:     { label: 'מנוע גלגל ישיר',             eta: 0.88, k0: 0.035, gear: 1.0,  regen: true },
+  geared:  { label: 'מנוע גלגל עם גיר פנימי',                    eta: 0.86, k0: 0.03,  gear: 0.95, regen: false, freewheel: true },
+  mid:     { label: 'מנוע מרכזי (Mid-Drive)',         eta: 0.87, k0: 0.03,  gear: 0.95, regen: false, freewheel: true, shift: 2 },
+  chain:   { label: 'PMSM בשרשרת / רצועה',         eta: 0.92, k0: 0.025, gear: 0.96, regen: true },
+  shaft:   { label: 'AC עם דיפרנציאל',      eta: 0.89, k0: 0.03,  gear: 0.93, regen: true },
+  brushed: { label: 'מוברש עם תמסורת',    eta: 0.78, k0: 0.05,  gear: 0.9,  regen: false },
+  worm:    { label: 'מוברש, גיר תולעת',         eta: 0.75, k0: 0.05,  gear: 0.65, regen: false, freewheel: true },
+};
+// eta: the controller's own efficiency; motorLoss: a square wave's current is not a clean sine and
+// heats the motor more; phase: phase current / battery current it allows at low speed.
+const RANGE_CTRL = {
+  square: { label: 'גל ריבועי (Square)', eta: 0.95, motorLoss: 1.08, phase: 2.0 },
+  sine:   { label: 'סינוס (Sine)',        eta: 0.96, motorLoss: 1.03, phase: 2.5 },
+  foc:    { label: 'FOC / וקטורי',        eta: 0.97, motorLoss: 1.0,  phase: 3.0 },
+};
+// Cells. rdc = the sheet's AC resistance × 1.5 (Ω). cont/peak in C: the sticker's figures, which the
+// site and the spec line print. rate: capacity at a discharge rate, [C, share], from the sheet.
+// ahFree: a cell sold in any capacity (prismatic, lead): its resistance is rdcAh / Ah and its
+// weight gPerAh × Ah grams.
+const RANGE_CELLS = {
+  '21700-50pl': { label: 'EVE 50PL · PRO',            chem: 'nmc', ah: 5,   rdc: 0.0105, cont: 25, peak: 36, g: 72, rate: [[0.2, 1], [2, 1], [6, 0.95], [8, 0.95]] },
+  '21700-50sg': { label: 'Tenpower 50SG · ADVANCED',  chem: 'nmc', ah: 5,   rdc: 0.021,  cont: 4,  peak: 10, g: 71, rate: [[0.2, 1], [0.5, 0.96], [1, 0.94], [2, 0.9]] },
+  '21700-50e':  { label: 'EVE 50E · CLASSIC',         chem: 'nmc', ah: 5,   rdc: 0.027,  cont: 2,  peak: 3,  g: 68, rate: [[0.2, 1], [0.5, 0.97], [1, 0.95], [2, 0.93], [3, 0.9]] },
+  '21700-40p':  { label: 'EVE 40P (21700)',                   chem: 'nmc', ah: 4,   rdc: 0.018,  cont: 12.5, peak: 12.5, g: 70, rate: [[0.2, 1], [2.5, 1], [5, 0.95], [7.5, 0.93], [10, 0.9]] },
+  '18650-25p':  { label: 'EVE 25P (18650)',       chem: 'nmc', ah: 2.5, rdc: 0.027,  cont: 12, peak: 12, g: 48, rate: [[0.2, 1], [4, 0.98], [8, 0.95]] },
+  'nmc-18650':  { label: '18650 כללי, 3Ah',  chem: 'nmc', ah: 3,   rdc: 0.035,  cont: 2,  peak: 3,  g: 46, rate: [[0.2, 1], [1, 0.95], [2, 0.9], [3, 0.85]] },
+  'nmc-21700':  { label: '21700 כללי, 4.5Ah',  chem: 'nmc', ah: 4.5, rdc: 0.03,   cont: 2,  peak: 3,  g: 68, rate: [[0.2, 1], [1, 0.95], [2, 0.91], [3, 0.87]] },
+  'lipo':       { label: 'LiPo פאוץ\' (RC)',         chem: 'nmc', ah: 5,   rdc: 0.004,  cont: 25, peak: 50, g: 105, rate: [[0.2, 1], [10, 0.97], [25, 0.92]] },
+  'lfp-32700':  { label: 'LiFePO4 32700',             chem: 'lfp', ah: 6,   rdc: 0.012,  cont: 3,  peak: 5,  g: 140, rate: [[0.2, 1], [1, 0.98], [3, 0.95]] },
+  'lfp-prism':  { label: 'LiFePO4 פריזמטי',          chem: 'lfp', ahFree: true, rdcAh: 0.05, cont: 1, peak: 2, gPerAh: 21, rate: [[0.2, 1], [1, 0.98], [2, 0.95]] },
+  'lto':        { label: 'LTO טיטנאט',               chem: 'lto', ahFree: true, rdcAh: 0.04, cont: 10, peak: 20, gPerAh: 30, rate: [[0.2, 1], [10, 0.97]] },
+  'nimh':       { label: 'NiMH',                     chem: 'nimh', ahFree: true, rdcAh: 0.05, cont: 1, peak: 3, gPerAh: 17, rate: [[0.2, 1], [1, 0.95], [3, 0.85]] },
+  'lead':       { label: 'עופרת (AGM / ג\'ל)',   chem: 'lead', ahFree: true, rdcAh: 0.04, cont: 1, peak: 3, gPerAh: 50, rate: [[0.05, 1]], peukert: 1.2 },
+};
+const RANGE_CHEM = {
+  nmc:  { label: 'ליתיום NMC/NCA', vnom: 3.6,  lvc: 3.0,  dod: 1,
+          ocv: [[0, 2.8], [0.02, 3.08], [0.04, 3.19], [0.07, 3.29], [0.1, 3.36], [0.15, 3.42], [0.2, 3.47], [0.3, 3.53], [0.4, 3.59], [0.5, 3.66], [0.6, 3.74], [0.7, 3.81], [0.8, 3.9], [0.9, 4.0], [1, 4.15]],
+          temp: [[-20, 0.6, 5], [-10, 0.75, 3], [0, 0.86, 1.9], [10, 0.94, 1.4], [20, 0.98, 1.1], [25, 1, 1], [35, 1, 0.85], [45, 0.99, 0.8]],
+          series: (v) => SERIES_FOR_V[v] || Math.round(v / 3.6) },
+  lfp:  { label: 'ליתיום-ברזל-פוספט', vnom: 3.2, lvc: 2.7, dod: 1,
+          ocv: [[0, 2.5], [0.02, 2.92], [0.05, 3.06], [0.1, 3.14], [0.2, 3.18], [0.3, 3.21], [0.5, 3.24], [0.7, 3.26], [0.9, 3.29], [0.95, 3.31], [1, 3.4]],
+          temp: [[-20, 0.5, 7], [-10, 0.65, 4], [0, 0.8, 2.5], [10, 0.92, 1.6], [20, 0.98, 1.15], [25, 1, 1], [35, 1, 0.85], [45, 1, 0.8]],
+          series: (v) => ({ 12: 4, 24: 8, 36: 12, 48: 16, 52: 16, 60: 20, 72: 24, 84: 26, 88: 28, 96: 30 })[v] || Math.round(v / 3.2) },
+  lto:  { label: 'ליתיום-טיטנאט', vnom: 2.3, lvc: 1.8, dod: 1,
+          ocv: [[0, 1.6], [0.05, 2.0], [0.1, 2.1], [0.3, 2.22], [0.5, 2.28], [0.7, 2.35], [0.9, 2.45], [1, 2.7]],
+          temp: [[-20, 0.85, 2.5], [-10, 0.9, 1.8], [0, 0.95, 1.4], [25, 1, 1], [45, 1, 0.9]],
+          series: (v) => Math.round(v / 2.3) },
+  nimh: { label: 'ניקל-מטל-הידריד', vnom: 1.2, lvc: 1.0, dod: 1,
+          ocv: [[0, 0.95], [0.05, 1.07], [0.1, 1.13], [0.3, 1.18], [0.5, 1.21], [0.7, 1.24], [0.9, 1.29], [1, 1.38]],
+          temp: [[-20, 0.5, 4], [-10, 0.7, 2.5], [0, 0.85, 1.6], [25, 1, 1], [45, 0.95, 0.9]],
+          series: (v) => Math.round(v / 1.2) },
+  lead: { label: 'עופרת-חומצה', vnom: 2.0, lvc: 1.75, dod: 0.8,
+          ocv: [[0, 1.85], [0.2, 1.93], [0.4, 1.98], [0.6, 2.03], [0.8, 2.08], [1, 2.13]],
+          temp: [[-20, 0.5, 3], [-10, 0.65, 2.2], [0, 0.78, 1.6], [10, 0.9, 1.25], [25, 1, 1], [40, 1.04, 0.9]],
+          series: (v) => Math.round(v / 2) },
+};
+// Vehicle classes. mass: the vehicle WITHOUT its battery (the battery's weight is computed from its
+// cells). power: each motor's rated (continuous) power. ctrlA: the controller's battery current.
+// acc: lights and display, W. The figures are typical for the class; every one is editable.
+const RANGE_VEHICLES = {
+  ebike:      { label: 'אופניים חשמליים — עירוני',     mass: 20,  cda: 0.55, tire: 'city',     wheel: 27.5, motor: 'geared',  power: 350,   motors: 1, top: 32,  ctrl: 'sine',   ctrlA: 18,  regen: false, acc: 3,  V: 48, ah: 15,  cell: '21700-50e',  rider: 80, speed: 25, use: 'suburb', terrain: 'flat',  surface: 'asphalt' },
+  ebike_fat:  { label: 'אופני שטח / צמיג שמן',          mass: 28,  cda: 0.6,  tire: 'fat',      wheel: 26,   motor: 'geared',  power: 750,   motors: 1, top: 45,  ctrl: 'sine',   ctrlA: 25,  regen: false, acc: 3,  V: 48, ah: 20,  cell: '21700-50e',  rider: 80, speed: 30, use: 'suburb', terrain: 'mild',  surface: 'asphalt' },
+  ebike_mid:  { label: 'אופניים עם מנוע מרכזי',          mass: 22,  cda: 0.55, tire: 'mtb',      wheel: 27.5, motor: 'mid',     power: 750,   motors: 1, top: 40,  ctrl: 'sine',   ctrlA: 25,  regen: false, acc: 3,  V: 48, ah: 17.5, cell: '21700-50e', rider: 80, speed: 28, use: 'suburb', terrain: 'mild',  surface: 'asphalt' },
+  scooter:    { label: 'קורקינט חשמלי',                  mass: 15,  cda: 0.62, tire: 'scooter',  wheel: 10,   motor: 'hub',     power: 500,   motors: 1, top: 35,  ctrl: 'sine',   ctrlA: 20,  regen: true,  acc: 4,  V: 48, ah: 15,  cell: '21700-50e',  rider: 80, speed: 25, use: 'city',   terrain: 'flat',  surface: 'asphalt' },
+  scooter_dual:{ label: 'קורקינט כבד דו-מנועי',          mass: 38,  cda: 0.65, tire: 'scooter',  wheel: 11,   motor: 'hub',     power: 1500,  motors: 2, top: 75,  ctrl: 'sine',   ctrlA: 60,  regen: true,  acc: 8,  V: 60, ah: 30,  cell: '21700-50sg', rider: 80, speed: 40, use: 'suburb', terrain: 'flat',  surface: 'asphalt' },
+  mobility:   { label: 'קלנועית',                         mass: 85,  cda: 0.75, tire: 'caster',   wheel: 13,   motor: 'brushed', power: 800,   motors: 1, top: 15,  ctrl: 'square', ctrlA: 60,  regen: false, acc: 5,  V: 24, ah: 50,  cell: 'lead',       rider: 80, speed: 12, use: 'city',   terrain: 'flat',  surface: 'asphalt' },
+  moped:      { label: 'קטנוע חשמלי',                     mass: 75,  cda: 0.65, tire: 'moto',     wheel: 12,   motor: 'hub',     power: 3000,  motors: 1, top: 70,  ctrl: 'sine',   ctrlA: 70,  regen: true,  acc: 25, V: 72, ah: 40,  cell: '21700-50sg', rider: 80, speed: 45, use: 'city',   terrain: 'flat',  surface: 'asphalt' },
+  moto:       { label: 'אופנוע חשמלי (כביש)',             mass: 130, cda: 0.55, tire: 'moto',     wheel: 17,   motor: 'chain',   power: 8000,  motors: 1, top: 110, ctrl: 'foc',    ctrlA: 200, regen: true,  acc: 40, V: 72, ah: 80,  cell: '21700-50pl', rider: 80, speed: 70, use: 'open',   terrain: 'flat',  surface: 'asphalt' },
+  surron:     { label: 'סור-רון / טלריה', mass: 42,  cda: 0.72, tire: 'knobby',   wheel: 19,   motor: 'chain',   power: 4000,  motors: 1, top: 75,  ctrl: 'foc',    ctrlA: 90,  regen: true,  acc: 10, V: 60, ah: 40,  cell: '21700-50pl', rider: 80, speed: 40, use: 'trail',  terrain: 'mild',  surface: 'dirt' },
+  enduro:     { label: 'אופנוע שטח כבד (אנדורו)',         mass: 75,  cda: 0.72, tire: 'knobby',   wheel: 21,   motor: 'chain',   power: 10000, motors: 1, top: 90,  ctrl: 'foc',    ctrlA: 200, regen: true,  acc: 15, V: 72, ah: 60,  cell: '21700-50pl', rider: 80, speed: 45, use: 'trail',  terrain: 'hilly', surface: 'dirt' },
+  atv_kids:   { label: 'טרקטורון ילדים',                  mass: 60,  cda: 0.7,  tire: 'atv',      wheel: 16,   motor: 'brushed', power: 1000,  motors: 1, top: 25,  ctrl: 'square', ctrlA: 35,  regen: false, acc: 5,  V: 48, ah: 20,  cell: 'lead',       rider: 35, speed: 15, use: 'trail',  terrain: 'flat',  surface: 'dirt' },
+  atv:        { label: 'טרקטורון',                        mass: 170, cda: 1.0,  tire: 'atv',      wheel: 23,   motor: 'chain',   power: 5000,  motors: 1, top: 60,  ctrl: 'sine',   ctrlA: 120, regen: true,  acc: 30, V: 72, ah: 50,  cell: '21700-50pl', rider: 90, speed: 30, use: 'trail',  terrain: 'mild',  surface: 'dirt' },
+  utv:        { label: 'באגי / UTV',                      mass: 450, cda: 1.4,  tire: 'atv',      wheel: 25,   motor: 'shaft',   power: 10000, motors: 1, top: 60,  ctrl: 'foc',    ctrlA: 300, regen: true,  acc: 60, V: 72, ah: 100, cell: 'lfp-prism',  rider: 160, speed: 35, use: 'trail', terrain: 'mild',  surface: 'dirt' },
+  golf:       { label: 'רכב גולף / רכב שירות',            mass: 350, cda: 1.6,  tire: 'turf',     wheel: 18,   motor: 'shaft',   power: 4000,  motors: 1, top: 25,  ctrl: 'sine',   ctrlA: 250, regen: true,  acc: 20, V: 48, ah: 105, cell: 'lfp-prism',  rider: 160, speed: 20, use: 'suburb', terrain: 'flat', surface: 'asphalt' },
+  kart:       { label: 'קארטינג',                         mass: 75,  cda: 0.7,  tire: 'kart',     wheel: 11,   motor: 'chain',   power: 5000,  motors: 1, top: 70,  ctrl: 'foc',    ctrlA: 150, regen: false, acc: 0,  V: 72, ah: 30,  cell: '21700-50pl', rider: 75, speed: 45, use: 'track',  terrain: 'flat',  surface: 'asphalt' },
+  trike:      { label: 'תלת-אופן / אופני משא',            mass: 45,  cda: 0.9,  tire: 'city',     wheel: 20,   motor: 'geared',  power: 750,   motors: 1, top: 30,  ctrl: 'sine',   ctrlA: 25,  regen: false, acc: 4,  V: 48, ah: 20,  cell: '21700-50e',  rider: 80, speed: 20, use: 'city',   terrain: 'flat',  surface: 'asphalt', cargo: 60 },
+  wheelchair: { label: 'כיסא גלגלים ממונע',               mass: 90,  cda: 0.6,  tire: 'caster',   wheel: 12,   motor: 'worm',    power: 300,   motors: 2, top: 10,  ctrl: 'square', ctrlA: 70,  regen: false, acc: 5,  V: 24, ah: 50,  cell: 'lead',       rider: 80, speed: 6,  use: 'city',   terrain: 'flat',  surface: 'asphalt' },
+  board:      { label: 'סקייטבורד חשמלי / וואן-וויל',     mass: 7,   cda: 0.6,  tire: 'urethane', wheel: 3.5,  motor: 'hub',     power: 800,   motors: 2, top: 35,  ctrl: 'foc',    ctrlA: 30,  regen: true,  acc: 2,  V: 36, ah: 10,  cell: '18650-25p',  rider: 75, speed: 22, use: 'suburb', terrain: 'flat',  surface: 'asphalt' },
+};
+const RANGE_DEFAULTS = { kv: 0, ratio: 1, S: 0, awd: false, cargo: 0, press: 'normal', posture: 'up', soh: 100, temp: 25, wind: 0, style: 'normal', lvc: null, bmsA: null, climb: null, target: null };
+
+function rangeLerp(tbl, x, col = 1) {
+  if (x <= tbl[0][0]) return tbl[0][col];
+  for (let i = 1; i < tbl.length; i++) {
+    if (x <= tbl[i][0]) {
+      const [x0, x1] = [tbl[i - 1][0], tbl[i][0]];
+      return tbl[i - 1][col] + (tbl[i][col] - tbl[i - 1][col]) * (x - x0) / (x1 - x0);
+    }
+  }
+  // past the last point: carry on along the last slope (a sheet stops at 2C; a pack can go 4C)
+  const n = tbl.length;
+  if (n < 2) return tbl[n - 1][col];
+  const [a, b] = [tbl[n - 2], tbl[n - 1]];
+  return b[col] + (b[col] - a[col]) * (x - b[0]) / (b[0] - a[0]);
+}
+
+// The pack: series from the voltage (or given), parallel from the Ah, resistance, weight.
+function rangePack(p) {
+  const cell = RANGE_CELLS[p.cell] || RANGE_CELLS['21700-50e'];
+  const chem = RANGE_CHEM[cell.chem];
+  const S = Math.max(1, Math.round(p.S || chem.series(p.V)));
+  let P, cellAh, rCell, gCell;
+  if (cell.ahFree) {
+    P = 1; cellAh = Math.max(1, p.ah); rCell = cell.rdcAh / cellAh; gCell = cell.gPerAh * cellAh;
+  } else {
+    P = Math.max(1, Math.round(p.ah / cell.ah)); cellAh = cell.ah; rCell = cell.rdc; gCell = cell.g;
+  }
+  const n = S * P;
+  const kg = n * gCell / 1000 * (cell.ahFree ? 1.08 : 1.18);   // case, nickel, BMS, wires
+  const R = S * (rCell / P + RANGE_PHYS.rLinkPerP / P) + RANGE_PHYS.rExtra;
+  const vnom = S * chem.vnom;
+  return { cell, chem, S, P, n, ah: P * cellAh, cellAh, rCell, R, kg, vnom, wh: vnom * P * cellAh };
+}
+
+// The drivetrain, seen from the wheel: a DC machine with a speed constant Ke (V·s/rad at the wheel,
+// the gearing included), a winding resistance R and a no-load current I0, per motor.
+//  - Ke: from the motor's KV and reduction when given, else the slowest winding that still reaches
+//    the stated top speed on the flat with an 80kg rider — the top speed means what the vehicle does,
+//    not what the motor does unloaded. So a heavier rider is a little slower, as on the road.
+//  - R: from the copper loss at the rated point (80% of no-load speed, rated power), which is what is
+//    left of the type's losses after the no-load loss. R therefore scales with Ke²: a faster winding
+//    has thinner, fewer turns, the same motor quality.
+//  - I0: the no-load loss is k0 × rated power at no-load speed, and a small motor spends a bigger
+//    share of its power just spinning (a 250W hub ~7%, a 1kW one ~4%).
+function rangeDrive(p, pack, refF) {
+  const M = RANGE_MOTORS[p.motor] || RANGE_MOTORS.hub, C = RANGE_CTRL[p.ctrl] || RANGE_CTRL.sine;
+  const n = Math.max(1, Math.round(p.motors || 1));
+  const r = Math.max(0.02, p.wheel * 0.0254 / 2);
+  const V = pack.vnom, Vlim = V * 0.97 * RANGE_PHYS.modulation;
+  const power = Math.max(50, p.power);
+  // a 250W motor peaks ~5 points under a 1kW one of its kind, an 8kW one ~1.5 over
+  const eta = Math.min(M.eta + 0.015, Math.max(M.eta - 0.08, M.eta + 0.025 * Math.log2(power / 1000)));
+  const k0 = Math.min(0.15, M.k0 * Math.pow(1000 / power, 0.6));
+  const I0 = k0 * power / Vlim;
+  const consts = (Ke) => {
+    const wr = 0.8 * Vlim / Ke;
+    const Ir = power / wr / Ke;
+    const loss = power * (1 / (eta - 0.02) - 1);
+    const cu = Math.max(0.3 * loss, loss - 0.8 * k0 * power);
+    return cu / (Ir * Ir);
+  };
+  let Ke;
+  if (p.kv > 0) Ke = 60 / (2 * Math.PI * p.kv) * Math.max(0.1, p.ratio || 1);
+  else {
+    const vt = Math.max(1, p.top) / 3.6, wt = vt / r, F = refF(vt) / M.gear / n;
+    let lo = 0.05 * Vlim / wt, hi = Vlim / wt;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      const Vm = mid * wt + (F * r / mid + I0) * consts(mid) * C.motorLoss;
+      if (Vm <= Vlim) lo = mid; else hi = mid;
+    }
+    Ke = lo;
+  }
+  return { M, C, n, r, V, Vlim, Ke, I0, R: consts(Ke), eta, k0, vNoLoad: Vlim / Ke * r * 3.6,
+    Iph: C.phase * p.ctrlA / n, Ibat: p.ctrlA, regen: M.regen && p.regen, gear: M.gear };
+}
+
+// Battery power (W) to push F newtons at v m/s with all motors. ratio > 1: a lower gear (mid-drive).
+function rangeMotor(d, F, v, Vbus, ratio = 1) {
+  const Ke = d.Ke * ratio;
+  const Fm = F / d.gear / d.n;
+  const w = v / d.r;
+  const Iload = Fm * d.r / Ke;
+  const I = Iload + d.I0;
+  const emf = Ke * w;
+  const Rl = d.R * d.C.motorLoss;
+  const Vm = emf + I * Rl;
+  const pMech = Fm * v * d.n;                         // out of the motors, into the gear
+  const pFe = emf * d.I0 * d.n;
+  const pCu = I * I * Rl * d.n;
+  const pIn = pMech + pFe + pCu;
+  const pBat = pIn / d.C.eta;
+  const why = Vm > Vbus * RANGE_PHYS.modulation ? 'volt' : I > d.Iph ? 'phase' : pBat / Vbus > d.Ibat ? 'bat' : '';
+  return { pBat, I, Vm, pMech, pFe, pCu, pGear: F * v * (1 / d.gear - 1), pCtrl: pBat - pIn, ok: !why, why };
+}
+
+// One stretch of road at grade s (fraction) and speed v: power at the battery and where it goes.
+function rangeStretch(ctx, v, s) {
+  const { m, crr, cda, rho, wind, d, Vbus } = ctx;
+  const g = RANGE_PHYS.g, cos = 1 / Math.sqrt(1 + s * s), sin = s * cos;
+  const fRoll = crr * (1 + 0.5 * Math.pow(v * 3.6 / 100, 2)) * m * g * cos, fAir = 0.5 * rho * cda * (v * v + wind * wind), fG = m * g * sin;
+  const F = fRoll + fAir + fG;
+  if (F > 0) {
+    const ratio = d.M.shift && s > 0.02 ? d.M.shift : 1;
+    const e = rangeMotor(d, F, v, Vbus, ratio);
+    return { v, F, fRoll, fAir, fG, pBat: e.pBat + ctx.acc, e, ok: e.ok, why: e.why, regen: 0 };
+  }
+  // pushing nothing: coasting, or braking down a descent
+  const spare = -F * v;                               // W the descent would add, braked away or recovered
+  const drag = d.M.freewheel ? 0 : d.Ke * (v / d.r) * d.I0 * d.n;
+  const regen = d.regen ? Math.min(Math.max(0, spare - drag) * RANGE_PHYS.regenEff, 0.35 * d.Ibat * Vbus) : 0;
+  return { v, F, fRoll, fAir, fG, pBat: ctx.acc - regen, e: null, ok: true, why: '', regen };
+}
+
+// The fastest speed (≤ v) the drivetrain holds on grade s; 0 if it cannot move at all.
+function rangeHold(ctx, v, s) {
+  if (rangeStretch(ctx, v, s).ok) return v;
+  let lo = 0, hi = v;
+  if (!rangeStretch(ctx, 0.5, s).ok) return 0;
+  lo = 0.5;
+  for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (rangeStretch(ctx, mid, s).ok) lo = mid; else hi = mid; }
+  return lo;
+}
+
+// The extra energy of one launch from 0 to v on the flat (J), its peak battery power, and the
+// rate the controller actually allows.
+function rangeLaunch(ctx, v, acc) {
+  const N = 16, mEff = ctx.m * (1 + RANGE_PHYS.rotMass);
+  let extra = 0, peak = 0, slow = false;
+  for (let i = 0; i < N; i++) {
+    const u = v * (i + 0.5) / N, du = v / N;
+    const base = rangeStretch(ctx, u, 0);
+    let a = acc, st;
+    for (let k = 0; k < 20; k++) {
+      const ratio = ctx.d.M.shift ? ctx.d.M.shift : 1;   // a gearbox launches in a low gear
+      const e = rangeMotor(ctx.d, base.F + mEff * a, u, ctx.Vbus, ratio);
+      st = e;
+      if (e.ok || a < 0.05) break;
+      a *= 0.8; slow = true;
+    }
+    const dt = du / a;
+    const p = st.pBat + ctx.acc;
+    extra += (p - base.pBat) * dt;
+    peak = Math.max(peak, p);
+  }
+  return { extra, peak, slow };
+}
+
+// Discharge the pack at a steady average power, cut off when the climb's power sags it below the
+// cut-off or the chemistry's usable depth runs out. Returns Wh delivered and how it ended.
+function rangeDischarge(pack, p, pAvg, pHill) {
+  const chem = pack.chem, cell = pack.cell;
+  const tCap = rangeLerp(chem.temp, p.temp, 1), tR = rangeLerp(chem.temp, p.temp, 2);
+  const soh = Math.min(1, Math.max(0.3, p.soh / 100));
+  const R = pack.R * tR * (1 + 2 * (1 - soh));
+  const lvc = (p.lvc || chem.lvc) * pack.S;
+  const socMin = 1 - (p.dod || chem.dod);
+  // capacity at this rate: the sheet's curve, or Peukert for lead (against its 20-hour rate)
+  const iAvg0 = pAvg / pack.vnom;
+  const cRate = iAvg0 / pack.P / pack.cellAh;
+  const rateK = cell.peukert ? Math.min(1.05, Math.pow((pack.ah / 20) / Math.max(iAvg0, 0.01), cell.peukert - 1))
+    : Math.min(1, Math.max(0.6, rangeLerp(cell.rate, cRate)));
+  const ahEff = pack.ah * soh * tCap * rateK;
+  const steps = 400;
+  const dQ = ahEff / steps;
+  let wh = 0, heat = 0, soc = 1, end = 'empty', sagHill = null, vAt20 = null;
+  const solveI = (ocv, P) => { const disc = ocv * ocv - 4 * R * P; return disc < 0 ? null : (ocv - Math.sqrt(disc)) / (2 * R); };
+  for (let k = 0; k < steps; k++) {
+    soc = 1 - (k + 0.5) / steps;
+    if (soc < socMin) { end = 'dod'; break; }
+    const ocv = rangeLerp(chem.ocv, soc) * pack.S;
+    const iA = solveI(ocv, pAvg);
+    const iH = solveI(ocv, pHill);
+    if (iA === null || iH === null) { end = 'weak'; break; }
+    const vH = ocv - iH * R;
+    if (vH < lvc) { end = soc > 0.08 ? 'sag' : 'empty'; break; }
+    if (soc <= 0.2 && vAt20 === null) { vAt20 = vH; sagHill = iH * R; }
+    const dt = dQ / iA;                                 // hours
+    wh += pAvg * dt;
+    heat += iA * iA * R * dt;
+  }
+  return { wh, heat, socEnd: Math.max(0, soc), end, R, ahEff, rateK, tCap, cRate, vAt20, sagHill };
+}
+
+// The whole model for one set of inputs.
+function rangeModel(inp) {
+  const p = { ...RANGE_DEFAULTS, ...inp };
+  const pack = rangePack(p);
+  const tire = RANGE_TIRES[p.tire] || RANGE_TIRES.city, surf = RANGE_SURFACES[p.surface] || RANGE_SURFACES.asphalt;
+  const terr = RANGE_TERRAIN[p.terrain] || RANGE_TERRAIN.flat;
+  const g = RANGE_PHYS.g;
+  const m = p.mass + pack.kg + p.rider + (p.cargo || 0);
+  const sizeK = Math.min(1.8, Math.max(0.6, Math.sqrt(tire.d / Math.max(1, p.wheel))));
+  const crr = tire.crr * sizeK * (1 + (surf.k - 1) * tire.soft) * (RANGE_PRESSURE[p.press] || RANGE_PRESSURE.normal).k * (p.crrK || 1);
+  const cda = p.cda * (RANGE_POSTURE[p.posture] || RANGE_POSTURE.up).k * (p.cdaK || 1);
+  const rho = RANGE_PHYS.rho0 * 288.15 / (273.15 + p.temp);
+  const wind = (p.wind || 0) / 3.6;
+  const Vbus = pack.vnom * 0.97;
+  const rollK = (v) => 1 + 0.5 * Math.pow(v * 3.6 / 100, 2);
+  const mRef = p.mass + pack.kg + 80 + (p.cargo || 0);
+  const d = rangeDrive(p, pack, (v) => crr * rollK(v) * mRef * RANGE_PHYS.g + 0.5 * rho * cda * v * v);
+  const ctx = { m, crr, cda, rho, wind, d, Vbus, acc: p.acc || 0 };
+  const grade = terr.grade / 100;
+  const climb = p.climb != null ? p.climb : terr.share * terr.grade * 10;    // m per km
+  const share = Math.min(0.5, grade > 0 ? climb / (grade * 1000) : 0);
+  const top = p.kv > 0 ? rangeHold(ctx, d.vNoLoad / 3.6, 0) * 3.6 : p.top;
+  const vWant = Math.min(p.speed, top) / 3.6;
+  const vTop = top / 3.6;
+  const notes = [];
+  // the three stretches of a kilometre
+  const vFlat = rangeHold(ctx, vWant, 0);
+  const vUp = share > 0 ? rangeHold(ctx, vWant, grade) : vFlat;
+  const vDown = Math.min(vWant, vTop);
+  const parts = [
+    { key: 'flat', len: 1000 * (1 - 2 * share), st: rangeStretch(ctx, Math.max(vFlat, 0.5), 0) },
+    { key: 'up', len: 1000 * share, st: vUp > 0 ? rangeStretch(ctx, vUp, grade) : null },
+    { key: 'down', len: 1000 * share, st: rangeStretch(ctx, vDown, -grade) },
+  ].filter((x) => x.len > 0);
+  const stall = share > 0 && vUp === 0;
+  const B = { roll: 0, air: 0, climb: 0, back: 0, launch: 0, regen: 0, motor: 0, gear: 0, ctrl: 0, acc: 0 };
+  let J = 0, T = 0, pHill = 0;
+  for (const x of parts) {
+    if (!x.st) continue;
+    const st = x.st, t = x.len / st.v;
+    J += st.pBat * t; T += t;
+    B.roll += st.fRoll * x.len; B.air += st.fAir * x.len; B.acc += ctx.acc * t;
+    if (st.fG > 0) B.climb += st.fG * x.len;
+    if (st.e) {
+      if (st.fG < 0) B.back += -st.fG * x.len;           // the descent paid all of it
+      B.motor += (st.e.pFe + st.e.pCu) * t; B.gear += st.e.pGear * t; B.ctrl += st.e.pCtrl * t;
+      pHill = Math.max(pHill, st.pBat);
+    } else {
+      B.back += (st.fRoll + st.fAir) * x.len;             // the descent paid the rolling and the air
+      B.regen += st.regen * t;
+    }
+  }
+  // the stops
+  const style = RANGE_STYLE[p.style] || RANGE_STYLE.normal;
+  const stops = (RANGE_USE[p.use] || RANGE_USE.suburb).stops * (p.stopsK || 1);
+  const ke = 0.5 * m * (1 + RANGE_PHYS.rotMass) * vFlat * vFlat;
+  const L = rangeLaunch(ctx, vFlat, style.acc);
+  const coast = ke * RANGE_PHYS.coastStops;
+  const regenStop = d.regen ? ke * (1 - RANGE_PHYS.coastStops) * RANGE_PHYS.regenShare * RANGE_PHYS.regenEff : 0;
+  J += stops * (L.extra - coast - regenStop);
+  B.launch += stops * (L.extra - coast);
+  B.regen += stops * regenStop;
+  const whKm = J / 3600;
+  const pAvg = J / T;                                    // average battery power while riding
+  const dis = rangeDischarge(pack, p, Math.max(1, pAvg), Math.max(pAvg, pHill || pAvg));
+  const km = whKm > 0 ? dis.wh / whKm : 0;
+  // the electrical picture
+  const cur = (P) => P / Vbus;
+  const iCruise = cur(parts[0].st.pBat), iHill = cur(pHill || parts[0].st.pBat), iPeak = cur(L.peak);
+  const perCell = (I) => I / pack.P;
+  const cellCont = (pack.cell.cont || 1) * pack.cellAh, cellPeak = (pack.cell.peak || pack.cell.cont || 1) * pack.cellAh;
+  if (vWant * 3.6 < p.speed - 0.5) notes.push({ lvl: 'warn', t: `המהירות שביקשת (${p.speed} קמ"ש) מעל המהירות המקסימלית של הכלי (${Math.round(top)}). חושב לפי ${Math.round(top)}.` });
+  if (vFlat < vWant - 0.3) notes.push({ lvl: 'warn', t: `במישור הכלי מגיע רק ל-${Math.round(vFlat * 3.6)} קמ"ש בעומס הזה (מוגבל ב${({ volt: 'מתח', phase: 'זרם פאזה', bat: 'זרם בקר' })[parts[0].st.why] || 'בקר'}).` });
+  if (stall) notes.push({ lvl: 'bad', t: `הכלי לא מטפס בשיפוע ${terr.grade}% במשקל הזה — הבקר או המנוע חלשים מדי. החישוב לא תקף לשטח הזה.` });
+  else if (share > 0 && vUp < vWant - 0.5) notes.push({ lvl: 'info', t: `בעליות של ${terr.grade}% המהירות יורדת ל-${Math.round(vUp * 3.6)} קמ"ש (הבקר מגביל).` });
+  if (perCell(iHill) > cellCont * 1.02) notes.push({ lvl: 'bad', t: `זרם רציף לתא בעלייה ${perCell(iHill).toFixed(1)}A — מעל ${cellCont.toFixed(0)}A שהתא מדורג לו. התאים יתחממו ויתבלו מהר; צריך יותר תאים במקביל או תא חזק יותר.` });
+  else if (perCell(iCruise) > cellCont * 0.8) notes.push({ lvl: 'warn', t: `התאים עובדים קרוב לגבול: ${perCell(iCruise).toFixed(1)}A לתא בשיוט מתוך ${cellCont.toFixed(0)}A.` });
+  if (perCell(iPeak) > cellPeak * 1.02) notes.push({ lvl: 'warn', t: `בזינוק: ${perCell(iPeak).toFixed(0)}A לתא, מעל השיא של ${cellPeak.toFixed(0)}A. כדאי להגביל את זרם הבקר או להוסיף תאים במקביל.` });
+  const bmsA = p.bmsA || null;
+  if (bmsA && iPeak > bmsA * 1.02) notes.push({ lvl: 'warn', t: `הבקר מושך בזינוק ${Math.round(iPeak)}A וה-BMS מוגדר ל-${bmsA}A — ה-BMS עלול לנתק.` });
+  if (dis.end === 'sag') notes.push({ lvl: 'warn', t: `הנסיעה תיגמר כשבסוללה עוד ${Math.round(dis.socEnd * 100)}%: בעלייה המתח צונח מתחת לניתוק של הבקר. סוללה עם התנגדות נמוכה יותר (יותר במקביל / תא חזק) תיתן את ההפרש.` });
+  if (dis.end === 'weak') notes.push({ lvl: 'bad', t: 'הסוללה לא מסוגלת לתת את ההספק הזה בכלל — היא קטנה או חלשה מדי לבקר.' });
+  const motorHeatUp = parts.find((x) => x.key === 'up' && x.st && x.st.e);
+  if (motorHeatUp && (d.M === RANGE_MOTORS.hub || d.M === RANGE_MOTORS.geared)) {
+    const loss = motorHeatUp.st.e.pCu + motorHeatUp.st.e.pFe;
+    if (loss > 0.3 * p.power * d.n) notes.push({ lvl: 'warn', t: `בעלייה המנוע מפזר ${Math.round(loss)}W חום — מנוע גלגל יתחמם בעלייה ארוכה.` });
+  }
+  if (pack.chem === RANGE_CHEM.lead) notes.push({ lvl: 'info', t: 'עופרת: חושב עד 80% עומק פריקה ועם תיקון פויקרט (Peukert) לזרם. בליתיום באותו משקל הטווח גדול פי 2-3.' });
+  if (p.temp < 10) notes.push({ lvl: 'info', t: `בקור של ${p.temp}°C הסוללה נותנת ${Math.round(dis.tCap * 100)}% מהקיבולת וההתנגדות שלה עולה.` });
+  return {
+    p, pack, d, m, crr, cda, rho, top, climb, share, stops, whKm, km, T, pAvg, pHill, iCruise, iHill, iPeak,
+    vFlat: vFlat * 3.6, vUp: vUp * 3.6, stall, dis, B, parts, L, notes, perCell: { cruise: perCell(iCruise), hill: perCell(iHill), launch: perCell(iPeak), cont: cellCont, max: cellPeak },
+  };
+}
+
+// The steepest grade the vehicle still climbs at walking-plus speed (10 km/h, or a third of its top).
+// The grip limit: tan θ ≤ μ × the share of the weight on the driven wheels (~0.6 on a two-wheeler
+// or a rear-drive; all of it on all-wheel drive).
+function rangeMaxGrade(inp) {
+  const r = rangeModel({ ...inp, terrain: 'flat' });
+  const ctx = { m: r.m, crr: r.crr, cda: r.cda, rho: r.rho, wind: 0, d: r.d, Vbus: r.pack.vnom * 0.97, acc: 0 };
+  const v = Math.min(10, r.top / 3) / 3.6;
+  let lo = 0, hi = 1.5;
+  if (!rangeStretch(ctx, v, 0).ok) return { motor: 0, grip: 0, pct: 0, by: 'motor' };
+  for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (rangeStretch(ctx, v, mid).ok) lo = mid; else hi = mid; }
+  const mu = (RANGE_SURFACES[r.p.surface] || RANGE_SURFACES.asphalt).mu;
+  const grip = mu * (r.p.awd || (r.d.n > 1 && r.p.motors > 1) ? 1 : 0.6);
+  return { motor: lo * 100, grip: grip * 100, pct: Math.min(lo, grip) * 100, by: grip < lo ? 'grip' : 'motor' };
+}
+
+// Range at a list of speeds, the rest held.
+function rangeSpeeds(inp) {
+  const top = rangeModel(inp).top;
+  const step = top > 60 ? 10 : 5;
+  const out = [];
+  for (let s = Math.max(step, Math.round(top * 0.25 / step) * step); s <= top + 0.1 && out.length < 9; s += step) {
+    const r = rangeModel({ ...inp, speed: s });
+    out.push({ speed: s, km: r.km, whKm: r.whKm, h: r.km / Math.max(1, r.vFlat) });
+  }
+  if (!out.length || out[out.length - 1].speed < top - 1) {
+    const r = rangeModel({ ...inp, speed: top });
+    out.push({ speed: Math.round(top), km: r.km, whKm: r.whKm, h: r.km / Math.max(1, r.vFlat) });
+  }
+  return out;
+}
+
+// The band: what a customer never says, moved both ways.
+function rangeBand(inp) {
+  const mid = rangeModel(inp);
+  const lo = rangeModel({ ...inp, crrK: 1.08, cdaK: 1.05, speed: Math.min(mid.top, inp.speed * 1.05), stopsK: 1.2 });
+  const hi = rangeModel({ ...inp, crrK: 0.95, cdaK: 0.97, speed: inp.speed * 0.97, stopsK: 0.85 });
+  return { mid, lo: Math.min(lo.km, mid.km), hi: Math.max(hi.km, mid.km) };
+}
+
+// Ah needed for a target range, the pack's own weight included.
+function rangeAhFor(inp, km) {
+  const cell = RANGE_CELLS[inp.cell];
+  const step = cell && !cell.ahFree ? cell.ah : 5;
+  for (let ah = step; ah <= 400; ah += step) {
+    const r = rangeModel({ ...inp, ah });
+    if (r.km >= km) return { ah, r };
+  }
+  return null;
+}
+
+// ---- the range page: a form of folded sections, filled from the vehicle's class ----
+// Picking a vehicle fills every field from its class; each one can then be changed. The page keeps
+// what he typed while he moves between tabs (rangeState lives as long as the hub is open).
+let rangeState = null;
+function rangePreset(key, keep) {
+  const v = RANGE_VEHICLES[key] || RANGE_VEHICLES.ebike;
+  const base = { ...RANGE_DEFAULTS, cargo: 0, ...v, veh: key, climb: null, kv: 0, ratio: 1, S: 0, posture: 'up', press: 'normal' };
+  // what describes the ride, not the vehicle, stays as he set it
+  if (keep) for (const k of ['temp', 'wind', 'soh', 'target', 'style']) base[k] = keep[k];
+  return base;
+}
+const rgEsc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function rgSel(k, label, map, hint) {
+  const cur = String(rangeState[k]);
+  const opts = Object.entries(map).map(([key, o]) => `<option value="${key}"${key === cur ? ' selected' : ''}>${rgEsc(typeof o === 'string' ? o : o.label)}</option>`).join('');
+  return `<div class="form-row"><label for="rg_${k}">${label}${hint ? `<div class="rg-hint">${hint}</div>` : ''}</label><select class="form-select" id="rg_${k}" data-rk="${k}" onchange="rangeInput(this)">${opts}</select></div>`;
+}
+function rgNum(k, label, { step = 1, min = 0, max = 100000, hint = '', ph = '' } = {}) {
+  const v = rangeState[k];
+  return `<div class="form-row"><label for="rg_${k}">${label}${hint ? `<div class="rg-hint">${hint}</div>` : ''}</label><input type="number" inputmode="decimal" class="form-input" id="rg_${k}" data-rk="${k}" value="${v == null || v === 0 && ph ? '' : v}" step="${step}" min="${min}" max="${max}"${ph ? ` placeholder="${ph}"` : ''} oninput="rangeInput(this)"></div>`;
+}
+function rangeVehicleOptions() {
+  const o = {}; for (const [k, v] of Object.entries(RANGE_VEHICLES)) o[k] = v.label; return o;
+}
+function rangeCellOptions() {
+  const o = {}; for (const [k, v] of Object.entries(RANGE_CELLS)) o[k] = v.label; return o;
+}
+function rangeFormHtml() {
+  const s = rangeState;
+  const basics = rgSel('veh', 'סוג כלי', rangeVehicleOptions())
+    + rgNum('rider', 'משקל רוכב (ק"ג)', { min: 10, max: 300 })
+    + rgNum('speed', 'מהירות נסיעה (קמ"ש)', { min: 3, max: 200, hint: 'המהירות שנוסעים בה רוב הזמן' })
+    + rgNum('V', 'מתח סוללה (V)', { min: 6, max: 200 })
+    + rgNum('ah', 'קיבולת (Ah)', { step: 0.5, min: 1, max: 1000 })
+    + rgSel('cell', 'סוג תא / סוללה', rangeCellOptions())
+    + rgSel('terrain', 'שטח', RANGE_TERRAIN)
+    + rgSel('surface', 'משטח', RANGE_SURFACES);
+  const vehicle = rgNum('mass', 'משקל הכלי בלי סוללה (ק"ג)', { min: 1, max: 3000 })
+    + rgNum('cargo', 'נוסע / מטען (ק"ג)', { min: 0, max: 1000 })
+    + rgNum('wheel', 'קוטר גלגל (אינץ\')', { step: 0.5, min: 2, max: 40, hint: 'הקוטר החיצוני של הצמיג' })
+    + rgSel('tire', 'צמיג', RANGE_TIRES)
+    + rgSel('press', 'לחץ אוויר', RANGE_PRESSURE)
+    + rgSel('posture', 'תנוחת רכיבה', RANGE_POSTURE)
+    + rgNum('cda', 'מקדם אוויר CdA (m²)', { step: 0.05, min: 0.1, max: 5, hint: 'שטח חזית × מקדם גרר, כולל הרוכב' })
+    + `<div class="form-row"><label for="rg_awd">הנעה בכל הגלגלים</label><select class="form-select" id="rg_awd" data-rk="awd" onchange="rangeInput(this)"><option value="0"${s.awd ? '' : ' selected'}>לא</option><option value="1"${s.awd ? ' selected' : ''}>כן</option></select></div>`;
+  const motor = rgSel('motor', 'סוג מנוע', RANGE_MOTORS)
+    + rgNum('power', 'הספק נומינלי למנוע (W)', { step: 50, min: 50, max: 200000, hint: 'הרציף, לא השיא' })
+    + rgNum('motors', 'מספר מנועים', { min: 1, max: 4 })
+    + rgNum('top', 'מהירות מקסימלית (קמ"ש)', { min: 3, max: 250, hint: 'מה שהכלי עושה במישור עם רוכב' })
+    + rgNum('kv', 'KV של המנוע (סל"ד לוולט)', { step: 0.5, min: 0, max: 5000, ph: 'לא ידוע', hint: 'אם ידוע: המהירות תחושב ממנו, מהגלגל ומההעברה' })
+    + rgNum('ratio', 'יחס העברה (מנוע : גלגל)', { step: 0.1, min: 0.1, max: 50, hint: 'מנוע גלגל = 1; שרשרת 14:52 = 3.7' })
+    + rgSel('ctrl', 'סוג בקר', RANGE_CTRL)
+    + rgNum('ctrlA', 'זרם בקר מקסימלי (A)', { min: 1, max: 2000, hint: 'זרם הסוללה, מכל המנועים יחד' })
+    + `<div class="form-row"><label for="rg_regen">בלימה רגנרטיבית</label><select class="form-select" id="rg_regen" data-rk="regen" onchange="rangeInput(this)"><option value="0"${s.regen ? '' : ' selected'}>אין</option><option value="1"${s.regen ? ' selected' : ''}>יש</option></select></div>`
+    + rgNum('acc', 'תאורה, צג ואביזרים (W)', { min: 0, max: 2000 });
+  const battery = rgNum('soh', 'בריאות הסוללה (%)', { min: 30, max: 100, hint: 'חדשה = 100' })
+    + rgNum('S', 'תאים בטור (S)', { min: 0, max: 60, ph: 'לפי המתח', hint: 'רק אם שונה מהרגיל למתח הזה' })
+    + rgNum('lvc', 'ניתוק בקר לתא (V)', { step: 0.05, min: 0, max: 4.2, ph: 'לפי הכימיה' })
+    + rgNum('bmsA', 'זרם BMS מקסימלי (A)', { min: 0, max: 2000, ph: 'לא ידוע' });
+  const ride = rgSel('use', 'אופי הנסיעה', RANGE_USE)
+    + rgSel('style', 'סגנון רכיבה', RANGE_STYLE)
+    + rgNum('climb', 'טיפוס (מטר לכל ק"מ)', { step: 1, min: 0, max: 300, ph: 'לפי השטח', hint: 'סך העליות במסלול ÷ אורכו' })
+    + rgNum('temp', 'טמפרטורה (°C)', { min: -30, max: 50 })
+    + rgNum('wind', 'רוח ממוצעת (קמ"ש)', { min: 0, max: 80, hint: 'הלוך ושוב: חצי נגד וחצי עם' });
+  return fold('rg-basic', '🛵 הכלי והסוללה', basics, { open: true })
+    + fold('rg-vehicle', '🛞 גלגלים, משקל ואוויר', vehicle, { sum: ' ' })
+    + fold('rg-motor', '⚙️ מנוע ובקר', motor, { sum: ' ' })
+    + fold('rg-battery', '🔋 סוללה — מתקדם', battery, { sum: ' ' })
+    + fold('rg-ride', '🗺️ תנאי נסיעה', ride, { sum: ' ' })
+    + fold('rg-target', '🎯 כמה סוללה צריך ללקוח', rgNum('target', 'כמה ק"מ הלקוח צריך?', { min: 0, max: 2000, ph: 'ק"מ', hint: 'התשובה מופיעה למטה, עם משקל הסוללה הגדולה' }), { open: !!rangeState.target });
+}
+function rangeSums(r) {
+  const s = rangeState;
+  const put = (id, t) => { const el = document.querySelector('[data-fold="' + id + '"] .fold-sum'); if (el) el.textContent = t; };
+  put('rg-vehicle', `${s.wheel}" · ${(RANGE_TIRES[s.tire] || {}).label || ''} · ${Math.round(r.m)} ק"ג בנסיעה`);
+  put('rg-motor', `${s.motors > 1 ? s.motors + '×' : ''}${s.power}W · ${Math.round(r.top)} קמ"ש · ${s.ctrlA}A`);
+  put('rg-battery', `${r.pack.S}S${r.pack.P}P · ${s.soh}%`);
+  put('rg-ride', `${(RANGE_USE[s.use] || {}).label || ''} · ${s.temp}°C`);
+}
+function rangeInput(el) {
+  const k = el.getAttribute('data-rk');
+  let v = el.value;
+  if (k === 'veh') { rangeState = rangePreset(v, rangeState); document.getElementById('rangeForm').innerHTML = rangeFormHtml(); calcRange(); return; }
+  if (k === 'regen' || k === 'awd') v = v === '1';
+  else if (el.tagName === 'INPUT') {
+    const n = parseFloat(v);
+    // the optional fields: empty means "work it out"
+    if (['climb', 'lvc', 'bmsA', 'target', 'S', 'kv'].includes(k)) v = Number.isFinite(n) && n > 0 ? n : (k === 'climb' && n === 0 ? 0 : null);
+    else v = Number.isFinite(n) ? n : rangeState[k];
+  }
+  rangeState[k] = v;
+  calcRange();
+}
+// the inputs, cleaned: a field left empty or out of reason is never a NaN downstream
+function rangeInputs() {
+  const s = rangeState, c = (x, lo, hi, d) => (Number.isFinite(+x) ? Math.min(hi, Math.max(lo, +x)) : d);
+  return { ...s, rider: c(s.rider, 0, 400, 80), cargo: c(s.cargo, 0, 2000, 0), speed: c(s.speed, 2, 250, 25), V: c(s.V, 3, 300, 48),
+    ah: c(s.ah, 0.5, 2000, 20), mass: c(s.mass, 1, 5000, 20), wheel: c(s.wheel, 2, 40, 20), cda: c(s.cda, 0.05, 6, 0.6),
+    power: c(s.power, 50, 300000, 500), motors: Math.round(c(s.motors, 1, 4, 1)), top: c(s.top, 3, 300, 30), ctrlA: c(s.ctrlA, 1, 3000, 30),
+    acc: c(s.acc, 0, 5000, 0), soh: c(s.soh, 30, 100, 100), temp: c(s.temp, -30, 55, 25), wind: c(s.wind, 0, 100, 0),
+    kv: s.kv > 0 ? s.kv : 0, ratio: c(s.ratio, 0.1, 50, 1), S: s.S > 0 ? Math.round(s.S) : 0, lvc: s.lvc > 0 ? s.lvc : null,
+    bmsA: s.bmsA > 0 ? s.bmsA : null, climb: s.climb == null ? null : c(s.climb, 0, 400, 0) };
+}
+const rgN = (x, d = 0) => (Number.isFinite(x) ? x.toLocaleString('he-IL', { maximumFractionDigits: d, minimumFractionDigits: d }) : '—');
+const RANGE_PARTS = [
+  ['roll', 'גלגול — צמיגים ומשטח', 1], ['air', 'אוויר', 1], ['climb', 'עליות', 1], ['back', 'מה שהירידות החזירו', -1],
+  ['launch', 'זינוקים מעצירה', 1], ['regen', 'בלימה רגנרטיבית החזירה', -1], ['motor', 'חום במנוע', 1], ['gear', 'תמסורת (גיר / שרשרת)', 1],
+  ['ctrl', 'בקר', 1], ['acc', 'תאורה, צג ואביזרים', 1],
+];
+const RANGE_END = {
+  empty: 'הסוללה מתרוקנת עד הסוף', dod: 'נעצר בעומק הפריקה המומלץ לכימיה הזו',
+  sag: 'בעלייה המתח צונח מתחת לניתוק לפני שהסוללה ריקה', weak: 'הסוללה לא מסוגלת לתת את ההספק',
+};
+let rangeLast = null;
 function calcRange() {
-  const el = document.getElementById('rangeResult');
-  if (!el) return;
-  const v = parseFloat(document.getElementById('rangeV').value) || 60;
-  const ah = parseFloat(document.getElementById('rangeAh').value) || 21;
-  // Clamped: an empty or silly weight used to feed straight into the multiplier — 0 kg
-  // gave ×0.63 and inflated the range by 60%, and a negative number went further still.
-  const weight = Math.min(200, Math.max(40, parseFloat(document.getElementById('rangeWeight').value) || 75));
-  const veh = document.getElementById('rangeVehicle').value;
-  const style = document.getElementById('rangeStyle').value;
-  const energy = v * ah;
-
-  // `?? ` fallbacks: an option added to either <select> without a matching key here used
-  // to make whPerKm undefined, and the result rendered as "NaN ק"מ".
-  const whPerKm = ({ bike: 12, ebike_fast: 18, scooter: 15, scooter_fast: 22, motor: 35 })[veh] ?? 15;
-  const styleMult = ({ eco: 0.8, normal: 1.0, sport: 1.3 })[style] ?? 1.0;
-  const weightMult = 1 + ((weight - 75) / 200);
-  const usableEnergy = energy * 0.85;           // ~85% depth of discharge
-  const range = usableEnergy / (whPerKm * styleMult * weightMult);
-
-  // A band, not a single number. Terrain, tyre pressure, wind and cold move real range by
-  // well over 10%, and "47 ק"מ" printed to a customer reads as a promise the lab then owns.
-  const lo = Math.round(range * 0.85), hi = Math.round(range * 1.1);
-  el.textContent = `${lo}-${hi} ק"מ`;
-  document.getElementById('rangeDetails').textContent =
-    `${Math.round(energy)} Wh · ${Math.round(usableEnergy)} Wh שמישים · ${(whPerKm * styleMult * weightMult).toFixed(1)} Wh/ק"מ · רוכב ${weight} ק"ג`;
+  const box = document.getElementById('rangeApp');
+  if (!box) return;
+  if (!rangeState) rangeState = rangePreset('ebike');
+  if (!document.getElementById('rangeForm')) box.innerHTML = '<div id="rangeForm"></div><div id="rangeOut"></div>';
+  const form = document.getElementById('rangeForm');
+  if (!form.firstChild) form.innerHTML = rangeFormHtml();
+  const inp = rangeInputs();
+  const band = rangeBand(inp), r = band.mid;
+  rangeLast = { inp, band };
+  rangeSums(r);
+  const lo = Math.floor(band.lo), hi = Math.ceil(band.hi);
+  const hours = r.km / Math.max(1, r.vFlat);
+  const hm = `${Math.floor(hours)}:${String(Math.round((hours % 1) * 60)).padStart(2, '0')}`;
+  const lvl = { bad: 'alert-danger', warn: 'alert-warning', info: 'alert-info' };
+  const notes = r.notes.map((n) => `<div class="alert ${lvl[n.lvl] || 'alert-info'}" style="margin-bottom:8px;">${rgEsc(n.t)}</div>`).join('');
+  // range by speed
+  const sp = rangeSpeeds(inp);
+  const spRows = sp.map((x) => `<tr${Math.abs(x.speed - inp.speed) < 0.5 ? ' class="rg-here"' : ''}><td>${x.speed}</td><td><b>${rgN(x.km)}</b></td><td>${rgN(x.whKm, 1)}</td><td>${Math.floor(x.h)}:${String(Math.round((x.h % 1) * 60)).padStart(2, '0')}</td></tr>`).join('');
+  const spTable = `<table class="rg-table"><thead><tr><th>קמ"ש</th><th>ק"מ</th><th>Wh/ק"מ</th><th>שעות</th></tr></thead><tbody>${spRows}</tbody></table>`
+    + `<div class="rg-hint" style="margin-top:6px;">אותו כלי, אותו שטח, מהירות שונה. מעל ${Math.round(r.top)} קמ"ש הכלי לא נוסע.</div>`;
+  // where the energy goes
+  const B = r.B, total = r.whKm;
+  const maxPart = Math.max(...RANGE_PARTS.map(([k]) => B[k] / 3600));
+  const bars = RANGE_PARTS.filter(([k]) => B[k] / 3600 >= 0.05).map(([k, label, sign]) => {
+    const wh = B[k] / 3600, w = Math.max(2, Math.round(100 * wh / maxPart));
+    return `<div class="rg-bar"><div class="rg-bar-l">${label}</div><div class="rg-bar-t"><span style="width:${w}%;${sign < 0 ? 'background:var(--success,#10b981);' : ''}"></span></div><div class="rg-bar-v">${sign < 0 ? '−' : ''}${rgN(wh, 1)}</div></div>`;
+  }).join('') + `<div class="rg-bar rg-bar-sum"><div class="rg-bar-l">סה"כ מהסוללה</div><div class="rg-bar-t"></div><div class="rg-bar-v">${rgN(total, 1)}</div></div>`
+    + `<div class="rg-hint" style="margin-top:6px;">ועוד ${rgN(r.dis.heat / Math.max(1, r.km), 1)} Wh לק"מ נשרפים כחום בתוך הסוללה עצמה (התנגדות פנימית ${rgN(r.dis.R * 1000)}mΩ).</div>`;
+  // electrical
+  const mg = rangeMaxGrade(inp);
+  const pc = r.perCell;
+  const rows = [
+    ['מארז', `${r.pack.S}S${r.pack.P}P · ${r.pack.n} תאים · ${rgN(r.pack.vnom, 1)}V ${rgN(r.pack.ah, 1)}Ah · ${rgN(r.pack.wh)}Wh · כ-${rgN(r.pack.kg, 1)} ק"ג`],
+    ['משקל בנסיעה', `${rgN(r.m)} ק"ג (כלי ${rgN(inp.mass)} + סוללה ${rgN(r.pack.kg)} + רוכב ${rgN(inp.rider)}${inp.cargo ? ' + ' + rgN(inp.cargo) : ''})`],
+    ['אנרגיה שמישה', `${rgN(r.dis.wh)}Wh מתוך ${rgN(r.pack.wh)}Wh — ${RANGE_END[r.dis.end] || ''}`],
+    ['זרם מהסוללה', `שיוט ${rgN(r.iCruise)}A · עלייה ${rgN(r.iHill)}A · זינוק ${rgN(r.iPeak)}A`],
+    ['זרם לתא', `שיוט ${rgN(pc.cruise, 1)}A · עלייה ${rgN(pc.hill, 1)}A · זינוק ${rgN(pc.launch, 1)}A — התא מדורג ${rgN(pc.cont)}A רציף / ${rgN(pc.max)}A שיא`],
+    r.dis.vAt20 ? ['מתח בעלייה כשנשארו 20%', `${rgN(r.dis.vAt20, 1)}V (צניחה של ${rgN(r.dis.sagHill, 1)}V; ניתוק ב-${rgN((inp.lvc || r.pack.chem.lvc) * r.pack.S, 1)}V)`] : null,
+    r.share > 0 ? ['בעליות של ' + (RANGE_TERRAIN[inp.terrain] || {}).grade + '%', r.stall ? 'לא עולה' : `${rgN(r.vUp)} קמ"ש`] : null,
+    ['השיפוע הכי תלול', `${rgN(mg.pct)}% (${mg.by === 'grip' ? 'מוגבל באחיזת הצמיגים במשטח הזה' : 'מוגבל במנוע ובבקר'}), ב-${rgN(Math.min(10, r.top / 3))} קמ"ש`],
+    ['המנוע כפי שחושב', `יעילות שיא כ-${rgN(r.d.eta * 100)}% · ${rgN(r.d.vNoLoad)} קמ"ש בלי עומס · ${rgN(r.top)} קמ"ש במישור`],
+    ['מקדמים', `גלגול Crr ${r.crr.toFixed(4)} · אוויר CdA ${r.cda.toFixed(2)}m² · ${rgN(r.climb)} מ' טיפוס לק"מ · ${rgN(r.stops, 1)} עצירות לק"מ`],
+  ].filter(Boolean).map(([k, v]) => `<div class="rg-row"><span>${k}</span><b>${rgEsc(v)}</b></div>`).join('');
+  // how much battery for a target
+  const tgt = rangeState.target;
+  let need = '';
+  if (tgt > 0) {
+    const a = rangeAhFor(inp, tgt);
+    need = a ? `<div class="rg-need">ל-${rgN(tgt)} ק"מ צריך <b>${rgN(a.ah, 1)}Ah</b> ב-${rgN(a.r.pack.vnom, 1)}V — ${a.r.pack.S}S${a.r.pack.P}P, ${a.r.pack.n} תאים, כ-${rgN(a.r.pack.kg, 1)} ק"ג (הטווח: ${rgN(a.r.km)} ק"מ, כולל משקל הסוללה הגדולה).</div>`
+      : `<div class="rg-need">${rgN(tgt)} ק"מ לא מגיעים בשום קיבולת סבירה בתנאים האלה.</div>`;
+  }
+  document.getElementById('rangeOut').innerHTML = `
+    <div class="result-box" style="margin-top:12px;">
+      <div class="result-label">טווח צפוי ב-${rgN(Math.min(inp.speed, r.top))} קמ"ש · ${rgEsc((RANGE_TERRAIN[inp.terrain] || {}).label || '')} · ${rgEsc((RANGE_SURFACES[inp.surface] || {}).label || '')}</div>
+      <div class="result-value" id="rangeResult">${lo === hi ? lo : `${lo}–${hi}`} ק"מ</div>
+      <div class="result-sub" id="rangeDetails">במודל ${rgN(r.km)} ק"מ · ${rgN(r.whKm, 1)} Wh לק"מ · ${rgN(r.dis.wh)} מתוך ${rgN(r.pack.wh)} Wh · כ-${hm} שעות רכיבה</div>
+    </div>
+    ${notes}
+    ${fold('rg-speeds', '🏁 טווח לפי מהירות', spTable, { open: true })}
+    ${fold('rg-energy', '⚡ לאן הולכת האנרגיה (Wh לק"מ)', bars)}
+    ${fold('rg-elec', '🔌 סוללה, זרמים וגבולות', rows)}
+    ${need ? fold('rg-need', '🎯 כמה סוללה צריך ל-' + rgN(tgt) + ' ק"מ', need, { open: true }) : ''}
+    <button class="btn btn-accent btn-block" style="background:#25D366;margin-bottom:10px;" onclick="rangeWhatsApp()">💬 שלח ללקוח בוואטסאפ</button>
+    <div class="alert alert-info"><strong>איך זה מחושב:</strong> כל ק"מ נרכב בשלושה חלקים (מישור, עלייה, ירידה) עם הכוחות על הגלגל — גלגול, אוויר, שיפוע, זינוקים — דרך מודל של המנוע והבקר, והסוללה נפרקת לפי הדאטה-שיט של התאים: עקומת מתח, התנגדות פנימית, קיבולת לפי זרם, טמפרטורה ובלאי. הטווח הוא טווח ולא מספר אחד: אותו חישוב עם מה שלקוח לא מספר (לחץ אוויר, המהירות שהוא באמת נוסע, עצירות) לשני הכיוונים.</div>`;
+}
+function rangeWhatsApp() {
+  if (!rangeLast) return;
+  const { inp, band } = rangeLast, r = band.mid;
+  const v = RANGE_VEHICLES[inp.veh] || {};
+  const text = [
+    'הערכת טווח — Green Power',
+    `כלי: ${v.label || 'כלי'}${inp.motors > 1 ? ` · ${inp.motors} מנועים` : ''} · ${inp.wheel}" · מנוע ${inp.power}W`,
+    `סוללה: ${rgN(r.pack.vnom, 0)}V ${rgN(r.pack.ah, 1)}Ah (${rgN(r.pack.wh)}Wh) · ${(RANGE_CELLS[inp.cell] || {}).label || ''}`,
+    `רוכב ${rgN(inp.rider)} ק"ג${inp.cargo ? ` + ${rgN(inp.cargo)} ק"ג מטען` : ''} · ${rgN(Math.min(inp.speed, r.top))} קמ"ש · ${(RANGE_TERRAIN[inp.terrain] || {}).label || ''}, ${(RANGE_SURFACES[inp.surface] || {}).label || ''}`,
+    `טווח צפוי: ${Math.floor(band.lo)}–${Math.ceil(band.hi)} ק"מ`,
+    `צריכה: כ-${rgN(r.whKm, 0)} Wh לק"מ`,
+    'החישוב פיזיקלי ותלוי ברכיבה, בצמיגים ובמזג האוויר.',
+  ].join('\n');
+  openExternal('https://wa.me/?text=' + encodeURIComponent(text));
 }
 
 // ============================================================
