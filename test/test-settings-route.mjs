@@ -62,14 +62,15 @@ const open = async () => {
 };
 await open();
 
-// ---- 1. no search box on any page; the three customer/number PICKERS inside forms stay
+// ---- 1. no search box on any page; the three customer/number PICKERS inside forms stay, and the one
+// search of לקוחות ועבודות, which he chose when the two tabs merged (2026-10-08)
 const boxes = await page.evaluate(() => {
-  const PICKERS = new Set(['custSearch', 'ordCustSearch', 'wbPickQ']);
+  const PICKERS = new Set(['custSearch', 'ordCustSearch', 'wbPickQ', 'ordSearch']);
   return [...document.querySelectorAll('section.page input')]
     .filter((i) => /חיפוש|חפש|🔍/.test(i.placeholder || '') || i.type === 'search')
     .map((i) => i.id).filter((id) => !PICKERS.has(id));
 });
-check('no page carries a search box (his call, 2026-10-06)', boxes.length === 0, boxes);
+check('no page carries a search box (his call, 2026-10-06) but the one on לקוחות ועבודות (2026-10-08)', boxes.length === 0, boxes);
 
 // ---- 2. the route: sea by default, his stale "local" reset once
 const first = await page.evaluate(() => ({ route: cellRoute(), flag: (Store.get('settings') || {}).cellRouteSeaDefault, hourly: (Store.get('settings') || {}).hourly }));
