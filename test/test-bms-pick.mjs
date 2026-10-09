@@ -73,6 +73,8 @@ if (SELFTEST) {
     // ...and make every board fit every pack, which is what the picker did before the brand
     // S-ranges went in: a DALY 13S was selectable for an 88V pack.
     window.bmsFitsPack = () => true;
+    // ...and the price that ignored the board (2026-10-09).
+    window.priceWithBms = (it, mode) => it[mode];
   });
 }
 
@@ -169,6 +171,57 @@ const field = await page.evaluate(() => {
   return { before, after, est };
 });
 check('picking a board moves the cost field to the cost with that board', field.after === field.est && field.after !== field.before, field);
+
+// ---------------------------------------------------------------- the price follows the board (2026-10-09)
+// Daniel: "למה בלוח בקרה המחיר של המוצר לא משתנה שמשנים בחירת BMS?" — the pick moved the cost and
+// the profit and left both prices where they were. His answer: "כמו באתר". A board that is one of
+// the site's upgrades (bmsOptions.ts: JK Smart where the pack ships with a DALY, ANT 400A on enduro
+// PRO) adds the site's price for it to the retail AND the trade price; any other board leaves them.
+// BMS_UPGRADES is generated from the site's table by gen-bms-options — keyed by this catalogue's
+// categories, so a key that matches none of them is a row that silently never changes.
+const tbl = await page.evaluate(() => ({ keys: Object.keys(BMS_UPGRADES), cats: [...new Set(CATALOG.map((r) => r.cat))] }));
+check('the hub carries the site\'s upgrade table, keyed by its own categories',
+  tbl.keys.length >= 30 && tbl.keys.every((k) => tbl.cats.includes(k)), { n: tbl.keys.length, unknown: tbl.keys.filter((k) => !tbl.cats.includes(k)) });
+const priced = await page.evaluate(() => {
+  localStorage.removeItem('gp_bms_pick'); localStorage.removeItem('gp_costs');
+  const at = (cat, name) => PRICING.findIndex((x) => x.cat === cat && x.name === name);
+  const read = (i, board) => {
+    openCostEditor(i);
+    setBmsPick(i, board);
+    const it = PRICING[i];
+    const out = { retail: it.retail, b2b: it.b2b, shown: document.getElementById('costPrices').textContent,
+      profit: document.getElementById('costProfit').textContent, cost: +document.getElementById('costInput').value,
+      r: priceWithBms(it, 'retail'), b: priceWithBms(it, 'b2b') };
+    try { closeModal(); } catch (e) { /* none */ }
+    return out;
+  };
+  const bike = at('סוללות אופניים - 72V PRO', '72V 40Ah');
+  const enduro = at('סוללות אינדורו וטרקטורונים - 88V PRO', '88V 40Ah');
+  const r = {
+    jk: read(bike, 'JK BD6A24S20P 200A'),
+    daly: read(bike, 'DALY 20S 72V 100A'),
+    antOnBike: read(bike, 'ANT 420A 24S'),
+    antOnEnduro: read(enduro, 'ANT 420A 24S'),
+    none: read(bike, ''),
+  };
+  localStorage.removeItem('gp_bms_pick');
+  return r;
+});
+const sh = (n) => '₪' + n.toLocaleString('en-US');
+const j = priced.jk;
+check('a JK on a 72V PRO pack adds the site\'s ₪350 to the retail and the trade price',
+  j.r === j.retail + 350 && j.b === j.b2b + 350, j);
+check('and the window shows those prices, saying why',
+  j.shown.includes(sh(j.retail + 350)) && j.shown.includes(sh(j.b2b + 350)) && /כולל JK Smart.*כמו באתר/.test(j.shown), j.shown);
+check('and the profit is worked out on the price with the upgrade',
+  j.profit.includes(sh(j.retail + 350 - j.cost)), { profit: j.profit, cost: j.cost });
+check('another DALY is not an upgrade: the prices stay the list\'s',
+  priced.daly.r === priced.daly.retail && priced.daly.b === priced.daly.b2b && !/כולל/.test(priced.daly.shown), priced.daly);
+check('the ANT 400A is an upgrade on an enduro PRO pack',
+  priced.antOnEnduro.r === priced.antOnEnduro.retail + 350 && /ANT 400A/.test(priced.antOnEnduro.shown), priced.antOnEnduro);
+check('and not on an e-bike, where the site does not offer it',
+  priced.antOnBike.r === priced.antOnBike.retail, priced.antOnBike);
+check('clearing the pick puts the list price back', priced.none.r === priced.none.retail && !/כולל/.test(priced.none.shown), priced.none);
 
 if (SELFTEST) console.log('\n[selftest] pickedBms was forced to null;\n[selftest] the checks about a pick changing the cost must have gone red.');
 check('no page errors', errs.length === 0, errs);
