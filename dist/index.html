@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v426';
+const HUB_BUILD = 'v427';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -12804,10 +12804,6 @@ function renderInventory() {
     const isUsed = (x) => /יד\s*2|יד\s*שני(?:י)?ה|משומש/i.test(x.name || '');
     const fresh = items.filter((x) => !isUsed(x));
     const used = items.filter(isUsed);
-    const sub = (title, list) => list.length
-      ? `<div style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin:8px 2px 4px;">${title}</div>`
-        + list.map((i) => renderInvItem(i, c)).join('')
-      : '';
     // Folded by default (Daniel, 2026-09-24): the page opens as a short list of categories and
     // a tap opens one. A category holding something low or out shows ⚠️ while folded, so
     // folding never hides a shortage.
@@ -12817,20 +12813,25 @@ function renderInventory() {
     // chargers by voltage, cells by format, BMS by series count. Read off the name, the same
     // way the sort above reads it; an item whose name carries no such number goes under אחר.
     const axis = INV_SUB[c] ? (x) => x.sub || invSubFromName(c, x.name) || null : null;
-    let body;
-    if (axis) {
+    const listBody = (list) => {
+      if (!axis) return list.map((i) => renderInvItem(i, c)).join('');
       const byKey = new Map();
-      for (const x of items) { const k = axis(x) || 'אחר'; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(x); }
+      for (const x of list) { const k = axis(x) || 'אחר'; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(x); }
       const keys = [...byKey.keys()].sort((a, b) => (a === 'אחר') - (b === 'אחר') || parseFloat(a) - parseFloat(b));
-      body = keys.map((k) => {
+      return keys.map((k) => {
         const l = byKey.get(k);
         const n = l.reduce((s, x) => s + (Number(x.qty) || 0), 0);
-        return `<div class="inv-sub"><span>${k}</span><span>${n} יח'</span></div>`
-          + l.filter((x) => !isUsed(x)).concat(l.filter(isUsed)).map((i) => renderInvItem(i, c)).join('');
+        return `<div class="inv-sub"><span>${k}</span><span>${n} יח'</span></div>` + l.map((i) => renderInvItem(i, c)).join('');
       }).join('');
-    } else {
-      body = used.length ? sub('חדש', fresh) + sub('♻️ יד 2', used) : fresh.map((i) => renderInvItem(i, c)).join('');
-    }
+    };
+    // New and second-hand never share a list (Daniel, 2026-10-09: "תעשה שיד 2 וחדש ב מלאי Bms לא
+    // יהיה מעורבב"). In BMS, chargers and cells the second-hand rows used to sit inside the same
+    // series/voltage group as the new ones, one line below them; now each condition is its own
+    // section with its own groups, new first — as the categories without an axis already were.
+    const section = (cond, title, list) => list.length
+      ? `<div data-inv-cond="${cond}" style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin:8px 2px 4px;">${title}</div>` + listBody(list)
+      : '';
+    const body = used.length ? section('new', 'חדש', fresh) + section('used', '♻️ יד 2', used) : listBody(fresh);
     return `<div style="margin-bottom:10px;">
       <div onclick="toggleInvCat('${encodeURIComponent(c)}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;cursor:pointer;border-bottom:2px solid var(--primary);">
         <span style="font-weight:700;font-size:15px;">${open ? '▾' : '◂'} ${CAT_ICON[c] || '📦'} ${c}${warn ? ' <span style="color:var(--danger);">⚠️</span>' : ''}</span>
