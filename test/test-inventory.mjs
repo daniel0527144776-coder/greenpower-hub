@@ -206,6 +206,49 @@ const grouped = await page.evaluate(() => {
 });
 check('BMS by series, chargers by voltage, cells by format', grouped === '13S,24S,60V,72V,18650,21700', grouped);
 
+// ---- 9b. new and second-hand never share a group (2026-10-09) ----
+// Daniel: "תעשה שיד 2 וחדש ב מלאי Bms לא יהיה מעורבב". Inside BMS the second-hand board sat in the
+// same 13S group as the new one, a line below it. Now: a "חדש" section with its own series groups,
+// then "♻️ יד 2" with its own — no group holds both, and nothing second-hand comes before a new row.
+const cond = await page.evaluate((SELF) => {
+  Store.set('inventory', [
+    { id: 'c1', name: 'BMS DALY 13S 60A', qty: 3, cat: 'BMS' },
+    { id: 'c2', name: 'BMS DALY 13S 60A (יד 2)', qty: 2, cat: 'BMS' },
+    { id: 'c3', name: 'BMS JK 24S 200A', qty: 1, cat: 'BMS' },
+    { id: 'c4', name: 'BMS 20S 100A משומש', qty: 1, cat: 'BMS' },
+    { id: 'c5', name: 'מטען 60V 5A', qty: 2, cat: 'מטען' },
+    { id: 'c6', name: 'מטען 60V 5A (יד 2)', qty: 1, cat: 'מטען' },
+  ]);
+  navigateTo('inventory');
+  ['BMS', 'מטען'].forEach((c) => { if (!INV_OPEN.has(c)) toggleInvCat(encodeURIComponent(c)); });
+  // the old layout, for the selftest: second-hand rows back inside the new groups
+  if (SELF) {
+    document.querySelectorAll('#inventoryList [data-inv-cond]').forEach((h) => h.remove());
+    const rows = [...document.querySelectorAll('#inventoryList .list-item')];
+    const nu = rows.find((r) => /DALY 13S 60A$/.test(r.querySelector('.list-item-title').textContent.trim()));
+    const old = rows.find((r) => /DALY 13S 60A \(יד 2\)/.test(r.querySelector('.list-item-title').textContent));
+    if (nu && old) nu.after(old);
+  }
+  const seq = [...document.querySelectorAll('#inventoryList [data-inv-cond], #inventoryList .inv-sub, #inventoryList .list-item-title')].map((el) =>
+    el.hasAttribute('data-inv-cond') ? '#' + el.getAttribute('data-inv-cond')
+      : el.classList.contains('inv-sub') ? '@' + el.firstElementChild.textContent.trim()
+      : el.textContent.trim());
+  // each series/voltage group, with the condition section it sits in
+  const groups = []; let condNow = null, g = null;
+  for (const t of seq) {
+    if (t[0] === '#') { condNow = t.slice(1); g = null; }
+    else if (t[0] === '@') { g = { cond: condNow, head: t.slice(1), items: [] }; groups.push(g); }
+    else if (g) g.items.push(t);
+  }
+  return { seq, groups };
+}, SELFTEST);
+const isUsedName = (n) => /יד\s*2|משומש/.test(n);
+const mixed = cond.groups.filter((g) => g.items.some(isUsedName) && g.items.some((n) => !isUsedName(n)));
+check('no BMS or charger group mixes new and second-hand', cond.groups.length >= 4 && mixed.length === 0, mixed.length ? mixed : cond.seq);
+check('the new come first, under "חדש", and the second-hand after, under "יד 2"',
+  cond.groups.every((g) => (g.cond === 'used') === g.items.every(isUsedName)) && cond.seq.indexOf('#new') < cond.seq.indexOf('#used'), cond.seq);
+check('second-hand BMS keep their own series groups', cond.groups.filter((g) => g.cond === 'used').map((g) => g.head).join(',').startsWith('13S,20S'), cond.groups);
+
 // ---- 10. adding an item: a sub-category can be chosen, and editing keeps the category ----
 const sub = await page.evaluate(() => {
   Store.set('inventory', [{ id: 'k1', name: 'תאי EVE 21700 50E', qty: 10, cat: 'תאים' }]);
