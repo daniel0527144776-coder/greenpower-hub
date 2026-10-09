@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v424';
+const HUB_BUILD = 'v425';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -10384,6 +10384,16 @@ function useVehiclePack(model, volts) {
   if (v.mine || !P) {
     const b = tubBest(v, V, c, fmt, dimExtraFor(V));
     if (b && b.P >= 1) { P = b.P; holder = b.h; layers = b.layers; }
+  } else {
+    // The table's build is an estimate. Where the tray is known and that build goes in on none of
+    // his nickels, open on the biggest that does (2026-10-09, Daniel: "תאמת שהמחשבון מידות של ה OX
+    // הכל נכון"): tapping the OX opened on 20S7P and "⛔ לא נכנס", though with the BMS at its end the
+    // most is 20S6P — and the Talaria, the Zero 11X and the Nami Klima did the same.
+    const tb0 = cellTub(tubOf(v), dimExtraFor(V));
+    if (tb0 && !holdersFor(fmt).some((h) => holderTakes(v, tb0, fmt, h, seriesForV(V), P, c, maxLayersFor(v, tb0, c)))) {
+      const b = tubBest(v, V, c, fmt, dimExtraFor(V));
+      if (b && b.P >= 1) { P = b.P; holder = b.h; layers = b.layers; }
+    }
   }
   if (!P) P = 4;
   // Densest holder that takes the build, where the tray is known; else the table's own pitch.
@@ -10679,7 +10689,7 @@ const VEHICLE_PACKS = [
   // The estimator reproduces those at 145 / 130 / 124 — within about 5%, which is close
   // enough to plan with and not close enough to cut a bracket to. Where he has counted, his
   // number wins; the geometry is for the vehicles nobody has counted yet.
-  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', src: 'AI', p: 21.5, s60: 16, p60: 8, s72: 20, p72: 7, max: 140,
+  { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Inokim OX', src: 'AI', p: 21.5, s60: 16, p60: 8, s72: 20, p72: 6, max: 140,
     // Height 65mm, Daniel 2026-09-27: "גובה אמבטיה 65 מ"מ חייב להשים מגביה". The narrow 60×140 part
     // is counted since 2026-10-08 (tubOf's nx, tailFit): 60 along, 140 across, centred. The BMS sits
     // at its end (Daniel: "ה-BMS יושב בסוף לא מעל התאים"), so 20S7P does not go in: 72V is 20S6P on
