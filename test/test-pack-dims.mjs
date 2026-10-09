@@ -148,12 +148,43 @@ const ox = await page.evaluate(() => {
   const okSquare = document.getElementById('dimResult').textContent;
   return { filled, overDiag, okSquare };
 });
-check('the OX fills its own 20S7P build', /20S 7P/.test(ox.filled), ox.filled.slice(0, 60));
+// Tapping it opens on a build that goes in: 20S6P at 72V, the BMS at the end (2026-10-09; it opened on
+// the table's 20S7P and "⛔ לא נכנס" for a day after the BMS moved to the end).
+check('tapping the OX opens on 20S6P at 72V, and it goes in', /20S 6P/.test(ox.filled) && /✅ נכנס ל-Inokim OX/.test(ox.filled) && !/⛔/.test(ox.filled), ox.filled.slice(0, 120));
 check('140 cells is over the 126 counted on the diagonal holder', /⛔|⚠/.test(ox.overDiag) && /126/.test(ox.overDiag) && /חורג/.test(ox.overDiag), ox.overDiag.slice(-70));
 // It used to test only for ⚠, and passed for two weeks over "⛔ לא נכנס ל-Inokim OX — 17S מתוך 20S".
 // The answer itself is asserted now — for the cells alone, which is what he counted. With the BMS at
 // the end it does not go in (the narrow-part section below).
 check('and with no BMS allowance the square takes his 140, with no ⛔ and no ⚠', /✅ נכנס ל-Inokim OX/.test(ox.okSquare) && !/⛔|⚠/.test(ox.okSquare), ox.okSquare.slice(0, 120));
+
+// ---- what a tap opens on (2026-10-09) ----
+// The table's 60V/72V builds are estimates; a tray that is known decides. Every vehicle whose tray
+// takes something at a voltage must open on a build that goes in, at 72V and at 60V. --selftest
+// takes tubBest away, and the table's estimates come back.
+const taps = await page.evaluate((SELF) => {
+  const real = window.tubBest;
+  if (SELF) window.tubBest = () => null;
+  document.getElementById('dimCell').value = '21700-50e';
+  document.getElementById('dimExtra').value = ''; dimExtraTouched = false; dimExtraAuto = null;
+  const bad = [];
+  let n = 0;
+  for (const v of VEHICLE_PACKS) {
+    if (!v.tub || isBomber(v) || v.case) continue;
+    for (const V of [72, 60]) {
+      if (!(V === 72 ? v.p72 : v.p60)) continue;
+      const tb = cellTub(tubOf(v), V >= 72 ? 26 : 22), c = DIM_CELLS['21700-50e'];
+      if (!tb || !holdersFor(21700).some((h) => maxPFor(v, tb, 21700, h, V, c))) continue;
+      useVehiclePack(v.m, V);
+      n++;
+      const head = (document.querySelector('#dimResult .dim-ok, #dimResult .dim-over') || {}).textContent || '';
+      if (!/✅/.test(head)) bad.push(`${v.m} ${V}V: ${head.slice(0, 70)}`);
+    }
+  }
+  clearDimVehicle();
+  window.tubBest = real;
+  return { n, bad };
+}, SELFTEST);
+check('every vehicle whose tray takes a build opens on one that goes in (72V and 60V)', taps.n >= 8 && taps.bad.length === 0, `${taps.n} opened · ${taps.bad.slice(0, 4).join(' | ')}`);
 
 // ---- the OX's narrow part (2026-10-08) ----
 // Daniel: "תבדוק איך להכניס לאינוקים 20S7P 21700 חלק רחב 42.5×16.5 חלק צר 6×14". The calculator saw
