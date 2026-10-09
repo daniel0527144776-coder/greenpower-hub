@@ -128,7 +128,7 @@ const rec = await page.evaluate(() => {
   document.getElementById('dimExtra').value = '22';
   useVehiclePack('Inokim OX', 60);
   document.getElementById('dimHolder').value = 'square-23';
-  document.getElementById('dimAh').value = '40'; calcPackDims();
+  dimAhPending = 40; calcPackDims();
   const ox = document.getElementById('dimResult').innerText;
   document.getElementById('dimExtra').value = '26';
   useVehiclePack('Inokim OX', 72);

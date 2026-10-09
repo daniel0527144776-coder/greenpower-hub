@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v428';
+const HUB_BUILD = 'v429';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9623,9 +9623,11 @@ function maxLayersFor(v, tub, c) {
   return stackAllowed(v) && tub && tub.H ? Math.max(1, Math.floor(tub.H / standH)) : 1;
 }
 
-// The capacity list is what the vehicle can actually take, in 5Ah steps — never typed. Above
+// The capacity list is what the vehicle can actually take, one option per P — never typed. Above
 // the ceiling the option is still offered and marked, because most of those ceilings are AI
 // estimates and blocking on a guess would stop a build that is genuinely possible.
+// One per P, not 5Ah steps (2026-10-09): with a 5Ah cell they are the same list, but an 18650 of
+// 3.5Ah went 35Ah → 10P and 40Ah → 12P, so 16S11P — the most the OX takes — could not be chosen.
 let dimAhPending = null;
 function refreshAhOptions() {
   const sel = document.getElementById('dimAh');
@@ -9636,20 +9638,20 @@ function refreshAhOptions() {
   const S = seriesForV(V);
   const cap = dimVehicle ? (dimVehicle.max || 0) : 0;
   const maxP = cap ? Math.floor(cap / S) : 20;
-  const step = 5;
-  const top = Math.max(step * 2, Math.ceil(Math.max(maxP * c.ah, 40) / step) * step + step * 2);
+  const top = Math.max(c.ah * 2, Math.max(maxP * c.ah, 40) + c.ah * 2);
   // A vehicle sets its capacity before this list is rebuilt for it, and a <select> silently
   // refuses a value it has no option for — so the wanted value is handed over, not set.
   const want = dimAhPending != null ? dimAhPending : (parseFloat(sel.value) || 20);
   dimAhPending = null;
+  // The option kept is the smallest that holds what was wanted — the same P the old list gave a
+  // capacity typed in 5Ah steps (30Ah of 3.5Ah cells is 9P = 31.5Ah).
+  const pWant = Math.max(1, Math.ceil(want / c.ah - 1e-9));
   let html = '';
-  for (let ah = step; ah <= Math.max(top, Math.ceil(want / step) * step); ah += step) {
-    const P = Math.ceil(ah / c.ah);
-    const cells = P * S;
-    const over = cap && cells > cap;
+  for (let P = 1; P * c.ah <= Math.max(top, pWant * c.ah) + 1e-9; P++) {
+    const ah = Math.round(P * c.ah * 100) / 100;
     // Only the capacity (2026-09-27): P and the cell count are in the result right under it,
     // and a capacity over the vehicle's ceiling is flagged there too, loudly.
-    html += `<option value="${ah}"${Math.abs(ah - want) < 0.01 ? ' selected' : ''}>${ah}Ah</option>`;
+    html += `<option value="${ah}"${P === pWant ? ' selected' : ''}>${ah}Ah</option>`;
   }
   sel.innerHTML = html;
   if (!sel.value) sel.value = String(want);
@@ -9694,7 +9696,7 @@ function calcPackDims() {
   if (noteEl) noteEl.textContent = dimExtraTouched ? 'ידני' : `אוטומטי לפי ${V}V`;
   const extra = Math.max(0, parseFloat((extraEl || {}).value) || 0);
   const S = seriesForV(V);
-  const P = Math.max(1, Math.ceil(Ah / c.ah));
+  const P = Math.max(1, Math.ceil(Ah / c.ah - 1e-9));   // 38.5 / 3.5 is 11.000000000000002
   const N = S * P;
   // ---- layers and layout are DECIDED, not typed (Daniel, 2026-09-25: "תעשה מתי שצריך לקפל
   // את הסוללה ל-2 שכבות אז שאני ידע ולא צריך מספר שכבות"). Layout is his method (hisFit): the
@@ -10408,8 +10410,8 @@ function fillDimBuild(v, V, P, holder, layers, c) {
   const fmt = c.label.startsWith('18650') ? 18650 : 21700;
   const S = seriesForV(V);
   set('dimV', V);
-  // Capacity is a list in 5Ah steps; the vehicle's P is for a 5Ah cell.
-  dimAhPending = Math.max(5, Math.round(P * c.ah / 5) * 5);
+  // Capacity is a list with one option per P, so the build's own P is what is chosen.
+  dimAhPending = P * c.ah;
   set('dimHolder', holder);
   calcPackDims();
 }
@@ -10443,8 +10445,12 @@ function useVehiclePack(model, volts) {
     // his nickels, open on the biggest that does (2026-10-09, Daniel: "תאמת שהמחשבון מידות של ה OX
     // הכל נכון"): tapping the OX opened on 20S7P and "⛔ לא נכנס", though with the BMS at its end the
     // most is 20S6P — and the Talaria, the Zero 11X and the Nami Klima did the same.
+    // And the table's P is counted in 21700 cells (its pitch is a 21700 nickel's), so with 18650 it
+    // says nothing: where the tray is known, an 18650 build opens on the biggest the tray takes
+    // (2026-10-09, Daniel: "OX ב-18650: לפתוח על הכי גדול" — the OX at 60V opened on 16S9P, though
+    // 16S11P goes in).
     const tb0 = cellTub(tubOf(v), dimExtraFor(V));
-    if (tb0 && !holdersFor(fmt).some((h) => holderTakes(v, tb0, fmt, h, seriesForV(V), P, c, maxLayersFor(v, tb0, c)))) {
+    if (tb0 && (fmt === 18650 || !holdersFor(fmt).some((h) => holderTakes(v, tb0, fmt, h, seriesForV(V), P, c, maxLayersFor(v, tb0, c))))) {
       const b = tubBest(v, V, c, fmt, dimExtraFor(V));
       if (b && b.P >= 1) { P = b.P; holder = b.h; layers = b.layers; }
     }
