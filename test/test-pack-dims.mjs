@@ -186,6 +186,41 @@ const taps = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('every vehicle whose tray takes a build opens on one that goes in (72V and 60V)', taps.n >= 8 && taps.bad.length === 0, `${taps.n} opened · ${taps.bad.slice(0, 4).join(' | ')}`);
 
+// ---- the OX's tub is drawn as it is: wide, then narrow (2026-10-09) ----
+// Daniel: "אמרתי לך שזה יהיה לא מלבן אחיד. זה אמור להיות רחב וזה מתקטן, נהיה צר". The tray was drawn
+// only when groups ran into the narrow part, so 20S6P — the build the OX opens on at 72V, all of it in
+// the wide part — came out as a plain block of cells. Now the tub is drawn round every OX plan, the
+// narrow part narrower than the wide one and centred, and the BMS at its far end. --selftest takes
+// the outline away.
+const tub = await page.evaluate((SELF) => {
+  if (SELF) window.trayOutline = () => null;
+  const one = (V, cell) => {
+    document.getElementById('dimCell').value = cell;
+    useVehiclePack('Inokim OX', V); calcPackDims();
+    const svg = document.querySelector('#dimResult .dim-nk.sel svg.pack-svg');
+    const poly = svg && svg.querySelector('polygon.pack-outline');
+    const pl = dimLast && dimLast.plan;
+    return { V, cell, filled: (document.getElementById('dimResult').innerText.match(/\d+S \d+P/) || [''])[0],
+      pts: poly ? poly.getAttribute('points').trim().split(/\s+/).length : 0,
+      outline: pl && pl.outline, bms: pl && pl.bms };
+  };
+  const r = [one(72, '21700-50e'), one(60, '21700-50e'), one(60, '18650-35v')];
+  document.getElementById('dimCell').value = '21700-50e';
+  clearDimVehicle();
+  return r;
+}, SELFTEST);
+const tubOk = (t) => {
+  const o = t.outline;
+  if (!o || o.length !== 8 || t.pts !== 8) return false;
+  const wide = o[6][1] - o[0][1], narrow = o[4][1] - o[3][1];          // 165 and 140
+  const mid = (o[0][1] + o[6][1]) / 2, nmid = (o[3][1] + o[4][1]) / 2;
+  const end = o[3][0];                                                   // the far end of the narrow part
+  return Math.abs(wide - 165) < 0.01 && Math.abs(narrow - 140) < 0.01 && Math.abs(mid - nmid) < 0.01
+    && t.bms && t.bms.x > o[1][0] && t.bms.x + t.bms.w <= end + 0.01 && t.bms.x + t.bms.w > end - 5;
+};
+check('the OX tub is drawn wide then narrow, round 20S6P at 72V, 16S8P at 60V and the 18650 build, the BMS at its far end',
+  tub.every(tubOk), tub.map((t) => `${t.V}V ${t.cell} ${t.filled}: ${t.pts} pts ${JSON.stringify(t.bms)}`));
+
 // ---- the OX's narrow part (2026-10-08) ----
 // Daniel: "תבדוק איך להכניס לאינוקים 20S7P 21700 חלק רחב 42.5×16.5 חלק צר 6×14". The calculator saw
 // only the 425×165. With the narrow part, 60 along and 140 across, centred, the groups the main part
