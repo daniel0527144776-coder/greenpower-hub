@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v427';
+const HUB_BUILD = 'v428';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9337,16 +9337,35 @@ function standPlan(o) {
   const hMM = (cols - 1) * cStep + dia + (!B && stagger ? pitch / 2 : 0);
   const bms = Math.max(0, o.extra || 0);
   const sPer = Math.ceil(N / P / (layers || 1));
-  // With a tail the tray itself is drawn, narrow part and all, so the worker sees where it goes;
-  // the BMS at the end then sits in the narrow part.
-  const tr = tail && o.tray && o.tray.nx ? o.tray : null, w0 = DIM_WALL;
-  const outline = tr ? [[0, 0], [tr.L, 0], [tr.L, tail.y0], [tr.L + tr.nx.L, tail.y0], [tr.L + tr.nx.L, tail.y0 + tr.nx.W],
-    [tr.L, tail.y0 + tr.nx.W], [tr.L, tr.W], [0, tr.W]].map(([x, y]) => [x - w0, y - w0]) : null;
+  // A two-part tray (the OX) is drawn, narrow part and all, so the worker sees where everything goes.
+  // It was drawn only when groups ran into the narrow part — so the build he is offered at 72V,
+  // 20S6P in the wide part, came out as a plain block of cells (2026-10-09, Daniel: "אמרתי לך שזה
+  // יהיה לא מלבן אחיד. זה אמור להיות רחב וזה מתקטן"). Now the tub is always drawn round the cells,
+  // and the BMS sits at the end of the narrow part — where it goes in the pack.
+  const tr = o.tray && o.tray.nx ? o.tray : null, w0 = DIM_WALL;
+  const y0 = tail ? tail.y0 : tr ? (tr.W - tr.nx.W) / 2 : 0;
+  const outline = trayOutline(tr, y0);
   const notes = [layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : '',
     tail && !o.quiet ? `קבוצות ${tail.from + 1}–${sPer} בחלק הצר` : ''].filter(Boolean);
   return { cells, dia, wMM, hMM, groups: true, outline,
-    bms: bms ? (tr ? { x: wMM + 2, y: tail.y0 - w0, w: Math.max(1, bms - 2), h: tr.nx.W } : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
+    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, tail ? wMM : null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
     split: layers > 1, note: notes.join(' · ') };
+}
+// The outline of a two-part tray in the drawing's own coordinates (0 is the first cell's edge, one
+// wall's clearance in from the tray's side): the wide part, then the narrow part centred across its
+// far end. Null for a plain tray.
+function trayOutline(tr, y0) {
+  if (!tr || !tr.nx) return null;
+  const w0 = DIM_WALL;
+  return [[0, 0], [tr.L, 0], [tr.L, y0], [tr.L + tr.nx.L, y0], [tr.L + tr.nx.L, y0 + tr.nx.W],
+    [tr.L, y0 + tr.nx.W], [tr.L, tr.W], [0, tr.W]].map(([x, y]) => [x - w0, y - w0]);
+}
+// The BMS in the narrow part: right after the cells when groups run into it (`after` = where they
+// end), else against the far end of the tray.
+function bmsInNarrow(tr, y0, bms, after) {
+  const w0 = DIM_WALL, end = tr.L + tr.nx.L - w0;
+  const w = Math.max(1, bms - 2);
+  return { x: after != null ? after + 2 : end - w0 - w, y: y0 - w0, w, h: tr.nx.W };
 }
 // The drawing for C: each group a line along the block, the lines side by side, band after band,
 // the series snaking so that one band's last group lies beside the next band's first. The group's
@@ -9366,8 +9385,9 @@ function alongPlan(o) {
   const wMM = (bands * P - 1) * pitch + dia + (stag ? pitch / 2 : 0);
   const hMM = (cols - 1) * rowPitch + dia;
   const bms = Math.max(0, o.extra || 0);
-  return { cells, dia, wMM, hMM, groups: true, numIn: true,
-    bms: bms ? { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM } : null,
+  const tr = o.tray && o.tray.nx ? o.tray : null, y0 = tr ? (tr.W - tr.nx.W) / 2 : 0;
+  return { cells, dia, wMM, hMM, groups: true, numIn: true, outline: trayOutline(tr, y0),
+    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
     split: layers > 1, note: layers > 1 ? `שכבה 1 מתוך ${layers}` : '' };
 }
 // The plan on screen. The numbers over the cells are the groups; B− and B+ are the two ends of
