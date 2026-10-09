@@ -41,7 +41,7 @@ await page.waitForTimeout(400);
 // estimator by calling the SHIPPING function — not a copy of its arithmetic.
 const read = async (opts) => page.evaluate((o) => {
   localStorage.setItem('gp_dims', JSON.stringify(o.models));
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const set = (id, v) => { if (id === 'dimAh') { dimAhPending = +v; return; } const el = document.getElementById(id); if (el) el.value = String(v); };
   set('dimCell', o.cell); set('dimV', o.v); set('dimAh', o.ah);
   set('dimHolder', o.holder); set('dimPerRow', o.perRow);
   if (o.extra != null) { set('dimExtra', o.extra); dimExtraTouched = true; }
@@ -125,7 +125,7 @@ check('the build it fills is the one it lists', /20S 10P/.test(picked.txt), pick
 const over = await page.evaluate(() => {
   useVehiclePack('Wolf King GTR');
   const ok = document.getElementById('dimResult').textContent;
-  document.getElementById('dimAh').value = '80'; calcPackDims();
+  dimAhPending = 80; calcPackDims();
   useVehiclePack('Blade GT');
   return { atMax: ok, blade: document.getElementById('dimResult').textContent };
 });
@@ -135,7 +135,7 @@ check('no warning when the build equals the ceiling', !/⚠/.test(over.atMax), o
 // with no diagonal holder, 136 on one and 126 on the other. A build of 136 is therefore fine
 // on the square holder and over on the 21.6/24.6 one, which a single ceiling cannot express.
 const ox = await page.evaluate(() => {
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const set = (id, v) => { if (id === 'dimAh') { dimAhPending = +v; return; } const el = document.getElementById(id); if (el) el.value = String(v); };
   useVehiclePack('Inokim OX');
   const filled = document.getElementById('dimResult').textContent;
   // The 21.5 nickel is the OX's tightest: 126 counted, against 136 on the 22.5 and 140 with
@@ -186,6 +186,33 @@ const taps = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('every vehicle whose tray takes a build opens on one that goes in (72V and 60V)', taps.n >= 8 && taps.bad.length === 0, `${taps.n} opened · ${taps.bad.slice(0, 4).join(' | ')}`);
 
+// ---- 18650 opens on the biggest the tray takes (2026-10-09) ----
+// Daniel: "OX ב-18650: לפתוח על הכי גדול". The table's P is a 21700 count, so with 18650 it was a
+// number from another cell: the OX at 60V opened on 16S9P though 16S11P goes in. Now an 18650 build on
+// a known tray opens on the most P any of his nickels takes (maxPFor, worked out here independently of
+// the code that chooses). --selftest takes tubBest away.
+const big = await page.evaluate((SELF) => {
+  const real = window.tubBest;
+  if (SELF) window.tubBest = () => null;
+  document.getElementById('dimCell').value = '18650-35v';
+  document.getElementById('dimExtra').value = ''; dimExtraTouched = false; dimExtraAuto = null;
+  const v = vehicleByName('Inokim OX'), c = DIM_CELLS['18650-35v'];
+  const out = [];
+  for (const V of [60, 72]) {
+    const tb = cellTub(tubOf(v), V >= 72 ? 26 : 22);
+    const most = Math.max(...holdersFor(18650).map((h) => maxPFor(v, tb, 18650, h, V, c) || 0));
+    useVehiclePack('Inokim OX', V);
+    const shown = (document.getElementById('dimResult').innerText.match(/(\d+)S (\d+)P/) || []);
+    out.push({ V, most, shown: shown[0] || '', P: +shown[2] || 0, ok: /✅/.test(document.getElementById('dimResult').innerText) });
+  }
+  document.getElementById('dimCell').value = '21700-50e';
+  clearDimVehicle();
+  window.tubBest = real;
+  return out;
+}, SELFTEST);
+check('tapping the OX with 18650 opens on the biggest build its tray takes (60V 16S11P, and at 72V too)',
+  big.length === 2 && big.every((b) => b.P === b.most && b.ok) && big[0].most === 11, big);
+
 // ---- the OX's tub is drawn as it is: wide, then narrow (2026-10-09) ----
 // Daniel: "אמרתי לך שזה יהיה לא מלבן אחיד. זה אמור להיות רחב וזה מתקטן, נהיה צר". The tray was drawn
 // only when groups ran into the narrow part, so 20S6P — the build the OX opens on at 72V, all of it in
@@ -233,7 +260,7 @@ check('the OX tub is drawn wide then narrow, round 20S6P at 72V, 16S8P at 60V an
 const oxn = await page.evaluate((SELF) => {
   const real = window.tailFit;
   if (SELF) window.tailFit = () => null;
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const set = (id, v) => { if (id === 'dimAh') { dimAhPending = +v; return; } const el = document.getElementById(id); if (el) el.value = String(v); };
   document.getElementById('dimCell').value = '21700-50e';
   document.getElementById('dimExtra').value = '26'; dimExtraTouched = true;   // the allowance he opens it on at 72V
   useVehiclePack('Inokim OX');
@@ -281,7 +308,7 @@ check('the vehicle list shows both parts of the tub', /425×165×65 \+ 60×140/.
 // One card per nickel since 2026-10-04 (Daniel: "יראה לי ציור בכל אחד מ-3 הניקלים"): each of his
 // three nickels gets its block, its layout and its drawing, and the chosen one is outlined.
 const draw = await page.evaluate(() => {
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const set = (id, v) => { if (id === 'dimAh') { dimAhPending = +v; return; } const el = document.getElementById(id); if (el) el.value = String(v); };
   set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30);
   clearDimVehicle();
   set('dimHolder', 'diag-a'); calcPackDims();
@@ -391,7 +418,7 @@ check('no "minimum area" line on the vehicle cards', !/שטח מינימלי/.te
 // because the nearest neighbour sits half a pitch sideways, and the first version of this
 // check condemned every honeycomb pack in the table.
 const clear = await page.evaluate(() => {
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const set = (id, v) => { if (id === 'dimAh') { dimAhPending = +v; return; } const el = document.getElementById(id); if (el) el.value = String(v); };
   const run = (cell, holder) => { set('dimCell', cell); set('dimHolder', holder); set('dimV', 72); set('dimAh', 20); calcPackDims();
     return document.getElementById('dimResult').textContent; };
   clearDimVehicle();
@@ -415,7 +442,7 @@ check('and a honeycomb row pitch under the diameter is fine', !/לא נכנס/.t
 // feature leaves a live call to something that no longer exists, and that fails in the console
 // instead of on screen. BRACKET_MAX itself is deliberately kept: it is the real sheet size.
 const pieces = await page.evaluate(() => {
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const set = (id, v) => { if (id === 'dimAh') { dimAhPending = +v; return; } const el = document.getElementById(id); if (el) el.value = String(v); };
   set('dimCell', '21700-50e'); set('dimHolder', 'square-23'); set('dimV', 72); set('dimAh', 60); set('dimPerRow', 20); calcPackDims();
   const big = document.getElementById('dimResult').textContent;
   set('dimAh', 10); set('dimPerRow', 10); calcPackDims();
@@ -426,7 +453,7 @@ check('and on a small pack too', !/חלקי תושבת/.test(pieces.small), piec
 check('but the layout itself still computes', /תצורה/.test(pieces.big), pieces.big.slice(0, 60));
 
 const nickels = await page.evaluate(() => {
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const set = (id, v) => { if (id === 'dimAh') { dimAhPending = +v; return; } const el = document.getElementById(id); if (el) el.value = String(v); };
   const run = (h) => { set('dimHolder', h); set('dimCell', '21700-50e'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
     const m = document.querySelector('#dimResult .dim-nk.sel .dim-size').textContent.match(/(\d+) × (\d+) × (\d+)/); return [+m[1], +m[2]]; };
   return { a: run('diag-a'), b: run('diag-b'), sq: run('square-23') };
@@ -454,7 +481,7 @@ check('and the corrected four are the ones that used to be', await page.evaluate
 
 // The nickel line used to price off his stock.
 const nick = await page.evaluate(() => {
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  const set = (id, v) => { if (id === 'dimAh') { dimAhPending = +v; return; } const el = document.getElementById(id); if (el) el.value = String(v); };
   set('dimCell', '21700-50e'); set('dimHolder', 'diag-a'); set('dimV', 72); set('dimAh', 30); set('dimPerRow', 6); calcPackDims();
   const six = document.getElementById('dimResult').textContent;
   set('dimAh', 15); calcPackDims();
@@ -988,10 +1015,10 @@ const ox18 = await page.evaluate((SELF) => {
   const fits12 = holderTakes(v, tub, 18650, 'sq-19', 16, 12, c, 1) > 0;
   const lay10 = hisFit(tub, 16, 10, 1, 19, 19, c.dia);
   // his own numbers: 60V 30Ah (16S12P) does not go in, and the best offered is 16S10P
-  document.getElementById('dimAh').value = '30'; calcPackDims();
+  dimAhPending = 30; calcPackDims();
   const best = dimBest ? dimBest.S + 'S' + dimBest.P + 'P' : '';
   // 25Ah is 10P of 2.6Ah: it goes in, laid along
-  document.getElementById('dimAh').value = '25'; calcPackDims();
+  dimAhPending = 25; calcPackDims();
   const res = document.getElementById('dimResult').innerText;
   const nums = [...document.querySelectorAll('#dimResult .dim-nk.sel svg .pack-group')].map((e) => e.textContent);
   const label = dimLast && dimLast.line;
