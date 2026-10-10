@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v429';
+const HUB_BUILD = 'v430';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -10891,6 +10891,9 @@ function renderVehiclePacks() {
   const known = new Set(VEHICLE_PACKS.map((v) => v.m.trim().toLowerCase()));
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
   const arg = (s) => esc(JSON.stringify(String(s)));
+  // A model name keeps a run like "3-12kW" on one line: on a phone it broke at the hyphen, "3-" ending
+  // one line and "12kW" starting the next (2026-10-10, test-rtl-sweep).
+  const title = (s) => esc(s).replace(/[A-Za-z0-9.]+(?:-[A-Za-z0-9.]+)+/g, (m) => '<span style="white-space:nowrap">' + m + '</span>');
   const size = (d) => `<bdi dir="ltr">${d.l || '?'}×${d.w || '?'}×${d.h || '?'}</bdi> מ"מ`;
   const tools = (d) => `<span style="display:flex;gap:4px;flex:none;">
       <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();openDimEditor('${esc(d.id)}')">✏️</button>
@@ -10938,7 +10941,7 @@ function renderVehiclePacks() {
       : '<span style="opacity:.7;">אין מידות</span>';
     body += `<div class="list-item${d ? ' mine' : ''}" onclick="useVehiclePack(${arg(v.m)})" style="cursor:pointer;">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
-        <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong class="list-item-title">${v.m}</strong></span>${d ? '' : `<span style="font-size:11px;color:var(--text-muted);flex:none;">${tray}</span>`}
+        <span style="display:flex;align-items:center;gap:8px;min-width:0;">${vehIcon(v)}<strong class="list-item-title">${title(v.m)}</strong></span>${d ? '' : `<span style="font-size:11px;color:var(--text-muted);flex:none;">${tray}</span>`}
       </div>
       ${d ? mineLine(d) : ''}
     </div>`;
