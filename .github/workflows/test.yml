@@ -76,6 +76,11 @@ jobs:
       - name: Hub — edit/delete, sales page, warranty register
         run: node test/test-hub-jobedit.mjs
 
+      # Every page, on a phone and on a desk, read for a number or English name drawn backwards
+      # ("+40"), broken mid-token ("3-" / "12kW"), or pushed off the screen (2026-10-10).
+      - name: Every page — right-to-left text, line breaks, overflow
+        run: node test/test-rtl-sweep.mjs
+
       # A dropped punch is a day worked for free, and worker_punches is the one table an
       # anonymous stranger can write to.
       - name: Worker clock — offline queue and the approval gate
