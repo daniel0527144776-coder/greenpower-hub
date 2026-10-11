@@ -442,6 +442,130 @@ check('a line marked ✓ הוזמן stays on the list and leaves the order', nee
 check('🗑 removes a line and leaves a tombstone, so another device does not bring it back', need.tombed && need.left.join() === 'ניקל 0.15', JSON.stringify(need.left));
 check('the list syncs, row by row, with its tombstones', need.sync, 'SYNC_KEYS / MERGE_KEYS');
 
+// ---- nickel: its own spec (2026-10-11) ----
+// Daniel: "יש לכל ניקל מפרט ייחודי משלו לכן תעשה לי אפשריות שאני יוכל להזין את המפרט המדויק". A nickel row
+// takes shape, material, thickness, width, cell, pitch, P and current; they are saved with the row,
+// come back when the row is edited again, and show on the row as one line. Other categories get none of
+// it. --selftest: saving drops the spec, the way the editor was before.
+const nk = await page.evaluate((SELF) => {
+  Store.set('inventory', [{ id: 'n1', name: 'ניקל 0.2', qty: 3, cat: 'ניקל' }, { id: 'b1', name: 'BMS DALY 13S 60A', qty: 1, cat: 'BMS' }]);
+  navigateTo('inventory');
+  const shown = () => { const el = document.getElementById('invNickelSpec'); return !!el && el.style.display !== 'none'; };
+  // a new item: the block follows the category
+  openInventoryEditor('');
+  const atBms = shown();
+  document.getElementById('invCat').value = 'ניקל'; invCatChanged();
+  const atNickel = shown();
+  closeModal();
+  // the BMS row's editor has no nickel block showing
+  openInventoryEditor('b1'); const onBms = shown(); closeModal();
+  // the nickel row: its thickness starts from its name
+  openInventoryEditor('n1');
+  const fromName = document.getElementById('nk_thick').value;
+  const set = { shape: 'W לתושבת', material: 'ניקל טהור', thick: '0.15', width: '8', cell: '21700', pitch: '22.7', p: '4', amps: '30' };
+  for (const [k, v] of Object.entries(set)) document.getElementById('nk_' + k).value = v;
+  if (SELF) { const real = window.readNickelSpec; window.readNickelSpec = () => null; saveInventory('n1'); window.readNickelSpec = real; }
+  else saveInventory('n1');
+  const row = getInventory().find((x) => x.id === 'n1');
+  if (!INV_OPEN.has('ניקל')) toggleInvCat(encodeURIComponent('ניקל'));
+  const line = (document.querySelector('#inventoryList [data-nickel-spec]') || {}).textContent || '';
+  // edited again, the fields hold what was saved
+  openInventoryEditor('n1');
+  const back = Object.fromEntries(Object.keys(set).map((k) => [k, document.getElementById('nk_' + k).value]));
+  closeModal();
+  // emptied, the spec goes
+  openInventoryEditor('n1');
+  Object.keys(set).forEach((k) => { document.getElementById('nk_' + k).value = ''; });
+  saveInventory('n1');
+  const cleared = getInventory().find((x) => x.id === 'n1').spec;
+  // a spec line with a hostile value is text, not markup
+  Store.set('inventory', [{ id: 'n2', name: 'ניקל', qty: 1, cat: 'ניקל', spec: { material: '<img src=x onerror=alert(1)>' } }]);
+  renderInventory();
+  const escaped = !document.querySelector('#inventoryList [data-nickel-spec] img');
+  return { atBms, atNickel, onBms, fromName, spec: row.spec || null, line, back, cleared, escaped };
+}, SELFTEST);
+check('the nickel fields show for ניקל and not for BMS', !nk.atBms && nk.atNickel && !nk.onBms, JSON.stringify([nk.atBms, nk.atNickel, nk.onBms]));
+check('the thickness starts from the row\'s name ("ניקל 0.2")', nk.fromName === '0.2', nk.fromName);
+check('the spec is saved with the row, numbers as numbers',
+  !!nk.spec && nk.spec.thick === 0.15 && nk.spec.width === 8 && nk.spec.pitch === 22.7 && nk.spec.p === 4 && nk.spec.amps === 30
+  && nk.spec.shape === 'W לתושבת' && nk.spec.material === 'ניקל טהור' && nk.spec.cell === '21700', JSON.stringify(nk.spec));
+check('the row shows it as one line', /ניקל טהור/.test(nk.line) && nk.line.includes('0.15×8') && /22\.7/.test(nk.line) && nk.line.includes('4P') && nk.line.includes('30A'), nk.line);
+check('edited again, every field holds what was saved', JSON.stringify(nk.back) === JSON.stringify({ shape: 'W לתושבת', material: 'ניקל טהור', thick: '0.15', width: '8', cell: '21700', pitch: '22.7', p: '4', amps: '30' }), JSON.stringify(nk.back));
+check('emptying every field clears the spec', nk.cleared == null, JSON.stringify(nk.cleared));
+check('a spec value is shown as text, never as markup', nk.escaped, 'escaped');
+
+// ---- nickel by weight, and the day it last changed (2026-10-11) ----
+// Daniel: "ושיהיה לפי משקל ותאריך עדכון אחרון". A ניקל row's quantity is kilograms to two decimals, ± moves
+// it by 0.1, the row and its category say ק"ג, the row says when it last changed, a strip on a roll shows
+// its length, and the order message asks for kilograms. A BMS row still counts whole items.
+// --selftest: the editor reads the quantity as a whole number again, as every row was read before.
+const kg = await page.evaluate((SELF) => {
+  Store.set('inventory', [{ id: 'k1', name: 'ניקל 0.15 גליל', qty: 1, cat: 'ניקל' }, { id: 'b2', name: 'BMS DALY 13S 60A', qty: 3, low: 1, cat: 'BMS' }]);
+  navigateTo('inventory');
+  if (!INV_OPEN.has('ניקל')) toggleInvCat(encodeURIComponent('ניקל'));
+  if (!INV_OPEN.has('BMS')) toggleInvCat(encodeURIComponent('BMS'));
+  // the editor asks for kilograms, in steps of 0.1
+  openInventoryEditor('k1');
+  const label = document.getElementById('invQtyLabel').textContent, step = document.getElementById('invQty').step;
+  document.getElementById('invQty').value = '2.4';
+  document.getElementById('invLow').value = '0.5';
+  Object.entries({ shape: 'פס בגליל', material: 'ניקל טהור', thick: '0.15', width: '8' }).forEach(([k, v]) => { document.getElementById('nk_' + k).value = v; });
+  const realPF = window.parseFloat;
+  if (SELF) window.parseFloat = (v) => parseInt(v, 10);
+  saveInventory('k1');
+  window.parseFloat = realPF;
+  const saved = getInventory().find((x) => x.id === 'k1');
+  // the row: its quantity in ק"ג, its length, the day it changed
+  const nkRow = () => [...document.querySelectorAll('#inventoryList .list-item')].find((el) => /גליל/.test(el.textContent));
+  const qtyText = (nkRow().querySelector('[data-inv-qty]') || {}).textContent || '';
+  const metres = (nkRow().querySelector('[data-nickel-metres]') || {}).textContent || '';
+  const updated = (nkRow().querySelector('[data-inv-updated]') || {}).textContent || '';
+  const today = new Date().toLocaleDateString('he-IL');
+  const catTotal = (document.querySelector('[data-inv-cat-total="ניקל"]') || {}).textContent || '';
+  // its + button moves it by 0.1, without float dust
+  [...nkRow().querySelectorAll('.num-btn')].find((b) => b.textContent.trim() === '+').click();
+  const plus = getInventory().find((x) => x.id === 'k1').qty;
+  const metresAfter = (nkRow().querySelector('[data-nickel-metres]') || {}).textContent || '';
+  // a BMS row still counts whole items and shows no date line
+  const bmsRow = [...document.querySelectorAll('#inventoryList .list-item')].find((el) => /DALY 13S/.test(el.textContent));
+  [...bmsRow.querySelectorAll('.num-btn')].find((b) => b.textContent.trim() === '+').click();
+  const bmsQty = getInventory().find((x) => x.id === 'b2').qty;
+  const bmsAfter = [...document.querySelectorAll('#inventoryList .list-item')].find((el) => /DALY 13S/.test(el.textContent));
+  const bmsDated = !!bmsAfter.querySelector('[data-inv-updated]');
+  const bmsTotal = (document.querySelector('[data-inv-cat-total="BMS"]') || {}).textContent || '';
+  openInventoryEditor('b2');
+  const bmsLabel = document.getElementById('invQtyLabel').textContent, bmsStep = document.getElementById('invQty').step;
+  closeModal();
+  // a row last changed on 1 September says so; a cut piece has no length
+  localStorage.setItem('gp_inventory', JSON.stringify([{ id: 'k2', name: 'ניקל W', qty: 0.3, low: 1, cat: 'ניקל', _u: new Date(2026, 8, 1, 12).getTime(),
+    spec: { shape: 'W לתושבת', material: 'ניקל טהור', thick: 0.15, width: 8 } }]));
+  renderInventory();
+  const oldDate = (document.querySelector('#inventoryList [data-inv-updated]') || {}).textContent || '';
+  const cutMetres = !!document.querySelector('#inventoryList [data-nickel-metres]');
+  // 0.3 − 0.1 is 0.19999999999999998 in floating point; the shelf must say 0.2
+  [...document.querySelectorAll('#inventoryList .num-btn')].find((b) => b.textContent.trim() === '−').click();
+  const minus = getInventory().find((x) => x.id === 'k2').qty;
+  const minusText = (document.querySelector('#inventoryList [data-inv-qty]') || {}).textContent || '';
+  // the order asks for kilograms
+  const order = orderListText();
+  return { label, step, saved: saved.qty, low: saved.low, qtyText, metres, updated, today, catTotal, plus, metresAfter,
+    bmsQty, bmsDated, bmsTotal, bmsLabel, bmsStep, oldDate, cutMetres, minus, minusText, order };
+}, SELFTEST);
+check('a nickel row\'s editor asks for ק"ג, in steps of 0.1', /ק"ג/.test(kg.label) && kg.step === '0.1', JSON.stringify([kg.label, kg.step]));
+check('2.4 ק"ג is saved as 2.4, and the threshold as 0.5', kg.saved === 2.4 && kg.low === 0.5, JSON.stringify([kg.saved, kg.low]));
+check('the row shows it as "2.4 ק"ג"', kg.qtyText.trim() === '2.4 ק"ג', kg.qtyText);
+check('its category totals it in ק"ג', /^2\.4 ק"ג$/.test(kg.catTotal.trim()), kg.catTotal);
+check('the + button adds 0.1 ק"ג (2.4 → 2.5)', kg.plus === 2.5, String(kg.plus));
+check('the − button takes 0.1 ק"ג with no float dust (0.3 → 0.2, not 0.19999…)', kg.minus === 0.2 && kg.minusText.trim() === '0.2 ק"ג', JSON.stringify([kg.minus, kg.minusText]));
+// 2.4 kg of pure nickel 0.15×8 mm: 2400 g ÷ (8.9 g/cm³ × 0.015 cm × 0.8 cm) = 22,472 cm ≈ 225 m; at 2.5 kg, 234 m
+check('a strip on a roll shows its length from its weight (≈225 מ, then ≈234 מ)', /≈\s*225\s*מטר/.test(kg.metres) && /≈\s*234\s*מטר/.test(kg.metresAfter), JSON.stringify([kg.metres, kg.metresAfter]));
+check('the row says it was updated today', kg.updated.includes('עודכן') && kg.updated.includes(kg.today), JSON.stringify([kg.updated, kg.today]));
+check('a row last changed on 1.9.2026 says so', /עודכן\s*1\.9\.2026/.test(kg.oldDate), kg.oldDate);
+check('a cut piece (W) gets no length', !kg.cutMetres, String(kg.cutMetres));
+check('a BMS row still counts whole items, in יח\', with no date line', kg.bmsQty === 4 && !kg.bmsDated && /^4 יח'$/.test(kg.bmsTotal.trim())
+  && !/ק"ג/.test(kg.bmsLabel) && kg.bmsStep === '1', JSON.stringify([kg.bmsQty, kg.bmsDated, kg.bmsTotal, kg.bmsLabel, kg.bmsStep]));
+check('the order asks for nickel in ק"ג, with what is left', /• ניקל W — 2 ק"ג \(נשארו 0\.2\)/.test(kg.order), kg.order);
+
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');
