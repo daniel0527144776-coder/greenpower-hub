@@ -442,6 +442,58 @@ check('a line marked ✓ הוזמן stays on the list and leaves the order', nee
 check('🗑 removes a line and leaves a tombstone, so another device does not bring it back', need.tombed && need.left.join() === 'ניקל 0.15', JSON.stringify(need.left));
 check('the list syncs, row by row, with its tombstones', need.sync, 'SYNC_KEYS / MERGE_KEYS');
 
+// ---- nickel: its own spec (2026-10-11) ----
+// Daniel: "יש לכל ניקל מפרט ייחודי משלו לכן תעשה לי אפשריות שאני יוכל להזין את המפרט המדויק". A nickel row
+// takes shape, material, thickness, width, cell, pitch, P, current and unit; they are saved with the row,
+// come back when the row is edited again, and show on the row as one line. Other categories get none of
+// it. --selftest: saving drops the spec, the way the editor was before.
+const nk = await page.evaluate((SELF) => {
+  Store.set('inventory', [{ id: 'n1', name: 'ניקל 0.2', qty: 3, cat: 'ניקל' }, { id: 'b1', name: 'BMS DALY 13S 60A', qty: 1, cat: 'BMS' }]);
+  navigateTo('inventory');
+  const shown = () => { const el = document.getElementById('invNickelSpec'); return !!el && el.style.display !== 'none'; };
+  // a new item: the block follows the category
+  openInventoryEditor('');
+  const atBms = shown();
+  document.getElementById('invCat').value = 'ניקל'; invCatChanged();
+  const atNickel = shown();
+  closeModal();
+  // the BMS row's editor has no nickel block showing
+  openInventoryEditor('b1'); const onBms = shown(); closeModal();
+  // the nickel row: its thickness starts from its name
+  openInventoryEditor('n1');
+  const fromName = document.getElementById('nk_thick').value;
+  const set = { shape: 'W לתושבת', material: 'ניקל טהור', thick: '0.15', width: '8', cell: '21700', pitch: '22.7', p: '4', amps: '30', unit: 'מטרים' };
+  for (const [k, v] of Object.entries(set)) document.getElementById('nk_' + k).value = v;
+  if (SELF) { const real = window.readNickelSpec; window.readNickelSpec = () => null; saveInventory('n1'); window.readNickelSpec = real; }
+  else saveInventory('n1');
+  const row = getInventory().find((x) => x.id === 'n1');
+  if (!INV_OPEN.has('ניקל')) toggleInvCat(encodeURIComponent('ניקל'));
+  const line = (document.querySelector('#inventoryList [data-nickel-spec]') || {}).textContent || '';
+  // edited again, the fields hold what was saved
+  openInventoryEditor('n1');
+  const back = Object.fromEntries(Object.keys(set).map((k) => [k, document.getElementById('nk_' + k).value]));
+  closeModal();
+  // emptied, the spec goes
+  openInventoryEditor('n1');
+  Object.keys(set).forEach((k) => { document.getElementById('nk_' + k).value = ''; });
+  saveInventory('n1');
+  const cleared = getInventory().find((x) => x.id === 'n1').spec;
+  // a spec line with a hostile value is text, not markup
+  Store.set('inventory', [{ id: 'n2', name: 'ניקל', qty: 1, cat: 'ניקל', spec: { material: '<img src=x onerror=alert(1)>' } }]);
+  renderInventory();
+  const escaped = !document.querySelector('#inventoryList [data-nickel-spec] img');
+  return { atBms, atNickel, onBms, fromName, spec: row.spec || null, line, back, cleared, escaped };
+}, SELFTEST);
+check('the nickel fields show for ניקל and not for BMS', !nk.atBms && nk.atNickel && !nk.onBms, JSON.stringify([nk.atBms, nk.atNickel, nk.onBms]));
+check('the thickness starts from the row\'s name ("ניקל 0.2")', nk.fromName === '0.2', nk.fromName);
+check('the spec is saved with the row, numbers as numbers',
+  !!nk.spec && nk.spec.thick === 0.15 && nk.spec.width === 8 && nk.spec.pitch === 22.7 && nk.spec.p === 4 && nk.spec.amps === 30
+  && nk.spec.shape === 'W לתושבת' && nk.spec.material === 'ניקל טהור' && nk.spec.cell === '21700' && nk.spec.unit === 'מטרים', JSON.stringify(nk.spec));
+check('the row shows it as one line', /ניקל טהור/.test(nk.line) && nk.line.includes('0.15×8') && /22\.7/.test(nk.line) && nk.line.includes('4P') && nk.line.includes('30A') && /מטרים/.test(nk.line), nk.line);
+check('edited again, every field holds what was saved', JSON.stringify(nk.back) === JSON.stringify({ shape: 'W לתושבת', material: 'ניקל טהור', thick: '0.15', width: '8', cell: '21700', pitch: '22.7', p: '4', amps: '30', unit: 'מטרים' }), JSON.stringify(nk.back));
+check('emptying every field clears the spec', nk.cleared == null, JSON.stringify(nk.cleared));
+check('a spec value is shown as text, never as markup', nk.escaped, 'escaped');
+
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
 if (SELFTEST) check('(selftest) deliberate', false, 'x');
