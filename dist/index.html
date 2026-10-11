@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v431';
+const HUB_BUILD = 'v432';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -12298,11 +12298,16 @@ function getInventory() { return Store.get('inventory') || []; }
 // lived on the inventory page, so you had to already suspect a shortage to see it.
 // Out of stock is now unconditional; a threshold is an extra warning, not the only one.
 const INV_LOW_DEFAULT = 2;
+// A row counted by weight (nickel) with no threshold of its own goes into "מה להזמין" under 3 kg (Daniel,
+// 2026-10-11: "תעשה שאם יש פחות מ 3 קילו אז יכנס להזמנה"). It is ordered back up to 3 kg in whole kilograms,
+// not to twice the threshold as items are: that would be 5 kg of every kind.
+const INV_LOW_DEFAULT_KG = 3;
+const invLowOf = (i) => (i.low != null ? Number(i.low) : invByWeight(invCatOf(i)) ? INV_LOW_DEFAULT_KG : INV_LOW_DEFAULT);
 function invShortages() {
   const out = [], low = [];
   for (const i of getInventory()) {
     const q = Number(i.qty) || 0;
-    const t = i.low != null ? Number(i.low) : INV_LOW_DEFAULT;
+    const t = invLowOf(i);
     if (q <= 0) out.push(i); else if (q <= t) low.push(i);
   }
   return { out, low, total: out.length + low.length };
@@ -12506,8 +12511,9 @@ function orderList() {
   for (const i of out.concat(low)) {
     if (seen.has(i) || invIsUsed(i) || invForecast(i, usage)) continue;    // a row with a rate is judged by it
     const q = Number(i.qty) || 0;
-    const t = i.low != null ? Number(i.low) : INV_LOW_DEFAULT;
-    lines.push({ name: i.name, have: q, want: Math.ceil(Math.max(t * 2 - q, t)), supplier: invSupplierOf(i), cat: invCatOf(i) });
+    const t = invLowOf(i);
+    const want = invByWeight(invCatOf(i)) ? Math.max(1, Math.ceil(t - q)) : Math.ceil(Math.max(t * 2 - q, t));
+    lines.push({ name: i.name, have: q, want, supplier: invSupplierOf(i), cat: invCatOf(i) });
   }
   // What he wrote down as missing (חסר להזמנה), beside what the stock says.
   lines.push(...needOrderLines());
@@ -12715,6 +12721,48 @@ function restoreMissingCellModels() {
     }
     settings.cellModelsRestored20260925 = true;
     Store.set('settings', settings);
+  } catch (e) { /* never block boot on this */ }
+}
+// Every nickel roll on his shelf, from his video of 2026-10-11 ("עשיתי סרטון של כל הניקלים נא תעלה לי אותם
+// למלאי"): he said each roll's material, cell, thickness, shape and pitch aloud and weighed it. Two rolls of the
+// same kind are one row. What was not said, or not heard clearly, is left empty, and the note says what to check.
+// Fixed ids: two devices that both run it add the same rows, and the sync keeps one of each. A row he has
+// deleted (tomb_inventory) does not come back. Runs once, flagged in the synced settings.
+const NICKEL_SEED_FLAG = 'nickelSeed20261011';
+const NICKEL_SEED = [
+  { id: 'nk20261011_01', name: 'ניקל טהור 0.25 W 21700 2P', qty: 2, spec: { shape: 'W לתושבת', material: 'ניקל טהור', thick: 0.25, cell: '21700', pitch: 22.7, p: 2 }, note: '2 גלילים של כקילו. נאמר גם מרווח 22.5 — לבדוק' },
+  { id: 'nk20261011_02', name: 'ניקל טהור 0.2 21700 3P', qty: 0.817, spec: { material: 'ניקל טהור', thick: 0.2, cell: '21700', pitch: 23, p: 3 } },
+  { id: 'nk20261011_03', name: 'ניקל מצופה 0.25 21700', qty: 1, spec: { material: 'פלדה מצופה ניקל', thick: 0.25, cell: '21700', pitch: 23 } },
+  { id: 'nk20261011_04', name: 'ניקל טהור אלכסוני 3P', qty: 1, spec: { shape: 'אלכסוני לתושבת', material: 'ניקל טהור', pitch: 22.5, p: 3 }, note: 'צורת Z. עובי ותא לא נאמרו' },
+  { id: 'nk20261011_05', name: 'ניקל טהור 0.15 18650', qty: 0.56, spec: { material: 'ניקל טהור', thick: 0.15, cell: '18650', pitch: 19 } },
+  { id: 'nk20261011_06', name: 'ניקל 0.2 אלכסוני 21700 2S', qty: 0.85, spec: { shape: 'אלכסוני לתושבת', thick: 0.2, cell: '21700', pitch: 22.5, s: 2 }, note: 'צורת Z. החומר לא נאמר' },
+  { id: 'nk20261011_07', name: 'ניקל מצופה 0.2 21700 2S', qty: 0.3, spec: { material: 'פלדה מצופה ניקל', thick: 0.2, cell: '21700', pitch: 23, s: 2 } },
+  { id: 'nk20261011_08', name: 'ניקל מצופה 18650 מרווח 18.5', qty: 0.7, spec: { material: 'פלדה מצופה ניקל', cell: '18650', pitch: 18.5 }, note: 'עובי לא נאמר' },
+  { id: 'nk20261011_09', name: 'ניקל טהור 0.2 21700 2S', qty: 1.045, spec: { material: 'ניקל טהור', thick: 0.2, cell: '21700', pitch: 23, s: 2 }, note: '2 גלילים: 145 גרם ו-900 גרם' },
+  { id: 'nk20261011_10', name: 'ניקל טהור 0.15 18650 3S', qty: 1, spec: { material: 'ניקל טהור', thick: 0.15, cell: '18650', pitch: 20, s: 3 } },
+  { id: 'nk20261011_11', name: 'ניקל 0.2 21700 2S (גליל קילו)', qty: 1, spec: { thick: 0.2, cell: '21700', pitch: 23, s: 2 }, note: 'נאמר "ציפוי ניקל טהור" — לבדוק טהור או מצופה' },
+  { id: 'nk20261011_12', name: 'ניקל טהור 0.2 W 21700 2P', qty: 0.024, spec: { shape: 'W לתושבת', material: 'ניקל טהור', thick: 0.2, cell: '21700', p: 2 }, note: 'נשמע "24 גרם" — לבדוק' },
+  { id: 'nk20261011_13', name: 'ניקל 18650 3P', qty: 0.05, spec: { cell: '18650', pitch: 19, p: 3 }, note: 'חומר ועובי לא נאמרו' },
+  { id: 'nk20261011_14', name: 'ניקל טהור 0.2 אלכסוני 18650', qty: 0.118, spec: { shape: 'אלכסוני לתושבת', material: 'ניקל טהור', thick: 0.2, cell: '18650', pitch: 18.5 }, note: 'צורת Z' },
+  { id: 'nk20261011_15', name: 'ניקל טהור 0.2×10 פס', qty: 1, spec: { shape: 'פס בגליל', material: 'ניקל טהור', thick: 0.2, width: 10 } },
+  { id: 'nk20261011_16', name: 'ניקל מצופה 0.15 18650 4S', qty: 0.53, spec: { material: 'פלדה מצופה ניקל', thick: 0.15, cell: '18650', pitch: 19, s: 4 } },
+  { id: 'nk20261011_17', name: 'ניקל מצופה 18650 מרווח 20.2', qty: 0.86, spec: { material: 'פלדה מצופה ניקל', cell: '18650', pitch: 20.2 }, note: 'נשמע "20.2 מילימטר" — אולי מרווח 20 ועובי 0.2, לבדוק' },
+];
+function seedNickelStockOnce() {
+  try {
+    const settings = Store.get('settings') || {};
+    if (settings[NICKEL_SEED_FLAG]) return;
+    const inv = getInventory();
+    const tomb = Store.get('tomb_inventory') || {};
+    const add = NICKEL_SEED.filter((r) => !inv.some((x) => x.id === r.id) && tomb[r.id] == null)
+      .map((r) => ({ id: r.id, name: r.name, cat: 'ניקל', qty: r.qty, low: null, note: r.note || '', spec: Object.assign({}, r.spec) }));
+    if (add.length && !Store.set('inventory', inv.concat(add))) return;
+    settings[NICKEL_SEED_FLAG] = true;
+    if (!Store.set('settings', settings)) return;
+    if (add.length) {
+      const kg = invQtyFmt(add.reduce((s, r) => s + r.qty, 0));
+      showNotice(`🧲 נוספו למלאי ${add.length} שורות ניקל מהסרטון — סה"כ ${kg} ק"ג.\nאיפה שכתוב "לבדוק" בהערה — לא נשמע ברור או לא נאמר.`);
+    }
   } catch (e) { /* never block boot on this */ }
 }
 function seedCellStockOnce() {
@@ -13069,7 +13117,7 @@ function invPaceLine(i) {
 }
 function adjustInventory(id, d) {
   const inv = getInventory(); const it = inv.find(x => x.id === id); if (!it) return;
-  it.qty = Math.max(0, Math.round(((Number(it.qty) || 0) + d) * 100) / 100);   // 0.1 kg steps add up without float dust
+  it.qty = Math.max(0, Math.round(((Number(it.qty) || 0) + d) * 1000) / 1000);   // 0.1 kg steps add up without float dust
   Store.set('inventory', inv); renderInventory();
 }
 // The sub-category a new item is filed under (Daniel, 2026-09-25: adding an item gave no way to
@@ -13091,14 +13139,15 @@ const NICKEL_SPEC = [
   { k: 'cell', label: 'לתא', opts: ['18650', '21700', '26650', '32700'] },
   { k: 'pitch', label: 'מרווח בין תאים (מ"מ)', num: 0.05 },
   { k: 'p', label: 'תאים במקביל (P)', num: 1 },
+  { k: 's', label: 'קבוצות בטור (S)', num: 1 },   // his rolls are marked 2S/3S/4S as well as 2P/3P
   { k: 'amps', label: 'זרם מרבי (A)', num: 1 },
 ];
 // Nickel is stocked BY WEIGHT (Daniel, same day: "ושיהיה לפי משקל ותאריך עדכון אחרון"): a ניקל row's
-// quantity is kilograms, to two decimals, the ± buttons move it by 0.1, and the row says when it last
+// quantity is kilograms, to the gram (three decimals), the ± buttons move it by 0.1, and the row says when it last
 // changed (its _u stamp — set by stampRows on any change, here or on another device).
 const invByWeight = (cat) => cat === 'ניקל';
 const invUnit = (cat) => (invByWeight(cat) ? 'ק"ג' : "יח'");
-const invQtyFmt = (q) => String(Math.round((Number(q) || 0) * 100) / 100);
+const invQtyFmt = (q) => String(Math.round((Number(q) || 0) * 1000) / 1000);   // to the gram: he weighs 817 g, 24 g
 // A strip's length from its weight: kg ÷ (density × thickness × width). Pure nickel 8.9 g/cm³,
 // nickel-plated steel 7.85; only for a strip on a roll with both sizes known.
 const NICKEL_DENSITY = { 'ניקל טהור': 8.9, 'פלדה מצופה ניקל': 7.85, 'נחושת + ניקל': 8.9 };
@@ -13116,7 +13165,7 @@ function nickelSpecLine(sp) {
   const size = sp.thick != null && sp.width != null ? n(sp.thick + '×' + sp.width) + ' מ"מ'
     : sp.thick != null ? 'עובי ' + n(sp.thick) + ' מ"מ' : sp.width != null ? 'רוחב ' + n(sp.width) + ' מ"מ' : '';
   return [sp.material && esc2(sp.material), size, sp.shape && esc2(sp.shape), sp.cell && 'לתא ' + n(sp.cell),
-    sp.pitch != null && 'מרווח ' + n(sp.pitch), sp.p != null && n(sp.p + 'P'), sp.amps != null && 'עד ' + n(sp.amps + 'A')].filter(Boolean).join(' · ');
+    sp.pitch != null && 'מרווח ' + n(sp.pitch), sp.p != null && n(sp.p + 'P'), sp.s != null && n(sp.s + 'S'), sp.amps != null && 'עד ' + n(sp.amps + 'A')].filter(Boolean).join(' · ');
 }
 // The thickness a row's name already says ("ניקל 0.15"), to start the field from.
 function nickelThickFromName(name) {
@@ -13172,7 +13221,7 @@ function invCatChanged() {
   const ql = document.getElementById('invQtyLabel'), ll = document.getElementById('invLowLabel');
   if (ql) ql.textContent = kg ? 'כמות במלאי (ק"ג)' : 'כמות במלאי';
   if (ll) ll.textContent = kg ? 'מתי להזמין (ק"ג)' : 'מתי להזמין (כמות)';
-  ['invQty', 'invLow'].forEach((x) => { const el = document.getElementById(x); if (el) el.step = kg ? '0.1' : '1'; });
+  ['invQty', 'invLow'].forEach((x) => { const el = document.getElementById(x); if (el) el.step = kg ? '0.001' : '1'; });
 }
 function openInventoryEditor(id) {
   const inv = getInventory();
@@ -13188,8 +13237,8 @@ function openInventoryEditor(id) {
     <div id="invNickelSpec" data-nickel-spec-form style="${curCat === 'ניקל' ? '' : 'display:none;'}border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin:6px 0;">
       <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;">⚡ מפרט הניקל</div>${nickelSpecRowsHtml(it)}</div>
     <div class="form-row"><label>שם הפריט</label><input class="form-input-wide" id="invName" value="${it.name || ''}" placeholder="20S 100A / DALY 60A / 72V 5A" style="width:170px;"></div>
-    <div class="form-row"><label id="invQtyLabel">${invByWeight(curCat) ? 'כמות במלאי (ק"ג)' : 'כמות במלאי'}</label><input type="number" class="form-input" id="invQty" value="${it.qty || 0}" min="0" step="${invByWeight(curCat) ? '0.1' : '1'}" inputmode="decimal"></div>
-    <div class="form-row"><label id="invLowLabel">${invByWeight(curCat) ? 'מתי להזמין (ק"ג)' : 'מתי להזמין (כמות)'}</label><input type="number" class="form-input" id="invLow" value="${it.low != null ? it.low : ''}" placeholder="לדוגמה ${invByWeight(curCat) ? '1' : '20'}" step="${invByWeight(curCat) ? '0.1' : '1'}"></div>
+    <div class="form-row"><label id="invQtyLabel">${invByWeight(curCat) ? 'כמות במלאי (ק"ג)' : 'כמות במלאי'}</label><input type="number" class="form-input" id="invQty" value="${it.qty || 0}" min="0" step="${invByWeight(curCat) ? '0.001' : '1'}" inputmode="decimal"></div>
+    <div class="form-row"><label id="invLowLabel">${invByWeight(curCat) ? 'מתי להזמין (ק"ג)' : 'מתי להזמין (כמות)'}</label><input type="number" class="form-input" id="invLow" value="${it.low != null ? it.low : ''}" placeholder="לדוגמה ${invByWeight(curCat) ? '3' : '20'}" step="${invByWeight(curCat) ? '0.001' : '1'}"></div>
     <div class="form-row"><label>הערה</label><input class="form-input-wide" id="invNote" value="${it.note || ''}" placeholder="ספק / מק\"ט" style="width:170px;"></div>
     <div class="form-row"><label>ספק (להזמנה)</label><input class="form-input-wide" id="invSupplier" list="invSupplierList" value="${String(it.supplier || '').replace(/"/g, '&quot;')}" placeholder="${String(invSupplierOf(it) || 'לפי הקטגוריה').replace(/"/g, '&quot;')}" style="width:170px;">
       <datalist id="invSupplierList">${invSupplierNames().map((n) => `<option value="${n.replace(/"/g, '&quot;')}">`).join('')}</datalist></div>`,
@@ -13201,8 +13250,8 @@ function saveInventory(id) {
   const lowVal = document.getElementById('invLow').value;
   const subEl = document.getElementById('invSub');
   const cat = document.getElementById('invCat').value;
-  // by weight: kilograms to two decimals; everything else counts whole items
-  const num = (v) => (invByWeight(cat) ? Math.round((parseFloat(v) || 0) * 100) / 100 : (parseInt(v) || 0));
+  // by weight: kilograms to the gram; everything else counts whole items
+  const num = (v) => (invByWeight(cat) ? Math.round((parseFloat(v) || 0) * 1000) / 1000 : (parseInt(v) || 0));
   const rec = { name, cat, sub: (INV_SUB[cat] && subEl && subEl.value) || '', qty: Math.max(0, num(document.getElementById('invQty').value)), low: lowVal === '' ? null : num(lowVal), note: document.getElementById('invNote').value };
   const inv = getInventory();
   const supEl = document.getElementById('invSupplier');
@@ -13787,6 +13836,7 @@ async function startApp() {
   seedInventoryOnce();
   seedCellStockOnce();
   restoreMissingCellModels();
+  seedNickelStockOnce();
   refileCellsFromBms();
   tidyQsSupplierOnce();
   init();
