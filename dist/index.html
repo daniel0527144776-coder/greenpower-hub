@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v430';
+const HUB_BUILD = 'v431';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -12556,7 +12556,7 @@ function orderGroups() {
     .map(([supplier, ls]) => ({ supplier, lines: ls }));
 }
 const orderLineText = (l) => (l.manual ? `• ${l.name}${l.qty ? ` — ${l.qty}` : ''}`
-  : `• ${l.name} — ${l.want} יח׳ (נשארו ${l.have}${l.perMonth ? `, יוצאים כ-${l.perMonth} בחודש` : ''})`);
+  : `• ${l.name} — ${l.want} ${invByWeight(l.cat) ? 'ק"ג' : 'יח׳'} (נשארו ${l.cat && invByWeight(l.cat) ? invQtyFmt(l.have) : l.have}${l.perMonth ? `, יוצאים כ-${l.perMonth} בחודש` : ''})`);
 function orderGroupText(g) {
   return (g.supplier ? `הזמנה מ-${g.supplier}:` : 'הזמנה (ספק לא ידוע):') + '\n' + g.lines.map(orderLineText).join('\n');
 }
@@ -12826,7 +12826,7 @@ function renderInventory() {
     const items = groups[c].slice().sort((a, b) => (c === 'BMS'
       ? unit(a, 'S') - unit(b, 'S') || unit(a, 'A') - unit(b, 'A')
       : unit(a, 'V') - unit(b, 'V')) || byStock(a, b));
-    const totalQty = items.reduce((s, x) => s + (Number(x.qty) || 0), 0);
+    const totalQty = invQtyFmt(items.reduce((s, x) => s + (Number(x.qty) || 0), 0));
     // Second-hand stock stands on its own. Matched on the name because that is where the
     // fact lives today — there is no "used" field on an inventory row, and inventing one
     // would orphan every item already typed in with "יד 2" in its name.
@@ -12864,7 +12864,7 @@ function renderInventory() {
     return `<div style="margin-bottom:10px;">
       <div onclick="toggleInvCat('${encodeURIComponent(c)}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;cursor:pointer;border-bottom:2px solid var(--primary);">
         <span style="font-weight:700;font-size:15px;">${open ? '▾' : '◂'} ${CAT_ICON[c] || '📦'} ${c}${warn ? ' <span style="color:var(--danger);">⚠️</span>' : ''}</span>
-        <span style="font-size:11px;color:var(--text-muted);">${totalQty} יח'</span>
+        <span data-inv-cat-total="${c}" style="font-size:11px;color:var(--text-muted);">${totalQty} ${invUnit(c)}</span>
       </div>
       ${!open ? '' : `<div style="margin-top:6px;">${body}</div>`}
     </div>`;
@@ -13033,16 +13033,21 @@ function openCellSheet(id) {
 }
 function renderInvItem(i, cat) {
   const isLow = (Number(i.qty) || 0) <= 0;   // out of stock only — no 'low' marking
+  const kg = invByWeight(cat), step = kg ? 0.1 : 1;
+  const m = kg ? nickelMetres(i) : null;
+  const when = kg && i._u ? new Date(Number(i._u)).toLocaleDateString('he-IL') : '';
   let title = i.name || '';
   if (cat && cat !== 'אחר' && title.startsWith(cat + ' ')) title = title.slice(cat.length + 1);
   return `<div class="list-item" style="${isLow ? 'border-color:var(--danger);' : ''}">
       <div class="list-item-header">
         <div><div class="list-item-title">${title} ${isLow ? '<span style="font-size:10px;color:var(--danger);">🔴 אזל</span>' : ''}</div>
-          <div class="list-item-subtitle">${i.note || ''}${i.low != null ? ` · סף: ${i.low}` : ''}${invPaceLine(i)}</div></div>
+          <div class="list-item-subtitle">${i.note || ''}${i.low != null ? ` · סף: ${kg ? invQtyFmt(i.low) + ' ק"ג' : i.low}` : ''}${invPaceLine(i)}</div>
+          ${cat === 'ניקל' && i.spec ? `<div data-nickel-spec style="font-size:11.5px;margin-top:2px;">${nickelSpecLine(i.spec)}${m ? ` · <span data-nickel-metres>≈ <bdi dir="ltr">${Math.round(m)}</bdi> מטר</span>` : ''}</div>` : ''}
+          ${when ? `<div data-inv-updated style="font-size:11px;color:var(--text-muted);margin-top:2px;">עודכן <bdi dir="ltr">${when}</bdi></div>` : ''}</div>
         <div class="num-input">
-          <button class="num-btn" onclick="adjustInventory('${i.id}',-1)">−</button>
-          <span class="num-val" style="${isLow ? 'color:var(--danger);' : ''}">${i.qty}</span>
-          <button class="num-btn" onclick="adjustInventory('${i.id}',1)">+</button>
+          <button class="num-btn" onclick="adjustInventory('${i.id}',-${step})">−</button>
+          <span class="num-val" data-inv-qty style="${isLow ? 'color:var(--danger);' : ''}${kg ? 'min-width:64px;' : ''}">${kg ? invQtyFmt(i.qty) + ' ק"ג' : i.qty}</span>
+          <button class="num-btn" onclick="adjustInventory('${i.id}',${step})">+</button>
         </div>
       </div>
       <div class="btn-group" style="margin-top:6px;">
@@ -13064,7 +13069,7 @@ function invPaceLine(i) {
 }
 function adjustInventory(id, d) {
   const inv = getInventory(); const it = inv.find(x => x.id === id); if (!it) return;
-  it.qty = Math.max(0, (Number(it.qty) || 0) + d);
+  it.qty = Math.max(0, Math.round(((Number(it.qty) || 0) + d) * 100) / 100);   // 0.1 kg steps add up without float dust
   Store.set('inventory', inv); renderInventory();
 }
 // The sub-category a new item is filed under (Daniel, 2026-09-25: adding an item gave no way to
@@ -13075,6 +13080,72 @@ const INV_SUB = {
   'מטען': ['12V', '24V', '36V', '48V', '52V', '60V', '72V', '84V', '88V'],
   'תא': ['18650', '21700', '26650', '32700'],
 };
+// A nickel's own spec (Daniel, 2026-10-11: "יש לכל ניקל מפרט ייחודי משלו לכן תעשה לי אפשריות שאני יוכל
+// להזין את המפרט המדויק"). Every field optional, kept as .spec on the stock row (it syncs with the row),
+// and shown on the row as one line. Choices are lists where the answers are few; sizes are numbers.
+const NICKEL_SPEC = [
+  { k: 'shape', label: 'צורה', opts: ['פס בגליל', 'מקטע חתוך', 'W לתושבת', 'אלכסוני לתושבת', 'ריבועי לתושבת', 'אחר'] },
+  { k: 'material', label: 'חומר', opts: ['ניקל טהור', 'פלדה מצופה ניקל', 'נחושת + ניקל', 'אחר'] },
+  { k: 'thick', label: 'עובי (מ"מ)', num: 0.01, hint: [0.1, 0.12, 0.15, 0.2, 0.25, 0.3] },
+  { k: 'width', label: 'רוחב (מ"מ)', num: 0.5 },
+  { k: 'cell', label: 'לתא', opts: ['18650', '21700', '26650', '32700'] },
+  { k: 'pitch', label: 'מרווח בין תאים (מ"מ)', num: 0.05 },
+  { k: 'p', label: 'תאים במקביל (P)', num: 1 },
+  { k: 'amps', label: 'זרם מרבי (A)', num: 1 },
+];
+// Nickel is stocked BY WEIGHT (Daniel, same day: "ושיהיה לפי משקל ותאריך עדכון אחרון"): a ניקל row's
+// quantity is kilograms, to two decimals, the ± buttons move it by 0.1, and the row says when it last
+// changed (its _u stamp — set by stampRows on any change, here or on another device).
+const invByWeight = (cat) => cat === 'ניקל';
+const invUnit = (cat) => (invByWeight(cat) ? 'ק"ג' : "יח'");
+const invQtyFmt = (q) => String(Math.round((Number(q) || 0) * 100) / 100);
+// A strip's length from its weight: kg ÷ (density × thickness × width). Pure nickel 8.9 g/cm³,
+// nickel-plated steel 7.85; only for a strip on a roll with both sizes known.
+const NICKEL_DENSITY = { 'ניקל טהור': 8.9, 'פלדה מצופה ניקל': 7.85, 'נחושת + ניקל': 8.9 };
+function nickelMetres(it) {
+  const sp = it && it.spec;
+  if (!sp || sp.shape !== 'פס בגליל' || !(sp.thick > 0) || !(sp.width > 0) || !((Number(it.qty) || 0) > 0)) return null;
+  const d = NICKEL_DENSITY[sp.material] || 8.9;
+  return (Number(it.qty) * 1000) / (d * (sp.thick / 10) * (sp.width / 10)) / 100;
+}
+// The row's spec as one line. Each number run is its own left-to-right isolate: "0.15×8" between two
+// Hebrew words was drawn "8×0.15".
+function nickelSpecLine(sp) {
+  if (!sp) return '';
+  const n = (x) => '<bdi dir="ltr">' + esc2(x) + '</bdi>';
+  const size = sp.thick != null && sp.width != null ? n(sp.thick + '×' + sp.width) + ' מ"מ'
+    : sp.thick != null ? 'עובי ' + n(sp.thick) + ' מ"מ' : sp.width != null ? 'רוחב ' + n(sp.width) + ' מ"מ' : '';
+  return [sp.material && esc2(sp.material), size, sp.shape && esc2(sp.shape), sp.cell && 'לתא ' + n(sp.cell),
+    sp.pitch != null && 'מרווח ' + n(sp.pitch), sp.p != null && n(sp.p + 'P'), sp.amps != null && 'עד ' + n(sp.amps + 'A')].filter(Boolean).join(' · ');
+}
+// The thickness a row's name already says ("ניקל 0.15"), to start the field from.
+function nickelThickFromName(name) {
+  const m = String(name || '').match(/(?:^|[^\d.])(0\.\d{1,2})(?![\d.])/);
+  return m ? parseFloat(m[1]) : null;
+}
+function nickelSpecRowsHtml(it) {
+  const sp = Object.assign({}, it.spec || {});
+  if (sp.thick == null) { const t = nickelThickFromName(it.name); if (t != null) sp.thick = t; }
+  return NICKEL_SPEC.map((f) => {
+    const v = sp[f.k] == null ? '' : sp[f.k];
+    const field = f.opts
+      ? `<select class="form-select" id="nk_${f.k}"><option value="">—</option>${f.opts.map((o) => `<option value="${esc2(o)}"${o === v ? ' selected' : ''}>${esc2(o)}</option>`).join('')}</select>`
+      : `<input type="number" class="form-input" id="nk_${f.k}" step="${f.num}" min="0" inputmode="decimal" value="${esc2(v)}"${f.hint ? ` list="nk_${f.k}_list"` : ''}>`
+        + (f.hint ? `<datalist id="nk_${f.k}_list">${f.hint.map((h) => `<option value="${h}">`).join('')}</datalist>` : '');
+    return `<div class="form-row"><label>${f.label}</label>${field}</div>`;
+  }).join('');
+}
+// What the editor's nickel fields hold, numbers as numbers, empty fields left out; null when all are empty.
+function readNickelSpec() {
+  const out = {};
+  for (const f of NICKEL_SPEC) {
+    const el = document.getElementById('nk_' + f.k);
+    if (!el || el.value === '') continue;
+    if (f.opts) out[f.k] = el.value;
+    else { const x = parseFloat(el.value); if (isFinite(x) && x >= 0) out[f.k] = x; }
+  }
+  return Object.keys(out).length ? out : null;
+}
 function invSubFromName(cat, name) {
   const n = String(name || '');
   if (cat === 'BMS') { const m = n.match(/(\d+)\s*S(?![A-Za-z\u0590-\u05FF])/i); return m ? m[1] + 'S' : ''; }
@@ -13095,6 +13166,13 @@ function invCatChanged() {
   if (!row) return;
   row.innerHTML = invSubRowHtml(cat, invSubFromName(cat, document.getElementById('invName').value));
   row.style.display = INV_SUB[cat] ? '' : 'none';
+  const nk = document.getElementById('invNickelSpec');
+  if (nk) nk.style.display = cat === 'ניקל' ? '' : 'none';
+  const kg = invByWeight(cat);
+  const ql = document.getElementById('invQtyLabel'), ll = document.getElementById('invLowLabel');
+  if (ql) ql.textContent = kg ? 'כמות במלאי (ק"ג)' : 'כמות במלאי';
+  if (ll) ll.textContent = kg ? 'מתי להזמין (ק"ג)' : 'מתי להזמין (כמות)';
+  ['invQty', 'invLow'].forEach((x) => { const el = document.getElementById(x); if (el) el.step = kg ? '0.1' : '1'; });
 }
 function openInventoryEditor(id) {
   const inv = getInventory();
@@ -13107,9 +13185,11 @@ function openInventoryEditor(id) {
   openModal(id ? 'עריכת פריט' : 'פריט מלאי חדש', `
     <div class="form-row"><label>קטגוריה</label><select class="form-select" id="invCat" onchange="invCatChanged()">${catOpts}</select></div>
     <div class="form-row" id="invSubRow" style="${INV_SUB[curCat] ? '' : 'display:none;'}">${invSubRowHtml(curCat, curSub)}</div>
+    <div id="invNickelSpec" data-nickel-spec-form style="${curCat === 'ניקל' ? '' : 'display:none;'}border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin:6px 0;">
+      <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;">⚡ מפרט הניקל</div>${nickelSpecRowsHtml(it)}</div>
     <div class="form-row"><label>שם הפריט</label><input class="form-input-wide" id="invName" value="${it.name || ''}" placeholder="20S 100A / DALY 60A / 72V 5A" style="width:170px;"></div>
-    <div class="form-row"><label>כמות במלאי</label><input type="number" class="form-input" id="invQty" value="${it.qty || 0}" min="0"></div>
-    <div class="form-row"><label>מתי להזמין (כמות)</label><input type="number" class="form-input" id="invLow" value="${it.low != null ? it.low : ''}" placeholder="לדוגמה 20"></div>
+    <div class="form-row"><label id="invQtyLabel">${invByWeight(curCat) ? 'כמות במלאי (ק"ג)' : 'כמות במלאי'}</label><input type="number" class="form-input" id="invQty" value="${it.qty || 0}" min="0" step="${invByWeight(curCat) ? '0.1' : '1'}" inputmode="decimal"></div>
+    <div class="form-row"><label id="invLowLabel">${invByWeight(curCat) ? 'מתי להזמין (ק"ג)' : 'מתי להזמין (כמות)'}</label><input type="number" class="form-input" id="invLow" value="${it.low != null ? it.low : ''}" placeholder="לדוגמה ${invByWeight(curCat) ? '1' : '20'}" step="${invByWeight(curCat) ? '0.1' : '1'}"></div>
     <div class="form-row"><label>הערה</label><input class="form-input-wide" id="invNote" value="${it.note || ''}" placeholder="ספק / מק\"ט" style="width:170px;"></div>
     <div class="form-row"><label>ספק (להזמנה)</label><input class="form-input-wide" id="invSupplier" list="invSupplierList" value="${String(it.supplier || '').replace(/"/g, '&quot;')}" placeholder="${String(invSupplierOf(it) || 'לפי הקטגוריה').replace(/"/g, '&quot;')}" style="width:170px;">
       <datalist id="invSupplierList">${invSupplierNames().map((n) => `<option value="${n.replace(/"/g, '&quot;')}">`).join('')}</datalist></div>`,
@@ -13121,10 +13201,13 @@ function saveInventory(id) {
   const lowVal = document.getElementById('invLow').value;
   const subEl = document.getElementById('invSub');
   const cat = document.getElementById('invCat').value;
-  const rec = { name, cat, sub: (INV_SUB[cat] && subEl && subEl.value) || '', qty: Math.max(0, parseInt(document.getElementById('invQty').value) || 0), low: lowVal === '' ? null : (parseInt(lowVal) || 0), note: document.getElementById('invNote').value };
+  // by weight: kilograms to two decimals; everything else counts whole items
+  const num = (v) => (invByWeight(cat) ? Math.round((parseFloat(v) || 0) * 100) / 100 : (parseInt(v) || 0));
+  const rec = { name, cat, sub: (INV_SUB[cat] && subEl && subEl.value) || '', qty: Math.max(0, num(document.getElementById('invQty').value)), low: lowVal === '' ? null : num(lowVal), note: document.getElementById('invNote').value };
   const inv = getInventory();
   const supEl = document.getElementById('invSupplier');
   if (supEl) rec.supplier = supEl.value.trim();          // empty = order it by its category's supplier
+  if (cat === 'ניקל') rec.spec = readNickelSpec();       // null clears a spec emptied in the editor
   if (id) { const i = inv.findIndex(x => x.id === id); if (i >= 0) inv[i] = { ...inv[i], ...rec }; }
   else { inv.push({ id: 'inv' + Date.now(), ...rec }); }
   Store.set('inventory', inv); closeModal(); renderInventory();
