@@ -551,7 +551,7 @@ const kg = await page.evaluate((SELF) => {
   return { label, step, saved: saved.qty, low: saved.low, qtyText, metres, updated, today, catTotal, plus, metresAfter,
     bmsQty, bmsDated, bmsTotal, bmsLabel, bmsStep, oldDate, cutMetres, minus, minusText, order };
 }, SELFTEST);
-check('a nickel row\'s editor asks for ק"ג, in steps of 0.1', /ק"ג/.test(kg.label) && kg.step === '0.1', JSON.stringify([kg.label, kg.step]));
+check('a nickel row\'s editor asks for ק"ג, to the gram', /ק"ג/.test(kg.label) && kg.step === '0.001', JSON.stringify([kg.label, kg.step]));
 check('2.4 ק"ג is saved as 2.4, and the threshold as 0.5', kg.saved === 2.4 && kg.low === 0.5, JSON.stringify([kg.saved, kg.low]));
 check('the row shows it as "2.4 ק"ג"', kg.qtyText.trim() === '2.4 ק"ג', kg.qtyText);
 check('its category totals it in ק"ג', /^2\.4 ק"ג$/.test(kg.catTotal.trim()), kg.catTotal);
@@ -564,7 +564,64 @@ check('a row last changed on 1.9.2026 says so', /עודכן\s*1\.9\.2026/.test(k
 check('a cut piece (W) gets no length', !kg.cutMetres, String(kg.cutMetres));
 check('a BMS row still counts whole items, in יח\', with no date line', kg.bmsQty === 4 && !kg.bmsDated && /^4 יח'$/.test(kg.bmsTotal.trim())
   && !/ק"ג/.test(kg.bmsLabel) && kg.bmsStep === '1', JSON.stringify([kg.bmsQty, kg.bmsDated, kg.bmsTotal, kg.bmsLabel, kg.bmsStep]));
-check('the order asks for nickel in ק"ג, with what is left', /• ניקל W — 2 ק"ג \(נשארו 0\.2\)/.test(kg.order), kg.order);
+check('the order asks for nickel in ק"ג, with what is left', /• ניקל W — 1 ק"ג \(נשארו 0\.2\)/.test(kg.order), kg.order);
+
+// ---- every nickel roll from his video (2026-10-11) ----
+// Daniel: "עשיתי סרטון של כל הניקלים נא תעלה לי אותם למלאי". The hub adds them once (seedNickelStockOnce):
+// fixed ids, so a second device adds nothing new; a row he deleted stays deleted; his own rows are kept.
+// A nickel row under 3 kg goes into the order, topped back up to 3 kg ("תעשה שאם יש פחות מ 3 קילו אז יכנס
+// להזמנה"), and his S marking has a field. --selftest: the seed ignores the tombstones.
+const seed = await page.evaluate((SELF) => {
+  if (typeof closeNotice === 'function') closeNotice();
+  const st = Store.get('settings') || {}; delete st[NICKEL_SEED_FLAG]; Store.set('settings', st);
+  localStorage.setItem('gp_inventory', JSON.stringify([{ id: 'mine', name: 'ניקל שלי', qty: 0.5, cat: 'ניקל' }]));
+  localStorage.setItem('gp_tomb_inventory', JSON.stringify({ nk20261011_05: Date.now() }));
+  const realGet = Store.get;
+  if (SELF) Store.get = function (k) { return k === 'tomb_inventory' ? {} : realGet.apply(this, arguments); };
+  seedNickelStockOnce();
+  Store.get = realGet;
+  const inv = getInventory();
+  const notice = (document.getElementById('noticeBackdrop') || {}).innerText || '';
+  const ids = inv.map((r) => r.id);
+  // a second device: the flag has not reached it yet, the rows have
+  const st2 = Store.get('settings') || {}; delete st2[NICKEL_SEED_FLAG]; Store.set('settings', st2);
+  seedNickelStockOnce();
+  const again = getInventory().length;
+  const flagged = !!(Store.get('settings') || {})[NICKEL_SEED_FLAG];
+  // the rows on the stock page
+  navigateTo('inventory');
+  if (!INV_OPEN.has('ניקל')) toggleInvCat(encodeURIComponent('ניקל'));
+  const lines = [...document.querySelectorAll('#inventoryList [data-nickel-spec]')].map((e) => e.textContent);
+  const total = (document.querySelector('[data-inv-cat-total="ניקל"]') || {}).textContent || '';
+  const qtys = [...document.querySelectorAll('#inventoryList [data-inv-qty]')].map((e) => e.textContent.trim());
+  const strip = getInventory().find((r) => r.id === 'nk20261011_15');
+  const metres = [...document.querySelectorAll('#inventoryList .list-item')].filter((el) => el.querySelector('[data-nickel-metres]')).map((el) => el.querySelector('[data-nickel-metres]').textContent);
+  // thresholds: a nickel row with none of its own is low under 3 kg (2.5 is, 3.2 is not); a BMS keeps the item default
+  const rows = [{ id: 'a', name: 'ניקל א', qty: 1, cat: 'ניקל' }, { id: 'd', name: 'ניקל ד', qty: 2.4, cat: 'ניקל' },
+    { id: 'e', name: 'ניקל ה', qty: 3.2, cat: 'ניקל' }, { id: 'c', name: 'BMS 13S', qty: 1, cat: 'BMS' }];
+  localStorage.setItem('gp_inventory', JSON.stringify(rows));
+  const sh = invShortages();
+  const low = sh.low.map((r) => r.id).sort().join();
+  const order = (orderList() || []).filter((l) => !l.manual).map(orderLineText).join('\n');
+  // the S field: in the editor, saved as a number, shown as "3S"
+  openInventoryEditor('a');
+  const hasS = !!document.getElementById('nk_s');
+  if (hasS) document.getElementById('nk_s').value = '3';
+  saveInventory('a');
+  const sSaved = (getInventory().find((r) => r.id === 'a').spec || {}).s;
+  const sLine = (document.querySelector('#inventoryList [data-nickel-spec]') || {}).textContent || '';
+  return { n: inv.length, ids, notice, again, flagged, lines, total, stripQty: strip && strip.qty, metres, low, order, hasS, sSaved, sLine, qtys };
+}, SELFTEST);
+check('16 nickel rows are added beside his own (17 from the video, one of which he deleted)', seed.n === 17 && seed.ids.includes('mine') && !seed.ids.includes('nk20261011_05'), JSON.stringify([seed.n, seed.ids.length]));
+check('the notice says how many and how much, to the gram', /16 שורות ניקל/.test(seed.notice) && /12\.294 ק"ג/.test(seed.notice), seed.notice);
+check('a second device adds nothing: the same fixed ids', seed.again === 17 && seed.flagged, JSON.stringify([seed.again, seed.flagged]));
+check('his "2S" rolls say 2S on the row, his "3P" ones 3P', seed.lines.some((l) => l.includes('2S')) && seed.lines.some((l) => l.includes('3P')), seed.lines.slice(0, 4).join(' | '));
+check('the category totals 12.794 ק"ג (with his own 0.5)', seed.total.trim() === '12.794 ק"ג', seed.total);
+check('a 24 g roll shows as 0.024 ק"ג, not 0.02', seed.qtys.includes('0.024 ק"ג') && seed.qtys.includes('0.817 ק"ג'), JSON.stringify(seed.qtys));
+check('the plain 0.2×10 strip shows its length (1 kg ≈ 56 m)', seed.stripQty === 1 && seed.metres.some((m) => /≈\s*56\s*מטר/.test(m)), JSON.stringify(seed.metres));
+check('a nickel row under 3 kg goes into the order (1 and 2.4 do, 3.2 does not); a BMS keeps the item default', seed.low === 'a,c,d', seed.low);
+check('it is ordered back up to 3 kg in whole kilograms (2.4 → 1 ק"ג, 1 → 2 ק"ג)', /• ניקל ד — 1 ק"ג \(נשארו 2\.4\)/.test(seed.order) && /• ניקל א — 2 ק"ג \(נשארו 1\)/.test(seed.order) && !/ניקל ה/.test(seed.order), seed.order);
+check('the editor has an S field, saved as a number and shown as "3S"', seed.hasS && seed.sSaved === 3 && seed.sLine.includes('3S'), JSON.stringify([seed.hasS, seed.sSaved, seed.sLine]));
 
 check('no JS errors', errs.length === 0, errs.join(' | '));
 check('and nothing asked through a dialog', dialogs.length === 0, dialogs.join(' | '));
