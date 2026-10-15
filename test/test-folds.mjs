@@ -54,10 +54,23 @@ const settings = await folds('settings');
 check('settings: every titled card is a folded section', settings.length === 4 && settings.every((f) => !f.open)
   && settings.map((f) => f.t).join('|') === '🏢 פרטי העסק (לחשבונית)|💵 הגדרות תמחור|💾 ניהול נתונים|🛠️ תחזוקה', settings);
 const work = await folds('worktime');
-check('work hours: the debts and the history fold', work.length === 2 && work[0].t === '👷 עובדים — מי חייב כמה' && work[1].t === '📝 שעות אחרונות' && work.every((f) => !f.open), work);
-check('…and the live cards stay as they were, ids and all', await page.evaluate(() => ['shiftCard', 'punchCard']
-  .every((id) => { const c = document.getElementById(id); return c && c.parentElement.id === 'page-worktime' && !c.closest('details'); })
-  && document.getElementById('wageDebtCard').tagName === 'DETAILS' && document.getElementById('wageDebtCard').parentElement.id === 'page-worktime'), '');
+// Every part of the clock folds since 2026-10-15 ("תעשה קיפולים בכל שעון העובדים"): who is in now and the
+// reports waiting for him open by themselves; the rest closed.
+check('work hours: every part folds, who is in and the reports open, the rest closed',
+  work.map((f) => f.t).join('|') === '👷 מי בעבודה עכשיו|📥 דיווחים מהטלפון — מחכים לאישור|👷 עובדים — מי חייב כמה|📝 שעות אחרונות|➕➖ הוספה או הורדה של שעות|🗑 נמחקו לאחרונה'
+  && work[0].open && work[1].open && work.slice(2).every((f) => !f.open), work);
+check('…and the live parts keep their ids', await page.evaluate(() => ['shiftCard', 'punchCard', 'wageDebtCard']
+  .every((id) => { const c = document.getElementById(id); return c && c.tagName === 'DETAILS' && c.parentElement.id === 'page-worktime'; })), '');
+// the months carry their number (2026-10-15: "שהחודשים יהיו עם ספרות גם"), and the worker's page folds
+const extra = await page.evaluate(() => {
+  Store.set('workers', [{ id: 'w1', name: 'יוסי', rate: 40 }]);
+  Store.set('worktime', [{ id: 't1', workerName: 'יוסי', hours: 3, rate: 40, date: new Date().toISOString() }]);
+  WT_WORKER = 'יוסי'; renderWorkerPage();
+  return { label: monthLabelHe('2026-10'), pay: wtPayDates(new Date(2026, 9, 15).getTime()).month,
+    wk: [...document.querySelectorAll('#wkBody details.fold .fold-title')].map((t) => t.textContent) };
+});
+check('a month is its name and its number', extra.label === 'אוקטובר (10) 2026' && extra.pay === 'אוקטובר (10)', extra);
+check('the worker\'s page folds its rate, payments and hours', extra.wk.join('|') === '💰 תמחור|💵 תשלומים|📝 כל השעות', extra.wk);
 const fin = await folds('finances');
 check('finances: "כל החודשים" folds, the month in front stays', fin.length === 1 && /כל החודשים/.test(fin[0].t) && !fin[0].open
   && await page.evaluate(() => !document.getElementById('finIncome').closest('details')), fin);
