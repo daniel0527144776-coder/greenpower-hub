@@ -1232,6 +1232,15 @@ check('an e-bike is drawn as a bicycle', fish.kind === 'ebike', fish.kind);
 
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
 
+// Sur-Ron Ultra Bee, measured inside by Daniel (2026-10-15): 312 × 220 × 170. On ניקל Z, folded in two,
+// 72V takes 20S11P — 55Ah, the bike's own 74V 55Ah. --selftest reads the tray 20mm shorter.
+const ub = await page.evaluate((SELF) => {
+  const v = vehicleByName('Sur-Ron Ultra Bee'), tb = tubOf(v);
+  const t = SELF ? { ...tb, L: tb.L - 20 } : tb;
+  return { tb, z72: maxPFor(v, cellTub(t, dimExtraFor(72, v)), 21700, 'diag-b', 72, DIM_CELLS['21700-50e']) };
+}, SELFTEST);
+check('Sur-Ron Ultra Bee: his 312 × 220 × 170, and 72V 20S11P on ניקל Z', ub.tb && ub.tb.L === 312 && ub.tb.W === 220 && ub.tb.H === 170 && ub.z72 === 11, ub);
+
 await browser.close();
 srv.close();
 // finish() RETURNS the code, it does not exit. Bare, every check in this file could fail and
