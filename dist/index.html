@@ -1452,6 +1452,8 @@ body { min-height: 100vh; }
 
   <div id="finPending" class="alert alert-warning" style="display:none;align-items:center;gap:10px;"></div>
 
+  <div id="finChart"></div>
+
   <div class="card">
     <h3 class="card-title">📅 כל החודשים</h3>
     <div id="finOverview"></div>
@@ -2752,7 +2754,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v441';
+const HUB_BUILD = 'v442';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3423,6 +3425,7 @@ function saveJob() {
     voltage: document.getElementById('voltage').value,
     capacity: document.getElementById('capacity').value,
     cellType: document.getElementById('cellType').value,
+    cells: calcConfig().total,
     jobs: Array.from(state.jobs),
     price: priceNum,
     // the amount off (₪), and the % when it was given as one; price is after it
@@ -3451,22 +3454,26 @@ function saveJob() {
   // A BMS is consumed by a full build, a BMS swap AND a BMS upgrade — the same three jobs the
   // calculator charges one for (`bmsUsed` in recalc). Anything else leaves it alone.
   const parts = jobStockParts(entry);
+  // One notice for the whole build (v442): two in a row, the cells' replaced the BMS line before
+  // it could be read.
+  const said = [];
   if (parts.bmsName) {
     const bmsName = parts.bmsName;
     const hit = inventoryTake(bmsName, 1, entry.customerName || '');
-    if (hit && hit.matched) showNotice(`ירד מהמלאי: ${hit.name} · נשארו ${hit.left}`);
-    else if (hit) showNotice(`⚠ ${bmsName} לא נמצא במלאי — לא הופחת`);
+    if (hit && hit.matched) said.push(`ירד מהמלאי: ${hit.name} · נשארו ${hit.left}`);
+    else if (hit) said.push(`⚠ ${bmsName} לא נמצא במלאי — לא הופחת`);
   }
   if (parts.cells) {
     const hit = inventoryDeduct(parts.cellModel, parts.cells, entry.customerName || '');
     if (hit && hit.matched) {
-      showNotice(`הופחתו ${hit.cells} תאים · נשארו ${hit.left}`);
+      said.push(`הופחתו ${hit.cells} תאים · נשארו ${hit.left}`);
     } else if (hit) {
       // Said out loud rather than swallowed: a build that did not find its cell on the shelf
       // means the stock figure is now wrong, and only he can say which row it should have hit.
-      showNotice(`⚠ ${hit.cellModel} לא נמצא במלאי — לא הופחת`);
+      said.push(`⚠ ${hit.cellModel} לא נמצא במלאי — לא הופחת`);
     }
   }
+  // shown at the end, with "נשמר", in one notice
 
   // Say which month it landed in. The finances page remembers the month you last looked
   // at, so a repair saved today can be invisible simply because the picker is on August.
@@ -3502,7 +3509,8 @@ function saveJob() {
     refreshCustomerSelect();
   }
 
-  alert('✅ ' + entry._savedMsg);
+  // One notice (v442): "נשמר" used to arrive as a second one and replace what the shelf lost.
+  showNotice(['✅ ' + entry._savedMsg].concat(said).join('\n'));
 }
 
 // ---- WhatsApp message generation ----
@@ -3552,7 +3560,11 @@ function generateWhatsApp() {
   document.getElementById('invoicePreview').style.display = 'none';
   ta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-  sendWhatsApp((document.getElementById('custPhone') || {}).value, msg, 'הלקוח');
+  // The quote goes out from the business WhatsApp through the bot, and when the customer says yes
+  // it becomes the repair in one tap (v442, Daniel 2026-10-15: "הצעת מחיר בוואטסאפ"). With no valid
+  // number it is the message to copy, as it was.
+  openWaCompose((document.getElementById('custPhone') || {}).value, custName, msg, '💬 הצעת מחיר ל' + (custName || 'לקוח'),
+    { fn: 'saveJob', label: '✅ אושר — שמור כתיקון' });
 }
 
 // ---- Invoice generation ----
@@ -4176,7 +4188,9 @@ function callCustomer(phone) {
 // goes out before he presses it. When the bot cannot be reached the message is there to copy, as
 // it always was, and 💬 צ׳אט still opens the empty chat the repair button used to open.
 let waComposeTarget = null;
-function openWaCompose(phone, name, text, title) {
+// `then` (v442): one more button under the message, for what follows it — a repair quote's
+// "✅ אושר — שמור כתיקון". It is a fixed function name from the hub's own code, never text.
+function openWaCompose(phone, name, text, title, then) {
   if (!waNumber(phone)) { showMessageToCopy(text, title); return; }
   waComposeTarget = { phone: String(phone), name: name || '' };
   openModal(title || ('💬 הודעה ל' + (name || 'לקוח')),
@@ -4184,7 +4198,8 @@ function openWaCompose(phone, name, text, title) {
     + '<div class="wt-muted" style="margin-top:6px">יישלח מהוואטסאפ העסקי שלך, דרך הבוט. אפשר לערוך לפני השליחה.</div>',
     '<button class="btn btn-primary" data-wa-send onclick="sendWaCompose()">📤 שלח דרך הבוט</button>'
     + '<button class="btn btn-secondary" onclick="copyMessageBox(\'waComposeMsg\')">📋 העתק</button>'
-    + '<button class="btn btn-secondary" onclick="waComposeOpenChat()">💬 פתח בוואטסאפ</button>');
+    + '<button class="btn btn-secondary" onclick="waComposeOpenChat()">💬 פתח בוואטסאפ</button>'
+    + (then ? '<button class="btn btn-accent" data-wa-then onclick="closeModal();' + then.fn + '()">' + escPunch(then.label) + '</button>' : ''));
 }
 // the message as he edited it, in his own WhatsApp
 function waComposeOpenChat() {
@@ -4250,10 +4265,23 @@ function jobBot(id) {
   const j = jobOf(id);
   if (j) openWaCompose(j.customerPhone, j.customerName, repairMessage(j));
 }
-// Marking a repair מוכן לאיסוף offers the "ready" message, the way נמסר offers the review request.
-function offerReadyMessage(j) {
+// Marking a repair מוכן לאיסוף tells the customer by itself, through the bot (v442, Daniel 2026-10-15:
+// "הודעת מוכן לאיסוף" — the bot sends it, he does not press anything). Once per job: readyToldAt is
+// kept on the job, so a status cycled past it and back asks him first instead of sending twice. When
+// the bot is out of reach (logged out, offline, the plan's limit) it is the question it always was,
+// and his yes opens his own WhatsApp with the message written.
+async function offerReadyMessage(j) {
   if (!j || !waNumber(j.customerPhone)) return;
-  askConfirm('מוכן לאיסוף ✅\nלשלוח ל' + (j.customerName || 'לקוח') + ' הודעה שהסוללה מוכנה?', () => jobWhatsApp(j.id));
+  const who = j.customerName || 'לקוח';
+  const ask = (why) => askConfirm('מוכן לאיסוף ✅\n' + why + 'לשלוח ל' + who + ' הודעה שהסוללה מוכנה?', () => jobWhatsApp(j.id));
+  if (j.readyToldAt) { ask('כבר נשלחה לו הודעה ב-' + new Date(j.readyToldAt).toLocaleDateString('he-IL') + '.\n'); return; }
+  if (typeof Sync === 'undefined' || !Sync.isAuthed()) { ask(''); return; }
+  try {
+    await waAdmin({ op: 'send', chat: j.customerPhone, text: repairMessage(j), name: j.customerName || '' });
+  } catch (e) { ask('הבוט לא זמין.\n'); return; }
+  const jobs = Store.get('jobs') || [], k = jobs.find((x) => String(x.id) === String(j.id));
+  if (k) { k.readyToldAt = new Date().toISOString(); Store.set('jobs', jobs); }
+  showNotice('✅ נשלחה ל' + who + ' בוואטסאפ הודעה שהסוללה מוכנה לאיסוף');
 }
 
 // ============================================================
@@ -7544,6 +7572,36 @@ function finMonthly() {
   wt.forEach(e => { const b = at(e.date); if (b) b.exp += (e.hours || 0) * (e.rate || 0); });
   return m;
 }
+// The last twelve months as bars (v442, Daniel 2026-10-15: "גרף הכנסות חודשי"). The figures are
+// finMonthly's, the same ones the table under it shows, so the two cannot disagree. Drawn as inline
+// SVG: nothing is fetched, which the phone's filter requires. Right to left like the page: the
+// oldest month on the right, this month on the left. A bar opens its month in the table.
+function finChartHtml(m, now = new Date()) {
+  const ks = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    ks.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+  }
+  const v = ks.map((k) => m[k] || { inc: 0, exp: 0 });
+  if (!v.some((x) => x.inc || x.exp)) return '';
+  const max = Math.max(...v.map((x) => Math.max(x.inc, x.exp)));
+  const W = 360, top = 14, base = 118, slot = W / 12, bw = slot * 0.36;
+  const h = (n) => Math.max(0, n) / max * (base - top);
+  const bars = ks.map((k, i) => {
+    const x = W - (i + 1) * slot, r = v[i];
+    const tip = monthLabelHe(k) + ': הכנסות ' + shek(r.inc) + (r.exp ? ' · הוצאות ' + shek(r.exp) : '');
+    return `<g data-fin-bar="${k}" onclick="toggleFinMonth('${k}')" style="cursor:pointer"><title>${tip}</title>`
+      + `<rect x="${x}" y="${top}" width="${slot}" height="${base - top + 18}" fill="transparent"/>`
+      + `<rect x="${(x + slot * 0.5).toFixed(1)}" y="${(base - h(r.inc)).toFixed(1)}" width="${bw.toFixed(1)}" height="${h(r.inc).toFixed(1)}" rx="2" style="fill:var(--primary)"/>`
+      + `<rect x="${(x + slot * 0.5 - bw).toFixed(1)}" y="${(base - h(r.exp)).toFixed(1)}" width="${bw.toFixed(1)}" height="${h(r.exp).toFixed(1)}" rx="2" style="fill:var(--danger)"/>`
+      + `<text x="${(x + slot / 2).toFixed(1)}" y="${base + 13}" text-anchor="middle" font-size="10" style="fill:var(--text-muted)">${+k.slice(5)}</text></g>`;
+  }).join('');
+  return `<div class="card" data-fin-chart style="padding:10px 10px 6px;margin-bottom:8px;">`
+    + `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px;">`
+    + `<span><span style="color:var(--primary);">■</span> הכנסות &nbsp;<span style="color:var(--danger);">■</span> הוצאות</span><span>12 חודשים · עד ${shek(max)}</span></div>`
+    + `<svg viewBox="0 0 ${W} ${base + 18}" width="100%" height="${base + 18}" role="img" aria-label="הכנסות והוצאות ב-12 החודשים האחרונים">`
+    + `<line x1="0" y1="${base}" x2="${W}" y2="${base}" style="stroke:var(--border)"/>${bars}</svg></div>`;
+}
 // A month is a row you can open. It used to only set the picker at the top, which meant
 // scrolling back up to see what you had just clicked on.
 let finOpenMonth = null;
@@ -7552,6 +7610,9 @@ function renderFinanceOverview() {
   const el = document.getElementById('finOverview');
   if (!el) return;
   const m = finMonthly();
+  // on the page itself, not inside the folded "כל החודשים" — a chart he has to open is not seen
+  const chart = document.getElementById('finChart');
+  if (chart) chart.innerHTML = finChartHtml(m);
   const keys = Object.keys(m).sort().reverse();
   if (!keys.length) { el.innerHTML = '<div class="empty-state"><div class="empty-state-text">אין עדיין נתונים.</div></div>'; return; }
   let ti = 0, te = 0;
@@ -12366,7 +12427,12 @@ function jobStockParts(entry) {
   }
   if (jobs.includes('full') && entry.voltage && entry.capacity && entry.cellType) {
     out.cellModel = entry.cellType;
-    out.cells = seriesForV(+entry.voltage) * Math.max(1, Math.ceil(+entry.capacity / 5));
+    // The build as the calculator laid it out (v442): `cells` is saved with the job. A job saved
+    // before that divides by ITS cell's capacity — dividing every one by 5Ah took half the cells
+    // of an 18650 build (2.5-3Ah) off the shelf, and the shelf then held cells that were gone.
+    const mah = (typeof CELL_MAH !== 'undefined' && CELL_MAH[entry.cellType]) || 5000;
+    out.cells = Number(entry.cells) > 0 ? Number(entry.cells)
+      : seriesForV(+entry.voltage) * Math.max(1, Math.ceil((+entry.capacity * 1000) / mah));
   }
   return out;
 }
