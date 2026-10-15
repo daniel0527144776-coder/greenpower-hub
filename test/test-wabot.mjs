@@ -120,6 +120,10 @@ check('the log, with why it did or did not answer', /✅ ענה/.test(t1) && /ש
 check('including a message too late to answer, and a chat it could not place', /הגיעה באיחור — לא נענתה/.test(t1) && /שיחה שהבוט לא זיהה/.test(t1), '');
 check('and a saved contact left to him, with the setting to choose it', /איש קשר שמור — עליך/.test(t1) && /לאנשי קשר שמורים — רק ללקוחות המעבדה/.test(t1) && /שמורים שהבוט עונה להם/.test(t1)
   && await page.evaluate(() => document.getElementById('wbSaved').checked === false), '');
+// v439: the lab customers' list is his — no button runs the scan again (it wiped 61 of them once)
+if (SELFTEST) await page.evaluate(() => { window.waLabScan = () => {}; });
+check('the list of lab customers has no button that scans the chats again',
+  !/בדוק את כל השיחות|המשך בדיקה/.test(t1) && await page.evaluate(() => !document.getElementById('wbLabScan') && typeof window.waLabScan === 'undefined'), '');
 
 // the settings — worked in with only that section open
 await page.evaluate(() => document.querySelectorAll('#wabotBody details.fold').forEach((d) => { d.open = d.dataset.fold === 'settings'; }));
