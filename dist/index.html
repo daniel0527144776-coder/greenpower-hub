@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v433';
+const HUB_BUILD = 'v434';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9621,8 +9621,13 @@ function holderTakes(v, tub, fmt, h, S, P, c, maxLayers) {
 // not a refusal there, it is a riser of known height (2026-09-27, the OX: 65mm, "חייב להשים מגביה").
 // 'Riser' or 'חובה הגבהה' — NOT a bare 'הגבהה', which also matches the other group, 'ללא הגבהה'.
 function needsRiser(v) { return !!v && /Riser|חובה הגבהה/.test(v.g || ''); }
+// A riser goes only as high as the vehicle leaves room for: his measure where he gave one (`riserMax` —
+// the OX: 12mm, Daniel 2026-10-15), else any.
+function riserFits(v, tub, standH) {
+  return needsRiser(v) && !(+v.riserMax > 0 && standH - tub.H > +v.riserMax + 0.01);
+}
 function maxPFor(v, tub, fmt, h, V, c) {
-  if (!tub || (tub.H && tub.H < c.len + DIM_CAP && !needsRiser(v))) return 0;
+  if (!tub || (tub.H && tub.H < c.len + DIM_CAP && !riserFits(v, tub, c.len + DIM_CAP))) return 0;
   const S = seriesForV(V), ml = maxLayersFor(v, tub, c);
   for (let P = 40; P >= 1; P--) if (holderTakes(v, tub, fmt, h, S, P, c, ml)) return P;
   return 0;
@@ -9719,7 +9724,7 @@ function calcPackDims() {
   const tub = bmsTop ? (tubAll && tubAll.H ? { ...tubAll, H: Math.max(0, tubAll.H - extra) } : tubAll) : cellTub(tubAll, extra);
   const standH = c.len + DIM_CAP;
   const maxLayers = maxLayersFor(dimVehicle, tub, c);
-  const riser = !!(tub && tub.H && tub.H < standH && needsRiser(dimVehicle));
+  const riser = !!(tub && tub.H && tub.H < standH && riserFits(dimVehicle, tub, standH));
   // A tray the cell stands in (or stands in on a riser) is judged; one it cannot stand in is not.
   const judged = !!(tub && (!(tub.H && tub.H < standH) || riser));
   // ---- one card per nickel (2026-10-04: "יראה לי ציור בכל אחד מ-3 הניקלים") ----
@@ -9866,7 +9871,7 @@ function calcPackDims() {
       // height nobody measured is written as '?' and said — the height was not checked.
       + (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ`
         + (tubAll.nx ? ` + חלק צר <bdi dir="ltr">${tubAll.nx.L} × ${tubAll.nx.W}</bdi>` : '')
-        + (tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` : '') : ' · גובה לא ידוע, לא נבדק')) : '')
+        + (tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` + (+dimVehicle.riserMax > 0 ? ` (אפשר עד ${dimVehicle.riserMax})` : '') : '') : ' · גובה לא ידוע, לא נבדק')) : '')
       + rec + `<div class="dim-nks">${cards.map(cardHtml).join('')}</div>`;
   }
   // With no vehicle chosen, check the build against his saved trays — turned either way,
@@ -10773,7 +10778,8 @@ const VEHICLE_PACKS = [
     // at its end (Daniel: "ה-BMS יושב בסוף לא מעל התאים"), so 20S7P does not go in: 72V is 20S6P on
     // ניקל א׳ or ב׳, in the wide part. His counts (caps) are cells alone, without the BMS.
     // The BMS takes 14mm at the end of the narrow part (Daniel, 2026-10-15), not the 26 allowed at 72V.
-    tub: '425×165×65 מ"מ + צר 60×140', bms: 14, caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
+    // Room for a riser of up to 12mm (Daniel, 2026-10-15: "65mm אם אפשרות להגבה של עוד 1.2 סמ").
+    tub: '425×165×65 מ"מ + צר 60×140', bms: 14, riserMax: 12, caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 21.5, s60: 16, p60: 4, s72: 20, p72: 3, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 72, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' ,
     tub: '455×134×58 מ"מ פנימי (נמדד 22.9.2026) · רדוד — אף תא לא עומד בו' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' ,
