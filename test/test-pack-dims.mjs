@@ -1239,6 +1239,14 @@ const ub = await page.evaluate((SELF) => {
   const t = SELF ? { ...tb, L: tb.L - 20 } : tb;
   return { tb, z72: maxPFor(v, cellTub(t, dimExtraFor(72, v)), 21700, 'diag-b', 72, DIM_CELLS['21700-50e']) };
 }, SELFTEST);
+// The OX takes a riser of up to 12mm (2026-10-15): a cell standing 9mm over its 65 goes in on one; with
+// room for 5mm only it would not. --selftest drops the limit.
+const rz = await page.evaluate((SELF) => {
+  const v = vehicleByName('Inokim OX'), tb = cellTub(tubOf(v), 14), c = DIM_CELLS['21700-50e'];
+  const tight = SELF ? { ...v, riserMax: 0 } : { ...v, riserMax: 5 };
+  return { ok: maxPFor(v, tb, 21700, 'diag-b', 72, c), tight: maxPFor(tight, tb, 21700, 'diag-b', 72, c), rm: v.riserMax };
+}, SELFTEST);
+check('a riser only as high as the vehicle has room for: the OX\'s 12mm takes the 21700, 5mm would not', rz.rm === 12 && rz.ok === 6 && rz.tight === 0, rz);
 check('Sur-Ron Ultra Bee: his 312 × 220 × 170, and 72V 20S11P on ניקל Z', ub.tb && ub.tb.L === 312 && ub.tb.W === 220 && ub.tb.H === 170 && ub.z72 === 11, ub);
 
 await browser.close();
