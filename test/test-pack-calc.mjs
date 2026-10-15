@@ -143,7 +143,7 @@ check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), 
 check('and it only recommends one that fits', rec.cards.length === 3 && /^diag-b:✓ נכנס:.*מומלץ/.test(rec.cards.find((k) => k.startsWith('diag-b')) || '')
   && /^diag-a:✗ לא נכנס:(?!.*מומלץ)/.test(rec.cards.find((k) => k.startsWith('diag-a')) || '') && /^square-23:✗ לא נכנס/.test(rec.cards.find((k) => k.startsWith('square-23')) || ''), rec.cards);
 check('a counted tray is still judged by the layout, not the count alone', /16S 8P · 128 תאים/.test(rec.ox) && /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.ox), rec.ox.slice(0, 120));
-check('and 20S6P on the square, with the 26mm BMS at the end, does not go in either — the page points at a nickel that takes it', /^⛔/.test(rec.ox72.trim()) && /20S 6P · 120 תא/.test(rec.ox72) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל [אב]׳/.test(rec.ox72), rec.ox72.slice(0, 160));
+check('and 20S6P on the square, with the 26mm BMS at the end, does not go in either — the page points at a nickel that takes it', /^⛔/.test(rec.ox72.trim()) && /20S 6P · 120 תא/.test(rec.ox72) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל [WZ] \(/.test(rec.ox72), rec.ox72.slice(0, 160));
 
 // ---- 4b. the tray HEIGHT, which was stored and never read until 2026-09-22 ----
 // A 21700 is 70.15mm long. A tray shallower than that cannot take a standing cell, and the

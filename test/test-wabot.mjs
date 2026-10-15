@@ -118,7 +118,7 @@ check('numbers in the local form', t1.includes('050-123-4567') && t1.includes('0
 check('only the open question waits for him', (t1.match(/הבוט שאל אותך/g) || []).length === 1 && /שאלות שמחכות לך\s*1/.test(t1), '');
 check('the log, with why it did or did not answer', /✅ ענה/.test(t1) && /שתק — ענית בעצמך/.test(t1), '');
 check('including a message too late to answer, and a chat it could not place', /הגיעה באיחור — לא נענתה/.test(t1) && /שיחה שהבוט לא זיהה/.test(t1), '');
-check('and a saved contact left to him, with the setting to choose it', /איש קשר שמור — עליך/.test(t1) && /לא עונה לאנשי קשר שמורים/.test(t1)
+check('and a saved contact left to him, with the setting to choose it', /איש קשר שמור — עליך/.test(t1) && /לאנשי קשר שמורים — רק ללקוחות המעבדה/.test(t1) && /שמורים שהבוט עונה להם/.test(t1)
   && await page.evaluate(() => document.getElementById('wbSaved').checked === false), '');
 
 // the settings — worked in with only that section open
