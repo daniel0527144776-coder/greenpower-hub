@@ -2752,7 +2752,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v438';
+const HUB_BUILD = 'v439';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -11537,35 +11537,21 @@ function waInstructionsHtml() {
 // Saved contacts the bot answers: the lab's own customers (Daniel, 2026-10-15: "רק לאנשי קשר ששמורים, רק
 // שקשורים לסוללות"). The bot's scan of his chats marks them, he removes or adds one here, and his word
 // stands over a later scan. A number with a job or an order in the hub is answered without being listed.
+// The scan button is gone (v439, "ללא אפשרות בדיקה חוזרת"): a fresh scan kept only his own marks and wiped
+// 61 customers the night it was pressed again. The bot refuses the op too. He adds and removes here.
 function waLabHtml() {
-  const list = waBot.settings.labSaved || [], lab = waBot.lab || { left: 0, total: 0, no: [] };
+  const list = waBot.settings.labSaved || [], lab = waBot.lab || { no: [] };
   const row = (x, on) => '<div class="wb-row wb-head"><span><span class="wb-who">' + escPunch(x.n || 'ללא שם') + '</span> · ' + escPunch(waNum(x.p))
     + (x.why ? '<div class="wb-sub">' + escPunch(x.why) + '</div>' : '') + '</span>'
     + '<button class="btn btn-secondary btn-sm" onclick="waLabSet(\'' + escPunch(x.p) + '\',' + (on ? 'false' : 'true') + ',this)" data-n="' + escPunch(x.n || '') + '">' + (on ? '✕' : '➕') + '</button></div>';
-  const scanned = lab.total ? lab.total - lab.left : 0;
   return fold('lab', '📇 שמורים שהבוט עונה להם', '<div class="wb-sub">לקוחות המעבדה מבין אנשי הקשר השמורים. שמור שלא ברשימה — הבוט לא עונה לו (כשההגדרה למעלה מסומנת). מי שיש לו תיקון או הזמנה בלוח הבקרה — תמיד.</div>'
-    + '<div class="wb-sub" style="margin-top:6px">' + (lab.total ? 'נבדקו ' + scanned + ' מתוך ' + lab.total + ' אנשי קשר שיש איתם שיחה' : 'עוד לא נבדקו') + '</div>'
-    + '<button class="btn btn-secondary btn-block" style="margin:6px 0" id="wbLabScan" onclick="waLabScan()">🔎 ' + (lab.left ? 'המשך בדיקה' : 'בדוק את כל השיחות') + '</button>'
+    + '<div style="height:6px"></div>'
     + (list.length ? list.map((x) => row(x, true)).join('') : '<div class="wb-sub">אין</div>')
     + (lab.no.length ? fold('labno', 'לא סומנו כלקוחות', lab.no.map((x) => row(x, false)).join(''), { count: lab.no.length, sub: true }) : ''),
     { count: list.length });
 }
 function waLabSet(p, on, btn) {
   waDo({ op: 'lab', p, on, n: btn ? btn.getAttribute('data-n') : '' }, on ? '✅ נוסף — הבוט יענה לו' : '✅ הוסר — הבוט לא יענה לו');
-}
-async function waLabScan() {
-  const btn = document.getElementById('wbLabScan');
-  let restart = !(waBot.lab && waBot.lab.left), r = null;
-  try {
-    for (let i = 0; i < 400; i++) {
-      r = await waAdmin({ op: 'labscan', limit: 15, restart });
-      restart = false;
-      if (btn) btn.textContent = '🔎 בודק… נשארו ' + r.left;
-      if (!r.left || !r.read) break;
-    }
-    await renderWaBot();
-    showNotice('✅ הבדיקה הסתיימה — ' + (r ? r.lab : 0) + ' לקוחות מעבדה');
-  } catch (e) { showNotice('⚠ הבדיקה נעצרה: ' + e.message); await renderWaBot(); }
 }
 function waBlockedHtml() {
   const list = waBot.settings.blocked || [];
