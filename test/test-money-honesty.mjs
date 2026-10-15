@@ -184,7 +184,9 @@ const wp = await page.evaluate(async () => {
   link.click();
   await new Promise((r) => setTimeout(r, 100));
   const active = (document.querySelector('.page.active') || {}).id;
-  const text = document.getElementById('page-worker').innerText;
+  // textContent, not innerText: since v436 the rate and the hours sit in folds the worker
+  // opens himself, so they are on the page but not rendered until he taps.
+  const text = document.getElementById('page-worker').textContent;
   return { active, title: document.getElementById('wkTitle').textContent, owes: workerLedger('אבי').balance, text: text.slice(0, 200), has: [Math.round(workerLedger('אבי').balance).toLocaleString('he-IL'), 'תעריף עכשיו', 'כל השעות'].every((s) => text.includes(s)) };
 });
 check('tapping a name on the clock page opens that worker\'s own page',
