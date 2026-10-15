@@ -288,18 +288,47 @@ const oxn = await page.evaluate((SELF) => {
 check('the OX tub is read with its narrow part, 60 along and 140 across',
   oxn.tb && oxn.tb.L === 425 && oxn.tb.W === 165 && oxn.tb.H === 65 && oxn.tb.nx && oxn.tb.nx.L === 60 && oxn.tb.nx.W === 140, JSON.stringify(oxn.tb));
 check('72V 20S7P with the BMS at the end: ⛔, and the best offered is 20S6P on ניקל ב׳',
-  /⛔ לא נכנס ל-Inokim OX/.test(oxn.res) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל ב׳/.test(oxn.res), oxn.res.slice(0, 160));
+  /⛔ לא נכנס ל-Inokim OX/.test(oxn.res) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל Z \(22\.5\)/.test(oxn.res), oxn.res.slice(0, 160));
 check('nothing puts the BMS on top of the cells', !/מעל התאים|עובי ה-BMS|BMS מעל/.test(oxn.res + oxn.res15 + ((oxn.label || {}).foot || '')), oxn.res.slice(0, 260));
 check('the tray row names the narrow part and the riser',
   /425 × 165 × 65 מ"מ \+ חלק צר 60 × 140 · צריך מגביה של לפחות 10 מ"מ/.test(oxn.res), oxn.res.slice(0, 260));
-check('maxima with the 26mm BMS at the end: square 72V 20S2P, 60V 16S7P; the diagonals 20S6P',
-  oxn.m72 === 2 && oxn.m60 === 7 && oxn.a72 === 6 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
-check('a 15mm BMS: 20S5P on the square, groups 19-20 in the narrow part', oxn.s15 === 5
+// P across, S along, every group a row of its own (Daniel, 2026-10-15): a group no longer folds into
+// the narrow part across the tray, so with a 26mm BMS the square has 19 rows for 20 groups — none at 72V.
+check('maxima with a 26mm BMS at the end: the square takes no 20S, 60V 16S7P; the diagonals 20S6P',
+  oxn.m72 === 0 && oxn.m60 === 7 && oxn.a72 === 6 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
+check('a 15mm BMS: 20S6P on the square, groups 19-20 in the narrow part', oxn.s15 === 6
   && /✅ נכנס ל-Inokim OX — קבוצות 19–20 בחלק הצר/.test(oxn.res15), [oxn.s15, oxn.res15.slice(0, 120)]);
 check('its drawing: 100 cells, the tray round them, the BMS after them in the narrow part; the label says where 19-20 go',
   oxn.cells === 100 && oxn.outline && oxn.bmsDrawn && oxn.bmsInNarrow && oxn.label && oxn.label.n === 100 && /קבוצות 19–20 בחלק הצר/.test(oxn.label.foot),
   [oxn.cells, oxn.outline, oxn.bmsDrawn, oxn.bmsInNarrow, JSON.stringify(oxn.label)]);
 check('the vehicle list shows both parts of the tub', /425×165×65 \+ 60×140/.test(oxn.list), oxn.list);
+
+// The OX as he measured it (2026-10-15): the BMS takes 14mm at the end of the narrow part, and the
+// block sits centred across the tray, the narrow part narrowing it on both sides, each group in the
+// same columns in both parts. --selftest puts the block back against one wall.
+const oxc = await page.evaluate((SELF) => {
+  const set = (id, v) => { if (id === 'dimAh') { dimAhPending = +v; return; } const el = document.getElementById(id); if (el) el.value = String(v); };
+  dimExtraTouched = false; dimExtraAuto = null;
+  document.getElementById('dimCell').value = '21700-50e';
+  useVehiclePack('Inokim OX', 72);
+  const extra = document.getElementById('dimExtra').value;
+  set('dimHolder', 'square-23'); set('dimAh', 30); calcPackDims();
+  const pl = dimLast && dimLast.plan, tb = tubOf(vehicleByName('Inokim OX'));
+  const cells = pl ? pl.cells : [];
+  if (SELF) cells.forEach((c) => { c.y -= 20; });
+  const ys = cells.map((c) => c.y), lo = Math.min(...ys) - pl.dia / 2, hi = Math.max(...ys) + pl.dia / 2;
+  // the drawing's 0 is one wall in from the tray's side: the tray's middle across is W/2 - wall
+  const mid = tb.W / 2 - DIM_WALL;
+  const tail = cells.filter((c) => c.g >= 18), main = cells.filter((c) => c.g === 0);
+  const sameCols = tail.length && tail.every((c) => main.some((m) => Math.abs(m.y - c.y) < 0.01));
+  const out = { extra, res: document.getElementById('dimResult').innerText.slice(0, 160), n: cells.length,
+    off: Math.abs((lo + hi) / 2 - mid), sameCols, max: maxPFor(vehicleByName('Inokim OX'), cellTub(tb, 14), 21700, 'square-23', 72, DIM_CELLS['21700-50e']) };
+  clearDimVehicle();
+  return out;
+}, SELFTEST);
+check('the OX\'s own BMS allowance is his 14mm, and with it the square takes 20S6P, 19-20 in the narrow part',
+  oxc.extra === '14' && oxc.max === 6 && /✅ נכנס ל-Inokim OX — קבוצות 19–20 בחלק הצר/.test(oxc.res) && oxc.n === 120, oxc);
+check('the block is centred across the tray, and the narrow part\'s groups sit in the same columns', oxc.off < 0.5 && oxc.sameCols, oxc);
 
 // The drawing is the answer to "how do I lay it out", so it has to BE the layout: one circle
 // per cell, in the grid the numbers above it describe. A picture that disagrees with the
@@ -772,7 +801,7 @@ const mx = await page.evaluate((SELF) => {
 // Talaria 385 x 171, no BMS allowance: twenty rows go in on neither nickel since the 2026-10-04
 // re-measure (22.5 / 22.7), so 72V has no maximum and 60V has one.
 check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: —/.test(mx.res), mx.res.slice(0, 400));
-check('and each nickel\'s card says how much it takes', mx.cards.length === 3 && /^ניקל א׳ — W 22\.7/.test(mx.cards[0]) && /^ניקל ב׳ — אלכסוני 22\.5/.test(mx.cards[1]) && /^ריבועי 23/.test(mx.cards[2])
+check('and each nickel\'s card says how much it takes', mx.cards.length === 3 && /^ניקל W — 22\.7/.test(mx.cards[0]) && /^ניקל Z — 22\.5/.test(mx.cards[1]) && /^ניקל H — 23/.test(mx.cards[2])
   && mx.cards.every((k) => /מקסימום באמבטיה\s*60V: (16S\d+P · \d+Ah|—)\s*72V: (20S\d+P · \d+Ah|—)/.test(k)), mx.cards.map((k) => k.slice(0, 120)));
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
 check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /385×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
@@ -1076,7 +1105,7 @@ check('each of the first eight rows is one group of 16, the rows of 17 one place
 check('the three short rows at the top are groups 9 and 10, and every group is 16', /^9( 9){12}$/.test(plate.desc[8] || '') && /^9 9 9( 10){8}$/.test(plate.desc[9] || '') && /^10( 10){7}$/.test(plate.desc[10] || '')
   && plate.sizes.length === 10 && plate.sizes.every((n) => n === 16), [plate.desc.slice(8), plate.sizes]);
 check('the plate says what to build: 20S16P, 72V 80Ah, the cell, the nickel, both stacks', /20S16P/.test(plate.head) && /72V 80Ah/.test(plate.head)
-  && /320 תאי 21700 EVE 50PL/.test(plate.line) && /ריבועי 23/.test(plate.line) && /ערימה 1: 1–10/.test(plate.foot) && /ערימה 2: 11–20/.test(plate.foot) && /16 במקביל/.test(plate.foot) && plate.canvas,
+  && /320 תאי 21700 EVE 50PL/.test(plate.line) && /· ניקל H \(23\)/.test(plate.line) && !/ניקל ניקל/.test(plate.line) && /ערימה 1: 1–10/.test(plate.foot) && /ערימה 2: 11–20/.test(plate.foot) && /16 במקביל/.test(plate.foot) && plate.canvas,
   [plate.head, plate.line, plate.foot]);
 check('his 22S15P has no place to spare: 11 groups across the rows, all 165 used', plate.old.n === 165 && plate.old.empties === 0 && plate.old.groups === 11, plate.old);
 
@@ -1202,6 +1231,15 @@ check('the chip and the card say measured, with the case size', /✓ נמדד/.t
 check('an e-bike is drawn as a bicycle', fish.kind === 'ebike', fish.kind);
 
 check('no dialog was raised', dialogs.length === 0, dialogs.join(' | '));
+
+// Sur-Ron Ultra Bee, measured inside by Daniel (2026-10-15): 312 × 220 × 170. On ניקל Z, folded in two,
+// 72V takes 20S11P — 55Ah, the bike's own 74V 55Ah. --selftest reads the tray 20mm shorter.
+const ub = await page.evaluate((SELF) => {
+  const v = vehicleByName('Sur-Ron Ultra Bee'), tb = tubOf(v);
+  const t = SELF ? { ...tb, L: tb.L - 20 } : tb;
+  return { tb, z72: maxPFor(v, cellTub(t, dimExtraFor(72, v)), 21700, 'diag-b', 72, DIM_CELLS['21700-50e']) };
+}, SELFTEST);
+check('Sur-Ron Ultra Bee: his 312 × 220 × 170, and 72V 20S11P on ניקל Z', ub.tb && ub.tb.L === 312 && ub.tb.W === 220 && ub.tb.H === 170 && ub.z72 === 11, ub);
 
 await browser.close();
 srv.close();

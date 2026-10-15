@@ -1131,9 +1131,9 @@ body { min-height: 100vh; }
     </div>
     <div class="form-row dim-wide"><label>מחזיק</label>
       <select class="form-select" id="dimHolder" onchange="calcPackDims(); calcFromOldPack()">
-        <option value="diag-a" selected>ניקל א׳ — W 22.7</option>
-        <option value="diag-b">ניקל ב׳ — אלכסוני 22.5</option>
-        <option value="square-23">ריבועי 23</option>
+        <option value="diag-a" selected>ניקל W — 22.7</option>
+        <option value="diag-b">ניקל Z — 22.5</option>
+        <option value="square-23">ניקל H — 23</option>
         <option value="custom">מותאם אישית ↓</option>
       </select>
     </div>
@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v432';
+const HUB_BUILD = 'v433';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9323,9 +9323,13 @@ function standPlan(o) {
   const g = Math.max(1, Math.ceil(P / cols));
   const groups = Math.ceil(N / P / (layers || 1));
   const cells = [];
+  // In a two-part tray the block is drawn centred across it, where tailFit placed it.
+  const trc = o.tray && o.tray.nx ? o.tray : null;
+  const blockH = (cols - 1) * cStep + dia + (!B && stagger ? pitch / 2 : 0);
+  const off = o.tail ? o.tail.off || 0 : trc ? Math.max(0, (trc.W - 2 * DIM_WALL - blockH) / 2) : 0;
   const at = (row, col, k) => {
     const offA = !B && stagger && row % 2 ? pitch / 2 : 0, offB = B && stagger && col % 2 ? pitch / 2 : 0;
-    cells.push({ x: row * aStep + offB + dia / 2, y: col * cStep + offA + dia / 2, g: k });
+    cells.push({ x: row * aStep + offB + dia / 2, y: off + col * cStep + offA + dia / 2, g: k });
   };
   // The groups of a two-part tray's narrow part are laid where tailFit put them (the OX).
   const tail = o.tail || null;
@@ -9525,6 +9529,10 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
 function tailFit(tub, lay, orient, cStep, aStep, half, P, sPer, pitch, rowPitch, dia) {
   const B = orient === 'B', stag = rowPitch < pitch - 0.01;
   const L = tub.L, W = tub.W, nL = tub.nx.L, nW = tub.nx.W, y0 = (W - nW) / 2;
+  // The block sits centred across the tray, as the narrow part does (Daniel, 2026-10-15: "מצטמצם משתי
+  // הצדדים"), and each group keeps the same columns in both parts — P across, S along.
+  const blockW = (lay.inRow - 1) * cStep + dia + (lay.rowsAlong > 1 ? half.A : 0);
+  const off = Math.max(0, (W - 2 * DIM_WALL - blockW) / 2);
   // the whole rows the main part has, counted as hisFit counts them, and the groups they take
   const rowsMain = Math.max(0, Math.floor((L + 0.5 - dia - 2 * DIM_WALL - (lay.inRow > 1 ? half.B : 0)) / aStep) + 1);
   const from = Math.min(sPer, Math.floor(rowsMain / lay.g));
@@ -9533,8 +9541,8 @@ function tailFit(tub, lay, orient, cStep, aStep, half, P, sPer, pitch, rowPitch,
   const slots = [];
   for (let i = from * lay.g; DIM_WALL + i * aStep < L + nL; i++) {
     const row = [];
-    for (let j = 0; ; j++) {
-      const y = DIM_WALL + j * cStep + (!B && stag && i % 2 ? pitch / 2 : 0);        // near edge, across
+    for (let j = 0; j < lay.inRow; j++) {
+      const y = DIM_WALL + off + j * cStep + (!B && stag && i % 2 ? pitch / 2 : 0);  // near edge, across
       if (y + dia + DIM_WALL > W + 0.5) break;
       const x = DIM_WALL + i * aStep + (B && stag && j % 2 ? pitch / 2 : 0) + dia;   // far edge, along
       const main = x + DIM_WALL <= L + 0.5;
@@ -9546,7 +9554,7 @@ function tailFit(tub, lay, orient, cStep, aStep, half, P, sPer, pitch, rowPitch,
   }
   if (slots.length < need) return null;
   const cells = slots.slice(0, need);
-  return { from, cells, spare: slots.length - need, rowsAlong: Math.max(...cells.map((k) => k[0])) + 1, y0 };
+  return { from, cells, spare: slots.length - need, rowsAlong: Math.max(...cells.map((k) => k[0])) + 1, y0, off };
 }
 // C, the third way round (2026-10-07): each group a straight line ALONG the tray, the groups side by
 // side across it, the series snaking back in bands. Tried only when A and B do not take the build,
@@ -9580,9 +9588,10 @@ const HOLDERS_BY_FMT = { 21700: ['diag-b', 'diag-a', 'square-23'], 18650: ['diag
 const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
 const HOLDER_ORDER = HOLDERS_BY_FMT[21700];
 function holdersFor(fmt) { return HOLDERS_BY_FMT[fmt] || HOLDER_ORDER; }
-const HOLDER_NAME = { 'diag-b': 'ניקל ב׳ (22.5)', 'diag-a': 'ניקל א׳ W (22.7)', 'square-23': 'ריבועי 23',
+// His names for the three 21700 nickels, by their shape (Daniel, 2026-10-15): W 22.7, Z 22.5, H 23.
+const HOLDER_NAME = { 'diag-b': 'ניקל Z (22.5)', 'diag-a': 'ניקל W (22.7)', 'square-23': 'ניקל H (23)',
   'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
-const HOLDER_LABEL = { 'diag-a': 'ניקל א׳ — W 22.7', 'diag-b': 'ניקל ב׳ — אלכסוני 22.5', 'square-23': 'ריבועי 23',
+const HOLDER_LABEL = { 'diag-a': 'ניקל W — 22.7', 'diag-b': 'ניקל Z — 22.5', 'square-23': 'ניקל H — 23',
   'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
 // Rebuilds the holder list for the cell size, keeping the choice when it is still valid.
 function refreshHolderOptions(fmt) {
@@ -9683,7 +9692,7 @@ function calcPackDims() {
   // board is physically bigger than a 13S. Filled in from the voltage until he types over it;
   // once he does, his number stays (dimExtraTouched), because he is the one holding the case.
   const extraEl = document.getElementById('dimExtra');
-  const autoExtra = V >= 72 ? 26 : V >= 60 ? 22 : V >= 48 ? 18 : 14;
+  const autoExtra = bmsAllowance(V, dimVehicle);
   // "Touched" is decided by comparing against the LAST value this function wrote, not by a
   // flag the input event sets. A flag only knows about typing — anything that sets the field
   // another way (a saved build, a vehicle preset, a test) looked untouched and got silently
@@ -10252,7 +10261,7 @@ function bomberHtml(v, c, fmt, holder, V, N, pairOf) {
     label: map ? {
       plan: labelPlan,
       head: `${S}S${chosenP}P · ${V}V ${ah(chosenP)}Ah` + (v.m ? ' · ' + v.m : ''),
-      line: `${N} תאי ${c.label || ''} · ניקל ${name}` + (stacks > 1 ? ` · ${stackWord} זהות` : ''),
+      line: `${N} תאי ${c.label || ''} · ${/^ניקל/.test(name) ? name : 'ניקל ' + name}` + (stacks > 1 ? ` · ${stackWord} זהות` : ''),
       foot: `${chosenP} במקביל בכל קבוצה · ${ranges.join(' · ')} · 1 = B−` + (map.some((r) => r.cells.some((x) => x.empty)) ? ' · ✕ ריק' : ''),
     } : { plan: plan(sel), line: `צד אחד · ${sel.perSide} תאים × ${stackWord} · ${name}`,
       foot: `צד השלדה ${Math.round(fr.L)}×${Math.round(fr.H)} מ״מ · ${sel.n} תאים` },
@@ -10373,7 +10382,7 @@ function vehicleByName(name) {
 // numbers (caps) where he counted, geometry elsewhere. Stacks only where stacking is allowed
 // and the height takes a second standing cell.
 function tubBest(v, V, c, fmt, extra) {
-  const tb = cellTub(tubOf(v), extra != null ? extra : dimExtraFor(V));
+  const tb = cellTub(tubOf(v), extra != null ? extra : dimExtraFor(V, v));
   if (!tb) return null;
   if (tb.H && tb.H < c.len + DIM_CAP && !needsRiser(v)) return null;
   const S = seriesForV(V);
@@ -10398,10 +10407,16 @@ function applyDimBest() {
   fillDimBuild(dimVehicle, +document.getElementById('dimV').value, b.P, b.h, b.layers, c);
 }
 // The allowance calcPackDims will use at this voltage: his own number once he typed one.
-function dimExtraFor(V) {
+// The length the BMS takes at the end: his own measure for a vehicle that has one (`bms` on its row —
+// the OX's 14mm, Daniel 2026-10-15), else the allowance by voltage.
+function bmsAllowance(V, v) {
+  if (v && +v.bms > 0) return +v.bms;
+  return V >= 72 ? 26 : V >= 60 ? 22 : V >= 48 ? 18 : 14;
+}
+function dimExtraFor(V, v) {
   const el = document.getElementById('dimExtra');
   if (dimExtraTouched && el) return Math.max(0, parseFloat(el.value) || 0);
-  return V >= 72 ? 26 : V >= 60 ? 22 : V >= 48 ? 18 : 14;
+  return bmsAllowance(V, v);
 }
 // The table's p is a tag from before the 2026-10-04 re-measure: 22.5 meant ניקל א׳ and 21.5 ניקל ב׳.
 function holderForPitch(p) { return p >= 23 ? 'square-23' : p >= 22.5 ? 'diag-a' : 'diag-b'; }
@@ -10435,10 +10450,10 @@ function useVehiclePack(model, volts) {
   // A tray he measured decides the build — the table is a guess, his tape is not. With no
   // voltage asked for, the highest one at which his tray takes anything.
   if ((v.mine || !P) && !volts) {
-    for (const vv of [72, 60, 52, 48, 36]) { if (tubBest(v, vv, c, fmt, dimExtraFor(vv))) { V = vv; P = V === 72 ? v.p72 : v.p60; break; } }
+    for (const vv of [72, 60, 52, 48, 36]) { if (tubBest(v, vv, c, fmt, dimExtraFor(vv, v))) { V = vv; P = V === 72 ? v.p72 : v.p60; break; } }
   }
   if (v.mine || !P) {
-    const b = tubBest(v, V, c, fmt, dimExtraFor(V));
+    const b = tubBest(v, V, c, fmt, dimExtraFor(V, v));
     if (b && b.P >= 1) { P = b.P; holder = b.h; layers = b.layers; }
   } else {
     // The table's build is an estimate. Where the tray is known and that build goes in on none of
@@ -10449,15 +10464,15 @@ function useVehiclePack(model, volts) {
     // says nothing: where the tray is known, an 18650 build opens on the biggest the tray takes
     // (2026-10-09, Daniel: "OX ב-18650: לפתוח על הכי גדול" — the OX at 60V opened on 16S9P, though
     // 16S11P goes in).
-    const tb0 = cellTub(tubOf(v), dimExtraFor(V));
+    const tb0 = cellTub(tubOf(v), dimExtraFor(V, v));
     if (tb0 && (fmt === 18650 || !holdersFor(fmt).some((h) => holderTakes(v, tb0, fmt, h, seriesForV(V), P, c, maxLayersFor(v, tb0, c))))) {
-      const b = tubBest(v, V, c, fmt, dimExtraFor(V));
+      const b = tubBest(v, V, c, fmt, dimExtraFor(V, v));
       if (b && b.P >= 1) { P = b.P; holder = b.h; layers = b.layers; }
     }
   }
   if (!P) P = 4;
   // Densest holder that takes the build, where the tray is known; else the table's own pitch.
-  const tb = cellTub(tubOf(v), dimExtraFor(V));
+  const tb = cellTub(tubOf(v), dimExtraFor(V, v));
   if (tb && !v.mine) {
     const ok = holdersFor(fmt).find((h) => holderTakes(v, tb, fmt, h, seriesForV(V), P, c, maxLayersFor(v, tb, c)));
     if (ok) holder = ok;
@@ -10626,6 +10641,9 @@ const VEHICLE_PACKS = [
     tub: '485×170×170 מ"מ (נמדד ע"י הלקוח)' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 32Ah', oemSrc: 'zippycycles', pack: '380×170×140 (XXL)', packSrc: 'citylion (XXL אחרי-שוק)' ,
     tub: '380×170×140 מ"מ — לפי מידות הסוללה המקורית (citylion), לא נמדד' },
+  // Measured inside by Daniel, 2026-10-15: "מידות סורון אולטרה פנימי אורך 31.2 רוחב 22 עובי 17" (cm).
+  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron Ultra Bee', src: 'Daniel', p: 22.5, s60: 16, p60: 11, s72: 20, p72: 11, max: 220,
+    tub: '312×220×170 מ"מ פנימי (נמדד 15.10.2026)' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', src: 'AI', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, oem: '60V 45Ah', oemSrc: 'talaria.cn.com', pack: '381×171×140', packSrc: 'talaria.cn.com' ,
     // 385 long, not 381 (2026-09-27): a 60V 60-65Ah pack sold on AliExpress as a DIRECT replacement
     // for the Sting MX4 measures 385×170×140, and a pack that goes in is a floor for the tray.
@@ -10754,7 +10772,8 @@ const VEHICLE_PACKS = [
     // is counted since 2026-10-08 (tubOf's nx, tailFit): 60 along, 140 across, centred. The BMS sits
     // at its end (Daniel: "ה-BMS יושב בסוף לא מעל התאים"), so 20S7P does not go in: 72V is 20S6P on
     // ניקל א׳ or ב׳, in the wide part. His counts (caps) are cells alone, without the BMS.
-    tub: '425×165×65 מ"מ + צר 60×140', caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
+    // The BMS takes 14mm at the end of the narrow part (Daniel, 2026-10-15), not the 26 allowed at 72V.
+    tub: '425×165×65 מ"מ + צר 60×140', bms: 14, caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 10X', src: 'AI', p: 21.5, s60: 16, p60: 4, s72: 20, p72: 3, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 72, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' ,
     tub: '455×134×58 מ"מ פנימי (נמדד 22.9.2026) · רדוד — אף תא לא עומד בו' },
   { g: 'קורקינטים · חובה הגבהה (Riser)', m: 'Zero 11X', src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' ,
@@ -10765,7 +10784,7 @@ const VEHICLE_PACKS = [
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Burn-E', src: 'AI', p: 23, s60: 16, p60: 12, s72: 20, p72: 10, upg: '72V 40Ah', upgSrc: 'fluidfreeride.com', max: 240, oem: '72V 40Ah', oemSrc: 'fluidfreeride' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Blast', src: 'AI', p: 22.5, s60: 16, p60: 10, s72: 20, p72: 8, max: 160, oem: '60V 40Ah', oemSrc: 'maxblinker' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Nami Klima', src: 'AI', p: 21.5, s60: 16, p60: 8, s72: 20, p72: 6, max: 147, oem: '60V 30Ah', oemSrc: 'fluidfreeride',
-    tub: '463×139×75 מ"מ פנימי (נמדד 22.9.2026) · שכבה אחת · 16S6P (6×16) בריבועי 23' },
+    tub: '463×139×75 מ"מ פנימי (נמדד 22.9.2026) · שכבה אחת · 16S6P (6×16) בניקל H 23' },
   { g: 'קורקינטים · ללא הגבהה', m: 'Wolf Warrior', src: 'AI', p: 22.5, s60: 16, p60: 13, s72: 20, p72: 10, upg: '60V 35Ah', upgSrc: 'fluidfreeride.com', max: 208, oem: '60V 35Ah', oemSrc: 'fluidfreeride',
     // The stock 60V 35Ah PACK (ebikescooter, 25.9.2026: 38.8 x 15.5 x 6.5 cm, 9.1kg). Deliberately
     // not a tub: 65mm is the pack, not the tray, and as a tray it would tell him no 21700 stands.
@@ -11445,7 +11464,7 @@ async function renderWaBot(reload = true) {
       return;
     }
   }
-  box.innerHTML = waStatusHtml() + waQuestionsHtml() + waComposeHtml() + waSettingsHtml() + waInstructionsHtml() + waBlockedHtml()
+  box.innerHTML = waStatusHtml() + waQuestionsHtml() + waComposeHtml() + waSettingsHtml() + waInstructionsHtml() + waLabHtml() + waBlockedHtml()
     + waPausedHtml() + waTeachHtml() + waKnowledgeHtml() + waLogHtml();
 }
 function waStatusHtml() {
@@ -11504,7 +11523,7 @@ function waSettingsHtml() {
     + '<div class="form-row"><label>אמוג׳י</label><select class="form-select" id="wbEmoji">' + opt('some', st.emoji, 'מעט') + opt('none', st.emoji, 'בלי') + '</select></div>'
     + chk('wbShabbat', st.shabbat, '🕯 שותק בשבת ובחג')
     + chk('wbIsrael', st.israelOnly, '🇮🇱 רק מספרים ישראליים')
-    + chk('wbSaved', st.skipSaved, '📇 לא עונה לאנשי קשר שמורים — רק למספרים חדשים')
+    + chk('wbSaved', st.skipSaved, '📇 לאנשי קשר שמורים — רק ללקוחות המעבדה (הרשימה למטה)')
     + chk('wbVoice', st.voice, '🎤 מתמלל הודעות קוליות')
     + chk('wbMedia', st.media, '🖼 קורא תמונות ו-PDF')
     + chk('wbAsk', st.askDaniel, '❓ כשלא בטוח — טיוטה מחכה לך כאן, לאישור')
@@ -11519,6 +11538,39 @@ function waInstructionsHtml() {
   const text = waBot.settings.instructions || '';
   return fold('instr', '📝 הוראות לבוט', '<textarea class="form-input-wide wb-area" id="wbInstr" maxlength="4000" placeholder="מבצע, יום סגור, מה לא להבטיח…">' + escPunch(text) + '</textarea>'
     + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="waSaveInstructions()">💾 שמור</button>', { count: text.trim() ? '✓' : null });
+}
+// Saved contacts the bot answers: the lab's own customers (Daniel, 2026-10-15: "רק לאנשי קשר ששמורים, רק
+// שקשורים לסוללות"). The bot's scan of his chats marks them, he removes or adds one here, and his word
+// stands over a later scan. A number with a job or an order in the hub is answered without being listed.
+function waLabHtml() {
+  const list = waBot.settings.labSaved || [], lab = waBot.lab || { left: 0, total: 0, no: [] };
+  const row = (x, on) => '<div class="wb-row wb-head"><span><span class="wb-who">' + escPunch(x.n || 'ללא שם') + '</span> · ' + escPunch(waNum(x.p))
+    + (x.why ? '<div class="wb-sub">' + escPunch(x.why) + '</div>' : '') + '</span>'
+    + '<button class="btn btn-secondary btn-sm" onclick="waLabSet(\'' + escPunch(x.p) + '\',' + (on ? 'false' : 'true') + ',this)" data-n="' + escPunch(x.n || '') + '">' + (on ? '✕' : '➕') + '</button></div>';
+  const scanned = lab.total ? lab.total - lab.left : 0;
+  return fold('lab', '📇 שמורים שהבוט עונה להם', '<div class="wb-sub">לקוחות המעבדה מבין אנשי הקשר השמורים. שמור שלא ברשימה — הבוט לא עונה לו (כשההגדרה למעלה מסומנת). מי שיש לו תיקון או הזמנה בלוח הבקרה — תמיד.</div>'
+    + '<div class="wb-sub" style="margin-top:6px">' + (lab.total ? 'נבדקו ' + scanned + ' מתוך ' + lab.total + ' אנשי קשר שיש איתם שיחה' : 'עוד לא נבדקו') + '</div>'
+    + '<button class="btn btn-secondary btn-block" style="margin:6px 0" id="wbLabScan" onclick="waLabScan()">🔎 ' + (lab.left ? 'המשך בדיקה' : 'בדוק את כל השיחות') + '</button>'
+    + (list.length ? list.map((x) => row(x, true)).join('') : '<div class="wb-sub">אין</div>')
+    + (lab.no.length ? fold('labno', 'לא סומנו כלקוחות', lab.no.map((x) => row(x, false)).join(''), { count: lab.no.length, sub: true }) : ''),
+    { count: list.length });
+}
+function waLabSet(p, on, btn) {
+  waDo({ op: 'lab', p, on, n: btn ? btn.getAttribute('data-n') : '' }, on ? '✅ נוסף — הבוט יענה לו' : '✅ הוסר — הבוט לא יענה לו');
+}
+async function waLabScan() {
+  const btn = document.getElementById('wbLabScan');
+  let restart = !(waBot.lab && waBot.lab.left), r = null;
+  try {
+    for (let i = 0; i < 400; i++) {
+      r = await waAdmin({ op: 'labscan', limit: 15, restart });
+      restart = false;
+      if (btn) btn.textContent = '🔎 בודק… נשארו ' + r.left;
+      if (!r.left || !r.read) break;
+    }
+    await renderWaBot();
+    showNotice('✅ הבדיקה הסתיימה — ' + (r ? r.lab : 0) + ' לקוחות מעבדה');
+  } catch (e) { showNotice('⚠ הבדיקה נעצרה: ' + e.message); await renderWaBot(); }
 }
 function waBlockedHtml() {
   const list = waBot.settings.blocked || [];
