@@ -1247,6 +1247,10 @@ const rz = await page.evaluate((SELF) => {
   return { ok: maxPFor(v, tb, 21700, 'diag-b', 72, c), tight: maxPFor(tight, tb, 21700, 'diag-b', 72, c), rm: v.riserMax };
 }, SELFTEST);
 check('a riser only as high as the vehicle has room for: the OX\'s 12mm takes the 21700, 5mm would not', rz.rm === 12 && rz.ok === 6 && rz.tight === 0, rz);
+// Every scooter in one group (2026-10-15: "תאחד את כל הקורקינטים"), the riser kept per row.
+const sc = await page.evaluate(() => ({ groups: [...new Set(VEHICLE_PACKS.filter((v) => /קורקינט/.test(v.g)).map((v) => v.g))],
+  ox: needsRiser(vehicleByName('Inokim OX')), plain: VEHICLE_PACKS.filter((v) => v.g === 'קורקינטים' && !v.riser).every((v) => !needsRiser(v)) }));
+check('the scooters are one group, and the riser is still each row\'s own', sc.groups.join('|') === 'קורקינטים' && sc.ox && sc.plain, sc);
 check('Sur-Ron Ultra Bee: his 312 × 220 × 170, and 72V 20S11P on ניקל Z', ub.tb && ub.tb.L === 312 && ub.tb.W === 220 && ub.tb.H === 170 && ub.z72 === 11, ub);
 
 await browser.close();

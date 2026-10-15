@@ -81,6 +81,7 @@ const r = await page.evaluate(async () => {
   const back = row ? await bkUnpack(row.value) : null;
   out.back = back ? { customers: (back.customers || []).length, worktime: (back.worktime || []).length } : null;
   out.posts = REQS.filter((x) => x.startsWith('POST')).length;
+  out.monthly = !!CLOUD['bk_m' + (new Date().getMonth() + 1)];
   out.stamp = !!Store.get('lastCloudBackup');
   REQS.length = 0;
   await cloudBackup();
@@ -109,7 +110,7 @@ const r = await page.evaluate(async () => {
   out.after = { customers: (Store.get('customers') || []).map((c) => c.id).sort().join(','), hours: (Store.get('worktime') || [])[0].hours };
   return out;
 });
-check('a day\'s backup goes up as bk_<weekday>, packed', r.ok === true && r.key && r.packed === 'gzip64' && r.posts === 1, r);
+check('a day\'s backup goes up as bk_<weekday>, packed, and the month\'s first as bk_m<month>, kept a year', r.ok === true && r.key && r.packed === 'gzip64' && r.posts === 2 && r.monthly, r);
 check('and comes back whole', r.back && r.back.customers === 2 && r.back.worktime === 1, r.back);
 check('it is stamped, and a second run the same day sends nothing', r.stamp && r.secondPosts === 0, [r.stamp, r.secondPosts]);
 check('a pull never downloads the backups', /key=not\.like\.bk_\*/.test(r.pullUrl), r.pullUrl);

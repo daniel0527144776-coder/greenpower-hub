@@ -87,11 +87,11 @@ if (SELFTEST) await page.evaluate(() => {
   const swap = (fn, a, b) => { const s = fn.toString(); if (!s.includes(a)) throw new Error('selftest: ' + a); return (0, eval)('(' + s.replace(a, b) + ')'); };
   window.escPunch = (s) => String(s == null ? '' : s);
   window.stuckWork = swap(stuckWork, 'Number(r._u) || 0', '0');
-  window.checkHubAlerts = swap(checkHubAlerts, "if (document.getElementById('modalBackdrop').classList.contains('active')) return false;", '');
+  // --selftest: the list pops up by itself again
+  window.checkHubAlerts = swap(checkHubAlerts, 'return a.length > 0;', 'if (a.length) showHubAlerts(false, a); return a.length > 0;');
 });
 
 // a test browser gets no pop-up unless the test asks for one — the guard that keeps it out of the other 40 suites
-check('in a test browser nothing pops up on its own', await page.evaluate(() => checkHubAlerts() === false && !document.getElementById('modalBackdrop').classList.contains('active')), '');
 await page.evaluate(() => { window.__gpAlertsUnderTest = true; });
 
 // stuck work
@@ -139,39 +139,19 @@ a = await page.evaluate((t) => hubAlerts(t + 5 * 60000).find((x) => x.id === 'sy
 check('once it went up, the clock starts again', !a, a);
 await page.evaluate(() => { Sync.pending = () => []; hubAlerts(); });
 
-// the pop-up
+// No pop-up, ever (2026-10-15, "שלא יקפוץ לי התראות"): the dot says there is something; the 🔔 opens the list.
 const modalOpen = () => page.evaluate(() => document.getElementById('modalBackdrop').classList.contains('active'));
-let popped = await page.evaluate(() => checkHubAlerts());
-check('something new pops up', popped === true && await modalOpen()
-  && await page.evaluate(() => document.getElementById('modalTitle').textContent === '🔔 התראות'), '');
+const has = await page.evaluate(() => checkHubAlerts());
+check('something new does not pop up: the red dot goes on, nothing opens', has === true && !(await modalOpen())
+  && await page.evaluate(() => document.getElementById('alertDot').style.display === ''), '');
+await page.evaluate(() => { localStorage.removeItem('gp_alerts_seen'); checkHubAlerts(); });
+check('not the next day either', !(await modalOpen()), '');
+await page.evaluate(() => showHubAlerts(true));
+check('the 🔔 opens the list', await modalOpen() && await page.evaluate(() => document.getElementById('modalTitle').textContent === '🔔 התראות'), '');
 const cards = await page.evaluate(() => [...document.querySelectorAll('#modalBody [data-alert]')].map((e) => e.dataset.alert));
 check('one card per alert', cards.join(',') === 'wa,stuck,backup', cards);
 check('a customer\'s name is shown as text, never run as markup', await page.evaluate(() => window.__xss === undefined && !document.querySelector('#modalBody img')
   && document.getElementById('modalBody').innerText.includes('<img src=x')), '');
-check('the red dot is on', await page.evaluate(() => document.getElementById('alertDot').style.display === ''), '');
-await page.evaluate(() => closeModal());
-check('the same list does not pop up again today', await page.evaluate(() => checkHubAlerts()) === false && !(await modalOpen()), '');
-await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('gp_alerts_seen')); s.day = '2000-01-01'; localStorage.setItem('gp_alerts_seen', JSON.stringify(s)); });
-check('it does the next day', await page.evaluate(() => checkHubAlerts()) === true, '');
-await page.evaluate(() => closeModal());
-
-// never over a window he has open, the login, or a hidden page
-const addStuck = (id) => page.evaluate(({ id, DAY }) => {
-  const j = JSON.parse(localStorage.getItem('gp_jobs')); j.push({ id, date: new Date(Date.now() - 12 * DAY).toISOString(), customerName: 'נוסף', jobStatus: 'בעבודה' });
-  localStorage.setItem('gp_jobs', JSON.stringify(j));
-}, { id, DAY });
-await addStuck('j7');
-await page.evaluate(() => openModal('לקוח', '<p id="hisWork">עבודה פתוחה</p>'));
-check('nothing pops over a window he has open', await page.evaluate(() => checkHubAlerts() === false && !!document.getElementById('hisWork')), '');
-await page.evaluate(() => { closeModal(); showNotice('הודעה'); });
-check('or over a notice', await page.evaluate(() => checkHubAlerts() === false && document.getElementById('noticeBody').textContent === 'הודעה'), '');
-await page.evaluate(() => { closeNotice(); showLogin(''); });
-check('or over the login', await page.evaluate(() => checkHubAlerts() === false), '');
-await page.evaluate(() => { hideLogin(); Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); });
-check('or while the hub is in the background', await page.evaluate(() => checkHubAlerts() === false), '');
-await page.evaluate(() => { delete document.hidden; });
-check('and the new item pops up once he is free', await page.evaluate(() => checkHubAlerts()) === true
-  && await page.evaluate(() => /4 עבודות/.test(document.getElementById('modalBody').innerText)), await page.evaluate(() => document.getElementById('modalBody').innerText.slice(0, 200)));
 
 // the buttons
 await page.evaluate(() => document.querySelector('#modalBody [data-alert="stuck"] button').click());
@@ -181,13 +161,13 @@ await page.evaluate(() => document.querySelector('#modalBody [data-alert="wa"] b
 await page.waitForTimeout(300);
 check('"לשאלות" opens the bot\'s page', !(await modalOpen()) && await page.evaluate(() => document.getElementById('page-wabot').classList.contains('active')), '');
 
-// the heartbeat: asks the bot, then checks
+// the heartbeat: asks the bot, then lights the dot — and opens nothing
 const g0 = gets.length;
-await page.evaluate(() => { localStorage.removeItem('gp_alerts_seen'); });
+await page.evaluate(() => { closeModal(); localStorage.removeItem('gp_alerts_seen'); });
 await page.evaluate(() => window._realHeartbeat(true));
 await page.waitForTimeout(500);
-check('the heartbeat asks the bot and pops up what is new', gets.length === g0 + 1 && await modalOpen(), [gets.length - g0]);
-await page.evaluate(() => closeModal());
+check('the heartbeat asks the bot and lights the dot, without popping anything', gets.length === g0 + 1 && !(await modalOpen())
+  && await page.evaluate(() => document.getElementById('alertDot').style.display === ''), [gets.length - g0]);
 
 // the 🔔 with nothing to say
 await page.evaluate(() => {
