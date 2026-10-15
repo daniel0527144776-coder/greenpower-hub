@@ -2749,7 +2749,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v434';
+const HUB_BUILD = 'v435';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7997,24 +7997,13 @@ function showHubAlerts(manual, list) {
   openModal('🔔 התראות', body, '<button class="btn btn-secondary" onclick="closeModal()">הבנתי</button>');
   try { localStorage.setItem(ALERT_SEEN_KEY, JSON.stringify({ sig: hubAlertsSig(a), day: new Date().toISOString().slice(0, 10) })); } catch (e) {}
 }
-// Pops the list up when there is something new; quiet otherwise.
+// Never pops up by itself (Daniel, 2026-10-15: "שלא יקפוץ לי התראות"): the red dot on the 🔔 says there
+// is something, and the list opens only when he taps it (showHubAlerts). Returns whether there is.
 function checkHubAlerts() {
   const a = hubAlerts();
   const dot = document.getElementById('alertDot');
   if (dot) dot.style.display = a.length ? '' : 'none';
-  if (!a.length || document.hidden) return false;
-  // A test browser (Playwright sets navigator.webdriver) gets no pop-up of its own accord: one
-  // landing in the middle of another suite's steps would take over its modal. test-alerts.mjs turns it on.
-  if (navigator.webdriver && !window.__gpAlertsUnderTest) return false;
-  const login = document.getElementById('loginOverlay');
-  if (login && login.style.display !== 'none' && getComputedStyle(login).display !== 'none') return false;
-  if (document.getElementById('modalBackdrop').classList.contains('active')) return false;
-  if (document.getElementById('noticeBackdrop').classList.contains('active')) return false;
-  let seen = {};
-  try { seen = JSON.parse(localStorage.getItem(ALERT_SEEN_KEY) || '{}') || {}; } catch (e) { seen = {}; }
-  if (seen.sig === hubAlertsSig(a) && seen.day === new Date().toISOString().slice(0, 10)) return false;
-  showHubAlerts(false, a);
-  return true;
+  return a.length > 0;
 }
 async function refreshWaAlertCount() {
   if (typeof Sync === 'undefined' || !Sync.isAuthed()) return;
@@ -13544,10 +13533,15 @@ async function cloudBackupRun() {
     const packed = await bkPack(data);
     const h = await Sync._headers();
     h['Prefer'] = 'resolution=merge-duplicates';
-    const r = await fetch(SB_URL + '/rest/v1/hub_state?on_conflict=user_id,key', { method: 'POST', headers: h,
-      body: JSON.stringify({ user_id: Sync.userId, key: 'bk_' + new Date().getDay(), value: { at: Date.now(), keys: Object.keys(data).length, ...packed }, updated_at: new Date().toISOString() }) });
+    const put = (key) => fetch(SB_URL + '/rest/v1/hub_state?on_conflict=user_id,key', { method: 'POST', headers: h,
+      body: JSON.stringify({ user_id: Sync.userId, key, value: { at: Date.now(), keys: Object.keys(data).length, ...packed }, updated_at: new Date().toISOString() }) });
+    const r = await put('bk_' + new Date().getDay());
     if (!r.ok) return false;
     Store.set('lastCloudBackup', Date.now());
+    // and once a month a copy kept for a year (Daniel, 2026-10-15: "שיהיה גיבוי אוטומטי"): the days roll
+    // over every week, so a mistake noticed after it would have nothing left to come back from
+    const month = new Date().toISOString().slice(0, 7);
+    if (Store.get('lastMonthlyBackup') !== month && (await put('bk_m' + (new Date().getMonth() + 1))).ok) Store.set('lastMonthlyBackup', month);
     const banner = document.getElementById('backupReminder');
     if (banner) banner.style.display = 'none';
     renderBackupStatus();
@@ -13581,7 +13575,7 @@ async function openCloudRestore() {
   if (!rows.length) { showNotice('אין עדיין גיבויים בענן. הגיבוי רץ מעצמו פעם ביום.'); return; }
   openModal('♻️ שחזור מגיבוי בענן',
     '<div class="wt-muted" style="margin-bottom:10px;">בחר יום. יחזרו רק שורות שחסרות עכשיו (שעות, לקוחות, מכירות, מלאי…). שום דבר קיים לא יוחלף.</div>'
-    + rows.map((x) => `<button class="btn btn-secondary btn-block" style="margin-bottom:6px;" data-bk="${escPunch(x.key)}" onclick="restoreFromCloud('${escPunch(x.key)}')">${new Date(x.updated_at).toLocaleString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</button>`).join(''),
+    + rows.map((x) => `<button class="btn btn-secondary btn-block" style="margin-bottom:6px;" data-bk="${escPunch(x.key)}" onclick="restoreFromCloud('${escPunch(x.key)}')">${new Date(x.updated_at).toLocaleString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}${/^bk_m/.test(x.key) ? ' · חודשי' : ''}</button>`).join(''),
     '<button class="btn btn-secondary" onclick="closeModal()">סגור</button>');
 }
 function missingRowsFrom(data) {
