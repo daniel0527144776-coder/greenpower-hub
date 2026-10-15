@@ -288,6 +288,18 @@ check('a repair\'s "21700-50pl" comes off "תאי EVE 21700 50PL"', rep.pl === t
 check('and "18650-25p" off the 18650 25P row', rep.p25 === true && rep.q[2] === 90, JSON.stringify(rep));
 check('"18650-6" matches no row rather than a near one', rep.six === false && rep.q[1] === 2500, JSON.stringify(rep));
 
+// ---- 10c. a build takes the cells it was built from (v442) ----
+// Every build was divided by 5Ah, so a 13S 10Ah of 25P (2.5Ah, 13S4P = 52 cells) took 26.
+const by = await page.evaluate((SELF) => {
+  if (SELF) CELL_MAH['18650-25p'] = 5000;   // the old rule: every cell taken as 5Ah
+  const old = jobStockParts({ jobs: ['full'], voltage: '48', capacity: '10', cellType: '18650-25p' });
+  const saved = jobStockParts({ jobs: ['full'], voltage: '48', capacity: '10', cellType: '18650-25p', cells: 52 });
+  const big = jobStockParts({ jobs: ['full'], voltage: '72', capacity: '30', cellType: '21700-50pl' });
+  return { old: old.cells, saved: saved.cells, big: big.cells };
+}, SELFTEST);
+check('an 18650 build saved before v442 takes 13S4P = 52 cells, not 26', by.old === 52, JSON.stringify(by));
+check('a build saved with its layout takes exactly that', by.saved === 52 && by.big === 120, JSON.stringify(by));
+
 // ---- 11. ordering by pace (2026-10-04, "הזמנת מלאי לפי קצב") ----
 // Every automatic deduction leaves a dated line; before the log, sales and repairs are read back
 // with the same decomposition that deducted them; a hand recount is not usage; and what to order

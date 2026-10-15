@@ -148,17 +148,63 @@ const war = await page.evaluate(() => [...document.querySelectorAll('#warranties
 check('on the warranties page, a repair\'s and a sale\'s 💬 and 🤖 go to their messages', war.includes("jobWhatsApp('j2')") && war.includes("orderWhatsApp('o1')")
   && war.includes("jobBot('j2')") && war.includes("orderBot('o1')") && !war.some((o) => /callCustomer/.test(o)), war.join(' '));
 
-// ---- marking a repair מוכן לאיסוף offers the message
+// ---- marking a repair מוכן לאיסוף tells the customer by itself, through the bot (v442)
+const before5 = posts.length;
 await page.evaluate(() => { navigateTo('orders'); cycleJobStatus('j5'); });
-await page.waitForTimeout(200);
-const n5 = await notice();
-check('🔁 to מוכן לאיסוף offers the ready message', /מוכן לאיסוף/.test(n5) && /הודעה שהסוללה מוכנה/.test(n5), n5);
-const ready = await page.evaluate(() => { window.__wa = []; noticeConfirm(); return window.__wa.slice(); });
-check('yes opens WhatsApp with it written, the pack ready', /\(60V 25Ah\) מוכנה לאיסוף/.test(textOf(ready[0])), ready[0]);
-await page.evaluate(() => { closeModal(); openJobEditor('j3'); document.getElementById('jeStatus').value = 'מוכן לאיסוף'; saveJobEdit('j3'); });
-await page.waitForTimeout(200);
-check('the job editor set to מוכן לאיסוף offers it too', /הודעה שהסוללה מוכנה/.test(await notice()), await notice());
+await page.waitForTimeout(400);
+const s5 = posts.slice(before5), n5 = await notice();
+check('🔁 to מוכן לאיסוף sends the ready message through the bot, with nothing to press', s5.length === 1 && s5[0].op === 'send' && s5[0].chat === '050-777-1234'
+  && /\(60V 25Ah\) מוכנה לאיסוף/.test(s5[0].text) && /נשלחה ל/.test(n5), [s5, n5]);
+check('and the job remembers it was told', await page.evaluate(() => !!jobOf('j5').readyToldAt), '');
 await page.evaluate(() => closeNotice());
+// ready a second time: no second message by itself, he is asked
+await page.evaluate(() => offerReadyMessage(jobOf('j5')));
+await page.waitForTimeout(300);
+check('ready again: nothing sent twice, he is asked', posts.length === before5 + 1 && /כבר נשלחה/.test(await notice()), await notice());
+const ready = await page.evaluate(() => { window.__wa = []; noticeConfirm(); return window.__wa.slice(); });
+check('his yes opens WhatsApp with it written, the pack ready', /\(60V 25Ah\) מוכנה לאיסוף/.test(textOf(ready[0])), ready[0]);
+// the bot out of reach: the question it always was
+botUp = false;
+await page.evaluate(() => { closeModal(); openJobEditor('j3'); document.getElementById('jeStatus').value = 'מוכן לאיסוף'; saveJobEdit('j3'); });
+await page.waitForTimeout(400);
+check('the job editor set to מוכן לאיסוף, the bot down: he is asked instead', /הבוט לא זמין/.test(await notice()) && /הודעה שהסוללה מוכנה/.test(await notice())
+  && await page.evaluate(() => !jobOf('j3').readyToldAt), await notice());
+botUp = true;
+await page.evaluate(() => closeNotice());
+
+// ---- the repair calculator's quote: through the bot, and approved into a repair in one tap (v442)
+if (SELFTEST) await page.evaluate(() => { window.openWaCompose = (p, n, t) => showMessageToCopy(t); });
+const beforeQ = posts.length;
+const q = await page.evaluate(async () => {
+  closeModal(); closeNotice();
+  navigateTo('calc');
+  document.getElementById('custName').value = 'יוסי';
+  document.getElementById('custPhone').value = '052-111-2222';
+  document.getElementById('voltage').value = '48';
+  document.getElementById('capacity').value = '20';
+  if (!state.jobs.has('bms')) toggleJob('bms');
+  recalc();
+  generateWhatsApp();
+  const box = (document.getElementById('waComposeMsg') || {}).value || '';
+  const then = document.querySelector('[data-wa-then]');
+  await sendWaCompose();
+  await new Promise((r) => setTimeout(r, 300));
+  closeNotice();
+  const n0 = (Store.get('jobs') || []).length;
+  generateWhatsApp();
+  const btn = document.querySelector('[data-wa-then]');
+  if (btn) btn.click();
+  await new Promise((r) => setTimeout(r, 300));
+  const jobs = Store.get('jobs') || [];
+  const said = document.getElementById('noticeBackdrop').classList.contains('active') ? document.getElementById('noticeBody').textContent : '';
+  return { said, box, then: then ? then.textContent : '', added: jobs.length - n0, job: jobs[0] && { phone: jobs[0].customerPhone, name: jobs[0].customerName } };
+});
+const sq = posts.slice(beforeQ);
+check('the calculator\'s 💬 opens the quote to send through the bot', /מחיר סופי/.test(q.box) && /✅ אושר/.test(q.then), q);
+check('📤 sends it from the business number to the customer', sq.length === 1 && sq[0].op === 'send' && sq[0].chat === '052-111-2222' && /מחיר סופי/.test(sq[0].text), sq);
+check('"✅ אושר — שמור כתיקון" saves it as the repair, in one tap', q.added === 1 && q.job && q.job.phone === '052-111-2222' && q.job.name === 'יוסי', q);
+check('and says it was saved, in the same notice as what left the shelf', /נשמר ·/.test(q.said) && /מלאי/.test(q.said), q.said);
+await page.evaluate(() => { closeModal(); closeNotice(); });
 
 // ---- a name with markup stays text
 // (the order list draws names as his own typing; only the message window is under test here)
