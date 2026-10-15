@@ -130,6 +130,9 @@ jobs:
       - name: The twelve-month chart on the finances page
         run: node test/test-fin-chart.mjs
 
+      - name: A new version reloads by itself, never over his work
+        run: node test/test-auto-update.mjs
+
       # The import writes 144 names into `customers` and the sales editor had no way to pick
       # one — so a repeat customer was retyped, which is the duplicate the import exists to
       # avoid. A search capped like the idle list would hide them all while still looking fine.
