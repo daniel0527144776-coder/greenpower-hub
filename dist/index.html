@@ -1454,6 +1454,8 @@ body { min-height: 100vh; }
 
   <div id="finChart"></div>
 
+  <div id="finWaLedger"></div>
+
   <div class="card">
     <h3 class="card-title">📅 כל החודשים</h3>
     <div id="finOverview"></div>
@@ -2754,7 +2756,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v444';
+const HUB_BUILD = 'v445';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7615,6 +7617,58 @@ function finMonthly() {
   wt.forEach(e => { const b = at(e.date); if (b) b.exp += (e.hours || 0) * (e.rate || 0); });
   return m;
 }
+// What his chats show and his books do not (v445, Daniel 2026-10-16: "רשימה לאישור בלוח הבקרה"). A
+// session read his WhatsApp and left the lines with money in them in the bot's memory — never in this
+// file, which is public. They are read with his login and offered one by one: ✓ books the line as an
+// income or an expense (id wa_<id>, src 'wa', deletable like any line he typed), ✕ drops it. Either way
+// the bot is told, so the line does not come back.
+let waLedger = null, waLedgerAt = 0;
+const waLedgerId = (id) => String(id || '').replace(/[^\w-]/g, '');
+async function loadWaLedger(force) {
+  if (typeof Sync === 'undefined' || !Sync.isAuthed()) { const el = document.getElementById('finWaLedger'); if (el) el.innerHTML = ''; return; }
+  if (force || !waLedger || Date.now() - waLedgerAt > 5 * 60000) {
+    try { const r = await waAdmin({ op: 'waledger_get' }); waLedger = Array.isArray(r.items) ? r.items : []; waLedgerAt = Date.now(); } catch (e) { return; }
+  }
+  renderWaLedger();
+}
+function renderWaLedger() {
+  const el = document.getElementById('finWaLedger');
+  if (!el) return;
+  const have = new Set([...(Store.get('incomes') || []), ...(Store.get('expenses') || [])].map((r) => String(r.id)));
+  const items = (waLedger || []).filter((x) => x && waLedgerId(x.id) && !have.has('wa_' + waLedgerId(x.id)));
+  if (!items.length) { el.innerHTML = ''; return; }
+  const row = (x) => {
+    const id = waLedgerId(x.id), out = x.kind === 'expense';
+    const day = x.d ? new Date(x.d + 'T12:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' }) : '';
+    return `<div class="fin-line" data-wa-line="${id}"><div><div>${escPunch(x.who || 'ללא שם')}${x.note ? ' — ' + escPunch(x.note) : ''}</div>`
+      + `<div class="fin-sub">${day} · ${out ? 'הוצאה' : 'הכנסה'}</div></div>`
+      + `<div class="${out ? 'fin-out' : 'fin-in'}" style="white-space:nowrap">${shek(x.a)} `
+      + `<button class="btn btn-sm btn-secondary" onclick="waLedgerTake('${id}')" title="רשום">✓</button> `
+      + `<button class="btn btn-sm btn-secondary" onclick="waLedgerDrop('${id}')" title="לא לרשום">✕</button></div></div>`;
+  };
+  el.innerHTML = '<div class="card">' + fold('waledger', '📲 מהוואטסאפ — לאישור',
+    '<div class="fin-sub" style="margin-bottom:6px">כסף שמופיע בשיחות ולא ברשום. ✓ רושם, ✕ מוותר.</div>' + items.map(row).join(''), { count: items.length }) + '</div>';
+}
+function waLedgerSettle(id) {
+  waLedger = (waLedger || []).filter((x) => waLedgerId(x.id) !== id);
+  waAdmin({ op: 'waledger_done', id }).catch(() => {});   // if it fails, the booked line still hides it here (wa_<id>)
+}
+function waLedgerTake(id) {
+  id = waLedgerId(id);
+  const x = (waLedger || []).find((y) => waLedgerId(y.id) === id);
+  if (!x) return;
+  const out = x.kind === 'expense', key = out ? 'expenses' : 'incomes';
+  const rows = Store.get(key) || [];
+  if (!rows.some((r) => String(r.id) === 'wa_' + id)) {
+    rows.unshift({ id: 'wa_' + id, amount: Number(x.a) || 0, cat: x.cat || (out ? 'אחר' : 'תיקונים ומכירות'),
+      note: [x.who, x.note].filter(Boolean).join(' — ').slice(0, 120), date: new Date((x.d || todayLocalISO()) + 'T12:00:00').toISOString(), src: 'wa' });
+    Store.set(key, rows);
+  }
+  waLedgerSettle(id);
+  renderFinances();
+}
+function waLedgerDrop(id) { waLedgerSettle(waLedgerId(id)); renderWaLedger(); }
+
 // The last twelve months as bars (v442, Daniel 2026-10-15: "גרף הכנסות חודשי"). The figures are
 // finMonthly's, the same ones the table under it shows, so the two cannot disagree. Drawn as inline
 // SVG: nothing is fetched, which the phone's filter requires. Right to left like the page: the
@@ -7754,6 +7808,7 @@ function renderFinances() {
       : '';
   }
   renderFinanceOverview();
+  loadWaLedger();
 }
 
 // Rebuilt 2026-09-25 (Daniel: "המון מלל מיותר וגם מסודר בצורה גרועה"). Where the money came
