@@ -301,8 +301,10 @@ check('the tray row names the narrow part and the riser',
 // narrow one, so 72V 20S6P goes in on all three nickels and 60V (22mm) takes 16S8P on the square.
 check('maxima with a 26mm BMS at the end: 72V 20S6P on the square and Z, 20S7P on W; 60V 16S8P on the square',
   oxn.m72 === 6 && oxn.m60 === 8 && oxn.a72 === 7 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
-check('a 15mm BMS: 20S5P on the square, all of it in the wide part, the full width', oxn.s15 === 6
-  && /✅ נכנס ל-Inokim OX/.test(oxn.res15) && !/קבוצ(ה|ות) [\d–]+ בחלק הצר/.test(oxn.res15) && /לכל רוחב האמבטיה: 7 בחלק הרחב/.test(oxn.res15), [oxn.s15, oxn.res15.slice(0, 160)]);
+// Each group a row of its own since the evening of 2026-10-17 ("שורה נגמרת, ממשיכה שורה הבאה ... מסודר"):
+// 20S5P is rows of five, and groups 19-20 go on into the narrow part.
+check('a 15mm BMS: 20S5P on the square, a row of five per group, 19-20 in the narrow part', oxn.s15 === 6
+  && /✅ נכנס ל-Inokim OX — קבוצות 19–20 בחלק הצר/.test(oxn.res15) && /כל קבוצה שורה: 5 לרוחב/.test(oxn.res15), [oxn.s15, oxn.res15.slice(0, 160)]);
 check('its drawing: 100 cells, the tray round them, the BMS at the end of the narrow part',
   oxn.cells === 100 && oxn.outline && oxn.bmsDrawn && oxn.bmsInNarrow && oxn.label && oxn.label.n === 100,
   [oxn.cells, oxn.outline, oxn.bmsDrawn, oxn.bmsInNarrow, JSON.stringify(oxn.label)]);
@@ -324,8 +326,8 @@ const oxc = await page.evaluate((SELF) => {
   const ys = cells.map((c) => c.y), lo = Math.min(...ys) - pl.dia / 2, hi = Math.max(...ys) + pl.dia / 2;
   // the drawing's 0 is one wall in from the tray's side: the tray's middle across is W/2 - wall
   const mid = tb.W / 2 - DIM_WALL;
-  // filled across the width: the first column holds the tray's whole width, 7 on the square
-  const sameCols = cells.filter((c) => Math.abs(c.x - cells[0].x) < 0.01).length === 7;
+  // a row per group: the first column holds the first group, six on the square
+  const sameCols = cells.filter((c) => Math.abs(c.x - cells[0].x) < 0.01).every((c) => c.g === 0) && cells.filter((c) => Math.abs(c.x - cells[0].x) < 0.01).length === 6;
   const out = { extra, res: document.getElementById('dimResult').innerText.slice(0, 160), n: cells.length,
     off: Math.abs((lo + hi) / 2 - mid), sameCols, max: maxPFor(vehicleByName('Inokim OX'), cellTub(tb, 14), 21700, 'square-23', 72, DIM_CELLS['21700-50e']) };
   dimExtraTouched = false;
@@ -333,7 +335,7 @@ const oxc = await page.evaluate((SELF) => {
   return out;
 }, SELFTEST);
 check('the OX\'s own BMS allowance is his 14mm, and with it the square takes 20S6P', oxc.extra === '14' && oxc.max === 6 && /✅ נכנס ל-Inokim OX/.test(oxc.res) && oxc.n === 120, oxc);
-check('the block is centred across the tray, and it takes the tray\'s whole width', oxc.off < 0.5 && oxc.sameCols, oxc);
+check('the block is centred across the tray, and each group is a row of its own', oxc.off < 0.5 && oxc.sameCols, oxc);
 
 // The drawing is the answer to "how do I lay it out", so it has to BE the layout: one circle
 // per cell, in the grid the numbers above it describe. A picture that disagrees with the
@@ -659,7 +661,7 @@ const hw = await page.evaluate((SELF) => {
   clearDimVehicle();
   return { txt, n: circles.length };
 }, SELFTEST);
-check('a group wider than the tray runs on across the whole width, and says so', /לכל רוחב האמבטיה: \d+ · 20S10P/.test(hw.txt) && hw.n === 100, [hw.n, hw.txt.slice(0, 260)]);
+check('a group wider than the tray: a row the tray\'s width, the group going on into the next, and it says so', /שורה של \d+ · כל קבוצה ממשיכה לשורה הבאה · 20S10P/.test(hw.txt) && hw.n === 100, [hw.n, hw.txt.slice(0, 260)]);
 
 // ...and is DRAWN in the order the series runs (2026-10-17): the groups follow each other column after
 // column, each group's cells in one piece — no group lies past the next one, and none is split by
@@ -780,7 +782,7 @@ const turn = await page.evaluate((SELF) => {
   return { r, circles, klima, wTxt };
 }, SELFTEST);
 check('a 145mm tray: on ניקל Z, nesting, 20S7P does not go in, and W is offered', /^⛔ לא נכנס ל-מגש מבחן/.test(turn.r.trim()) && /הכי גדול שנכנס: 20S 7P · 35Ah · ניקל W/.test(turn.r), turn.r.slice(0, 160));
-check('on ניקל W, the zigzag, seven across take 20S7P', /✓ נכנס/.test(turn.wTxt) && /לכל רוחב האמבטיה: 7 · 20S7P/.test(turn.wTxt), turn.wTxt.slice(0, 200));
+check('on ניקל W, the zigzag, seven across take 20S7P, a row per group', /✓ נכנס/.test(turn.wTxt) && /כל קבוצה שורה: 7 לרוחב · 20S7P/.test(turn.wTxt), turn.wTxt.slice(0, 200));
 check('the Nami Klima takes his 16S6P on the square 23', /^✅ נכנס ל-Nami Klima/.test(turn.klima.trim()) && /16S 6P/.test(turn.klima), turn.klima.slice(0, 160));
 check('and the drawing still has one circle per cell', turn.circles === 140, turn.circles);
 
@@ -1297,6 +1299,13 @@ const oxw = await page.evaluate((SELF) => {
   const w72 = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]');
   out.w72 = { ok: /✓ נכנס/.test(w72.textContent), bareTxt: /שורה אחת בסוף בלי תבנית/.test(w72.textContent),
     bare: w72.querySelectorAll('circle.pack-bare').length, cells: w72.querySelectorAll('circle').length };
+  out.w72.snake = /הקבוצות ממשיכות משורה לשורה/.test(w72.textContent);
+  // 60V 16S8P on W: eight across, a group to a row, every row one group
+  useVehiclePack('Inokim OX', 60); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 40; calcPackDims();
+  const w60 = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]'), cs = dimLast.plan.cells, cols = new Map();
+  for (const q of cs) { const k = Math.floor((q.x - dimLast.plan.dia / 2 + 1) / 22.7); (cols.get(k) || cols.set(k, new Set()).get(k)).add(q.g); }
+  out.w60 = { txt: /כל קבוצה שורה: 8 לרוחב/.test(w60.textContent), oneEach: [...cols.values()].every((g) => g.size === 1), cols: cols.size };
+  useVehiclePack('Inokim OX', 72); document.getElementById('dimHolder').value = 'diag-a';
   dimAhPending = 40; calcPackDims();
   const w80 = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]');
   out.w80 = { svg: !!w80.querySelector('svg.pack-svg'), note: /אין ציור: לא נכנס/.test(w80.textContent), no: /✗ לא נכנס/.test(w80.textContent) };
@@ -1313,6 +1322,8 @@ check('the OX: every cell of every maximum lies inside the tray, wide part or na
 check('the OX at 60V 16S8P on ניקל H: it goes in, group 16 in the narrow part, drawn', oxw.h60.ok && oxw.h60.svg && oxw.h60.narrow, oxw.h60);
 check('the OX at 72V 20S7P on ניקל W: his 136 in the holder and four bare cells, one row at the end, drawn dashed', oxw.w72.ok && oxw.w72.bareTxt && oxw.w72.bare === 4 && oxw.w72.cells === 140, oxw.w72);
 check('the OX at 72V 20S8P on ניקל W: ✗ and no drawing', oxw.w80.no && !oxw.w80.svg && oxw.w80.note, oxw.w80);
+check('the OX at 60V 16S8P on ניקל W: a row of eight per group, sixteen rows, no row shared', oxw.w60.txt && oxw.w60.oneEach && oxw.w60.cols === 16, oxw.w60);
+check('20S7P on W goes in only with the rows the whole width, and the card says so', oxw.w72.snake, oxw.w72);
 
 await browser.close();
 srv.close();
