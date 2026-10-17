@@ -150,10 +150,11 @@ check('the price list has no search box (his call, 2026-10-06)', price.noSearch,
 const cat = await page.evaluate(() => {
   navigateTo('catalog');
   const list = document.getElementById('catalogList');
-  const volts = [...list.querySelectorAll('.price-volt')].map((e) => e.innerText.trim());
+  // textContent: a heading inside a folded topic has no innerText, and the topics start folded
+  const volts = [...list.querySelectorAll('.price-volt')].map((e) => e.textContent.trim());
   const heads = [...list.querySelectorAll('.price-cat')];
   const i = Math.floor(heads.length / 2);
-  const label = heads[i].innerText.replace(/^[▾▸]\s*/, '').trim();
+  const label = heads[i].dataset.cat;
   catOpenCats = new Set(); renderCatalog();
   [...document.getElementById('catalogList').querySelectorAll('.price-cat')][i].click();
   return { volts, cats: heads.length, clicked: label, opened: [...catOpenCats][0] || '' };

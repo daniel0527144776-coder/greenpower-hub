@@ -116,6 +116,50 @@ console.log('\n4. a restored record recomputes it the same way');
   check('the restore path agrees with the build path', r === '1500A/2160A', r);
 }
 
+console.log('\n4b. the 18650s, each computed from its own sheet');
+{
+  // Daniel, 2026-10-17: "ואין אפשרות ל-18650 ... שיהיה גם את התאים של ה-18650 גם כן במדבקות, שיחשב
+  // אותם". 25P: 30A on 2.5Ah = 12C, no pulse on the sheet, printed once. JP30: 36A on 3.0Ah = 12C, 140A
+  // for 5s = 46C. 26V and 35V: 3C continuous (the distributors'), peak his: 4C and 5C.
+  const has = ['EVE 18650 26V', 'EVE 18650 35V', 'EVE 18650 25P', 'Ampace 18650 JP30'].every((c) => opts.cells.includes(c));
+  check('the editor offers the four 18650s', has, opts.cells);
+  if (has) {
+    const p25 = await build(volt, '20', 'EVE 18650 25P', 'DALY 60A');
+    check('25P 20Ah: 12C, 240A', p25.cRate === (SELFTEST ? 'never' : '12C') && p25.discharge === '240A', p25);
+    const jp = await build(volt, '30', 'Ampace 18650 JP30', 'DALY 60A');
+    check('JP30 30Ah: 12C/46C, 360A/1380A', jp.cRate === '12C/46C' && jp.discharge === '360A/1380A', jp);
+    const v26 = await build(volt, '25', 'EVE 18650 26V', 'DALY 60A');
+    const v35 = await build(volt, '35', 'EVE 18650 35V', 'DALY 60A');
+    check('26V 25Ah: 3C/4C, 75A/100A; 35V 35Ah: 3C/5C, 105A/175A',
+      v26.cRate === '3C/4C' && v26.discharge === '75A/100A' && v35.cRate === '3C/5C' && v35.discharge === '105A/175A', [v26, v35]);
+    const sku = await p.evaluate(() => document.getElementById('sku-value').innerText.trim());
+    check('and the SKU names the cell', /-35V-\d+$/.test(sku), sku);
+    await build(volt, '30', 'Ampace 18650 JP30', 'DALY 60A');
+    const back = await p.evaluate(() => {
+      const el = (id) => document.getElementById(id);
+      window.refreshComputedSpecDisplay(['capacity-value', 'cells-value', 'bms-value'].map((id) => ({ id, innerHTML: el(id).innerHTML })));
+      return el('discharge-value').innerText.trim();
+    });
+    check('a restored JP30 record recomputes the same', back === '360A/1380A', back);
+  }
+  // And the hub sends them: an 18650 sale line names its cell ("13S10P EVE 26V"), and a line with only the
+  // tier and 18650 takes the scooter rows' cells. Every value the hub can send is one the editor offers.
+  const hub = await ctx.newPage();
+  await hub.goto('http://127.0.0.1:4189/index.html', { waitUntil: 'domcontentloaded' });
+  await hub.waitForFunction(() => typeof stickerCellFromText === 'function', { timeout: 20000 });
+  const sent = await hub.evaluate(() => ({
+    line: stickerCellFromText('48V 26Ah · 13S10P EVE 26V'),
+    adv: stickerCellFromText('סוללות קורקינטים 18650 - 60V ADVANCED'),
+    cls: stickerCellFromText('סוללות קורקינטים 18650 - 60V CLASSIC'),
+    v21: stickerCellFromText('72V 30Ah PRO'),
+    all: [...Object.values(STICKER_CELLS), ...Object.values(STICKER_TIER_CELL), ...Object.values(STICKER_TIER_CELL_18650)],
+  }));
+  await hub.close();
+  check('the hub: an 18650 line sends its own cell, not the 21700 of its tier',
+    sent.line === 'EVE 18650 26V' && sent.adv === 'EVE 18650 25P' && sent.cls === 'EVE 18650 26V' && sent.v21 === 'EVE 21700 50PL', sent);
+  check('and every cell the hub sends is on the editor\'s list', sent.all.every((c) => opts.cells.includes(c)), sent.all.filter((c) => !opts.cells.includes(c)));
+}
+
 console.log('\n5. the safety marks cannot be pushed off the label');
 {
   // The left column had 8px of slack, and the same markup that measured +16px of clearance
