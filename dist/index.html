@@ -1133,6 +1133,7 @@ body { min-height: 100vh; }
       <select class="form-select" id="dimHolder" onchange="calcPackDims(); calcFromOldPack()">
         <option value="diag-a" selected>ניקל W — 22.7</option>
         <option value="diag-b">ניקל Z — 22.5</option>
+        <option value="square-225">ניקל H — 22.5</option>
         <option value="square-23">ניקל H — 23</option>
         <option value="custom">מותאם אישית ↓</option>
       </select>
@@ -2771,7 +2772,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v456';
+const HUB_BUILD = 'v457';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9489,7 +9490,8 @@ const DIM_PITCH = {
   // Re-measured 2026-10-04 (Daniel): ניקל א׳ is the W-shaped strip at 22.7, ניקל ב׳ the diagonal at
   // 22.5 — both on nesting rows (he chose that for the W too), so each is d x 0.866 between rows.
   // The keys stay with the NICKELS, not the numbers: the OX's counted 136/126 were counted on them.
-  21700: { 'diag-a': [22.7, 19.66], 'diag-b': [22.5, 19.49], 'square-23': [23, 23] },
+  // And an H at 22.5 beside the 23 (Daniel, 2026-10-17: "וגם יש H אם 22.5M"), square like it.
+  21700: { 'diag-a': [22.7, 19.66], 'diag-b': [22.5, 19.49], 'square-225': [22.5, 22.5], 'square-23': [23, 23] },
 };
 const DIM_WALL = 1.5;        // bracket edge either side
 const DIM_CAP = 4;           // holder caps above and below the cell
@@ -9861,7 +9863,10 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap) {
     // two photos of his packs, every group one straight row: "אני רוצה שיהיה מסודר כמו שאני בונה, לא כמו
     // הציור הזה"). Rows the whole width are not tried there, so a build that goes in only that way does
     // not go in: 72V on W is 20S6P. Everywhere else they stay the fallback (his choice the same night:
-    // without it Sur-Ron, Talaria, Zero 10X/11X, OXO and Nami Klima take no 72V pack at all).
+    // without it Sur-Ron, Talaria, Zero 10X/11X, OXO and Nami Klima take no 72V pack at all), and it is
+    // how he builds such a pack: a photo of his, rows across the whole width with the groups running on
+    // from row to row, and "תעשה שיהיה אם תבנית וזה נחש". A U (bands side by side) was tried and dropped:
+    // "תעשה רק כמו בתמונות ... לא לעשות צורות אחרות".
     const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap)
       || (tub.nx ? null : trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, true));
     const across = f ? f.across : acrossFit(tub.W, orient === 'B' ? rowPitch : pitch, dia);
@@ -9955,15 +9960,16 @@ function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia, cap) {
 // "the densest that fits", so the recommendation is the first one that gets the pack in.
 // Per cell size: a holder is made for one cell and the list must follow the cell chosen.
 // Densest first — the recommendation takes the first that fits.
-const HOLDERS_BY_FMT = { 21700: ['diag-b', 'diag-a', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
+const HOLDERS_BY_FMT = { 21700: ['diag-b', 'diag-a', 'square-225', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
 // The order the list shows them in, which is the order he knows them by.
-const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
+const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-225', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
 const HOLDER_ORDER = HOLDERS_BY_FMT[21700];
 function holdersFor(fmt) { return HOLDERS_BY_FMT[fmt] || HOLDER_ORDER; }
-// His names for the three 21700 nickels, by their shape (Daniel, 2026-10-15): W 22.7, Z 22.5, H 23.
-const HOLDER_NAME = { 'diag-b': 'ניקל Z (22.5)', 'diag-a': 'ניקל W (22.7)', 'square-23': 'ניקל H (23)',
+// His names for the 21700 nickels, by their shape (Daniel, 2026-10-15): W 22.7, Z 22.5, H 23; and H 22.5
+// (2026-10-17).
+const HOLDER_NAME = { 'diag-b': 'ניקל Z (22.5)', 'diag-a': 'ניקל W (22.7)', 'square-225': 'ניקל H (22.5)', 'square-23': 'ניקל H (23)',
   'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
-const HOLDER_LABEL = { 'diag-a': 'ניקל W — 22.7', 'diag-b': 'ניקל Z — 22.5', 'square-23': 'ניקל H — 23',
+const HOLDER_LABEL = { 'diag-a': 'ניקל W — 22.7', 'diag-b': 'ניקל Z — 22.5', 'square-225': 'ניקל H — 22.5', 'square-23': 'ניקל H — 23',
   'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
 // Rebuilds the holder list for the cell size, keeping the choice when it is still valid.
 function refreshHolderOptions(fmt) {

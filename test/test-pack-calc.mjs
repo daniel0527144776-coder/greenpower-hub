@@ -146,7 +146,7 @@ check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), 
 // pack goes in is just the first item of a list. Since 2026-10-04 each nickel is its own card.
 // One recommendation, on a card that fits: the densest of those that fit (since 2026-10-17 all three take
 // this tray, filled across its width, so it is ניקל Z).
-check('and it only recommends one that fits', rec.cards.length === 3 && rec.cards.filter((k) => /מומלץ/.test(k)).length === 1
+check('and it only recommends one that fits', rec.cards.length === 4 && rec.cards.filter((k) => /מומלץ/.test(k)).length === 1
   && /^diag-b:✓ נכנס:.*מומלץ/.test(rec.cards.find((k) => k.startsWith('diag-b')) || '') && rec.cards.every((k) => !/✗/.test(k) || !/מומלץ/.test(k)), rec.cards);
 check('a counted tray is still judged by the layout, not the count alone', /16S 8P · 128 תאים/.test(rec.ox) && /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.ox), rec.ox.slice(0, 120));
 // The OX is a row per group (2026-10-17, night: "מסודר כמו שאני בונה"): with a 26mm BMS twenty rows of six
