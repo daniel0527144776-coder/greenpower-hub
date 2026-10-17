@@ -2756,7 +2756,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v450';
+const HUB_BUILD = 'v451';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9498,7 +9498,9 @@ function standPlan(o) {
   const notes = [layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : '',
     tail && !o.quiet ? `קבוצות ${tail.from + 1}–${sPer} בחלק הצר` : ''].filter(Boolean);
   return { cells, dia, wMM, hMM, groups: true, outline,
-    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, tail ? wMM : null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
+    // The BMS at the far end of the narrow part, where he puts it (2026-10-15: "בסוף החלק הצר"), also
+    // when groups run into the narrow part: the tray they were fitted in already leaves it its length.
+    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
     split: layers > 1, note: notes.join(' · ') };
 }
 // The outline of a two-part tray in the drawing's own coordinates (0 is the first cell's edge, one
@@ -9642,9 +9644,18 @@ function groupLayout(S, P, layers, acrossMax) {
 function staggerAdd(orient, pitch, rowPitch) {
   return rowPitch < pitch - 0.01 ? { A: orient === 'A' ? pitch / 2 : 0, B: orient === 'B' ? pitch / 2 : 0 } : { A: 0, B: 0 };
 }
+// THE OX'S W AND Z ARE ZIGZAG WITHIN THE GROUP (Daniel, 2026-10-17: "למה לא תיקנת את הציורים של ox" —
+// "זיגזג בתוך הקבוצה"). In a two-part tray a diagonal nickel tries B first: each group a zigzag
+// across, the groups along at the full pitch, the last of them into the narrow part. Trying A first
+// flipped the drawing between voltages (60V zigzag, 72V straight) and left the narrow part empty. With
+// his 14mm BMS B takes every maximum A did on the OX (36-72V, W, Z and H); A stays behind it for a
+// longer BMS, where only A gets 20S6P in. Only there: on the other trays B first would cut 38 maxima.
+function diagBFirst(tub, pitch, rowPitch, dia) { return !!(tub && tub.nx) && dia >= DIM_ALONG_BELOW && rowPitch < pitch - 0.01; }
 function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
   let first = null;
-  for (const [orient, cStep, aStep] of [['A', pitch, rowPitch], ['B', rowPitch, pitch]]) {
+  const ways = [['A', pitch, rowPitch], ['B', rowPitch, pitch]];
+  if (diagBFirst(tub, pitch, rowPitch, dia)) ways.reverse();
+  for (const [orient, cStep, aStep] of ways) {
     const half = staggerAdd(orient, pitch, rowPitch);
     const across = acrossFit(tub.W - half.A, cStep, dia);
     const lay = groupLayout(S, P, layers, across);
@@ -9997,7 +10008,10 @@ function calcPackDims() {
       + kv('גודל סוללה', `<span class="dim-size">${iso(k.L + ' × ' + k.W + ' × ' + k.H)}</span> מ"מ`)
       + kv('פריסה', layoutText(S, P, k.layers, k.cols, k.rows, false, k.orient, k.lay && k.lay.bands))
       + (dimVehicle && tub && k.h !== 'custom' ? kv('מקסימום באמבטיה', maxLine(k.h)) : '')
-      + warn + packSvg(k.plan) + '</div>';
+      // A build that does not go in a two-part tray has no layout to draw: the fold it was given ran past
+      // the tray, the BMS in among the cells (the OX, 60V on ניקל H, 2026-10-17). The most it takes is
+      // in the row above.
+      + warn + (k.fits === false && tubAll && tubAll.nx ? '<div class="dim-nk-note">אין ציור: לא נכנס באמבטיה בניקל הזה</div>' : packSvg(k.plan)) + '</div>';
   };
   // The label for the worker draws the chosen card's plan; its two text lines are said here.
   const sPer = Math.ceil(S / layers), gRows = Math.ceil(P / cols);
