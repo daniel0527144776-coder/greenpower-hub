@@ -2756,7 +2756,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v448';
+const HUB_BUILD = 'v450';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -11547,7 +11547,7 @@ async function waAdmin(body, query) {
   if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
   return j;
 }
-const WA_RESULT = { sent: '✅ ענה', asked: '❓ העביר אליך', paused: '⏸ שתק — ענית בעצמך', rate: '⏸ יותר מדי הודעות בשעה', blocked: '🚫 מספר חסום',
+const WA_RESULT = { sent: '✅ ענה', menu: '📋 שלח תפריט', asked: '❓ העביר אליך', paused: '⏸ שתק — ענית בעצמך', rate: '⏸ יותר מדי הודעות בשעה', blocked: '🚫 מספר חסום',
   off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל', manual: '📤 נשלח ממך',
   // the two the bot used to drop without a trace (2026-10-05): over ten minutes late, and a chat it cannot tell is a person
   stale: '⌛ הגיעה באיחור — לא נענתה', unknown: '❔ שיחה שהבוט לא זיהה',
@@ -11619,7 +11619,7 @@ async function renderWaBot(reload = true) {
     }
   }
   box.innerHTML = waStatusHtml() + waQuestionsHtml() + waComposeHtml() + waSettingsHtml() + waInstructionsHtml() + waLabHtml() + waBlockedHtml()
-    + waPausedHtml() + waTeachHtml() + waKnowledgeHtml() + waLogHtml();
+    + waLaterHtml() + waPausedHtml() + waTeachHtml() + waKnowledgeHtml() + waLogHtml();
 }
 function waStatusHtml() {
   const b = waBot, st = b.settings, L = b.learning || {}, n = (x) => Number(x) || 0;
@@ -11684,6 +11684,8 @@ function waSettingsHtml() {
     + chk('wbHold', st.holdLine !== false, '⏳ ובינתיים אומר ללקוח שתחזור אליו')
     + chk('wbFacts', st.hubFacts, '🔧 מספר ללקוח על העבודות שלו')
     + chk('wbIntro', st.introduce, '👋 מציג את עצמו כעוזר אוטומטי')
+    + chk('wbMenu', st.menu !== false, '📋 ללקוח חדש שכתב רק "היי" — שולח תפריט')
+    + chk('wbLater', st.answerLater !== false, '🕐 הודעה שהגיעה כשסגור — עונה לה כשהמעבדה נפתחת')
     + chk('wbLearn', st.learn, '📚 לומד מהשיחות שלך')
     + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="waSaveSettings()">💾 שמור</button>');
 }
@@ -11770,6 +11772,13 @@ function waBlockPicked() {
   const add = [...waPicked].map((i) => ({ p: waContacts[i].p, n: waContacts[i].n }));
   waDo({ op: 'settings', settings: { blocked: (waBot.settings.blocked || []).concat(add) } }, '✅ נחסמו ' + add.length + ' — הבוט לא יענה להם');
 }
+// Who wrote while the lab was closed, and when the bot will answer them (2026-10-17): shown only while someone waits.
+function waLaterHtml() {
+  const list = waBot.later || [];
+  if (!list.length) return '';
+  return fold('later', '🕐 ייענו כשהמעבדה נפתחת', list.map((x) => '<div class="wb-row"><div class="wb-head"><span class="wb-who">' + escPunch(x.n || 'לקוח') + ' · ' + escPunch(waNum(x.c)) + '</span>'
+    + '<span class="wb-when">' + waWhen(x.due) + '</span></div></div>').join(''));
+}
 function waPausedHtml() {
   const list = waBot.paused || [];
   return fold('paused', '🔇 שותק עכשיו', (list.length ? list.map((x, i) => '<div class="wb-row"><div class="wb-head"><span class="wb-who">' + escPunch(x.n || 'לקוח') + ' · ' + escPunch(waNum(x.c)) + '</span>'
@@ -11805,7 +11814,7 @@ function waLogHtml() {
       + '<span class="wb-when">' + waWhen(e.at) + '</span></div>'
       + (e.in ? '<div class="wb-text">💬 ' + escPunch(e.in) + '</div>' : '')
       + (e.out ? '<div class="wb-out">🤖 ' + escPunch(e.out) + '</div>' : '')
-      + '<span class="wb-tag">' + escPunch(WA_RESULT[e.r] || e.r) + '</span></div>').join('')
+      + '<span class="wb-tag">' + escPunch(WA_RESULT[e.r] || e.r) + (e.later ? ' · ייענה ב-' + waWhen(e.later) : '') + '</span></div>').join('')
       : '<div class="wb-sub">אין עדיין</div>')
     + '</div>', { count: (waBot.log || []).length });
 }
@@ -11825,7 +11834,7 @@ function waSaveSettings() {
     custom: { days, from: wbVal('wbFrom') || '00:00', to: wbVal('wbTo') || '23:59' }, model: wbVal('wbModel'),
     length: wbVal('wbLength'), tone: wbVal('wbTone'), emoji: wbVal('wbEmoji'), holdLine: on('wbHold'),
     shabbat: on('wbShabbat'), israelOnly: on('wbIsrael'), skipSaved: on('wbSaved'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
-    hubFacts: on('wbFacts'), introduce: on('wbIntro'), learn: on('wbLearn') } }, '✅ ההגדרות נשמרו');
+    hubFacts: on('wbFacts'), introduce: on('wbIntro'), menu: on('wbMenu'), answerLater: on('wbLater'), learn: on('wbLearn') } }, '✅ ההגדרות נשמרו');
 }
 function waSaveInstructions() {
   waDo({ op: 'settings', settings: { instructions: document.getElementById('wbInstr').value } }, '✅ ההוראות נשמרו — הבוט יפעל לפיהן מההודעה הבאה');
