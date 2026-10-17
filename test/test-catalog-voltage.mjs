@@ -49,9 +49,40 @@ if (SELFTEST) {
   await page.evaluate(() => {
     const real = window.renderCatalog;
     window.renderCatalog = function () { real(); catCatKeys = catCatKeys.slice(1); };
+    // and the one long transport topic, every family under each voltage together
+    CATALOG_TOPICS.splice(0, 4, { title: '🔋 סוללות לכלי תחבורה', re: /^סוללות (אופניים|קורקינטים|אינדורו|Sur-Ron)/i });
     renderCatalog();
   });
 }
+
+// ---------------------------------------------------------------- one topic per family
+// "כל המחירות מבולבלות ... רשימה ארוכה של כל סוגי הסוללות ... שיהיה מסודר בקטגוריות, בתת קטגוריה, וגם ...
+// ה-18650, ... ה-21700" (Daniel, 2026-10-17). Each family its own topic, and the scooters' two cell sizes
+// each a section of their own: every category under the heading of its own family and cells.
+const fam = await page.evaluate(() => {
+  document.querySelectorAll('#catalogList details.fold').forEach((d) => { d.open = true; foldOpen.add(d.dataset.fold); });
+  renderCatalog();
+  const FAM = [['אופניים', /^סוללות אופניים/], ['קורקינטים', /^סוללות קורקינטים/], ['אינדורו', /^סוללות אינדורו/], ['Sur-Ron', /^סוללות Sur-Ron/]];
+  const wrong = [], seen = {};
+  for (const el of document.querySelectorAll('#catalogList .price-cat')) {
+    const c = el.dataset.cat, f = FAM.find(([, re]) => re.test(c));
+    if (!f) continue;
+    // the fold titles round this row, outermost first
+    const heads = [];
+    for (let d = el.closest('details.fold'); d; d = d.parentElement.closest('details.fold')) heads.unshift(d.querySelector(':scope > summary .price-series').textContent);
+    seen[f[0]] = (seen[f[0]] || 0) + 1;
+    if (!heads[0] || !heads[0].includes(f[0])) wrong.push(c + ' @ ' + heads.join(' / '));
+    if (f[0] === 'קורקינטים' && heads[1] !== 'סוללות ' + (/18650/.test(c) ? 18650 : 21700)) wrong.push(c + ' @ ' + heads.join(' / '));
+  }
+  const scoot = [...document.querySelectorAll('#catalogList details.fold')].find((d) => /קורקינטים/.test(d.querySelector(':scope > summary').textContent));
+  const secs = scoot ? [...scoot.querySelectorAll(':scope > .fold-body > details.fold > summary .price-series')].map((e) => e.textContent) : [];
+  // the row says what the topic does not: "72V PRO" under אופניים, not the family again
+  const rows = [...document.querySelectorAll('#catalogList .price-cat')].filter((e) => /^סוללות (אופניים|קורקינטים|אינדורו)/.test(e.dataset.cat)).map((e) => e.innerText.replace(/[▾▸]/g, '').trim());
+  return { wrong: wrong.slice(0, 6), n: wrong.length, seen, secs, long: rows.filter((r) => !/^\d+V (CLASSIC|ADVANCED|PRO)$/.test(r)).slice(0, 4) };
+});
+check('every battery family is a topic of its own, each category under its own family', fam.n === 0 && Object.keys(fam.seen).length === 4, fam);
+check('the scooters: 21700 first, then 18650, each its own section', fam.secs.join(',') === 'סוללות 21700,סוללות 18650', fam.secs);
+check('and a row reads voltage and series only', fam.long.length === 0, fam.long);
 
 // ---------------------------------------------------------------- the headings
 const shape = await page.evaluate(() => {
@@ -119,7 +150,8 @@ const clicks = await page.evaluate(() => {
   const total = heads().length;
   for (let i = 0; i < total; i++) {
     const before = heads();
-    const label = before[i].innerText.replace(/^[▾▸]\s*/, '').trim();
+    // the row shows the category less its family's words (the topic says them); data-cat is its key
+    const label = before[i].dataset.cat;
     before[i].click();
     const opened = [...catOpenCats];
     if (opened.length !== 1 || opened[0] !== label) wrong.push({ clicked: label, opened: opened.join('|') });
