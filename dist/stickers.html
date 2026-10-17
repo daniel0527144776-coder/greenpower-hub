@@ -485,9 +485,17 @@
                  <div>
                     <label for="cells-select" class="block text-sm font-medium text-gray-700 mb-1">סוג תאים</label>
                     <select id="cells-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
+                        <optgroup label="21700">
                         <option value="EVE 21700 50E" selected>EVE 21700 50E — CLASSIC (2C/3C)</option>
                         <option value="Tenpower 21700 50SG">Tenpower 21700 50SG — ADVANCED (4C/10C)</option>
                         <option value="EVE 21700 50PL">EVE 21700 50PL — PRO (25C/36C)</option>
+                        </optgroup>
+                        <optgroup label="18650">
+                        <option value="EVE 18650 26V">EVE 18650 26V — 2.6Ah (3C/4C)</option>
+                        <option value="EVE 18650 35V">EVE 18650 35V — 3.5Ah (3C/5C)</option>
+                        <option value="EVE 18650 25P">EVE 18650 25P — 2.5Ah (12C)</option>
+                        <option value="Ampace 18650 JP30">Ampace 18650 JP30 — 3.0Ah (12C/46C)</option>
+                        </optgroup>
                     </select>
                 </div>
                 <div class="grid grid-cols-1">
@@ -1358,6 +1366,25 @@
             window.fitRepairPanels = fitRepairPanels;
 
             function getCellRates(cellsText) {
+                // THE 18650s (Daniel, 2026-10-17: "שיהיה גם את התאים של ה-18650 גם כן במדבקות, שיחשב אותם").
+                // Each from its maker's sheet, the same sheets the hub's cell card shows (CELL_SHEETS):
+                // EVE 25P 30A continuous on 2.5Ah = 12C, no pulse figure, so 12C both (product-specs PT);
+                // Ampace JP30 36A continuous to full discharge on 3.0Ah = 12C, 140A for 5 seconds = 46C.
+                // EVE 26V and 35V have no sheet from EVE itself. Continuous: 3C, the distributors' figure
+                // (7.65A on 2.55Ah, 10.2A on 3.4Ah), which he accepted; peak: his own, the way 50SG's is
+                // (same day: "35v 5C / 26v 4c"). rateText/dischargeText print --- for a cell with no figure.
+                if (cellsText.includes("JP30")) {
+                    return { cont: 12, peak: 46, cellCode: "JP30" };
+                }
+                if (cellsText.includes("25P")) {
+                    return { cont: 12, peak: 12, cellCode: "25P" };
+                }
+                if (cellsText.includes("26V")) {
+                    return { cont: 3, peak: 4, cellCode: "26V" };
+                }
+                if (cellsText.includes("35V")) {
+                    return { cont: 3, peak: 5, cellCode: "35V" };
+                }
                 // EVE 50PL — PRO extreme cell (25C cont / 36C peak, per datasheet 125A/180A).
                 if (cellsText.includes("50PL")) {
                     return { cont: 25, peak: 36, cellCode: "50PL" };
@@ -1368,6 +1395,17 @@
                 }
                 // EVE 50E — CLASSIC energy cell.
                 return { cont: 2, peak: 3, cellCode: "50E" };
+            }
+            // A cell with no figure (null) prints --- in both rows, and a peak the sheet gives as the
+            // continuous one prints once: "12C", not "12C/12C".
+            function rateText(cont, peak) {
+                if (cont == null) return '---';
+                return peak == null || peak === cont ? `${cont}C` : `${cont}C/${peak}C`;
+            }
+            function dischargeText(ah, cont, peak) {
+                if (cont == null || isNaN(ah)) return '---';
+                const a = (c) => Math.round(ah * c);
+                return peak == null || peak === cont ? `${a(cont)}A` : `${a(cont)}A/${a(peak)}A`;
             }
             // זרם פריקה is the CELLS' figure — capacity × C-rate — and deliberately does not
             // account for the BMS. It was capped at min(cells, BMS) on 2026-08-19 and Daniel
@@ -1401,9 +1439,9 @@
                 if (!isNaN(totalCapacity) && cellsText) {
                     const { cont, peak } = getCellRates(cellsText);
                     const crateSpan = document.getElementById('c-rate-value');
-                    if (crateSpan) crateSpan.innerText = `${cont}C/${peak}C`;
+                    if (crateSpan) crateSpan.innerText = rateText(cont, peak);
                     const dischargeSpan = document.getElementById('discharge-value');
-                    if (dischargeSpan) dischargeSpan.innerText = `${totalCapacity * cont}A/${totalCapacity * peak}A`;
+                    if (dischargeSpan) dischargeSpan.innerText = dischargeText(totalCapacity, cont, peak);
                 }
                 const bmsSpan = document.getElementById('bms-value');
                 if (bmsSpan) bmsSpan.innerText = formatBmsWithPeak(savedBms);
@@ -1439,13 +1477,11 @@
 
                 // C-Rate Calculation — always show both continuous and peak
                 const { cont: cRateContinuous, peak: cRatePeak, cellCode } = getCellRates(cell);
-                document.getElementById('c-rate-value').innerText = `${cRateContinuous}C/${cRatePeak}C`;
+                document.getElementById('c-rate-value').innerText = rateText(cRateContinuous, cRatePeak);
 
                 // Auto Calculate Discharge based on C-Rate — continuous/peak, from the cells.
                 // Not capped by the BMS; see the note above formatBmsWithPeak.
-                const dischargeContinuous = totalCapacity * cRateContinuous;
-                const dischargePeak = totalCapacity * cRatePeak;
-                document.getElementById('discharge-value').innerText = `${dischargeContinuous}A/${dischargePeak}A`;
+                document.getElementById('discharge-value').innerText = dischargeText(totalCapacity, cRateContinuous, cRatePeak);
 
                 // BMS Calculation
                 document.getElementById('bms-value').innerText = bmsText;

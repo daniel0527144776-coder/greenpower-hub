@@ -1325,6 +1325,37 @@ check('the OX at 72V 20S8P on ניקל W: ✗ and no drawing', oxw.w80.no && !ox
 check('the OX at 60V 16S8P on ניקל W: a row of eight per group, sixteen rows, no row shared', oxw.w60.txt && oxw.w60.oneEach && oxw.w60.cols === 16, oxw.w60);
 check('20S7P on W goes in only with the rows the whole width, and the card says so', oxw.w72.snake, oxw.w72);
 
+// "הכל שם נראה מפולגן, צריך שיראה מסודר" (Daniel, 2026-10-17, a screenshot of that 20S7P): rows the
+// whole width put a group round the corner, so the numbers over the columns named no group and the dark
+// groups read as holes. Each group's number now sits in its own cells, once, and every group is filled.
+const tidy = await page.evaluate((SELF) => {
+  const real = fillPlan;
+  if (SELF) fillPlan = (o) => { const r = real(o); r.snake = r.numIn = false; return r; };
+  useVehiclePack('Inokim OX', 72); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 35; calcPackDims();
+  const svg = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"] svg.pack-svg');
+  if (!svg) { fillPlan = real; clearDimVehicle(); return { nums: '', onOwn: false, dark: -1, ends: '', svg: false }; }
+  const circles = [...svg.querySelectorAll('circle')], cs = dimLast.plan.cells;
+  const nums = [...svg.querySelectorAll('text.pack-group')];
+  // each number on a cell of its own group: the circle under it carries that group
+  const onOwn = nums.every((t) => { const k = +t.textContent - 1, x = +t.getAttribute('x');
+    return circles.some((c, i) => cs[i] && cs[i].g === k && Math.abs(+c.getAttribute('cx') - x) < 0.2); });
+  // the nickel: P−1 links in each group, from one cell to the next of the same group, none across two
+  const links = [...svg.querySelectorAll('line.pack-nickel')];
+  const at = (x, y) => circles.findIndex((c) => Math.abs(+c.getAttribute('cx') - x) < 0.05 && Math.abs(+c.getAttribute('cy') - y) < 0.05);
+  const across = links.filter((l) => { const i = at(+l.getAttribute('x1'), +l.getAttribute('y1')), j = at(+l.getAttribute('x2'), +l.getAttribute('y2'));
+    return i < 0 || j < 0 || cs[i].g !== cs[j].g || Math.abs(i - j) !== 1; }).length;
+  const out = { nums: nums.map((t) => t.textContent).join(','), onOwn, links: links.length, across,
+    dark: circles.filter((c) => /bg-card/.test(c.getAttribute('fill'))).length,
+    ends: [...svg.querySelectorAll('text')].map((t) => t.textContent).filter((x) => /^B[−+]$/.test(x)).join(',') };
+  fillPlan = real; clearDimVehicle();
+  return out;
+}, SELFTEST);
+check('the OX 20S7P on W: groups 1 to 20 numbered once each, every number inside its own group',
+  tidy.nums === Array.from({ length: 20 }, (_, i) => i + 1).join(',') && tidy.onOwn, tidy);
+check('and no group drawn dark (all filled, two colours), with B− and B+', tidy.dark === 0 && tidy.ends === 'B−,B+', tidy);
+// "נחש עם קו ניקל" (same day, his pick of three drawings)
+check('with the nickel drawn: 6 links in each of the 20 groups, each from a cell to the next of its own group', tidy.links === 120 && tidy.across === 0, tidy);
+
 await browser.close();
 srv.close();
 // finish() RETURNS the code, it does not exit. Bare, every check in this file could fail and
