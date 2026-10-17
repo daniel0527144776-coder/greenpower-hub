@@ -2756,7 +2756,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v452';
+const HUB_BUILD = 'v453';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9459,6 +9459,7 @@ const DIM_CAP = 4;           // holder caps above and below the cell
 // bracket's straight rows along the length) puts the half-pitch offset on the length; A across.
 function standPlan(o) {
   if (o.orient === 'C') return alongPlan(o);
+  if (o.tail && o.tail.fill) return fillPlan(o);
   const { cols, rows, pitch, rowPitch, dia, N, P, layers } = o;
   const B = o.orient === 'B';
   const stagger = rowPitch < pitch - 0.01 && (B ? cols > 1 : rows > 1);
@@ -9508,6 +9509,21 @@ function standPlan(o) {
 function narrowNote(tl, sPer) {
   const from = tl.fill ? tl.narrowFrom : tl.from;
   return from == null ? '' : from + 1 >= sPer ? `קבוצה ${sPer} בחלק הצר` : `קבוצות ${from + 1}–${sPer} בחלק הצר`;
+}
+// A tray filled by trayFill: each cell where it was placed (the drawing's 0 is one wall in), the bare
+// ones marked, the groups in the order the series runs.
+function bareRows(n) { return n === 1 ? 'שורה אחת בסוף בלי תבנית' : `${n} שורות בסוף בלי תבנית`; }
+function fillPlan(o) {
+  const t = o.tail, P = o.P, dia = o.dia;
+  const cells = t.pts.map((q, n) => ({ x: q.x - DIM_WALL, y: q.y - DIM_WALL, g: Math.floor(n / P), bare: !!q.bare }));
+  const wMM = Math.max(...cells.map((c) => c.x)) + dia / 2, hMM = Math.max(...cells.map((c) => c.y)) + dia / 2;
+  const tr = o.tray && o.tray.nx ? o.tray : null, y0 = tr ? (tr.W - tr.nx.W) / 2 : 0;
+  const layers = o.layers || 1, bms = Math.max(0, o.extra || 0), sPer = Math.ceil(o.N / P / layers);
+  const notes = [layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : '']
+    .concat(o.quiet ? [] : [narrowNote(t, sPer), t.bareFrom != null ? `${bareRows(t.bareCols)} (מקבוצה ${t.bareFrom + 1})` : '']).filter(Boolean);
+  return { cells, dia, wMM, hMM, groups: true, outline: trayOutline(tr, y0),
+    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
+    split: layers > 1, note: notes.join(' · ') };
 }
 // The outline of a two-part tray in the drawing's own coordinates (0 is the first cell's edge, one
 // wall's clearance in from the tray's side): the wide part, then the narrow part centred across its
@@ -9569,7 +9585,7 @@ function packSvg(plan) {
   const r = (plan.dia / 2 * sc * 0.94).toFixed(1);
   for (const c of plan.cells) {
     const band = c.g >= 0 && c.g % 2 === 1;
-    g += `<circle cx="${X(c.x)}" cy="${Y(c.y)}" r="${r}" fill="${band ? 'var(--primary)' : 'var(--bg-card, #1e293b)'}" fill-opacity="${band ? 0.35 : 0.9}" stroke="var(--primary)" stroke-width="1"/>`;
+    g += `<circle${c.bare ? ' class="pack-bare" stroke-dasharray="2 1.5"' : ''} cx="${X(c.x)}" cy="${Y(c.y)}" r="${r}" fill="${band ? 'var(--primary)' : 'var(--bg-card, #1e293b)'}" fill-opacity="${band ? 0.35 : 0.9}" stroke="${c.bare ? 'var(--warning,#f59e0b)' : 'var(--primary)'}" stroke-width="1"/>`;
   }
   if (plan.bms) {
     const b = plan.bms, bw = b.w * sc, bh = b.h * sc, bx = PX + b.x * sc, by = PT + b.y * sc;
@@ -9663,47 +9679,106 @@ function nickelOfPair(pitch, rowPitch) {
   for (const [k, [p, rp]] of Object.entries(DIM_PITCH[21700])) if (Math.abs(p - pitch) < 0.01 && Math.abs(rp - rowPitch) < 0.01) return k;
   return null;
 }
-function trayFill(tub, orient, need, pitch, rowPitch, dia, P) {
+// AND WHEN THE BRACKET DOES NOT GO IN, THE LAST ROWS WITHOUT IT (Daniel, 2026-10-17: "שאם אין מקום מספיק
+// אז כמה שורות בסוף לבנות בלי תבנית כדי שיכנס בכל צורה שהיא"). The bracket's columns are kept from B−
+// on; the end of the tray, past the last of them, takes bare cells: no holder, BARE_GAP apart, nested
+// row to row, as many across as the part they stand in has room for. The fewest bare columns that
+// take the build are used, so a build the bracket takes needs none. His counts (caps) are counts of a
+// HOLDER, so they cap the bracket's cells and not the bare ones.
+const BARE_GAP = 0.3;   // mm between two bare cells (taped or glued, no holder)
+const BARE_MAX = 3;     // "כמה שורות בסוף": at most this many bare columns, at the end only
+function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap) {
   const B = orient === 'B', stag = rowPitch < pitch - 0.01;
   const cStep = B ? rowPitch : pitch, aStep = B ? pitch : rowPitch, half = staggerAdd(orient, pitch, rowPitch);
-  const L = tub.L, W = tub.W, nL = tub.nx.L, nW = tub.nx.W, y0 = (W - nW) / 2;
+  const L = tub.L, W = tub.W, nx = tub.nx, nL = nx ? nx.L : 0, nW = nx ? nx.W : 0, y0 = nx ? (W - nW) / 2 : 0, end = L + nL;
+  // 1 = in the wide part, 2 = in the narrow part, 0 = out; by the cell's far edge along and near edge across
+  const where = (xF, yN) => {
+    if (xF + DIM_WALL <= L + 0.5 && yN >= DIM_WALL - 0.5 && yN + dia + DIM_WALL <= W + 0.5) return 1;
+    return nx && xF + DIM_WALL <= end + 0.5 && yN >= y0 + DIM_WALL - 0.5 && yN + dia <= y0 + nW - DIM_WALL + 0.5 ? 2 : 0;
+  };
   const across = acrossFit(W - half.A, cStep, dia);
   if (across < 1) return null;
   const blockW = (across - 1) * cStep + dia + half.A;
   const off = Math.max(0, (W - 2 * DIM_WALL - blockW) / 2);
-  const slots = [];
-  let acrossNarrow = 0;
-  for (let i = 0; DIM_WALL + i * aStep < L + nL; i++) {
+  // the bracket, column by column; cells as centres in the tray's own millimetres
+  const cols = [];
+  for (let i = 0; DIM_WALL + i * aStep + dia <= end + DIM_WALL; i++) {
     const col = [];
     for (let j = 0; j < across; j++) {
-      const y = DIM_WALL + off + j * cStep + (!B && stag && i % 2 ? pitch / 2 : 0);   // near edge, across
-      if (y + dia + DIM_WALL > W + 0.5) continue;
-      const x = DIM_WALL + i * aStep + (B && stag && j % 2 ? pitch / 2 : 0) + dia;    // far edge, along
-      const main = x + DIM_WALL <= L + 0.5;
-      const narrow = !main && x + DIM_WALL <= L + nL + 0.5 && y >= y0 + DIM_WALL - 0.5 && y + dia <= y0 + nW - DIM_WALL + 0.5;
-      if (main || narrow) col.push([i, j, narrow]);
+      const yN = DIM_WALL + off + j * cStep + (!B && stag && i % 2 ? pitch / 2 : 0);
+      const xF = DIM_WALL + i * aStep + (B && stag && j % 2 ? pitch / 2 : 0) + dia;
+      const w = where(xF, yN);
+      if (w) col.push({ x: xF - dia / 2, y: yN + dia / 2, narrow: w === 2 });
     }
-    if (col.some((c) => c[2])) acrossNarrow = Math.max(acrossNarrow, col.length);
-    if (i % 2) col.reverse();
-    slots.push(...col);
+    if (!col.length) break;
+    cols.push(col);
   }
-  if (slots.length < need) return null;
-  const cells = slots.slice(0, need);
-  const firstNarrow = cells.findIndex((c) => c[2]);
-  return { from: 0, fill: true, cells: cells.map(([i, j]) => [i, j]), spare: slots.length - need, rowsAlong: Math.max(...cells.map((k) => k[0])) + 1,
-    y0, off, across, acrossNarrow, narrowFrom: firstNarrow < 0 ? null : Math.floor(firstNarrow / P) };
+  // his count of the holder's places is a ceiling on the bracket
+  if (cap != null) { let n = cols.reduce((t, c) => t + c.length, 0); while (cols.length && n > cap) n -= cols.pop().length; }
+  // bare columns from xStart (the near edge of the first) to the end of the tray
+  const bare = (xStart) => {
+    const bp = dia + BARE_GAP, out = [];
+    for (let i = 0; ; i++) {
+      const xN = xStart + i * bp * 0.866;
+      if (xN + dia + DIM_WALL > end + 0.5) break;
+      const wide = xN + dia + DIM_WALL <= L + 0.5;
+      if (!wide && !nx) break;
+      const lo = wide ? DIM_WALL : y0 + DIM_WALL, hi = wide ? W - DIM_WALL : y0 + nW - DIM_WALL;
+      const n = Math.floor((hi - lo - dia - bp / 2 + 0.5) / bp) + 1;
+      if (n < 1) break;
+      const o = lo + (hi - lo - ((n - 1) * bp + dia + bp / 2)) / 2 + (i % 2 ? bp / 2 : 0);
+      const col = [];
+      for (let j = 0; j < n; j++) col.push({ x: xN + dia / 2, y: o + j * bp + dia / 2, narrow: !wide, bare: true });
+      out.push(col);
+    }
+    return out;
+  };
+  const count = (cs) => cs.reduce((t, c) => t + c.length, 0);
+  let use = cols, bareCols = 0;
+  if (count(cols) < need) {
+    use = null;
+    for (let m = cols.length; m >= Math.max(0, cols.length - BARE_MAX); m--) {
+      const kept = cols.slice(0, m);
+      const xStart = m ? Math.max(...kept[m - 1].map((c) => c.x + dia / 2)) + BARE_GAP : DIM_WALL;
+      const extra = bare(xStart);
+      if (count(kept) + count(extra) >= need) {
+        // the fewest bare columns that do it
+        let k = 0, t = count(kept);
+        while (t < need) t += extra[k++].length;
+        if (k > BARE_MAX) continue;
+        use = kept.concat(extra.slice(0, k)); bareCols = k;
+        break;
+      }
+    }
+    if (!use) return null;
+  }
+  const slots = [];
+  use.forEach((c, i) => slots.push(...(i % 2 ? c.slice().reverse() : c)));
+  const pts = slots.slice(0, need);
+  const firstNarrow = pts.findIndex((c) => c.narrow), firstBare = pts.findIndex((c) => c.bare);
+  const acrossNarrow = Math.max(0, ...use.filter((c) => c.some((q) => q.narrow) && !c.some((q) => q.bare)).map((c) => c.length));
+  const r = dia / 2, xs = pts.map((q) => q.x), ys = pts.map((q) => q.y);
+  return { from: 0, fill: true, pts, spare: slots.length - need, rowsAlong: use.length, y0, across, acrossNarrow, bareCols,
+    narrowFrom: firstNarrow < 0 ? null : Math.floor(firstNarrow / P), bareFrom: firstBare < 0 ? null : Math.floor(firstBare / P),
+    ext: { L: Math.max(...xs) + r - (Math.min(...xs) - r) + 2 * DIM_WALL, W: Math.max(...ys) + r - (Math.min(...ys) - r) + 2 * DIM_WALL } };
 }
-function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
+// "הזיגזג חל על הכל ב W. Z, כל הכלים" (Daniel, 2026-10-17): every tray, not the OX alone.
+function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap) {
   let first = null;
-  // A two-part tray, standing 21700, one layer: filled wide then narrow (trayFill), each nickel its own way.
-  if (tub && tub.nx && dia >= DIM_ALONG_BELOW && layers === 1) {
-    const orient = rowPitch < pitch - 0.01 ? FILL_WAY[nickelOfPair(pitch, rowPitch)] || 'A' : 'A';
-    const f = trayFill(tub, orient, S * P, pitch, rowPitch, dia, P);
+  const nk = dia >= DIM_ALONG_BELOW ? nickelOfPair(pitch, rowPitch) : null;
+  // Standing 21700: each layer filled across the whole width (trayFill), each nickel its own way. A layer
+  // holds its share of the groups, the same plan in each.
+  if (tub && dia >= DIM_ALONG_BELOW) {
+    const orient = rowPitch < pitch - 0.01 ? FILL_WAY[nk] || 'A' : 'A';
+    const sPer = Math.ceil(S / (layers || 1));
+    const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap);
     const across = f ? f.across : acrossFit(tub.W, orient === 'B' ? rowPitch : pitch, dia);
-    const lay = { inRow: Math.max(1, across), g: 1, rowsAlong: f ? f.rowsAlong : Math.ceil(S * P / Math.max(1, across)), orient };
+    const lay = { inRow: Math.max(1, across), g: 1, rowsAlong: f ? f.rowsAlong : Math.ceil(sPer * P / Math.max(1, across)), orient };
     return f ? { ...lay, tail: f, fits: true } : { ...lay, fits: false };
   }
-  for (const [orient, cStep, aStep] of [['A', pitch, rowPitch], ['B', rowPitch, pitch]]) {
+  const ways = [['A', pitch, rowPitch], ['B', rowPitch, pitch]].filter(([o]) => !nk || !FILL_WAY[nk] || FILL_WAY[nk] === o);
+  if (cap != null && S * P > cap) return { ...groupLayout(S, P, layers, 1), orient: ways[0][0], fits: false };
+  for (const [orient, cStep, aStep] of ways) {
     const half = staggerAdd(orient, pitch, rowPitch);
     const across = acrossFit(tub.W - half.A, cStep, dia);
     const lay = groupLayout(S, P, layers, across);
@@ -9779,8 +9854,8 @@ function fitAlong(tub, S, P, layers, pitch, rowPitch, dia) {
   return { orient: 'C', inRow: per, g: 1, rowsAlong: bands * P, bands, fits: acrossMM <= tub.W + 0.5 && alongMM <= tub.L + 0.5 };
 }
 // The fewest layers that take the build (1 if none do — the verdict then says why).
-function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia) {
-  for (let l = 1; l <= maxLayers; l++) if (hisFit(tub, S, P, l, pitch, rowPitch, dia).fits) return l;
+function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia, cap) {
+  for (let l = 1; l <= maxLayers; l++) if (hisFit(tub, S, P, l, pitch, rowPitch, dia, cap).fits) return l;
   return 0;
 }
 
@@ -9816,8 +9891,7 @@ function refreshHolderOptions(fmt) {
 function holderTakes(v, tub, fmt, h, S, P, c, maxLayers) {
   const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
   if (!p) return 0;
-  if (v && v.caps && v.caps[h] != null && S * P > v.caps[h]) return 0;
-  return layersFor(tub, S, P, maxLayers, p, rp, c.dia);
+  return layersFor(tub, S, P, maxLayers, p, rp, c.dia, v && v.caps && v.caps[h] != null ? v.caps[h] : null);
 }
 // The biggest P a holder takes in this tray at this voltage, his way (0 when nothing fits).
 // Used to say, per nickel and per voltage, how much goes in (Daniel, 2026-09-27: "תכתוב מה
@@ -9946,10 +10020,11 @@ function calcPackDims() {
     const [p, rp] = pairOf(h);
     let layersH = 1, lay = groupLayout(S, P, 1, Infinity), fits = null;
     if (judged) {
-      layersH = layersFor(tub, S, P, maxLayers, p, rp, c.dia) || 1;
-      lay = hisFit(tub, S, P, layersH, p, rp, c.dia);
-      // Where he COUNTED this holder in this tray (the OX), his count is a ceiling as well.
-      fits = lay.fits && !(dimVehicle.caps && dimVehicle.caps[h] != null && N > dimVehicle.caps[h]);
+      // Where he COUNTED this holder in this tray (the OX), his count caps the holder's cells (hisFit).
+      const cap = dimVehicle.caps && dimVehicle.caps[h] != null ? dimVehicle.caps[h] : null;
+      layersH = layersFor(tub, S, P, maxLayers, p, rp, c.dia, cap) || 1;
+      lay = hisFit(tub, S, P, layersH, p, rp, c.dia, cap);
+      fits = lay.fits;
     } else if (tub) fits = false;
     const orient = lay.orient || 'A', rows = lay.rowsAlong, cols = lay.inRow;
     // The block: L runs along the series (the BMS sits at its end, so its allowance is added
@@ -9968,6 +10043,7 @@ function calcPackDims() {
     // 19.5mm holds 21.15mm cells because the nearest cell in the next row sits half a pitch over.
     const stagger = rp < p - 0.01 && (orient === 'A' ? rows > 1 : cols > 1);
     const tight = Math.min(p, stagger ? Math.sqrt((p / 2) ** 2 + rp ** 2) : rp);
+    if (lay.tail && lay.tail.fill) { alongMM = lay.tail.ext.L; acrossMM = lay.tail.ext.W; }
     // The block's L runs into the narrow part with the cells, and the BMS sits after them.
     return { h, p, rp, lay, orient, rows, cols, fits, tight, layers: layersH,
       L: Math.round(alongMM + (bmsTop ? 0 : extra)), W: Math.round(acrossMM),
@@ -9998,7 +10074,7 @@ function calcPackDims() {
       rec = shallowCellOptions(tub.L, tub.W, tub.H, V, S);
     } else if (tub) {
       const counted = dimVehicle.caps && dimVehicle.caps[holder] != null;
-      const overCount = counted && N > dimVehicle.caps[holder];
+      const overCount = counted && N > dimVehicle.caps[holder] && !(sel.lay && sel.lay.tail && sel.lay.tail.fill);
       const ok = !overCount && fitsTray;
       const tl = sel.lay && sel.lay.tail;
       if (ok) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` — בקיפול ל-${layers} שכבות` : ''}`
@@ -10055,7 +10131,9 @@ function calcPackDims() {
       + (k === sel ? '<span class="dim-tag">נבחר</span>' : '') + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '') + badge + '</div>'
       + kv('גודל סוללה', `<span class="dim-size">${iso(k.L + ' × ' + k.W + ' × ' + k.H)}</span> מ"מ`)
       + kv('פריסה', k.lay && k.lay.tail && k.lay.tail.fill
-        ? `לכל רוחב האמבטיה: ${k.lay.tail.across} בחלק הרחב${k.lay.tail.acrossNarrow ? `, ${k.lay.tail.acrossNarrow} בחלק הצר` : ''} · <bdi dir="ltr">${S}S${P}P</bdi>`
+        ? `לכל רוחב האמבטיה: ${k.lay.tail.across}${tubAll && tubAll.nx ? ' בחלק הרחב' : ''}${k.lay.tail.acrossNarrow ? `, ${k.lay.tail.acrossNarrow} בחלק הצר` : ''} · <bdi dir="ltr">${S}S${P}P</bdi>`
+          + (k.layers > 1 ? ` · אורך <bdi dir="ltr">${Math.ceil(S / k.layers)}S</bdi> · ${k.layers} שכבות` : '')
+          + (k.lay.tail.bareCols ? ' · ' + bareRows(k.lay.tail.bareCols) : '')
         : layoutText(S, P, k.layers, k.cols, k.rows, false, k.orient, k.lay && k.lay.bands))
       + (dimVehicle && tub && k.h !== 'custom' ? kv('מקסימום באמבטיה', maxLine(k.h)) : '')
       // A build that does not go in a two-part tray has no layout to draw: the fold it was given ran past
@@ -10859,7 +10937,9 @@ const VEHICLE_PACKS = [
   { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron', src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 32Ah', oemSrc: 'zippycycles', pack: '380×170×140 (XXL)', packSrc: 'citylion (XXL אחרי-שוק)' ,
     tub: '380×170×140 מ"מ — לפי מידות הסוללה המקורית (citylion), לא נמדד' },
   // Measured inside by Daniel, 2026-10-15: "מידות סורון אולטרה פנימי אורך 31.2 רוחב 22 עובי 17" (cm).
-  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron Ultra Bee', src: 'נמדד', p: 22.5, s60: 16, p60: 11, s72: 20, p72: 11, max: 220,
+  // Its builds are the calculator's for this tray: 16S15P and 20S12P in two layers since 2026-10-17, when the
+  // trays were filled across their whole width (trayFill); 16S11P / 20S11P before.
+  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron Ultra Bee', src: 'נמדד', p: 22.5, s60: 16, p60: 15, s72: 20, p72: 12, max: 240,
     tub: '312×220×170 מ"מ פנימי (נמדד 15.10.2026)' },
   { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', src: 'AI', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, oem: '60V 45Ah', oemSrc: 'talaria.cn.com', pack: '381×171×140', packSrc: 'talaria.cn.com' ,
     // 385 long, not 381 (2026-09-27): a 60V 60-65Ah pack sold on AliExpress as a DIRECT replacement
@@ -10972,7 +11052,8 @@ const VEHICLE_PACKS = [
   // The model is the Tiger 2 (Daniel, 2026-10-05: "טייגר 2"; the tub measured inside). The name keeps the
   // word טרקטורון, the word he uses for it: the group's plural (plain nun) does not contain it (final nun). hubOnly — his decision (2026-10-05, asked whether to publish it to the site's fit page:
   // "ב", only in the hub). Do not ask again.
-  { g: 'טרקטורונים', m: 'טייגר 2 — טרקטורון', src: 'נמדד', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 11, max: 288, hubOnly: true,
+  // 72V 20S14P since 2026-10-17 (the tray filled across its whole width), 20S11P before.
+  { g: 'טרקטורונים', m: 'טייגר 2 — טרקטורון', src: 'נמדד', p: 21.5, s60: 16, p60: 18, s72: 20, p72: 14, max: 288, hubOnly: true,
     tub: '345×230×170 מ"מ (נמדד: אורך 34.5, רוחב 23, גובה 17) · מארז פלסטיק' },
   { g: 'קורקינטים', m: 'Inokim OXO', riser: true, src: 'AI', p: 22.5, s60: 16, p60: 7, s72: 20, p72: 6, max: 120, oem: '60V 28Ah', oemSrc: 'voltride', pack: '420×155×65', packSrc: 'boardstore/inokim' ,
     tub: '420×155×65 מ"מ — לפי מידות הסוללה המקורית (boardstore), לא נמדד' },
