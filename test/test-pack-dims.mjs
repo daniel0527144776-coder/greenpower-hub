@@ -264,7 +264,7 @@ const oxn = await page.evaluate((SELF) => {
   document.getElementById('dimCell').value = '21700-50e';
   document.getElementById('dimExtra').value = '26'; dimExtraTouched = true;   // the allowance he opens it on at 72V
   useVehiclePack('Inokim OX');
-  set('dimHolder', 'square-23'); calcPackDims();
+  set('dimHolder', 'square-23'); set('dimAh', 35); calcPackDims();
   const res = document.getElementById('dimResult').innerText;
   const v = vehicleByName('Inokim OX'), c = DIM_CELLS['21700-50e'], tb = tubOf(v);
   const max = (h, V, e) => maxPFor(v, cellTub(tb, e), 21700, h, V, c);
@@ -287,19 +287,20 @@ const oxn = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('the OX tub is read with its narrow part, 60 along and 140 across',
   oxn.tb && oxn.tb.L === 425 && oxn.tb.W === 165 && oxn.tb.H === 65 && oxn.tb.nx && oxn.tb.nx.L === 60 && oxn.tb.nx.W === 140, JSON.stringify(oxn.tb));
-check('72V 20S7P with the BMS at the end: ⛔, and the best offered is 20S6P on ניקל ב׳',
-  /⛔ לא נכנס ל-Inokim OX/.test(oxn.res) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל Z \(22\.5\)/.test(oxn.res), oxn.res.slice(0, 160));
+check('72V 20S7P with the BMS at the end: ⛔, and the best offered is 20S6P',
+  /⛔ לא נכנס ל-Inokim OX/.test(oxn.res) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל [WZH] \(/.test(oxn.res), oxn.res.slice(0, 160));
 check('nothing puts the BMS on top of the cells', !/מעל התאים|עובי ה-BMS|BMS מעל/.test(oxn.res + oxn.res15 + ((oxn.label || {}).foot || '')), oxn.res.slice(0, 260));
 check('the tray row names the narrow part and the riser',
   /425 × 165 × 65 מ"מ \+ חלק צר 60 × 140 · צריך מגביה של לפחות 10 מ"מ/.test(oxn.res), oxn.res.slice(0, 260));
-// P across, S along, every group a row of its own (Daniel, 2026-10-15): a group no longer folds into
-// the narrow part across the tray, so with a 26mm BMS the square has 19 rows for 20 groups — none at 72V.
-check('maxima with a 26mm BMS at the end: the square takes no 20S, 60V 16S7P; the diagonals 20S6P',
-  oxn.m72 === 0 && oxn.m60 === 7 && oxn.a72 === 6 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
-check('a 15mm BMS: 20S6P on the square, groups 19-20 in the narrow part', oxn.s15 === 6
-  && /✅ נכנס ל-Inokim OX — קבוצות 19–20 בחלק הצר/.test(oxn.res15), [oxn.s15, oxn.res15.slice(0, 120)]);
-check('its drawing: 100 cells, the tray round them, the BMS after them in the narrow part; the label says where 19-20 go',
-  oxn.cells === 100 && oxn.outline && oxn.bmsDrawn && oxn.bmsInNarrow && oxn.label && oxn.label.n === 100 && /קבוצות 19–20 בחלק הצר/.test(oxn.label.foot),
+// Filled across the whole width since 2026-10-17 (his photo of an 8-across pack: "אני בונה בצורה הזאת גם
+// ב H z w"): with a 26mm BMS the square has 7 x 18 = 126 places in the wide part and five more in the
+// narrow one, so 72V 20S6P goes in on all three nickels and 60V (22mm) takes 16S8P on the square.
+check('maxima with a 26mm BMS at the end: 20S6P on all three nickels, 60V 16S8P on the square',
+  oxn.m72 === 6 && oxn.m60 === 8 && oxn.a72 === 6 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
+check('a 15mm BMS: 20S5P on the square, all of it in the wide part, the full width', oxn.s15 === 6
+  && /✅ נכנס ל-Inokim OX/.test(oxn.res15) && !/קבוצ(ה|ות) [\d–]+ בחלק הצר/.test(oxn.res15) && /לכל רוחב האמבטיה: 7 בחלק הרחב/.test(oxn.res15), [oxn.s15, oxn.res15.slice(0, 160)]);
+check('its drawing: 100 cells, the tray round them, the BMS at the end of the narrow part',
+  oxn.cells === 100 && oxn.outline && oxn.bmsDrawn && oxn.bmsInNarrow && oxn.label && oxn.label.n === 100,
   [oxn.cells, oxn.outline, oxn.bmsDrawn, oxn.bmsInNarrow, JSON.stringify(oxn.label)]);
 check('the vehicle list shows both parts of the tub', /425×165×65 \+ 60×140/.test(oxn.list), oxn.list);
 
@@ -319,17 +320,16 @@ const oxc = await page.evaluate((SELF) => {
   const ys = cells.map((c) => c.y), lo = Math.min(...ys) - pl.dia / 2, hi = Math.max(...ys) + pl.dia / 2;
   // the drawing's 0 is one wall in from the tray's side: the tray's middle across is W/2 - wall
   const mid = tb.W / 2 - DIM_WALL;
-  const tail = cells.filter((c) => c.g >= 18), main = cells.filter((c) => c.g === 0);
-  const sameCols = tail.length && tail.every((c) => main.some((m) => Math.abs(m.y - c.y) < 0.01));
+  // filled across the width: the first column holds the tray's whole width, 7 on the square
+  const sameCols = cells.filter((c) => Math.abs(c.x - cells[0].x) < 0.01).length === 7;
   const out = { extra, res: document.getElementById('dimResult').innerText.slice(0, 160), n: cells.length,
     off: Math.abs((lo + hi) / 2 - mid), sameCols, max: maxPFor(vehicleByName('Inokim OX'), cellTub(tb, 14), 21700, 'square-23', 72, DIM_CELLS['21700-50e']) };
   dimExtraTouched = false;
   clearDimVehicle();
   return out;
 }, SELFTEST);
-check('the OX\'s own BMS allowance is his 14mm, and with it the square takes 20S6P, 19-20 in the narrow part',
-  oxc.extra === '14' && oxc.max === 6 && /✅ נכנס ל-Inokim OX — קבוצות 19–20 בחלק הצר/.test(oxc.res) && oxc.n === 120, oxc);
-check('the block is centred across the tray, and the narrow part\'s groups sit in the same columns', oxc.off < 0.5 && oxc.sameCols, oxc);
+check('the OX\'s own BMS allowance is his 14mm, and with it the square takes 20S6P', oxc.extra === '14' && oxc.max === 6 && /✅ נכנס ל-Inokim OX/.test(oxc.res) && oxc.n === 120, oxc);
+check('the block is centred across the tray, and it takes the tray\'s whole width', oxc.off < 0.5 && oxc.sameCols, oxc);
 
 // The drawing is the answer to "how do I lay it out", so it has to BE the layout: one circle
 // per cell, in the grid the numbers above it describe. A picture that disagrees with the
@@ -1254,41 +1254,54 @@ const sc = await page.evaluate(() => ({ groups: [...new Set(VEHICLE_PACKS.filter
 check('the scooters are one group, and the riser is still each row\'s own', sc.groups.join('|') === 'קורקינטים' && sc.ox && sc.plain, sc);
 check('Sur-Ron Ultra Bee: his 312 × 220 × 170, and 72V 20S11P on ניקל Z', ub.tb && ub.tb.L === 312 && ub.tb.W === 220 && ub.tb.H === 170 && ub.z72 === 11, ub);
 
-// ---- the OX, drawn his way at every voltage (2026-10-17: "למה לא תיקנת את הציורים של ox") ----
-// On ניקל W and Z a group is a zigzag across the tray (B) at 36-72V alike; at 72V groups 19-20 go on
-// into the narrow part and the BMS is at its far end; every maximum stays; and a build that does not
-// go in (60V 16S8P on ניקל H) has no drawing instead of a fold run out of the tray.
-// --selftest: A first again, as before.
+// ---- the OX, filled wide then narrow, each nickel its own way (2026-10-17) ----
+// Daniel: "ה-W זה בזיגזג, זה יותר צר ברוחב ויותר ארוך באורך. ב-Z ... משתלב אחד בתוך השני, אבל זה יותר
+// רחב", and "בצורה רחבה, ומתקטן לתוך החלק הצר עד הסוף" — with his photo of an 8-across pack, "אני בונה
+// בצורה הזאת גם ב H z w". W is laid B (zigzag across: 8 in the wide part, 6 in the narrow one), Z is A
+// (5 and 6 nesting: 6 and 5), the square 7 and 5. Every cell of every maximum lies inside the tray; the
+// maxima are the places the tray has, capped by his counts; a build over his count has no drawing.
+// --selftest lays W the way of Z.
 const oxw = await page.evaluate((SELF) => {
-  if (SELF) window.diagBFirst = () => false;
+  if (SELF) FILL_WAY['diag-a'] = 'A';
   // his own 14mm BMS, not an allowance an earlier check typed into the field
   document.getElementById('dimExtra').value = '14'; dimExtraTouched = true;
   document.getElementById('dimCell').value = '21700-50e';
-  const v = vehicleByName('Inokim OX'), c = DIM_CELLS['21700-50e'], out = { orient: [], max: [] };
+  const v = vehicleByName('Inokim OX'), c = DIM_CELLS['21700-50e'], tb = tubOf(v), out = { orient: [], max: [], outside: [], across: [] };
   for (const V of [36, 48, 52, 60, 72]) {
-    const tub = cellTub(tubOf(v), dimExtraFor(V, v)), S = seriesForV(V);
-    for (const h of ['diag-a', 'diag-b']) {
+    const tub = cellTub(tb, dimExtraFor(V, v)), S = seriesForV(V);
+    for (const h of ['diag-a', 'diag-b', 'square-23']) {
       const mp = maxPFor(v, tub, 21700, h, V, c), [p, rp] = DIM_PITCH[21700][h];
-      out.orient.push(V + h + ':' + hisFit(tub, S, mp, 1, p, rp, c.dia).orient);
-      out.max.push(V + h + ':' + mp);
+      const lay = hisFit(tub, S, mp, 1, p, rp, c.dia);
+      out.orient.push(V + h + ':' + lay.orient); out.max.push(V + h + ':' + mp);
+      if (V === 60) out.across.push(h + ':' + (lay.tail ? lay.tail.across + '/' + lay.tail.acrossNarrow : '-'));
+      if (!mp || !lay.tail) { out.outside.push(V + h + ':none'); continue; }
+      // every cell inside the wide part or the narrow one, in the drawing's own coordinates
+      const pl = standPlan({ cols: lay.inRow, rows: lay.rowsAlong, pitch: p, rowPitch: rp, dia: c.dia, N: S * mp, P: mp, layers: 1, extra: 14, orient: lay.orient, tail: lay.tail, tray: tb });
+      const W0 = DIM_WALL, r = c.dia / 2, y0 = (tb.W - tb.nx.W) / 2;
+      const inWide = (q) => q.x - r >= -W0 - 0.5 && q.x + r <= tb.L - W0 + 0.5 && q.y - r >= -W0 - 0.5 && q.y + r <= tb.W - W0 + 0.5;
+      const inNarrow = (q) => q.x + r <= tb.L + tb.nx.L - 14 - W0 + 0.6 && q.y - r >= y0 - W0 - 0.5 && q.y + r <= y0 + tb.nx.W - W0 + 0.5;
+      const bad = pl.cells.filter((q) => !inWide(q) && !inNarrow(q)).length;
+      if (bad || pl.cells.length !== S * mp) out.outside.push(V + h + ':' + bad + '/' + pl.cells.length);
     }
   }
-  useVehiclePack('Inokim OX', 72); calcPackDims();
-  const r72 = document.getElementById('dimResult'), pl = dimLast && dimLast.plan;
-  out.narrow72 = [...r72.querySelectorAll('.dim-nk')].map((k) => /קבוצות 19–20 בחלק הצר/.test(k.textContent));
-  const o = pl && pl.outline;
-  out.bmsEnd = !!(pl && pl.bms && o && Math.abs(pl.bms.x + pl.bms.w - (o[3][0] - DIM_WALL)) < 0.6);
   useVehiclePack('Inokim OX', 60); document.getElementById('dimHolder').value = 'square-23'; dimAhPending = 40; calcPackDims();
   const h60 = document.querySelector('#dimResult .dim-nk[data-holder="square-23"]');
-  out.h60 = { svg: !!h60.querySelector('svg.pack-svg'), note: /אין ציור: לא נכנס/.test(h60.textContent), no: /✗ לא נכנס/.test(h60.textContent), s: (h60.textContent.match(/\d+S\d+P|\d+P/) || [''])[0] };
+  out.h60 = { svg: !!h60.querySelector('svg.pack-svg'), narrow: /קבוצה 16 בחלק הצר/.test(h60.textContent), ok: /✓ נכנס/.test(h60.textContent) };
+  useVehiclePack('Inokim OX', 72); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 35; calcPackDims();
+  const w72 = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]');
+  out.w72 = { svg: !!w72.querySelector('svg.pack-svg'), note: /אין ציור: לא נכנס/.test(w72.textContent), no: /✗ לא נכנס/.test(w72.textContent) };
+  FILL_WAY['diag-a'] = 'B';
+  dimExtraTouched = false;
   clearDimVehicle();
   return out;
 }, SELFTEST);
-check('the OX: ניקל W and Z zigzag within the group (B) at every voltage', oxw.orient.every((x) => /:B$/.test(x)), oxw.orient.join(' '));
-check('the OX: the maxima are what they were — 36V 12P, 48-52V 8P, 60V 8P on W and 7P on Z, 72V 6P',
-  oxw.max.join(' ') === '36diag-a:12 36diag-b:12 48diag-a:8 48diag-b:8 52diag-a:8 52diag-b:8 60diag-a:8 60diag-b:7 72diag-a:6 72diag-b:6', oxw.max.join(' '));
-check('the OX at 72V: groups 19-20 in the narrow part on all three nickels, the BMS at its far end', oxw.narrow72.length === 3 && oxw.narrow72.every(Boolean) && oxw.bmsEnd, [oxw.narrow72, oxw.bmsEnd]);
-check('the OX at 60V 16S8P on ניקל H: ✗ and no drawing, not a fold out of the tray', oxw.h60.no && !oxw.h60.svg && oxw.h60.note, oxw.h60);
+check('the OX: W laid zigzag across (B), Z nesting (A), at every voltage', oxw.orient.every((x) => /diag-a:B$|diag-b:A$|square-23:A$/.test(x)), oxw.orient.join(' '));
+check('the OX: across the wide and the narrow part, W 8/6, Z 6/5, the square 7/5', oxw.across.join(' ') === 'diag-a:8/6 diag-b:6/5 square-23:7/5', oxw.across.join(' '));
+check('the OX: the maxima are the places it has, capped by his counts (136 W, 126 Z, 140 H)',
+  oxw.max.join(' ') === '36diag-a:13 36diag-b:12 36square-23:13 48diag-a:10 48diag-b:9 48square-23:10 52diag-a:9 52diag-b:9 52square-23:9 60diag-a:8 60diag-b:7 60square-23:8 72diag-a:6 72diag-b:6 72square-23:6', oxw.max.join(' '));
+check('the OX: every cell of every maximum lies inside the tray, wide part or narrow', oxw.outside.length === 0, oxw.outside.join(' '));
+check('the OX at 60V 16S8P on ניקל H: it goes in, group 16 in the narrow part, drawn', oxw.h60.ok && oxw.h60.svg && oxw.h60.narrow, oxw.h60);
+check('the OX at 72V 20S7P on ניקל W, over his count of 136: ✗ and no drawing', oxw.w72.no && !oxw.w72.svg && oxw.w72.note, oxw.w72);
 
 await browser.close();
 srv.close();
