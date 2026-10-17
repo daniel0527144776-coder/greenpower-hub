@@ -139,7 +139,9 @@ check('a month he opened stays open when the page re-draws, its rows shown', ope
 check('"פגות בקרוב" (the home banner\'s target) opens', opened.expiring === true, opened);
 check('the price list: a chosen category opens its topics; פתח הכל / סגור הכל open and close them', opened.catSearch && opened.catAll && opened.catNone, opened);
 
-const twice = await page.evaluate(() => { foldStatic('settings'); foldStatic('worktime'); return document.querySelectorAll('details.fold details.fold').length; });
+// On the two pages foldStatic folds: the price list nests its scooters' 21700 and 18650 sections inside
+// their topic on purpose (2026-10-17), and that is not a page folded twice.
+const twice = await page.evaluate(() => { foldStatic('settings'); foldStatic('worktime'); return document.querySelectorAll('#page-settings details.fold details.fold, #page-worktime details.fold details.fold').length; });
 check('folding again changes nothing — no section inside a section', twice === 0 && (await folds('settings')).length === 4, twice);
 check('no page errors', errs.length === 0, errs.join(' | '));
 
