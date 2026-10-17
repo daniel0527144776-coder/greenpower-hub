@@ -95,8 +95,9 @@ const stack = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('there is no layers field to type into', !stack.field, stack.field);
 check('a pack that fits one layer is not folded', /✅/.test(stack.moto40) && !/שכבות/.test(stack.moto40), stack.moto40.slice(0, 90));
-check('one that does not is folded, and the page says so', /בקיפול ל-2 שכבות/.test(stack.moto50), stack.moto50.slice(0, 90));
-check('and the layout names the S per layer', /אורך 10S · 2 שכבות/.test(stack.moto50), stack.moto50.slice(0, 260));
+// Short since 2026-10-17 ("פחות מלל"): the head says the layers, the drawing says which groups are in the first.
+check('one that does not is folded, and the page says so', /✅ נכנס ל-אופנוע שליחויות 72V · 2 שכבות/.test(stack.moto50), stack.moto50.slice(0, 90));
+check('and the drawing names the groups of the first layer', /שכבה 1 מתוך 2 · קבוצות 1–10/.test(stack.moto50), stack.moto50.slice(0, 260));
 // A Bomber is built with the cells LYING (2026-09-27), and since 2026-09-28 its page is only that
 // answer — a standing fold would be advice for a build nobody does in that frame.
 check('a Bomber is answered lying, not folded standing', /נכנס עד:/.test(stack.fc1) && !/שכבות/.test(stack.fc1), stack.fc1.slice(0, 90));
@@ -133,12 +134,12 @@ const rec = await page.evaluate(() => {
   useVehiclePack('Inokim OX', 60);
   document.getElementById('dimHolder').value = 'square-23';
   dimAhPending = 40; calcPackDims();
-  const ox = document.getElementById('dimResult').innerText;
+  const ox = document.getElementById('dimResult').innerText, oxWhy = (document.querySelector('#dimResult .dim-over') || {}).title || '';
   document.getElementById('dimExtra').value = '26';
   useVehiclePack('Inokim OX', 72);
   document.getElementById('dimHolder').value = 'square-23'; calcPackDims();
   const ox72 = document.getElementById('dimResult').innerText;
-  return { html, order, ox, ox72, cards };
+  return { html, order, ox, oxWhy, ox72, cards };
 });
 check('the densest holder is tried first', rec.order[0] === 'diag-b', rec.order.join(','));
 check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), rec.html.slice(0, 80).replace(/<[^>]*>/g, ''));
@@ -148,10 +149,11 @@ check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), 
 // this tray, filled across its width, so it is ניקל Z).
 check('and it only recommends one that fits', rec.cards.length === 4 && rec.cards.filter((k) => /מומלץ/.test(k)).length === 1
   && /^diag-b:✓ נכנס:.*מומלץ/.test(rec.cards.find((k) => k.startsWith('diag-b')) || '') && rec.cards.every((k) => !/✗/.test(k) || !/מומלץ/.test(k)), rec.cards);
-check('a counted tray is still judged by the layout, not the count alone', /16S 8P · 128 תאים/.test(rec.ox) && /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.ox), rec.ox.slice(0, 120));
-// The OX is a row per group (2026-10-17, night: "מסודר כמו שאני בונה"): with a 26mm BMS twenty rows of six
-// do not go in on the square, and are never laid the whole width instead; Z, nesting, takes them.
-check('and 20S6P on the square, with the 26mm BMS at the end: ⛔, never the whole width, the best on Z', /^⛔/.test(rec.ox72.trim()) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל Z/.test(rec.ox72) && !/לכל רוחב האמבטיה/.test(rec.ox72), rec.ox72.slice(0, 160));
+// The reason is not printed any more (2026-10-17, "פחות מלל"); it is the banner's title.
+check('a counted tray is still judged by the layout, not the count alone', /16S 8P · 128 תאים/.test(rec.ox) && /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.oxWhy), [rec.oxWhy, rec.ox.slice(0, 120)]);
+// Rows the whole width in every tray, the OX too (2026-10-17, night: "נחש בכל הכלים, גם OX"): 20S6P on the
+// square goes in the wide part alone, 7 across x 18 = 126 places, even with a 26mm BMS at the end.
+check('and 20S6P on the square, with the 26mm BMS at the end, goes in the wide part, the full width', /^✅/.test(rec.ox72.trim()) && /20S 6P · 120 תא/.test(rec.ox72), rec.ox72.slice(0, 160));
 
 // ---- 4b. the tray HEIGHT, which was stored and never read until 2026-09-22 ----
 // A 21700 is 70.15mm long. A tray shallower than that cannot take a standing cell, and the
@@ -191,7 +193,7 @@ check('a deep enough tray is left alone', !/לא נכנס לאמבטיה/.test(h
 // OX is 65mm, "חייב להשים מגביה") — planned on the footprint, and told how tall the riser is.
 check('a riser vehicle is not refused for its height', !/לא נכנס לאמבטיה/.test(heights.compound) && !/לא נכנס לאמבטיה/.test(heights.riserZero),
   heights.compound.replace(/<[^>]*>/g, '').slice(0, 90));
-check('and it says how tall the riser must be', /צריך מגביה של לפחות 10 מ"מ/.test(heights.compound.replace(/<[^>]*>/g, '')) && /צריך מגביה של לפחות 17 מ"מ/.test(heights.riserZero.replace(/<[^>]*>/g, '')),
+check('and it says how tall the riser must be', /מגביה 10 מ"מ/.test(heights.compound.replace(/<[^>]*>/g, '')) && /מגביה 17 מ"מ/.test(heights.riserZero.replace(/<[^>]*>/g, '')),
   heights.compound.replace(/<[^>]*>/g, '').slice(0, 260));
 
 // ---- 4c. the 18650 offer that comes with a shallow tray ----
