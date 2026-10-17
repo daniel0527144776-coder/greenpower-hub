@@ -43,7 +43,9 @@ const DATA = {
         { at: NOW - 120000, c: '972504444444@c.us', n: 'משה', in: 'שלום', r: 'paused' },
         { at: NOW - 180000, c: '972505555555@c.us', n: 'דוד', r: 'stale', late: 1500 },
         { at: NOW - 240000, c: '123456789012345@lid', n: 'לקוח', r: 'unknown' },
-        { at: NOW - 300000, c: '972506060606@c.us', n: 'משה השכן', r: 'saved' }],
+        { at: NOW - 300000, c: '972506060606@c.us', n: 'משה השכן', r: 'saved' },
+        { at: NOW - 360000, c: '972507777777@c.us', n: 'רון', in: 'יש 52V?', r: 'hours', later: NOW + 7200000 }],
+  later: [{ c: '972507777777@c.us', n: 'רון', first: NOW - 360000, due: NOW + 7200000 }],
   paused: [{ c: '972504444444@c.us', n: 'משה', until: NOW + 3600000, manual: false }],
   questions: [{ id: 'q1', at: NOW - 30000, c: '972501234567@c.us', n: 'יוסי', q: 'יש מטען 84V? ' + EVIL, msg: 'יש לכם מטען?', draft: 'כן, יש מטען 84V. ' + EVIL, done: false },
               { id: 'q0', at: NOW - 900000, c: '972501234567@c.us', n: 'יוסי', q: 'ישנה', done: true }],
@@ -73,7 +75,8 @@ await page.route('**/rest/v1/**', (route) => route.fulfill({ status: 200, body: 
 await page.goto('http://localhost:4362/index.html', { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.renderWaBot === 'function', null, { timeout: 30000 });
 if (SELFTEST) await page.evaluate(() => { window.escPunch = (s) => String(s == null ? '' : s); window.waNum = (c) => String(c); });
-if (SELFTEST) delete DATA.photos;   // the bot's count of photos waiting, gone
+if (SELFTEST) delete DATA.photos;
+if (SELFTEST) await page.evaluate(() => { window.waLaterHtml = () => ''; });   // who waits for the opening, not shown   // the bot's count of photos waiting, gone
 
 const text = () => page.evaluate(() => document.getElementById('wabotBody').innerText);
 // Everything below the state is folded (2026-10-05, "שכל הקטגוריות יהיו מקופלות"): the content checks
@@ -114,6 +117,8 @@ check('the photos waiting for the library are counted, not shown', /📷 7 תמ�
 check('the state, the week\'s counts and the connection', /הבוט עונה עכשיו ללקוחות/.test(t1) && /מחובר לוואטסאפ/.test(t1) && /ענה השבוע\s*5/.test(t1) && /12 שיחות נקראו/.test(t1), t1.slice(0, 300));
 check('nothing a customer wrote runs as markup', await page.evaluate(() => window.__xss === undefined && !document.querySelector('#wabotBody img')), '');
 check('it is shown as text instead', t1.includes('כמה עולה <img src=x') && t1.includes('יש מטען 84V? <img'), '');
+check('who wrote while closed is listed, with when the bot will answer, and the log says it too (2026-10-17)',
+  /ייענו כשהמעבדה נפתחת/.test(t1) && t1.includes('רון · 050-777-7777') && /מחוץ לשעות · ייענה ב-/.test(t1), '');
 check('numbers in the local form', t1.includes('050-123-4567') && t1.includes('050-444-4444'), '');
 check('only the open question waits for him', (t1.match(/הבוט שאל אותך/g) || []).length === 1 && /שאלות שמחכות לך\s*1/.test(t1), '');
 check('the log, with why it did or did not answer', /✅ ענה/.test(t1) && /שתק — ענית בעצמך/.test(t1), '');
@@ -129,13 +134,13 @@ check('the list of lab customers has no button that scans the chats again',
 await page.evaluate(() => document.querySelectorAll('#wabotBody details.fold').forEach((d) => { d.open = d.dataset.fold === 'settings'; }));
 await page.waitForTimeout(50);
 await page.evaluate(() => { document.getElementById('wbPause').value = '3'; document.getElementById('wbModel').value = 'saving'; document.getElementById('wbVoice').checked = false; document.getElementById('wbSaved').checked = true;
-  document.getElementById('wbLength').value = 'short'; document.getElementById('wbTone').value = 'formal'; document.getElementById('wbEmoji').value = 'none'; document.getElementById('wbHold').checked = false; waSaveSettings(); });
+  document.getElementById('wbLength').value = 'short'; document.getElementById('wbTone').value = 'formal'; document.getElementById('wbEmoji').value = 'none'; document.getElementById('wbHold').checked = false; document.getElementById('wbLater').checked = false; waSaveSettings(); });
 let p = await lastPost(1);
 check('the section he saved in is still open after the page re-draws, the others folded again',
   await page.evaluate(() => { const o = Object.fromEntries([...document.querySelectorAll('#wabotBody details.fold')].map((d) => [d.dataset.fold, d.open])); return o.settings === true && o.log === false && o.know === false && o.blocked === false; }), '');
 check('saving the settings sends what he set', p && p.op === 'settings' && p.settings.pauseHours === 3 && p.settings.model === 'saving' && p.settings.voice === false && p.settings.skipSaved === true
   && p.settings.shabbat === true && p.settings.israelOnly === true && p.settings.hours === 'always' && p.settings.custom.days.length === 7
-  && p.settings.length === 'short' && p.settings.tone === 'formal' && p.settings.emoji === 'none' && p.settings.holdLine === false, p);
+  && p.settings.length === 'short' && p.settings.tone === 'formal' && p.settings.emoji === 'none' && p.settings.holdLine === false && p.settings.answerLater === false && p.settings.menu === true, p);
 await page.evaluate(() => { document.getElementById('wbHours').value = 'custom'; for (let i = 0; i < 7; i++) document.getElementById('wbDay' + i).checked = false; waSaveSettings(); });
 await page.waitForTimeout(300);
 check('his own hours with no day at all are not saved — the bot would never answer', posts.length === 1
