@@ -126,9 +126,10 @@ const rec = await page.evaluate(() => {
   // row is 20S6P; on the square even that does not go in, asserted below, and the page points at
   // the nickel that takes it.)
   // Since 2026-10-17 the OX is filled wide then narrow (trayFill), so 16S8P on the square goes in with
-  // his own BMS — 126 in the wide part, the rest in the narrow one. A 55mm BMS leaves the narrow part
-  // too short for a cell, and then the 140 he counted is still not enough: the layout decides.
-  document.getElementById('dimExtra').value = '55';
+  // his own BMS — 126 in the wide part, the rest in the narrow one. With a 140mm allowance the tray is
+  // 345mm of the wide part alone, and even the last rows without the holder do not make 128: the 140 he
+  // counted is not enough on its own, the layout decides.
+  document.getElementById('dimExtra').value = '140';
   useVehiclePack('Inokim OX', 60);
   document.getElementById('dimHolder').value = 'square-23';
   dimAhPending = 40; calcPackDims();
@@ -143,8 +144,10 @@ check('the densest holder is tried first', rec.order[0] === 'diag-b', rec.order.
 check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), rec.html.slice(0, 80).replace(/<[^>]*>/g, ''));
 // Densest FIRST is only right if it also has to fit: a recommendation that ignores whether the
 // pack goes in is just the first item of a list. Since 2026-10-04 each nickel is its own card.
-check('and it only recommends one that fits', rec.cards.length === 3 && /^diag-b:✓ נכנס:.*מומלץ/.test(rec.cards.find((k) => k.startsWith('diag-b')) || '')
-  && /^diag-a:✗ לא נכנס:(?!.*מומלץ)/.test(rec.cards.find((k) => k.startsWith('diag-a')) || '') && /^square-23:✗ לא נכנס/.test(rec.cards.find((k) => k.startsWith('square-23')) || ''), rec.cards);
+// One recommendation, on a card that fits: the densest of those that fit (since 2026-10-17 all three take
+// this tray, filled across its width, so it is ניקל Z).
+check('and it only recommends one that fits', rec.cards.length === 3 && rec.cards.filter((k) => /מומלץ/.test(k)).length === 1
+  && /^diag-b:✓ נכנס:.*מומלץ/.test(rec.cards.find((k) => k.startsWith('diag-b')) || '') && rec.cards.every((k) => !/✗/.test(k) || !/מומלץ/.test(k)), rec.cards);
 check('a counted tray is still judged by the layout, not the count alone', /16S 8P · 128 תאים/.test(rec.ox) && /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.ox), rec.ox.slice(0, 120));
 // Filled across the whole width (2026-10-17), 20S6P on the square goes in the wide part alone, 7 across
 // x 18 = 126 places, even with a 26mm BMS at the end.

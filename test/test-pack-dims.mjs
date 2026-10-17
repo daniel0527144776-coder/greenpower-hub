@@ -151,7 +151,9 @@ const ox = await page.evaluate(() => {
 // Tapping it opens on a build that goes in: 20S6P at 72V, the BMS at the end (2026-10-09; it opened on
 // the table's 20S7P and "⛔ לא נכנס" for a day after the BMS moved to the end).
 check('tapping the OX opens on 20S6P at 72V, and it goes in', /20S 6P/.test(ox.filled) && /✅ נכנס ל-Inokim OX/.test(ox.filled) && !/⛔/.test(ox.filled), ox.filled.slice(0, 120));
-check('140 cells is over the 126 counted on the diagonal holder', /⛔|⚠/.test(ox.overDiag) && /126/.test(ox.overDiag) && /חורג/.test(ox.overDiag), ox.overDiag.slice(-70));
+// Since 2026-10-17 a tray the holder cannot fill takes its last rows without it ("כמה שורות בסוף לבנות בלי
+// תבנית"): 140 on ניקל Z is his 126 in the holder and the rest bare at the end.
+check('140 cells on the diagonal holder he counted 126: the holder\'s 126, and the last rows without it', /✅/.test(ox.overDiag) && /בלי תבנית/.test(ox.overDiag) && !/חורג/.test(ox.overDiag), ox.overDiag.slice(-120));
 // It used to test only for ⚠, and passed for two weeks over "⛔ לא נכנס ל-Inokim OX — 17S מתוך 20S".
 // The answer itself is asserted now — for the cells alone, which is what he counted. With the BMS at
 // the end it does not go in (the narrow-part section below).
@@ -287,16 +289,18 @@ const oxn = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('the OX tub is read with its narrow part, 60 along and 140 across',
   oxn.tb && oxn.tb.L === 425 && oxn.tb.W === 165 && oxn.tb.H === 65 && oxn.tb.nx && oxn.tb.nx.L === 60 && oxn.tb.nx.W === 140, JSON.stringify(oxn.tb));
-check('72V 20S7P with the BMS at the end: ⛔, and the best offered is 20S6P',
-  /⛔ לא נכנס ל-Inokim OX/.test(oxn.res) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל [WZH] \(/.test(oxn.res), oxn.res.slice(0, 160));
+// With the 26mm BMS, 20S7P does not go in on the square; on ניקל W it does, its last row without the holder
+// (2026-10-17), and that is the build offered.
+check('72V 20S7P with a 26mm BMS: ⛔ on the square, and the best offered is 20S7P on ניקל W',
+  /⛔ לא נכנס ל-Inokim OX/.test(oxn.res) && /הכי גדול שנכנס: 20S 7P · 35Ah · ניקל W \(/.test(oxn.res), oxn.res.slice(0, 160));
 check('nothing puts the BMS on top of the cells', !/מעל התאים|עובי ה-BMS|BMS מעל/.test(oxn.res + oxn.res15 + ((oxn.label || {}).foot || '')), oxn.res.slice(0, 260));
 check('the tray row names the narrow part and the riser',
   /425 × 165 × 65 מ"מ \+ חלק צר 60 × 140 · צריך מגביה של לפחות 10 מ"מ/.test(oxn.res), oxn.res.slice(0, 260));
 // Filled across the whole width since 2026-10-17 (his photo of an 8-across pack: "אני בונה בצורה הזאת גם
 // ב H z w"): with a 26mm BMS the square has 7 x 18 = 126 places in the wide part and five more in the
 // narrow one, so 72V 20S6P goes in on all three nickels and 60V (22mm) takes 16S8P on the square.
-check('maxima with a 26mm BMS at the end: 20S6P on all three nickels, 60V 16S8P on the square',
-  oxn.m72 === 6 && oxn.m60 === 8 && oxn.a72 === 6 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
+check('maxima with a 26mm BMS at the end: 72V 20S6P on the square and Z, 20S7P on W; 60V 16S8P on the square',
+  oxn.m72 === 6 && oxn.m60 === 8 && oxn.a72 === 7 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
 check('a 15mm BMS: 20S5P on the square, all of it in the wide part, the full width', oxn.s15 === 6
   && /✅ נכנס ל-Inokim OX/.test(oxn.res15) && !/קבוצ(ה|ות) [\d–]+ בחלק הצר/.test(oxn.res15) && /לכל רוחב האמבטיה: 7 בחלק הרחב/.test(oxn.res15), [oxn.s15, oxn.res15.slice(0, 160)]);
 check('its drawing: 100 cells, the tray round them, the BMS at the end of the narrow part',
@@ -645,37 +649,42 @@ check('each priced above its cost, with a trade price between', cat18.ok, cat18)
 
 // ---- his method: the group across the narrow side, the series along the length ----
 const hw = await page.evaluate((SELF) => {
-  if (SELF) window.groupLayout = (S, P, layers) => { const per = Math.ceil(S * P / layers); return { inRow: 17, g: 1, rowsAlong: Math.ceil(per / 17) }; };
+  if (SELF) window.trayFill = () => null;
   document.getElementById('dimExtra').value = '0'; dimExtraTouched = true;
-  // a 10P group in a 170mm-wide tray: seven across is the most, so each group takes two rows of five
+  // a 10P group in a 170mm-wide tray: since 2026-10-17 the tray is filled across its whole width and a
+  // group runs on into the next column (his photo, "אני בונה בצורה הזאת גם ב H z w")
   useVehiclePack('אופנוע שליחויות 72V'); dimAhPending = 50; calcPackDims();
   const txt = document.getElementById('dimResult').innerText;
   const circles = [...document.querySelectorAll('#dimResult .dim-nk.sel circle')].map((c) => [+c.getAttribute('cx'), +c.getAttribute('cy')]);
   clearDimVehicle();
   return { txt, n: circles.length };
 }, SELFTEST);
-check('a group too wide for the tray takes two rows, and says so', /רוחב 10P \(2 שורות\)/.test(hw.txt), hw.txt.slice(0, 260));
+check('a group wider than the tray runs on across the whole width, and says so', /לכל רוחב האמבטיה: \d+ · 20S10P/.test(hw.txt) && hw.n === 100, [hw.n, hw.txt.slice(0, 260)]);
 
-// ...and is DRAWN in its own two rows (2026-10-04). 7P in two rows is a row of 4 and a row of 3;
-// the drawing used to pour the cells into rows of 4 one after another, so the groups ran into each
-// other and the picture had 35 rows where the size counted 40. No row of the drawing may hold two
-// groups. --selftest pours them in one after another again.
+// ...and is DRAWN in the order the series runs (2026-10-17): the groups follow each other column after
+// column, each group's cells in one piece — no group lies past the next one, and none is split by
+// another. --selftest shuffles the groups.
 const own = await page.evaluate((SELF) => {
   if (SELF) window.standPlan = ((f) => (o) => {
     const p = f(o);
-    p.cells.slice().sort((a, b) => a.x - b.x || a.y - b.y).forEach((c, i) => { c.g = Math.floor(i / o.P); });
+    p.cells.forEach((c, i) => { c.g = (i * 7) % Math.ceil(o.N / o.P); });
     return p;
   })(window.standPlan);
   useVehiclePack('Talaria', 72);
-  document.getElementById('dimHolder').value = 'diag-a'; calcPackDims();
-  const cells = dimLast.plan.cells;
-  const byX = new Map();
-  for (const c of cells) { const k = Math.round(c.x * 10); (byX.get(k) || byX.set(k, new Set()).get(k)).add(c.g); }
+  document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 30; calcPackDims();
+  const cells = dimLast.plan.cells, n = cells.length, G = Math.max(...cells.map((c) => c.g)) + 1;
+  // each column (cells at one x) holds a run of consecutive groups, and the columns climb in group order
+  const cols = new Map();
+  // a column of ניקל W is a zigzag: its cells sit 0 or half a pitch along, so it is found by its pitch
+  const dia = dimLast.plan.dia;
+  for (const c of cells) { const k = Math.floor((c.x - dia / 2 + 1) / 22.7); (cols.get(k) || cols.set(k, []).get(k)).push(c.g); }
+  const ranges = [...cols.entries()].sort((a, b) => a[0] - b[0]).map(([, gs]) => [Math.min(...gs), Math.max(...gs)]);
+  const ordered = ranges.every((r, i) => i === 0 || r[0] >= ranges[i - 1][1]) && ranges.every((r) => r[1] - r[0] <= 1);
   const txt = document.querySelector('#dimResult .dim-nk.sel').innerText;
   clearDimVehicle();
-  return { rows: byX.size, mixed: [...byX.values()].filter((s) => s.size > 1).length, txt };
+  return { n, G, ordered, txt };
 }, SELFTEST);
-check('a two-row group is drawn in its own two rows: 40 rows, none shared', /רוחב 7P \(2 שורות\)/.test(own.txt) && own.rows === 40 && own.mixed === 0, own);
+check('the drawing follows the series: 20 groups of 6, column after column, no group split by another', own.n === 120 && own.G === 20 && own.ordered, own);
 
 // ---- the build on a label for the worker (2026-09-25) ----
 // 100 x 50mm at 300dpi is 1181 x 590 dots: one canvas pixel per printer dot, like the battery
@@ -752,28 +761,26 @@ check('the tray has its own size row, height included', /גודל אמבטיה\s
 check('an unknown height is written ? and said to be unchecked', /גודל אמבטיה\s*400 × 150 × \? מ"מ · גובה לא ידוע, לא נבדק/.test(th.unknown) && !/400/.test(th.chip), [th.unknown.slice(0, 160), th.chip]);
 check('and with no vehicle there is no tray row', !/גודל אמבטיה/.test(th.none), th.none.slice(0, 120));
 
-// ---- the diagonal bracket both ways round (2026-09-27) ----
-// A stand-in 500 x 145 tray: seven across 145mm fit only with the bracket's straight rows ALONG it
-// (19.49 a step across on ניקל ב׳); straight rows across need 159. This was the Nami Klima until
-// 2026-10-04, when he corrected that note: the Klima (463 x 139 x 75) takes 16S6P on the square 23.
-// --selftest restores the one-way fit, which says seven do not go in.
+// ---- each nickel one way round, on every tray (2026-10-17: "הזיגזג חל על הכל ב W. Z, כל הכלים") ----
+// A stand-in 500 x 145 tray. ניקל W is a zigzag across, seven in 145mm, and takes 20S7P; ניקל Z nests,
+// straight across, five in 145mm, and does not (it used to be turned round to take seven). The Nami Klima
+// (463 x 139 x 75) takes his 16S6P on the square 23. --selftest turns Z round again.
 const turn = await page.evaluate((SELF) => {
-  if (SELF) window.hisFit = (tub, S, P, layers, pitch, rowPitch, dia) => {
-    const across = acrossFit(tub.W, pitch, dia); const lay = groupLayout(S, P, layers, across);
-    const aMM = (lay.inRow - 1) * pitch + dia + 2 * DIM_WALL, lMM = (lay.rowsAlong - 1) * rowPitch + dia + 2 * DIM_WALL;
-    return { ...lay, orient: 'A', fits: across >= 1 && aMM <= tub.W + 0.5 && lMM <= tub.L + 0.5 };
-  };
+  if (SELF) FILL_WAY['diag-b'] = 'B';
   VEHICLE_PACKS.push({ g: 'בדיקה', m: 'מגש מבחן', src: 'AI', p: 21.5, s60: 16, p60: 7, s72: 20, p72: 7, max: 140, tub: '500×145×75 מ"מ' });
   useVehiclePack('מגש מבחן', 72); document.getElementById('dimHolder').value = 'diag-b'; dimAhPending = 35; calcPackDims();
   const r = document.getElementById('dimResult').innerText;
-  const circles = document.querySelectorAll('#dimResult .dim-nk.sel circle').length;
+  const w = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]');
+  const circles = w.querySelectorAll('circle').length, wTxt = w.innerText;
+  FILL_WAY['diag-b'] = 'A';
   clearDimVehicle(); VEHICLE_PACKS.pop();
   useVehiclePack('Nami Klima', 60); document.getElementById('dimHolder').value = 'square-23'; dimAhPending = 30; calcPackDims();
   const klima = document.getElementById('dimResult').innerText;
   clearDimVehicle();
-  return { r, circles, klima };
+  return { r, circles, klima, wTxt };
 }, SELFTEST);
-check('seven across a 145mm tray: 20S7P goes in with the bracket turned', /^✅ נכנס ל-מגש מבחן/.test(turn.r.trim()) && /רוחב 7P · אורך 20S/.test(turn.r), turn.r.slice(0, 160));
+check('a 145mm tray: on ניקל Z, nesting, 20S7P does not go in, and W is offered', /^⛔ לא נכנס ל-מגש מבחן/.test(turn.r.trim()) && /הכי גדול שנכנס: 20S 7P · 35Ah · ניקל W/.test(turn.r), turn.r.slice(0, 160));
+check('on ניקל W, the zigzag, seven across take 20S7P', /✓ נכנס/.test(turn.wTxt) && /לכל רוחב האמבטיה: 7 · 20S7P/.test(turn.wTxt), turn.wTxt.slice(0, 200));
 check('the Nami Klima takes his 16S6P on the square 23', /^✅ נכנס ל-Nami Klima/.test(turn.klima.trim()) && /16S 6P/.test(turn.klima), turn.klima.slice(0, 160));
 check('and the drawing still has one circle per cell', turn.circles === 140, turn.circles);
 
@@ -799,9 +806,8 @@ const mx = await page.evaluate((SELF) => {
   clearDimVehicle();
   return { res, cards, cardTxt, sharedOnList, sharedAfter };
 }, SELFTEST);
-// Talaria 385 x 171, no BMS allowance: twenty rows go in on neither nickel since the 2026-10-04
-// re-measure (22.5 / 22.7), so 72V has no maximum and 60V has one.
-check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: —/.test(mx.res), mx.res.slice(0, 400));
+// Talaria 385 x 171, no BMS allowance: since 2026-10-17, filled across its width, it has a maximum at both.
+check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: 20S\d+P · \d+Ah/.test(mx.res), mx.res.slice(0, 400));
 check('and each nickel\'s card says how much it takes', mx.cards.length === 3 && /^ניקל W — 22\.7/.test(mx.cards[0]) && /^ניקל Z — 22\.5/.test(mx.cards[1]) && /^ניקל H — 23/.test(mx.cards[2])
   && mx.cards.every((k) => /מקסימום באמבטיה\s*60V: (16S\d+P · \d+Ah|—)\s*72V: (20S\d+P · \d+Ah|—)/.test(k)), mx.cards.map((k) => k.slice(0, 120)));
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
@@ -1188,9 +1194,9 @@ check('the Tiger 2 is listed, named with טייגר and with טרקטורון',
   !atv.missing && atv.byWord && atv.byModel, atv.missing ? 'missing' : [atv.byWord, atv.byModel]);
 check('any vehicle in the ATV group may be folded into two layers, not only one named טרקטורון',
   !atv.missing && atv.groupStacks === true, String(atv.groupStacks));
-check('it opens on 72V 20S11P (220 cells) in two layers, and 60V takes 16S18P at most',
-  !atv.missing && atv.V === '72' && /✅ נכנס/.test(atv.r72) && /20S 11P · 220 תאים/.test(atv.r72) && /2 שכבות/.test(atv.r72)
-  && /60V: 16S18P · 90Ah/.test(atv.r72) && /72V: 20S11P · 55Ah/.test(atv.r72),
+check('it opens on 72V 20S14P (280 cells) in two layers, and 60V takes 16S18P at most',
+  !atv.missing && atv.V === '72' && /✅ נכנס/.test(atv.r72) && /20S 14P · 280 תאים/.test(atv.r72) && /2 שכבות/.test(atv.r72)
+  && /60V: 16S18P · 90Ah/.test(atv.r72) && /72V: 20S14P · 70Ah/.test(atv.r72),
   atv.missing ? 'missing' : [atv.V, atv.r72.slice(0, 200)]);
 const fish = await page.evaluate((SELF) => {
   const name = 'סילבר פיש 72V';
@@ -1252,15 +1258,15 @@ check('a riser only as high as the vehicle has room for: the OX\'s 12mm takes th
 const sc = await page.evaluate(() => ({ groups: [...new Set(VEHICLE_PACKS.filter((v) => /קורקינט/.test(v.g)).map((v) => v.g))],
   ox: needsRiser(vehicleByName('Inokim OX')), plain: VEHICLE_PACKS.filter((v) => v.g === 'קורקינטים' && !v.riser).every((v) => !needsRiser(v)) }));
 check('the scooters are one group, and the riser is still each row\'s own', sc.groups.join('|') === 'קורקינטים' && sc.ox && sc.plain, sc);
-check('Sur-Ron Ultra Bee: his 312 × 220 × 170, and 72V 20S11P on ניקל Z', ub.tb && ub.tb.L === 312 && ub.tb.W === 220 && ub.tb.H === 170 && ub.z72 === 11, ub);
+check('Sur-Ron Ultra Bee: his 312 × 220 × 170, and 72V 20S12P on ניקל Z (20S11P before the tray was filled across, 2026-10-17)', ub.tb && ub.tb.L === 312 && ub.tb.W === 220 && ub.tb.H === 170 && ub.z72 === 12, ub);
 
 // ---- the OX, filled wide then narrow, each nickel its own way (2026-10-17) ----
 // Daniel: "ה-W זה בזיגזג, זה יותר צר ברוחב ויותר ארוך באורך. ב-Z ... משתלב אחד בתוך השני, אבל זה יותר
 // רחב", and "בצורה רחבה, ומתקטן לתוך החלק הצר עד הסוף" — with his photo of an 8-across pack, "אני בונה
 // בצורה הזאת גם ב H z w". W is laid B (zigzag across: 8 in the wide part, 6 in the narrow one), Z is A
-// (5 and 6 nesting: 6 and 5), the square 7 and 5. Every cell of every maximum lies inside the tray; the
-// maxima are the places the tray has, capped by his counts; a build over his count has no drawing.
-// --selftest lays W the way of Z.
+// (nesting: 6 and 5), the square 7 and 5. Every cell of every maximum lies inside the tray; the holder's
+// cells are capped by his counts, and past them up to three rows at the end go in without it ("כמה שורות
+// בסוף לבנות בלי תבנית"); a build that still does not go in has no drawing. --selftest lays W the way of Z.
 const oxw = await page.evaluate((SELF) => {
   if (SELF) FILL_WAY['diag-a'] = 'A';
   // his own 14mm BMS, not an allowance an earlier check typed into the field
@@ -1289,7 +1295,11 @@ const oxw = await page.evaluate((SELF) => {
   out.h60 = { svg: !!h60.querySelector('svg.pack-svg'), narrow: /קבוצה 16 בחלק הצר/.test(h60.textContent), ok: /✓ נכנס/.test(h60.textContent) };
   useVehiclePack('Inokim OX', 72); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 35; calcPackDims();
   const w72 = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]');
-  out.w72 = { svg: !!w72.querySelector('svg.pack-svg'), note: /אין ציור: לא נכנס/.test(w72.textContent), no: /✗ לא נכנס/.test(w72.textContent) };
+  out.w72 = { ok: /✓ נכנס/.test(w72.textContent), bareTxt: /שורה אחת בסוף בלי תבנית/.test(w72.textContent),
+    bare: w72.querySelectorAll('circle.pack-bare').length, cells: w72.querySelectorAll('circle').length };
+  dimAhPending = 40; calcPackDims();
+  const w80 = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]');
+  out.w80 = { svg: !!w80.querySelector('svg.pack-svg'), note: /אין ציור: לא נכנס/.test(w80.textContent), no: /✗ לא נכנס/.test(w80.textContent) };
   FILL_WAY['diag-a'] = 'B';
   dimExtraTouched = false;
   clearDimVehicle();
@@ -1297,11 +1307,12 @@ const oxw = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('the OX: W laid zigzag across (B), Z nesting (A), at every voltage', oxw.orient.every((x) => /diag-a:B$|diag-b:A$|square-23:A$/.test(x)), oxw.orient.join(' '));
 check('the OX: across the wide and the narrow part, W 8/6, Z 6/5, the square 7/5', oxw.across.join(' ') === 'diag-a:8/6 diag-b:6/5 square-23:7/5', oxw.across.join(' '));
-check('the OX: the maxima are the places it has, capped by his counts (136 W, 126 Z, 140 H)',
-  oxw.max.join(' ') === '36diag-a:13 36diag-b:12 36square-23:13 48diag-a:10 48diag-b:9 48square-23:10 52diag-a:9 52diag-b:9 52square-23:9 60diag-a:8 60diag-b:7 60square-23:8 72diag-a:6 72diag-b:6 72square-23:6', oxw.max.join(' '));
+check('the OX: the maxima — the holder up to his counts (136 W, 126 Z, 140 H), then at most three bare rows',
+  oxw.max.join(' ') === '36diag-a:15 36diag-b:13 36square-23:13 48diag-a:11 48diag-b:10 48square-23:10 52diag-a:10 52diag-b:9 52square-23:9 60diag-a:9 60diag-b:8 60square-23:8 72diag-a:7 72diag-b:6 72square-23:6', oxw.max.join(' '));
 check('the OX: every cell of every maximum lies inside the tray, wide part or narrow', oxw.outside.length === 0, oxw.outside.join(' '));
 check('the OX at 60V 16S8P on ניקל H: it goes in, group 16 in the narrow part, drawn', oxw.h60.ok && oxw.h60.svg && oxw.h60.narrow, oxw.h60);
-check('the OX at 72V 20S7P on ניקל W, over his count of 136: ✗ and no drawing', oxw.w72.no && !oxw.w72.svg && oxw.w72.note, oxw.w72);
+check('the OX at 72V 20S7P on ניקל W: his 136 in the holder and four bare cells, one row at the end, drawn dashed', oxw.w72.ok && oxw.w72.bareTxt && oxw.w72.bare === 4 && oxw.w72.cells === 140, oxw.w72);
+check('the OX at 72V 20S8P on ניקל W: ✗ and no drawing', oxw.w80.no && !oxw.w80.svg && oxw.w80.note, oxw.w80);
 
 await browser.close();
 srv.close();
