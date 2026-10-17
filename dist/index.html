@@ -2756,7 +2756,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v451';
+const HUB_BUILD = 'v452';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9496,12 +9496,18 @@ function standPlan(o) {
   const y0 = tail ? tail.y0 : tr ? (tr.W - tr.nx.W) / 2 : 0;
   const outline = trayOutline(tr, y0);
   const notes = [layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : '',
-    tail && !o.quiet ? `קבוצות ${tail.from + 1}–${sPer} בחלק הצר` : ''].filter(Boolean);
+    tail && !o.quiet ? narrowNote(tail, sPer) : ''].filter(Boolean);
   return { cells, dia, wMM, hMM, groups: true, outline,
     // The BMS at the far end of the narrow part, where he puts it (2026-10-15: "בסוף החלק הצר"), also
     // when groups run into the narrow part: the tray they were fitted in already leaves it its length.
     bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
     split: layers > 1, note: notes.join(' · ') };
+}
+// Which groups lie in the narrow part: from the first one with a cell there (a filled tray) or the first
+// laid past the wide part's rows (tailFit). '' when none does.
+function narrowNote(tl, sPer) {
+  const from = tl.fill ? tl.narrowFrom : tl.from;
+  return from == null ? '' : from + 1 >= sPer ? `קבוצה ${sPer} בחלק הצר` : `קבוצות ${from + 1}–${sPer} בחלק הצר`;
 }
 // The outline of a two-part tray in the drawing's own coordinates (0 is the first cell's edge, one
 // wall's clearance in from the tray's side): the wide part, then the narrow part centred across its
@@ -9644,18 +9650,60 @@ function groupLayout(S, P, layers, acrossMax) {
 function staggerAdd(orient, pitch, rowPitch) {
   return rowPitch < pitch - 0.01 ? { A: orient === 'A' ? pitch / 2 : 0, B: orient === 'B' ? pitch / 2 : 0 } : { A: 0, B: 0 };
 }
-// THE OX'S W AND Z ARE ZIGZAG WITHIN THE GROUP (Daniel, 2026-10-17: "למה לא תיקנת את הציורים של ox" —
-// "זיגזג בתוך הקבוצה"). In a two-part tray a diagonal nickel tries B first: each group a zigzag
-// across, the groups along at the full pitch, the last of them into the narrow part. Trying A first
-// flipped the drawing between voltages (60V zigzag, 72V straight) and left the narrow part empty. With
-// his 14mm BMS B takes every maximum A did on the OX (36-72V, W, Z and H); A stays behind it for a
-// longer BMS, where only A gets 20S6P in. Only there: on the other trays B first would cut 38 maxima.
-function diagBFirst(tub, pitch, rowPitch, dia) { return !!(tub && tub.nx) && dia >= DIM_ALONG_BELOW && rowPitch < pitch - 0.01; }
+// THE TWO-PART TRAY IS FILLED, WIDE THEN NARROW (Daniel, 2026-10-17, on the OX: "צריך שהסוללה ...
+// נכנס בתוך החלק הרחב, ומשתלב לחלק הצר, לא במלבן אחד ארוך, אלא ... בצורה רחבה, ומתקטן לתוך החלק הצר עד
+// הסוף"). The cells take the whole width of the wide part, then the width of the narrow part to its end,
+// on the bracket's one grid; the groups follow each other in the order the series runs, column after
+// column and snaking, so a group may turn the corner into the next column. Each nickel goes its own way
+// round (same day: "ה-W זה בזיגזג, זה יותר צר ברוחב ויותר ארוך באורך. ב-Z ... משתלב אחד בתוך השני, אבל
+// זה יותר רחב"): W is B, a zigzag across at 19.66 and columns 22.7 apart; Z is A, straight across at 22.5
+// and the columns nesting 19.49 apart. That is exactly his count: Z 6 across x 21 = 126, W 8 x 17 = 136.
+const FILL_WAY = { 'diag-a': 'B', 'diag-b': 'A' };
+function nickelOfPair(pitch, rowPitch) {
+  for (const [k, [p, rp]] of Object.entries(DIM_PITCH[21700])) if (Math.abs(p - pitch) < 0.01 && Math.abs(rp - rowPitch) < 0.01) return k;
+  return null;
+}
+function trayFill(tub, orient, need, pitch, rowPitch, dia, P) {
+  const B = orient === 'B', stag = rowPitch < pitch - 0.01;
+  const cStep = B ? rowPitch : pitch, aStep = B ? pitch : rowPitch, half = staggerAdd(orient, pitch, rowPitch);
+  const L = tub.L, W = tub.W, nL = tub.nx.L, nW = tub.nx.W, y0 = (W - nW) / 2;
+  const across = acrossFit(W - half.A, cStep, dia);
+  if (across < 1) return null;
+  const blockW = (across - 1) * cStep + dia + half.A;
+  const off = Math.max(0, (W - 2 * DIM_WALL - blockW) / 2);
+  const slots = [];
+  let acrossNarrow = 0;
+  for (let i = 0; DIM_WALL + i * aStep < L + nL; i++) {
+    const col = [];
+    for (let j = 0; j < across; j++) {
+      const y = DIM_WALL + off + j * cStep + (!B && stag && i % 2 ? pitch / 2 : 0);   // near edge, across
+      if (y + dia + DIM_WALL > W + 0.5) continue;
+      const x = DIM_WALL + i * aStep + (B && stag && j % 2 ? pitch / 2 : 0) + dia;    // far edge, along
+      const main = x + DIM_WALL <= L + 0.5;
+      const narrow = !main && x + DIM_WALL <= L + nL + 0.5 && y >= y0 + DIM_WALL - 0.5 && y + dia <= y0 + nW - DIM_WALL + 0.5;
+      if (main || narrow) col.push([i, j, narrow]);
+    }
+    if (col.some((c) => c[2])) acrossNarrow = Math.max(acrossNarrow, col.length);
+    if (i % 2) col.reverse();
+    slots.push(...col);
+  }
+  if (slots.length < need) return null;
+  const cells = slots.slice(0, need);
+  const firstNarrow = cells.findIndex((c) => c[2]);
+  return { from: 0, fill: true, cells: cells.map(([i, j]) => [i, j]), spare: slots.length - need, rowsAlong: Math.max(...cells.map((k) => k[0])) + 1,
+    y0, off, across, acrossNarrow, narrowFrom: firstNarrow < 0 ? null : Math.floor(firstNarrow / P) };
+}
 function hisFit(tub, S, P, layers, pitch, rowPitch, dia) {
   let first = null;
-  const ways = [['A', pitch, rowPitch], ['B', rowPitch, pitch]];
-  if (diagBFirst(tub, pitch, rowPitch, dia)) ways.reverse();
-  for (const [orient, cStep, aStep] of ways) {
+  // A two-part tray, standing 21700, one layer: filled wide then narrow (trayFill), each nickel its own way.
+  if (tub && tub.nx && dia >= DIM_ALONG_BELOW && layers === 1) {
+    const orient = rowPitch < pitch - 0.01 ? FILL_WAY[nickelOfPair(pitch, rowPitch)] || 'A' : 'A';
+    const f = trayFill(tub, orient, S * P, pitch, rowPitch, dia, P);
+    const across = f ? f.across : acrossFit(tub.W, orient === 'B' ? rowPitch : pitch, dia);
+    const lay = { inRow: Math.max(1, across), g: 1, rowsAlong: f ? f.rowsAlong : Math.ceil(S * P / Math.max(1, across)), orient };
+    return f ? { ...lay, tail: f, fits: true } : { ...lay, fits: false };
+  }
+  for (const [orient, cStep, aStep] of [['A', pitch, rowPitch], ['B', rowPitch, pitch]]) {
     const half = staggerAdd(orient, pitch, rowPitch);
     const across = acrossFit(tub.W - half.A, cStep, dia);
     const lay = groupLayout(S, P, layers, across);
@@ -9954,7 +10002,7 @@ function calcPackDims() {
       const ok = !overCount && fitsTray;
       const tl = sel.lay && sel.lay.tail;
       if (ok) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` — בקיפול ל-${layers} שכבות` : ''}`
-        + (tl ? ` — קבוצות ${tl.from + 1}–${Math.ceil(S / layers)} בחלק הצר` : '') + '</div>';
+        + (tl && narrowNote(tl, Math.ceil(S / layers)) ? ' — ' + narrowNote(tl, Math.ceil(S / layers)) : '') + '</div>';
       else {
         // Say WHY in his terms: how many series groups the length takes, against how many he needs.
         let across = 0, g = 1, sFit = 0;
@@ -10006,7 +10054,9 @@ function calcPackDims() {
       + `<div class="dim-nk-head"><b>${k.h === 'custom' ? 'מותאם אישית' : HOLDER_LABEL[k.h]}</b>`
       + (k === sel ? '<span class="dim-tag">נבחר</span>' : '') + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '') + badge + '</div>'
       + kv('גודל סוללה', `<span class="dim-size">${iso(k.L + ' × ' + k.W + ' × ' + k.H)}</span> מ"מ`)
-      + kv('פריסה', layoutText(S, P, k.layers, k.cols, k.rows, false, k.orient, k.lay && k.lay.bands))
+      + kv('פריסה', k.lay && k.lay.tail && k.lay.tail.fill
+        ? `לכל רוחב האמבטיה: ${k.lay.tail.across} בחלק הרחב${k.lay.tail.acrossNarrow ? `, ${k.lay.tail.acrossNarrow} בחלק הצר` : ''} · <bdi dir="ltr">${S}S${P}P</bdi>`
+        : layoutText(S, P, k.layers, k.cols, k.rows, false, k.orient, k.lay && k.lay.bands))
       + (dimVehicle && tub && k.h !== 'custom' ? kv('מקסימום באמבטיה', maxLine(k.h)) : '')
       // A build that does not go in a two-part tray has no layout to draw: the fold it was given ran past
       // the tray, the BMS in among the cells (the OX, 60V on ניקל H, 2026-10-17). The most it takes is
@@ -10020,7 +10070,7 @@ function calcPackDims() {
       : 'רוחב ' + P + 'P' + (gRows > 1 ? ' (' + gRows + ' שורות)' : '') + ' · אורך ' + sPer + 'S') + (layers > 1 ? ' · ' + layers + ' שכבות' : '')
       + ' · ' + (sel.h === 'custom' ? 'מותאם אישית' : HOLDER_NAME[sel.h]),
     foot: 'גודל סוללה ' + L + '×' + W + '×' + H + ' מ״מ' + (layers > 1 ? ' · שכבה 1: קבוצות 1–' + sPer + ' · שכבה 2: קבוצות ' + (sPer + 1) + '–' + S : '')
-      + (sel.lay && sel.lay.tail ? ' · קבוצות ' + (sel.lay.tail.from + 1) + '–' + sPer + ' בחלק הצר' : '') };
+      + (sel.lay && sel.lay.tail && narrowNote(sel.lay.tail, sPer) ? ' · ' + narrowNote(sel.lay.tail, sPer) : '') };
   let html;
   // A Bomber is built lying, and an e-bike case is his own layout (2026-10-04) — each has its own
   // cards, below; everything else is the standing pack.
