@@ -323,6 +323,7 @@ const oxc = await page.evaluate((SELF) => {
   const sameCols = tail.length && tail.every((c) => main.some((m) => Math.abs(m.y - c.y) < 0.01));
   const out = { extra, res: document.getElementById('dimResult').innerText.slice(0, 160), n: cells.length,
     off: Math.abs((lo + hi) / 2 - mid), sameCols, max: maxPFor(vehicleByName('Inokim OX'), cellTub(tb, 14), 21700, 'square-23', 72, DIM_CELLS['21700-50e']) };
+  dimExtraTouched = false;
   clearDimVehicle();
   return out;
 }, SELFTEST);
@@ -1252,6 +1253,42 @@ const sc = await page.evaluate(() => ({ groups: [...new Set(VEHICLE_PACKS.filter
   ox: needsRiser(vehicleByName('Inokim OX')), plain: VEHICLE_PACKS.filter((v) => v.g === 'קורקינטים' && !v.riser).every((v) => !needsRiser(v)) }));
 check('the scooters are one group, and the riser is still each row\'s own', sc.groups.join('|') === 'קורקינטים' && sc.ox && sc.plain, sc);
 check('Sur-Ron Ultra Bee: his 312 × 220 × 170, and 72V 20S11P on ניקל Z', ub.tb && ub.tb.L === 312 && ub.tb.W === 220 && ub.tb.H === 170 && ub.z72 === 11, ub);
+
+// ---- the OX, drawn his way at every voltage (2026-10-17: "למה לא תיקנת את הציורים של ox") ----
+// On ניקל W and Z a group is a zigzag across the tray (B) at 36-72V alike; at 72V groups 19-20 go on
+// into the narrow part and the BMS is at its far end; every maximum stays; and a build that does not
+// go in (60V 16S8P on ניקל H) has no drawing instead of a fold run out of the tray.
+// --selftest: A first again, as before.
+const oxw = await page.evaluate((SELF) => {
+  if (SELF) window.diagBFirst = () => false;
+  // his own 14mm BMS, not an allowance an earlier check typed into the field
+  document.getElementById('dimExtra').value = '14'; dimExtraTouched = true;
+  document.getElementById('dimCell').value = '21700-50e';
+  const v = vehicleByName('Inokim OX'), c = DIM_CELLS['21700-50e'], out = { orient: [], max: [] };
+  for (const V of [36, 48, 52, 60, 72]) {
+    const tub = cellTub(tubOf(v), dimExtraFor(V, v)), S = seriesForV(V);
+    for (const h of ['diag-a', 'diag-b']) {
+      const mp = maxPFor(v, tub, 21700, h, V, c), [p, rp] = DIM_PITCH[21700][h];
+      out.orient.push(V + h + ':' + hisFit(tub, S, mp, 1, p, rp, c.dia).orient);
+      out.max.push(V + h + ':' + mp);
+    }
+  }
+  useVehiclePack('Inokim OX', 72); calcPackDims();
+  const r72 = document.getElementById('dimResult'), pl = dimLast && dimLast.plan;
+  out.narrow72 = [...r72.querySelectorAll('.dim-nk')].map((k) => /קבוצות 19–20 בחלק הצר/.test(k.textContent));
+  const o = pl && pl.outline;
+  out.bmsEnd = !!(pl && pl.bms && o && Math.abs(pl.bms.x + pl.bms.w - (o[3][0] - DIM_WALL)) < 0.6);
+  useVehiclePack('Inokim OX', 60); document.getElementById('dimHolder').value = 'square-23'; dimAhPending = 40; calcPackDims();
+  const h60 = document.querySelector('#dimResult .dim-nk[data-holder="square-23"]');
+  out.h60 = { svg: !!h60.querySelector('svg.pack-svg'), note: /אין ציור: לא נכנס/.test(h60.textContent), no: /✗ לא נכנס/.test(h60.textContent), s: (h60.textContent.match(/\d+S\d+P|\d+P/) || [''])[0] };
+  clearDimVehicle();
+  return out;
+}, SELFTEST);
+check('the OX: ניקל W and Z zigzag within the group (B) at every voltage', oxw.orient.every((x) => /:B$/.test(x)), oxw.orient.join(' '));
+check('the OX: the maxima are what they were — 36V 12P, 48-52V 8P, 60V 8P on W and 7P on Z, 72V 6P',
+  oxw.max.join(' ') === '36diag-a:12 36diag-b:12 48diag-a:8 48diag-b:8 52diag-a:8 52diag-b:8 60diag-a:8 60diag-b:7 72diag-a:6 72diag-b:6', oxw.max.join(' '));
+check('the OX at 72V: groups 19-20 in the narrow part on all three nickels, the BMS at its far end', oxw.narrow72.length === 3 && oxw.narrow72.every(Boolean) && oxw.bmsEnd, [oxw.narrow72, oxw.bmsEnd]);
+check('the OX at 60V 16S8P on ניקל H: ✗ and no drawing, not a fold out of the tray', oxw.h60.no && !oxw.h60.svg && oxw.h60.note, oxw.h60);
 
 await browser.close();
 srv.close();
