@@ -226,6 +226,7 @@ body { min-height: 100vh; }
 .dim-tag.ok { border-color:#34d399; color:#34d399; }
 .dim-nk .pack-svg { display:block; margin:8px auto 0; }
 .dim-nk-note { font-size:11px; color:var(--text-muted); margin-top:4px; }
+.dim-nk-side { font-size:11px; font-weight:700; color:var(--text-muted); margin:6px 0 2px; }
 .info-banner { background: var(--primary-light); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; font-size: 12.5px; color: var(--primary-dark); display: flex; align-items: center; gap: 8px; }
 
 /* Section divider */
@@ -2772,7 +2773,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v457';
+const HUB_BUILD = 'v460';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9562,33 +9563,14 @@ function narrowNote(tl, sPer) {
 }
 // A tray filled by trayFill: each cell where it was placed (the drawing's 0 is one wall in), the bare
 // ones marked, the groups in the order the series runs.
-// The layout row of a filled tray: a row per group where that is how it goes; a group wider than the
-// tray, or rows the whole width (snake), said as such.
-function fillText(t, S, P, twoPart) {
-  const nar = t.acrossNarrow && t.acrossNarrow !== t.across ? `, ${t.acrossNarrow} בחלק הצר` : '';
-  const head = t.snake ? `לכל רוחב האמבטיה: ${t.across}${twoPart ? ' בחלק הרחב' : ''}${nar} · הקבוצות ממשיכות משורה לשורה`
-    : P > t.across ? `שורה של ${t.across}${nar} · כל קבוצה ממשיכה לשורה הבאה`
-    : `כל קבוצה שורה: ${P} לרוחב${nar}`;
-  return head + ` · <bdi dir="ltr">${S}S${P}P</bdi>`;
-}
-function bareRows(n) { return n === 1 ? 'שורה אחת בסוף בלי תבנית' : `${n} שורות בסוף בלי תבנית`; }
 function fillPlan(o) {
   const t = o.tail, P = o.P, dia = o.dia;
-  const cells = t.pts.map((q, n) => ({ x: q.x - DIM_WALL, y: q.y - DIM_WALL, g: Math.floor(n / P), bare: !!q.bare }));
+  const cells = t.pts.map((q, n) => ({ x: q.x - DIM_WALL, y: q.y - DIM_WALL, g: Math.floor(n / P), bare: !!q.bare, row: q.row }));
   const wMM = Math.max(...cells.map((c) => c.x)) + dia / 2, hMM = Math.max(...cells.map((c) => c.y)) + dia / 2;
   const tr = o.tray && o.tray.nx ? o.tray : null, y0 = tr ? (tr.W - tr.nx.W) / 2 : 0;
   const layers = o.layers || 1, bms = Math.max(0, o.extra || 0), sPer = Math.ceil(o.N / P / layers);
-  const notes = [layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : '']
-    .concat(o.quiet ? [] : [narrowNote(t, sPer), t.bareFrom != null ? `${bareRows(t.bareCols)} (מקבוצה ${t.bareFrom + 1})` : '']).filter(Boolean);
-  // Rows the whole width (snake): a group turns the corner into the next row, so a number over the
-  // columns names no group. Each group's number goes in its own middle cell instead, and the groups are
-  // shaded in two colours, both filled (Daniel, 2026-10-17, on the OX 20S7P: "הכל שם נראה מפולגן, צריך
-  // שיראה מסודר" — a dark group among light ones read as holes, and the numbers over the top as columns).
-  if (t.snake) for (let k = 0; k * P < cells.length; k++) {
-    const gc = cells.slice(k * P, k * P + P), mx = gc.reduce((s, c) => s + c.x, 0) / gc.length, my = gc.reduce((s, c) => s + c.y, 0) / gc.length;
-    gc.reduce((m, c) => (Math.hypot(c.x - mx, c.y - my) < Math.hypot(m.x - mx, m.y - my) ? c : m)).first = true;
-  }
-  return { cells, dia, wMM, hMM, groups: true, numIn: !!t.snake, snake: !!t.snake, outline: trayOutline(tr, y0),
+  const notes = [layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : ''].filter(Boolean);
+  return { cells, dia, wMM, hMM, groups: true, nickel: true, pitch: o.pitch, rowPitch: o.rowPitch, outline: trayOutline(tr, y0),
     bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
     split: layers > 1, note: notes.join(' · ') };
 }
@@ -9639,7 +9621,65 @@ function planExt(pl) {
   const o = pl.outline || [];
   return { x: Math.max(pl.wMM, pl.bms ? pl.bms.x + pl.bms.w : 0, ...o.map((p) => p[0])), y: Math.max(pl.hMM, ...o.map((p) => p[1])) };
 }
+// THE NICKEL AS IT SITS (Daniel, 2026-10-17, night, over a list of questions with example drawings: "תעשה
+// כמו שהניקל באמת יושב על התאים", in two drawings, "כן, ככה"). On one side a strip joins groups 1+2, 3+4 …;
+// on the other group 1 is alone (B−), then 2+3, 4+5 …, and the last alone (B+) when the count comes out so.
+// Each strip one colour, laid over every cell of its groups and between neighbours; the cells' outlines on
+// top, and the rows numbered over the top ("ב׳: מספר השורה"). No number in the cells (his, on the draft:
+// "תמחוק את מספר התאים שכתוב בשחור באמצע הציור").
+const NICKEL_COLS = ['#f59e0b', '#22d3ee', '#a3e635', '#f472b6', '#a78bfa', '#fb7185'];
+function nickelPieces(G, side) {
+  const out = [];
+  if (side === 'top') for (let k = 0; k < G; k += 2) out.push(k + 1 < G ? [k, k + 1] : [k]);
+  else { out.push([0]); for (let k = 1; k < G; k += 2) out.push(k + 1 < G ? [k, k + 1] : [k]); }
+  return out;
+}
+function nickelSvg(plan, side) {
+  const PX = 24, PT = 20, PB = 8;
+  const { x: ext, y: hh } = planExt(plan);
+  const sc = Math.min(1.2, (340 - 2 * PX) / ext, 260 / hh);
+  const W = Math.round(ext * sc) + 2 * PX, H = Math.round(hh * sc) + PT + PB;
+  const X = (x) => (PX + x * sc).toFixed(1), Y = (y) => (PT + y * sc).toFixed(1);
+  const txt = (x, y, s, more) => `<text x="${x}" y="${y}" fill="var(--text-muted)" font-size="10" text-anchor="middle"${more || ''}>${s}</text>`;
+  let g = plan.outline
+    ? `<polygon class="pack-outline" points="${plan.outline.map(([x, y]) => X(x) + ',' + Y(y)).join(' ')}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`
+    : `<rect x="${PX - 3}" y="${PT - 3}" width="${(ext * sc + 6).toFixed(1)}" height="${(plan.hMM * sc + 6).toFixed(1)}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`;
+  const cells = plan.cells, G = Math.max(...cells.map((c) => c.g)) + 1, near = Math.max(plan.pitch || 0, plan.rowPitch || 0, plan.dia + 0.3) * 1.08;
+  const bw = (plan.dia * 0.34 * sc).toFixed(1), dotR = (plan.dia * 0.26 * sc).toFixed(1);
+  nickelPieces(G, side).forEach((pc, n) => {
+    const cs = cells.filter((c) => pc.includes(c.g)), col = NICKEL_COLS[n % NICKEL_COLS.length];
+    let piece = '';
+    for (let a = 0; a < cs.length; a++) for (let b = a + 1; b < cs.length; b++)
+      if (Math.hypot(cs[a].x - cs[b].x, cs[a].y - cs[b].y) < near)
+        piece += `<line x1="${X(cs[a].x)}" y1="${Y(cs[a].y)}" x2="${X(cs[b].x)}" y2="${Y(cs[b].y)}" stroke="${col}" stroke-width="${bw}" stroke-linecap="round"/>`;
+    // a dot under each cell as a zero-length round line, so the only circles in the drawing are the cells
+    for (const c of cs) piece += `<line x1="${X(c.x)}" y1="${Y(c.y)}" x2="${X(c.x)}" y2="${Y(c.y)}" stroke="${col}" stroke-width="${(2 * dotR).toFixed(1)}" stroke-linecap="round"/>`;
+    g += `<g class="pack-nickel" data-groups="${pc.map((k) => k + 1).join('+')}" opacity=".8">${piece}</g>`;
+  });
+  const r = (plan.dia / 2 * sc * 0.94).toFixed(1);
+  for (const c of cells) g += `<circle${c.bare ? ' class="pack-bare" stroke-dasharray="2 1.5"' : ''} cx="${X(c.x)}" cy="${Y(c.y)}" r="${r}" fill="none" stroke="${c.bare ? 'var(--warning,#f59e0b)' : 'var(--text-muted, #cbd5e1)'}" stroke-width="1"/>`;
+  if (plan.bms) {
+    const b = plan.bms, bwid = b.w * sc, bh = b.h * sc, bx = PX + b.x * sc, by = PT + b.y * sc;
+    g += `<rect class="pack-bms" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bwid.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>`
+      + (bwid >= 24 ? txt((bx + bwid / 2).toFixed(1), (by + bh / 2 + 3.5).toFixed(1), 'BMS', ' font-weight="700"')
+        : `<g transform="translate(${(bx + bwid / 2 + 3.5).toFixed(1)},${(by + bh / 2).toFixed(1)}) rotate(-90)">` + txt(0, 0, 'BMS', ' font-weight="700"') + '</g>');
+  }
+  // the rows, over the top: every one where there is room, else every other or every fifth, and the last
+  const rows = [];
+  for (const c of cells) if (c.row != null) (rows[c.row] = rows[c.row] || []).push(c.x);
+  const mid = rows.map((a) => (a ? a.reduce((s, v) => s + v, 0) / a.length : null));
+  let gap = Infinity;
+  for (let i = 1; i < mid.length; i++) if (mid[i] != null && mid[i - 1] != null) gap = Math.min(gap, (mid[i] - mid[i - 1]) * sc);
+  const step = gap >= 15 ? 1 : gap >= 7.5 ? 2 : 5, last = mid.length - 1;
+  mid.forEach((m, i) => { if (m != null && ((i % step === 0 && last - i >= step) || i === last)) g += txt(X(m), PT - 7, String(i + 1), ' class="pack-row"'); });
+  const yMid = Y(plan.hMM / 2);
+  g += `<text x="${PX - 4}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="end" dominant-baseline="middle">B−</text>`
+    + (plan.split ? '' : `<text x="${(PX + ext * sc + 4).toFixed(1)}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="start" dominant-baseline="middle">B+</text>`);
+  return `<div class="dim-nk-side">${side === 'top' ? 'צד עליון' : 'צד תחתון'}</div>`
+    + `<svg class="pack-svg pack-side-${side}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" direction="ltr" style="max-width:100%;height:auto;direction:ltr;">${g}</svg>`;
+}
 function packSvg(plan) {
+  if (plan.nickel) return nickelSvg(plan, 'top') + nickelSvg(plan, 'bottom') + (plan.note ? `<div class="dim-nk-note">${plan.note}</div>` : '');
   const PX = 24, PT = plan.groups ? 20 : 8, PB = 8;
   const { x: ext, y: hh } = planExt(plan);
   const sc = Math.min(1.2, (340 - 2 * PX) / ext, 260 / hh);
@@ -9840,6 +9880,7 @@ function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap, snake) {
     }
     if (!use) return null;
   }
+  use.forEach((c, i) => c.forEach((q) => { q.row = i; }));
   const slots = [];
   use.forEach((c, i) => slots.push(...(i % 2 ? c.slice().reverse() : c)));
   const pts = slots.slice(0, need);
@@ -9867,8 +9908,9 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap) {
     // how he builds such a pack: a photo of his, rows across the whole width with the groups running on
     // from row to row, and "תעשה שיהיה אם תבנית וזה נחש". A U (bands side by side) was tried and dropped:
     // "תעשה רק כמו בתמונות ... לא לעשות צורות אחרות".
-    const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap)
-      || (tub.nx ? null : trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, true));
+    // Since the same night's questions: rows the whole width in every tray, the OX too ("נחש בכל הכלים, גם
+    // OX"), even where a row per group would go in ("ג׳: נחש לכל הרוחב").
+    const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, true);
     const across = f ? f.across : acrossFit(tub.W, orient === 'B' ? rowPitch : pitch, dia);
     const lay = { inRow: Math.max(1, across), g: 1, rowsAlong: f ? f.rowsAlong : Math.ceil(sPer * P / Math.max(1, across)), orient };
     return f ? { ...lay, tail: f, fits: true } : { ...lay, fits: false };
@@ -10174,9 +10216,7 @@ function calcPackDims() {
       const counted = dimVehicle.caps && dimVehicle.caps[holder] != null;
       const overCount = counted && N > dimVehicle.caps[holder] && !(sel.lay && sel.lay.tail && sel.lay.tail.fill);
       const ok = !overCount && fitsTray;
-      const tl = sel.lay && sel.lay.tail;
-      if (ok) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` — בקיפול ל-${layers} שכבות` : ''}`
-        + (tl && narrowNote(tl, Math.ceil(S / layers)) ? ' — ' + narrowNote(tl, Math.ceil(S / layers)) : '') + '</div>';
+      if (ok) head = `<div class="dim-ok">✅ נכנס ל-${name}${layers > 1 ? ` · ${layers} שכבות` : ''}</div>`;
       else {
         // Say WHY in his terms: how many series groups the length takes, against how many he needs.
         let across = 0, g = 1, sFit = 0;
@@ -10192,11 +10232,11 @@ function calcPackDims() {
         const why = overCount ? `חורג ב-${N - dimVehicle.caps[holder]} תאים (נכנסים ${dimVehicle.caps[holder]} עם המחזיק הזה, נספר)`
           : across < 1 ? 'המגש צר מדי לתא אחד'
           : `לאורך נכנסות <bdi dir="ltr">${sFit}S</bdi> מתוך <bdi dir="ltr">${S}S</bdi>${g > 1 ? ` (כל קבוצה ${g} שורות)` : ''}${maxLayers > 1 ? ` גם ב-${maxLayers} שכבות` : ''}`;
-        head = `<div class="dim-over">⛔ לא נכנס ל-${name} — ${why}</div>`;
+        head = `<div class="dim-over" title="${why.replace(/<[^>]*>/g, '')}">⛔ לא נכנס ל-${name}</div>`;
         const b = tubBest(dimVehicle, V, c, fmt, extra);
         if (b && b.P >= 1) {
           dimBest = b;
-          best = `<button class="btn btn-secondary btn-sm dim-best" onclick="applyDimBest()"><span>הכי גדול שנכנס: <bdi dir="ltr">${b.S}S ${b.P}P · ${+(b.P * c.ah).toFixed(1)}Ah</bdi> · ${HOLDER_NAME[b.h]}${b.layers > 1 ? ' · ' + b.layers + ' שכבות' : ''} ←</span></button>`;
+          best = `<button class="btn btn-secondary btn-sm dim-best" onclick="applyDimBest()"><span>הכי גדול: <bdi dir="ltr">${b.S}S ${b.P}P · ${+(b.P * c.ah).toFixed(1)}Ah</bdi> · ${HOLDER_NAME[b.h]}${b.layers > 1 ? ' · ' + b.layers + ' שכבות' : ''} ←</span></button>`;
         }
       }
       if (!win) rec = '<div class="dim-rec"><b style="color:var(--danger);">אף מחזיק לא מכיל את החבילה במגש הזה</b></div>';
@@ -10224,20 +10264,20 @@ function calcPackDims() {
     // the 50SG (21.35) in a 21.4 bracket: 0.05mm, and that is still flagged.
     const warn = c.dia > k.tight - 0.1
       ? `<div class="dim-over">⚠ ${c.label} בקוטר ${c.dia} מ"מ לא נכנס — המרחק הקצר ביותר בין מרכזים הוא ${k.tight.toFixed(1)} מ"מ</div>` : '';
-    return `<div class="dim-nk${k === sel ? ' sel' : ''}" data-holder="${k.h}" onclick="pickDimHolder('${k.h}')">`
+    // What the layout row used to say, kept for the tests and the worker, not shown: rows across, the whole
+    // width or not, bare rows, the first group in the narrow part, layers.
+    const tl = k.lay && k.lay.tail && k.lay.tail.fill ? k.lay.tail : null;
+    const facts = tl ? ` data-across="${tl.across}" data-snake="${tl.snake ? 1 : 0}" data-bare="${tl.bareCols || 0}" data-narrow="${tl.narrowFrom == null ? '' : tl.narrowFrom + 1}" data-layers="${k.layers || 1}"` : ` data-layers="${k.layers || 1}"`;
+    return `<div class="dim-nk${k === sel ? ' sel' : ''}" data-holder="${k.h}"${facts} onclick="pickDimHolder('${k.h}')">`
       + `<div class="dim-nk-head"><b>${k.h === 'custom' ? 'מותאם אישית' : HOLDER_LABEL[k.h]}</b>`
       + (k === sel ? '<span class="dim-tag">נבחר</span>' : '') + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '') + badge + '</div>'
       + kv('גודל סוללה', `<span class="dim-size">${iso(k.L + ' × ' + k.W + ' × ' + k.H)}</span> מ"מ`)
-      + kv('פריסה', k.lay && k.lay.tail && k.lay.tail.fill
-        ? fillText(k.lay.tail, S, P, tubAll && tubAll.nx)
-          + (k.layers > 1 ? ` · אורך <bdi dir="ltr">${Math.ceil(S / k.layers)}S</bdi> · ${k.layers} שכבות` : '')
-          + (k.lay.tail.bareCols ? ' · ' + bareRows(k.lay.tail.bareCols) : '')
-        : layoutText(S, P, k.layers, k.cols, k.rows, false, k.orient, k.lay && k.lay.bands))
-      + (dimVehicle && tub && k.h !== 'custom' ? kv('מקסימום באמבטיה', maxLine(k.h)) : '')
+      // No layout row and fewer words (Daniel, 2026-10-17: "תמחוק את ההסבר של הפריסה זה לא מעניין ... פחות
+      // מלל"): the drawing is the layout.
+      + (dimVehicle && tub && k.h !== 'custom' ? kv('מקסימום', maxLine(k.h)) : '')
       // A build that does not go in a two-part tray has no layout to draw: the fold it was given ran past
-      // the tray, the BMS in among the cells (the OX, 60V on ניקל H, 2026-10-17). The most it takes is
-      // in the row above.
-      + warn + (k.fits === false && tubAll && tubAll.nx ? '<div class="dim-nk-note">אין ציור: לא נכנס באמבטיה בניקל הזה</div>' : packSvg(k.plan)) + '</div>';
+      // the tray, the BMS in among the cells (the OX, 60V on ניקל H, 2026-10-17). The badge says ✗.
+      + warn + (k.fits === false && tubAll && tubAll.nx ? '' : packSvg(k.plan)) + '</div>';
   };
   // The label for the worker draws the chosen card's plan; its two text lines are said here.
   const sPer = Math.ceil(S / layers), gRows = Math.ceil(P / cols);
@@ -10259,7 +10299,7 @@ function calcPackDims() {
       // height nobody measured is written as '?' and said — the height was not checked.
       + (dimVehicle && tubAll ? kv('גודל אמבטיה', `<bdi dir="ltr">${tubAll.L} × ${tubAll.W} × ${tubAll.H || '?'}</bdi> מ"מ`
         + (tubAll.nx ? ` + חלק צר <bdi dir="ltr">${tubAll.nx.L} × ${tubAll.nx.W}</bdi>` : '')
-        + (tubAll.H ? (riser ? ` · צריך מגביה של לפחות ${Math.ceil(standH - tubAll.H)} מ"מ` + (+dimVehicle.riserMax > 0 ? ` (אפשר עד ${dimVehicle.riserMax})` : '') : '') : ' · גובה לא ידוע, לא נבדק')) : '')
+        + (tubAll.H ? (riser ? ` · מגביה ${Math.ceil(standH - tubAll.H)} מ"מ` : '') : ' · גובה לא ידוע')) : '')
       + rec + `<div class="dim-nks">${cards.map(cardHtml).join('')}</div>`;
   }
   // With no vehicle chosen, check the build against his saved trays — turned either way,
@@ -10476,18 +10516,6 @@ async function printPackLabel() {
   document.body.appendChild(fr);
 }
 
-// The layout in S and P, in his words: the group ACROSS (לרוחב), the series ALONG (לאורך).
-// S and P stay Latin and isolated — inside Hebrew "20S 4P" reads back as "4P 20S".
-function layoutText(S, P, layers, cols, rows, derived, orient, bands) {
-  const iso = (s) => `<bdi dir="ltr">${s}</bdi>`;
-  const sPer = Math.ceil(S / layers);
-  // C: the group lies along; say so, and how many lines across and bands along
-  if (orient === 'C') return `קבוצה לאורך ${iso(P + 'P')} · ${cols} קבוצות לרוחב${bands > 1 ? ` · ${bands} גושים` : ''}${layers > 1 ? ` · ${layers} שכבות` : ''}`;
-  const g = Math.ceil(P / cols);
-  // Short (2026-09-27: "שיהיה כתוב תמציתי יותר"): רוחב = the group, אורך = the string per layer.
-  return `רוחב ${iso(P + 'P')}${g > 1 ? ` (${g} שורות)` : ''} · אורך ${iso(sPer + 'S')}${layers > 1 ? ` · ${layers} שכבות` : ''}`
-    + (derived ? ' · מרווח משוער' : '');
-}
 // ---- cells LYING, for the Bombers (2026-09-27, Daniel: "כן, לבומברים בלבד") ----------------
 // A Bomber is not built like a scooter. The cells lie on their side ACROSS the frame, in stacks
 // side by side (two in his Plus), and the pack is cut to the triangle of the frame — so the side
@@ -10803,6 +10831,9 @@ function applyDimBest() {
 // The length the BMS takes at the end: his own measure for a vehicle that has one (`bms` on its row —
 // the OX's 14mm, Daniel 2026-10-15), else the allowance by voltage.
 function bmsAllowance(V, v) {
+  // `bmsTop`: the BMS sits over the cells, in the height, and takes none of the length (the Ultra Bee:
+  // Daniel, 2026-10-17, of his 72V 75Ah in it, "מעל התאים, בגובה").
+  if (v && v.bmsTop) return 0;
   if (v && +v.bms > 0) return +v.bms;
   return V >= 72 ? 26 : V >= 60 ? 22 : V >= 48 ? 18 : 14;
 }
@@ -11037,8 +11068,8 @@ const VEHICLE_PACKS = [
   // Measured inside by Daniel, 2026-10-15: "מידות סורון אולטרה פנימי אורך 31.2 רוחב 22 עובי 17" (cm).
   // Its builds are the calculator's for this tray: 16S15P and 20S12P in two layers since 2026-10-17, when the
   // trays were filled across their whole width (trayFill); 16S11P / 20S11P before.
-  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron Ultra Bee', src: 'נמדד', p: 22.5, s60: 16, p60: 15, s72: 20, p72: 12, max: 240,
-    tub: '312×220×170 מ"מ פנימי (נמדד 15.10.2026)' },
+  { g: 'אופנועי שטח (E-Moto)', m: 'Sur-Ron Ultra Bee', src: 'נמדד', p: 22.5, s60: 16, p60: 16, s72: 20, p72: 13, max: 260,
+    tub: '312×220×170 מ"מ פנימי (נמדד 15.10.2026)', bmsTop: true },
   { g: 'אופנועי שטח (E-Moto)', m: 'Talaria', src: 'AI', p: 23, s60: 16, p60: 8, s72: 20, p72: 7, max: 140, oem: '60V 45Ah', oemSrc: 'talaria.cn.com', pack: '381×171×140', packSrc: 'talaria.cn.com' ,
     // 385 long, not 381 (2026-09-27): a 60V 60-65Ah pack sold on AliExpress as a DIRECT replacement
     // for the Sting MX4 measures 385×170×140, and a pack that goes in is a floor for the tray.
