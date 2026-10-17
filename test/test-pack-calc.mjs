@@ -149,9 +149,9 @@ check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), 
 check('and it only recommends one that fits', rec.cards.length === 3 && rec.cards.filter((k) => /מומלץ/.test(k)).length === 1
   && /^diag-b:✓ נכנס:.*מומלץ/.test(rec.cards.find((k) => k.startsWith('diag-b')) || '') && rec.cards.every((k) => !/✗/.test(k) || !/מומלץ/.test(k)), rec.cards);
 check('a counted tray is still judged by the layout, not the count alone', /16S 8P · 128 תאים/.test(rec.ox) && /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.ox), rec.ox.slice(0, 120));
-// Filled across the whole width (2026-10-17), 20S6P on the square goes in the wide part alone, 7 across
-// x 18 = 126 places, even with a 26mm BMS at the end.
-check('and 20S6P on the square, with the 26mm BMS at the end, goes in the wide part, the full width', /^✅/.test(rec.ox72.trim()) && /20S 6P · 120 תא/.test(rec.ox72) && /לכל רוחב האמבטיה: 7 בחלק הרחב/.test(rec.ox72), rec.ox72.slice(0, 160));
+// The OX is a row per group (2026-10-17, night: "מסודר כמו שאני בונה"): with a 26mm BMS twenty rows of six
+// do not go in on the square, and are never laid the whole width instead; Z, nesting, takes them.
+check('and 20S6P on the square, with the 26mm BMS at the end: ⛔, never the whole width, the best on Z', /^⛔/.test(rec.ox72.trim()) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל Z/.test(rec.ox72) && !/לכל רוחב האמבטיה/.test(rec.ox72), rec.ox72.slice(0, 160));
 
 // ---- 4b. the tray HEIGHT, which was stored and never read until 2026-09-22 ----
 // A 21700 is 70.15mm long. A tray shallower than that cannot take a standing cell, and the
