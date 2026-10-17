@@ -362,7 +362,8 @@ const draw = await page.evaluate(() => {
            bands: fills.length >= 18 && fills[0] !== fills[6] && fills[0] === fills[12],
            txt: svg ? svg.textContent : '', L: block[1], W: block[2], res: document.getElementById('dimResult').innerText };
 });
-check('three cards, one per nickel, each drawing the whole pack', draw.cards === 'diag-a:120 diag-b:120 square-23:120', draw.cards);
+// Four since 2026-10-17: an H at 22.5 beside the 23 ("וגם יש H אם 22.5M").
+check('four cards, one per nickel, each drawing the whole pack', draw.cards === 'diag-a:120 diag-b:120 square-225:120 square-23:120', draw.cards);
 check('the chosen nickel is the outlined card', draw.selHolder === 'diag-a', draw.selHolder);
 check('the drawing has one circle per cell (120)', draw.circles === 120, String(draw.circles));
 // "צבע לסירוגין + מספר" (2026-10-04): the groups alternate in shade and are numbered B− to B+.
@@ -810,7 +811,7 @@ const mx = await page.evaluate((SELF) => {
 }, SELFTEST);
 // Talaria 385 x 171, no BMS allowance: since 2026-10-17, filled across its width, it has a maximum at both.
 check('the result says the most the tray takes with this nickel, per voltage', /מקסימום באמבטיה\s*60V: 16S\d+P · \d+Ah\s*72V: 20S\d+P · \d+Ah/.test(mx.res), mx.res.slice(0, 400));
-check('and each nickel\'s card says how much it takes', mx.cards.length === 3 && /^ניקל W — 22\.7/.test(mx.cards[0]) && /^ניקל Z — 22\.5/.test(mx.cards[1]) && /^ניקל H — 23/.test(mx.cards[2])
+check('and each nickel\'s card says how much it takes', mx.cards.length === 4 && /^ניקל W — 22\.7/.test(mx.cards[0]) && /^ניקל Z — 22\.5/.test(mx.cards[1]) && /^ניקל H — 22\.5/.test(mx.cards[2]) && /^ניקל H — 23/.test(mx.cards[3])
   && mx.cards.every((k) => /מקסימום באמבטיה\s*60V: (16S\d+P · \d+Ah|—)\s*72V: (20S\d+P · \d+Ah|—)/.test(k)), mx.cards.map((k) => k.slice(0, 120)));
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
 check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /385×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
@@ -832,7 +833,7 @@ const n18 = await page.evaluate((SELF) => {
   return { opts18, opts21, res };
 }, SELFTEST);
 check('choosing 18650 offers his three 18650 nickels', JSON.stringify(n18.opts18) === JSON.stringify(['diag-185', 'sq-19', 'sq-2025', 'custom']), n18.opts18);
-check('and 21700 gets its own three back', JSON.stringify(n18.opts21) === JSON.stringify(['diag-a', 'diag-b', 'square-23', 'custom']), n18.opts21);
+check('and 21700 gets its own four back', JSON.stringify(n18.opts21) === JSON.stringify(['diag-a', 'diag-b', 'square-225', 'square-23', 'custom']), n18.opts21);
 // 16S4P on the 18.5 diagonal: four across = 3 x 18.5 + 9.25 (the half cell) + 18.35 + 3 = 86;
 // sixteen rows along at 16.02 = 15 x 16.02 + 21.35 + 22 (BMS at 60V) = 284. It is the first card.
 check('an 18650 block is measured on the 18650 nickel', /^[\s\S]*?אלכסוני 18\.5[\s\S]*?גודל סוללה\s*284 × 86 × 69/.test(n18.res) && !/משוער/.test(n18.res), n18.res.slice(0, 260));
@@ -942,7 +943,7 @@ const rb = await page.evaluate((SELF) => {
   localStorage.setItem('gp_dims', '[]');
   return out;
 }, SELFTEST);
-check('only his three holders and a custom one are offered', JSON.stringify(rb.opts) === JSON.stringify(['diag-a', 'diag-b', 'square-23', 'custom']), rb.opts);
+check('only his four holders and a custom one are offered', JSON.stringify(rb.opts) === JSON.stringify(['diag-a', 'diag-b', 'square-225', 'square-23', 'custom']), rb.opts);
 check('the calculator opens on the vehicle list', rb.vehFirst, rb.vehFirst);
 check('a 22.5mm vehicle gets the 22.5 diagonal', rb.enduroHolder === 'diag-a', rb.enduroHolder);
 check('picking a vehicle shows its result', rb.toBuild, rb.toBuild);
@@ -1007,7 +1008,7 @@ check('his Bomber Plus comes back as 2 stacks of 165 = 330 cells', lying.stacks 
 check('which at 72V is 20S16P, 80Ah (his next build)', /20S16P · 80Ah/.test(lying.plus), lying.plus.slice(0, 260));
 // The 23-square card fills the outline of his own Plus: his rows, bottom to top, cell for cell.
 check('on its own nickel the Plus card is his 165 a side, row for row', lying.plusShape.rows === '16,16,17,17,17,17,17,16,13,11,8' && lying.plusShape.cells === 165, lying.plusShape);
-check('the Plus has a card per nickel, each drawn inside the frame\'s outline', /^diag-a:\d+:1 diag-b:\d+:1 square-23:165:1$/.test(lying.plusCards), lying.plusCards);
+check('the Plus has a card per nickel, each drawn inside the frame\'s outline', /^diag-a:\d+:1 diag-b:\d+:1 square-225:\d+:1 square-23:165:1$/.test(lying.plusCards), lying.plusCards);
 check('the regular Bomber in 18650 on the 19 square is his blue 20S17P: 170 a side, 340', lying.regShape.cells === 170 && /170 תאים × 2 ערימות = 340/.test(lying.reg18) && /20S17P/.test(lying.reg18), [lying.regShape, lying.reg18.slice(0, 160)]);
 check('a Bomber frame too narrow for a lying cell says so', /צר מדי לתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
 check('the FC-1 (90 across, his tape) fits a 72V build lying on ניקל ב׳', /נכנס עד: 72V 20S8P · 40Ah|נכנסת — 20S8P · 40Ah, 160 תאים · המקסימום/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
@@ -1132,7 +1133,7 @@ const sweep = await page.evaluate((SELF) => {
     const r = document.getElementById('dimResult');
     if (SELF && v.m === 'Bomber Plus 15kW') r.insertAdjacentHTML('beforeend', '<div>הסוללות שבנית</div>');
     const cards = [...r.querySelectorAll('.dim-nk')];
-    const want = v.case ? 1 : 3;
+    const want = v.case ? 1 : 4;
     if (cards.length !== want || !cards.every((k) => k.querySelector('svg.pack-svg circle')) || /הסוללות שבנית/.test(r.textContent)) bad.push(v.m + ':' + cards.length + (cards.length === want ? ' ' + document.getElementById('dimV').value + 'V ' + (dimLast ? dimLast.S + 'S' + dimLast.P + 'P' : '') + ' extra ' + document.getElementById('dimExtra').value + ' ' + cards.filter((k) => !k.querySelector('svg.pack-svg circle')).map((k) => k.dataset.holder).join('/') : ''));
     const sel = r.querySelector('.dim-nk.sel');
     if (!sel || !dimLast || dimLast.plan.cells.length !== sel.querySelectorAll('circle').length) bad.push(v.m + ' label');
