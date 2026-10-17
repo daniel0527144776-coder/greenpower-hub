@@ -2756,7 +2756,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v453';
+const HUB_BUILD = 'v454';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9512,6 +9512,15 @@ function narrowNote(tl, sPer) {
 }
 // A tray filled by trayFill: each cell where it was placed (the drawing's 0 is one wall in), the bare
 // ones marked, the groups in the order the series runs.
+// The layout row of a filled tray: a row per group where that is how it goes; a group wider than the
+// tray, or rows the whole width (snake), said as such.
+function fillText(t, S, P, twoPart) {
+  const nar = t.acrossNarrow && t.acrossNarrow !== t.across ? `, ${t.acrossNarrow} בחלק הצר` : '';
+  const head = t.snake ? `לכל רוחב האמבטיה: ${t.across}${twoPart ? ' בחלק הרחב' : ''}${nar} · הקבוצות ממשיכות משורה לשורה`
+    : P > t.across ? `שורה של ${t.across}${nar} · כל קבוצה ממשיכה לשורה הבאה`
+    : `כל קבוצה שורה: ${P} לרוחב${nar}`;
+  return head + ` · <bdi dir="ltr">${S}S${P}P</bdi>`;
+}
 function bareRows(n) { return n === 1 ? 'שורה אחת בסוף בלי תבנית' : `${n} שורות בסוף בלי תבנית`; }
 function fillPlan(o) {
   const t = o.tail, P = o.P, dia = o.dia;
@@ -9687,7 +9696,7 @@ function nickelOfPair(pitch, rowPitch) {
 // HOLDER, so they cap the bracket's cells and not the bare ones.
 const BARE_GAP = 0.3;   // mm between two bare cells (taped or glued, no holder)
 const BARE_MAX = 3;     // "כמה שורות בסוף": at most this many bare columns, at the end only
-function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap) {
+function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap, snake) {
   const B = orient === 'B', stag = rowPitch < pitch - 0.01;
   const cStep = B ? rowPitch : pitch, aStep = B ? pitch : rowPitch, half = staggerAdd(orient, pitch, rowPitch);
   const L = tub.L, W = tub.W, nx = tub.nx, nL = nx ? nx.L : 0, nW = nx ? nx.W : 0, y0 = nx ? (W - nW) / 2 : 0, end = L + nL;
@@ -9696,8 +9705,13 @@ function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap) {
     if (xF + DIM_WALL <= L + 0.5 && yN >= DIM_WALL - 0.5 && yN + dia + DIM_WALL <= W + 0.5) return 1;
     return nx && xF + DIM_WALL <= end + 0.5 && yN >= y0 + DIM_WALL - 0.5 && yN + dia <= y0 + nW - DIM_WALL + 0.5 ? 2 : 0;
   };
-  const across = acrossFit(W - half.A, cStep, dia);
-  if (across < 1) return null;
+  const room = acrossFit(W - half.A, cStep, dia);
+  if (room < 1) return null;
+  // A group is a row of its own (Daniel, 2026-10-17, with the photos of his builds: "שורה נגמרת, ממשיכה שורה
+  // הבאה. כמו נחש, זה לא אמור להיות קבוצות חלק בצד, חלק פה בצד הזה"): the row is as wide as the group, and
+  // only a group wider than the tray runs on into the next row. `snake`: rows the whole width of the tray
+  // whatever the group — tried only when that is the one way the build goes in (hisFit).
+  const across = snake ? room : Math.min(P, room);
   const blockW = (across - 1) * cStep + dia + half.A;
   const off = Math.max(0, (W - 2 * DIM_WALL - blockW) / 2);
   // the bracket, column by column; cells as centres in the tray's own millimetres
@@ -9724,7 +9738,8 @@ function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap) {
       const wide = xN + dia + DIM_WALL <= L + 0.5;
       if (!wide && !nx) break;
       const lo = wide ? DIM_WALL : y0 + DIM_WALL, hi = wide ? W - DIM_WALL : y0 + nW - DIM_WALL;
-      const n = Math.floor((hi - lo - dia - bp / 2 + 0.5) / bp) + 1;
+      // a bare row is a group's row too: no wider than the group (rows the whole width: as many as go)
+      const fit = Math.floor((hi - lo - dia - bp / 2 + 0.5) / bp) + 1, n = snake ? fit : Math.min(across, fit);
       if (n < 1) break;
       const o = lo + (hi - lo - ((n - 1) * bp + dia + bp / 2)) / 2 + (i % 2 ? bp / 2 : 0);
       const col = [];
@@ -9758,7 +9773,7 @@ function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap) {
   const firstNarrow = pts.findIndex((c) => c.narrow), firstBare = pts.findIndex((c) => c.bare);
   const acrossNarrow = Math.max(0, ...use.filter((c) => c.some((q) => q.narrow) && !c.some((q) => q.bare)).map((c) => c.length));
   const r = dia / 2, xs = pts.map((q) => q.x), ys = pts.map((q) => q.y);
-  return { from: 0, fill: true, pts, spare: slots.length - need, rowsAlong: use.length, y0, across, acrossNarrow, bareCols,
+  return { from: 0, fill: true, snake: !!snake && across > P, pts, spare: slots.length - need, rowsAlong: use.length, y0, across, acrossNarrow, bareCols,
     narrowFrom: firstNarrow < 0 ? null : Math.floor(firstNarrow / P), bareFrom: firstBare < 0 ? null : Math.floor(firstBare / P),
     ext: { L: Math.max(...xs) + r - (Math.min(...xs) - r) + 2 * DIM_WALL, W: Math.max(...ys) + r - (Math.min(...ys) - r) + 2 * DIM_WALL } };
 }
@@ -9771,7 +9786,8 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap) {
   if (tub && dia >= DIM_ALONG_BELOW) {
     const orient = rowPitch < pitch - 0.01 ? FILL_WAY[nk] || 'A' : 'A';
     const sPer = Math.ceil(S / (layers || 1));
-    const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap);
+    const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap)
+      || trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, true);
     const across = f ? f.across : acrossFit(tub.W, orient === 'B' ? rowPitch : pitch, dia);
     const lay = { inRow: Math.max(1, across), g: 1, rowsAlong: f ? f.rowsAlong : Math.ceil(sPer * P / Math.max(1, across)), orient };
     return f ? { ...lay, tail: f, fits: true } : { ...lay, fits: false };
@@ -10131,7 +10147,7 @@ function calcPackDims() {
       + (k === sel ? '<span class="dim-tag">נבחר</span>' : '') + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '') + badge + '</div>'
       + kv('גודל סוללה', `<span class="dim-size">${iso(k.L + ' × ' + k.W + ' × ' + k.H)}</span> מ"מ`)
       + kv('פריסה', k.lay && k.lay.tail && k.lay.tail.fill
-        ? `לכל רוחב האמבטיה: ${k.lay.tail.across}${tubAll && tubAll.nx ? ' בחלק הרחב' : ''}${k.lay.tail.acrossNarrow ? `, ${k.lay.tail.acrossNarrow} בחלק הצר` : ''} · <bdi dir="ltr">${S}S${P}P</bdi>`
+        ? fillText(k.lay.tail, S, P, tubAll && tubAll.nx)
           + (k.layers > 1 ? ` · אורך <bdi dir="ltr">${Math.ceil(S / k.layers)}S</bdi> · ${k.layers} שכבות` : '')
           + (k.lay.tail.bareCols ? ' · ' + bareRows(k.lay.tail.bareCols) : '')
         : layoutText(S, P, k.layers, k.cols, k.rows, false, k.orient, k.lay && k.lay.bands))
