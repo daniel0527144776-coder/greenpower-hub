@@ -2771,7 +2771,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v455';
+const HUB_BUILD = 'v456';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9857,8 +9857,13 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap) {
   if (tub && dia >= DIM_ALONG_BELOW) {
     const orient = rowPitch < pitch - 0.01 ? FILL_WAY[nk] || 'A' : 'A';
     const sPer = Math.ceil(S / (layers || 1));
+    // The OX — the one two-part tray — is built a row per group and nothing else (Daniel, 2026-10-17, with
+    // two photos of his packs, every group one straight row: "אני רוצה שיהיה מסודר כמו שאני בונה, לא כמו
+    // הציור הזה"). Rows the whole width are not tried there, so a build that goes in only that way does
+    // not go in: 72V on W is 20S6P. Everywhere else they stay the fallback (his choice the same night:
+    // without it Sur-Ron, Talaria, Zero 10X/11X, OXO and Nami Klima take no 72V pack at all).
     const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap)
-      || trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, true);
+      || (tub.nx ? null : trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, true));
     const across = f ? f.across : acrossFit(tub.W, orient === 'B' ? rowPitch : pitch, dia);
     const lay = { inRow: Math.max(1, across), g: 1, rowsAlong: f ? f.rowsAlong : Math.ceil(sPer * P / Math.max(1, across)), orient };
     return f ? { ...lay, tail: f, fits: true } : { ...lay, fits: false };

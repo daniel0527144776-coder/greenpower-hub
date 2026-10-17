@@ -289,18 +289,18 @@ const oxn = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('the OX tub is read with its narrow part, 60 along and 140 across',
   oxn.tb && oxn.tb.L === 425 && oxn.tb.W === 165 && oxn.tb.H === 65 && oxn.tb.nx && oxn.tb.nx.L === 60 && oxn.tb.nx.W === 140, JSON.stringify(oxn.tb));
-// With the 26mm BMS, 20S7P does not go in on the square; on ניקל W it does, its last row without the holder
-// (2026-10-17), and that is the build offered.
-check('72V 20S7P with a 26mm BMS: ⛔ on the square, and the best offered is 20S7P on ניקל W',
-  /⛔ לא נכנס ל-Inokim OX/.test(oxn.res) && /הכי גדול שנכנס: 20S 7P · 35Ah · ניקל W \(/.test(oxn.res), oxn.res.slice(0, 160));
+// With the 26mm BMS, 20S7P does not go in on the square, and the OX is a row per group only (2026-10-17,
+// night: "מסודר כמו שאני בונה"), so the build offered is 20S6P on ניקל Z.
+check('72V 20S7P with a 26mm BMS: ⛔ on the square, and the best offered is 20S6P on ניקל Z',
+  /⛔ לא נכנס ל-Inokim OX/.test(oxn.res) && /הכי גדול שנכנס: 20S 6P · 30Ah · ניקל Z \(/.test(oxn.res), oxn.res.slice(0, 160));
 check('nothing puts the BMS on top of the cells', !/מעל התאים|עובי ה-BMS|BMS מעל/.test(oxn.res + oxn.res15 + ((oxn.label || {}).foot || '')), oxn.res.slice(0, 260));
 check('the tray row names the narrow part and the riser',
   /425 × 165 × 65 מ"מ \+ חלק צר 60 × 140 · צריך מגביה של לפחות 10 מ"מ/.test(oxn.res), oxn.res.slice(0, 260));
-// Filled across the whole width since 2026-10-17 (his photo of an 8-across pack: "אני בונה בצורה הזאת גם
-// ב H z w"): with a 26mm BMS the square has 7 x 18 = 126 places in the wide part and five more in the
-// narrow one, so 72V 20S6P goes in on all three nickels and 60V (22mm) takes 16S8P on the square.
-check('maxima with a 26mm BMS at the end: 72V 20S6P on the square and Z, 20S7P on W; 60V 16S8P on the square',
-  oxn.m72 === 6 && oxn.m60 === 8 && oxn.a72 === 7 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
+// A row per group in the OX (2026-10-17, night): with a 26mm BMS the narrow part has room for one row on
+// the square and on W, so twenty rows of six do not go in there and 72V is 20S5P; Z nests its rows and
+// takes 20S6P; 60V (22mm, sixteen rows) takes 16S8P on the square.
+check('maxima with a 26mm BMS at the end: 72V 20S5P on the square and W, 20S6P on Z; 60V 16S8P on the square',
+  oxn.m72 === 5 && oxn.m60 === 8 && oxn.a72 === 5 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
 // Each group a row of its own since the evening of 2026-10-17 ("שורה נגמרת, ממשיכה שורה הבאה ... מסודר"):
 // 20S5P is rows of five, and groups 19-20 go on into the narrow part.
 check('a 15mm BMS: 20S5P on the square, a row of five per group, 19-20 in the narrow part', oxn.s15 === 6
@@ -1124,6 +1124,8 @@ check('his 22S15P has no place to spare: 11 groups across the rows, all 165 used
 // list back on one page.
 const sweep = await page.evaluate((SELF) => {
   const bad = [];
+  // each vehicle as it opens: a case allowance typed by an earlier check (the OX's 26mm) is not its own
+  dimExtraTouched = false; dimExtraAuto = null;
   document.getElementById('dimCell').value = '21700-50e';
   for (const v of VEHICLE_PACKS) {
     useVehiclePack(v.m);
@@ -1131,7 +1133,7 @@ const sweep = await page.evaluate((SELF) => {
     if (SELF && v.m === 'Bomber Plus 15kW') r.insertAdjacentHTML('beforeend', '<div>הסוללות שבנית</div>');
     const cards = [...r.querySelectorAll('.dim-nk')];
     const want = v.case ? 1 : 3;
-    if (cards.length !== want || !cards.every((k) => k.querySelector('svg.pack-svg circle')) || /הסוללות שבנית/.test(r.textContent)) bad.push(v.m + ':' + cards.length);
+    if (cards.length !== want || !cards.every((k) => k.querySelector('svg.pack-svg circle')) || /הסוללות שבנית/.test(r.textContent)) bad.push(v.m + ':' + cards.length + (cards.length === want ? ' ' + document.getElementById('dimV').value + 'V ' + (dimLast ? dimLast.S + 'S' + dimLast.P + 'P' : '') + ' extra ' + document.getElementById('dimExtra').value + ' ' + cards.filter((k) => !k.querySelector('svg.pack-svg circle')).map((k) => k.dataset.holder).join('/') : ''));
     const sel = r.querySelector('.dim-nk.sel');
     if (!sel || !dimLast || dimLast.plan.cells.length !== sel.querySelectorAll('circle').length) bad.push(v.m + ' label');
   }
@@ -1317,22 +1319,26 @@ const oxw = await page.evaluate((SELF) => {
 check('the OX: W laid zigzag across (B), Z nesting (A), at every voltage', oxw.orient.every((x) => /diag-a:B$|diag-b:A$|square-23:A$/.test(x)), oxw.orient.join(' '));
 check('the OX: across the wide and the narrow part, W 8/6, Z 6/5, the square 7/5', oxw.across.join(' ') === 'diag-a:8/6 diag-b:6/5 square-23:7/5', oxw.across.join(' '));
 check('the OX: the maxima — the holder up to his counts (136 W, 126 Z, 140 H), then at most three bare rows',
-  oxw.max.join(' ') === '36diag-a:15 36diag-b:13 36square-23:13 48diag-a:11 48diag-b:10 48square-23:10 52diag-a:10 52diag-b:9 52square-23:9 60diag-a:9 60diag-b:8 60square-23:8 72diag-a:7 72diag-b:6 72square-23:6', oxw.max.join(' '));
+  oxw.max.join(' ') === '36diag-a:15 36diag-b:13 36square-23:13 48diag-a:11 48diag-b:10 48square-23:10 52diag-a:10 52diag-b:9 52square-23:9 60diag-a:9 60diag-b:8 60square-23:8 72diag-a:6 72diag-b:6 72square-23:6', oxw.max.join(' '));
 check('the OX: every cell of every maximum lies inside the tray, wide part or narrow', oxw.outside.length === 0, oxw.outside.join(' '));
 check('the OX at 60V 16S8P on ניקל H: it goes in, group 16 in the narrow part, drawn', oxw.h60.ok && oxw.h60.svg && oxw.h60.narrow, oxw.h60);
-check('the OX at 72V 20S7P on ניקל W: his 136 in the holder and four bare cells, one row at the end, drawn dashed', oxw.w72.ok && oxw.w72.bareTxt && oxw.w72.bare === 4 && oxw.w72.cells === 140, oxw.w72);
+// It went in until the night of 2026-10-17 as eight across the whole width, the groups turning the corner;
+// "מסודר כמו שאני בונה, לא כמו הציור הזה" — in the OX a group is a row, and 20S7P is not built that way.
+check('the OX at 72V 20S7P on ניקל W: ✗, no drawing, and never laid the whole width', !oxw.w72.ok && oxw.w72.cells === 0 && !oxw.w72.snake, oxw.w72);
 check('the OX at 72V 20S8P on ניקל W: ✗ and no drawing', oxw.w80.no && !oxw.w80.svg && oxw.w80.note, oxw.w80);
 check('the OX at 60V 16S8P on ניקל W: a row of eight per group, sixteen rows, no row shared', oxw.w60.txt && oxw.w60.oneEach && oxw.w60.cols === 16, oxw.w60);
-check('20S7P on W goes in only with the rows the whole width, and the card says so', oxw.w72.snake, oxw.w72);
 
-// "הכל שם נראה מפולגן, צריך שיראה מסודר" (Daniel, 2026-10-17, a screenshot of that 20S7P): rows the
+// "הכל שם נראה מפולגן, צריך שיראה מסודר" (Daniel, 2026-10-17, a screenshot of the OX 20S7P): rows the
 // whole width put a group round the corner, so the numbers over the columns named no group and the dark
 // groups read as holes. Each group's number now sits in its own cells, once, and every group is filled.
+// The OX is a row per group since; the Zero 11X at 60V (16S8P on W) still goes in only the whole width.
 const tidy = await page.evaluate((SELF) => {
   const real = fillPlan;
   if (SELF) fillPlan = (o) => { const r = real(o); r.snake = r.numIn = false; return r; };
-  useVehiclePack('Inokim OX', 72); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 35; calcPackDims();
+  dimExtraTouched = false;
+  useVehiclePack('Zero 11X', 60); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 40; calcPackDims();
   const svg = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"] svg.pack-svg');
+  const groups = dimLast ? Math.ceil(dimLast.plan.cells.length / 8) : 0;
   if (!svg) { fillPlan = real; clearDimVehicle(); return { nums: '', onOwn: false, dark: -1, ends: '', svg: false }; }
   const circles = [...svg.querySelectorAll('circle')], cs = dimLast.plan.cells;
   const nums = [...svg.querySelectorAll('text.pack-group')];
@@ -1344,17 +1350,17 @@ const tidy = await page.evaluate((SELF) => {
   const at = (x, y) => circles.findIndex((c) => Math.abs(+c.getAttribute('cx') - x) < 0.05 && Math.abs(+c.getAttribute('cy') - y) < 0.05);
   const across = links.filter((l) => { const i = at(+l.getAttribute('x1'), +l.getAttribute('y1')), j = at(+l.getAttribute('x2'), +l.getAttribute('y2'));
     return i < 0 || j < 0 || cs[i].g !== cs[j].g || Math.abs(i - j) !== 1; }).length;
-  const out = { nums: nums.map((t) => t.textContent).join(','), onOwn, links: links.length, across,
+  const out = { nums: nums.map((t) => t.textContent).join(','), onOwn, links: links.length, across, groups, cells: cs.length,
     dark: circles.filter((c) => /bg-card/.test(c.getAttribute('fill'))).length,
     ends: [...svg.querySelectorAll('text')].map((t) => t.textContent).filter((x) => /^B[−+]$/.test(x)).join(',') };
   fillPlan = real; clearDimVehicle();
   return out;
 }, SELFTEST);
-check('the OX 20S7P on W: groups 1 to 20 numbered once each, every number inside its own group',
-  tidy.nums === Array.from({ length: 20 }, (_, i) => i + 1).join(',') && tidy.onOwn, tidy);
+check('the Zero 11X 16S8P on W, the whole width: groups 1 to 16 numbered once each, every number inside its own group',
+  tidy.groups === 16 && tidy.nums === Array.from({ length: 16 }, (_, i) => i + 1).join(',') && tidy.onOwn, tidy);
 check('and no group drawn dark (all filled, two colours), with B− and B+', tidy.dark === 0 && tidy.ends === 'B−,B+', tidy);
 // "נחש עם קו ניקל" (same day, his pick of three drawings)
-check('with the nickel drawn: 6 links in each of the 20 groups, each from a cell to the next of its own group', tidy.links === 120 && tidy.across === 0, tidy);
+check('with the nickel drawn: 7 links in each of the 16 groups, each from a cell to the next of its own group', tidy.links === 112 && tidy.across === 0, tidy);
 
 await browser.close();
 srv.close();
