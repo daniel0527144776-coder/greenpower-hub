@@ -2712,7 +2712,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v466';
+const HUB_BUILD = 'v467';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6075,7 +6075,7 @@ function shallowCellOptions(TL, TW, TH, V, S) {
     let P = 0;
     for (const h of holdersFor(18650)) {
       const [p, rp] = DIM_PITCH[18650][h];
-      for (let q = 40; q > P; q--) if (hisFit({ L: TL, W: TW, H: TH }, S, q, 1, p, rp, cd.dia).fits) { P = q; break; }
+      for (let q = 40; q > P; q--) if (hisFit({ L: TL, W: TW, H: TH }, S, q, 1, p, rp, cd.dia, null, h).fits) { P = q; break; }
     }
     if (P < 1) continue;
     const Ah = Math.round(P * cd.ah * 10) / 10;
@@ -9388,7 +9388,8 @@ const DIM_PITCH = {
   // 18650: his own nickels, both SQUARE (Daniel, 2026-09-27: "הניקל של 18650 זה 19mm או 20.25").
   // They used to carry the 21700 pitches, so every 18650 build came out a size too big.
   // And a DIAGONAL 18.5 ("יש גם אלכסוני 18.5"): rows nest at 18.5 x 0.866 = 16.02.
-  18650: { 'diag-185': [18.5, 16.02], 'sq-19': [19, 19], 'sq-2025': [20.25, 20.25] },
+  // W is the 18.5 diagonal laid the other way round: a zigzag across (B), like the 21700's W (2026-10-18)
+  18650: { 'diag-185': [18.5, 16.02], 'diag-185w': [18.5, 16.02], 'sq-19': [19, 19], 'sq-2025': [20.25, 20.25] },
   // Re-measured 2026-10-04 (Daniel): ניקל א׳ is the W-shaped strip at 22.7, ניקל ב׳ the diagonal at
   // 22.5 — both on nesting rows (he chose that for the W too), so each is d x 0.866 between rows.
   // The keys stay with the NICKELS, not the numbers: the OX's counted 136/126 were counted on them.
@@ -9453,7 +9454,7 @@ function standPlan(o) {
   return { cells, dia, wMM, hMM, groups: true, outline,
     // The BMS at the far end of the narrow part, where he puts it (2026-10-15: "בסוף החלק הצר"), also
     // when groups run into the narrow part: the tray they were fitted in already leaves it its length.
-    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
+    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM, y: 0, w: Math.max(1, bms), h: hMM }) : null,
     split: layers > 1, note: notes.join(' · ') };
 }
 // Which groups lie in the narrow part: from the first one with a cell there (a filled tray) or the first
@@ -9474,7 +9475,7 @@ function fillPlan(o) {
   // In a two-part tray the BMS comes right after the last cells (2026-10-18: "תאים עד הסוף, וה-BMS אחריהם"),
   // so the pack drawn is the pack the card's size counts, cells and BMS.
   return { cells, dia, wMM, hMM, groups: true, nickel: true, pitch: o.pitch, rowPitch: o.rowPitch, outline: trayOutline(tr, y0),
-    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, wMM) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
+    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, wMM) : { x: wMM, y: 0, w: Math.max(1, bms), h: hMM }) : null,
     split: layers > 1, note: notes.join(' · ') };
 }
 // The outline of a two-part tray in the drawing's own coordinates (0 is the first cell's edge, one
@@ -9488,10 +9489,12 @@ function trayOutline(tr, y0) {
 }
 // The BMS in the narrow part: right after the cells when groups run into it (`after` = where they
 // end), else against the far end of the tray.
+// Flush against them, no gap (Daniel, 2026-10-18: "שה-BMS יהיה ממש אחרי התאים. לא שיהיה מרחק"), as wide as
+// its allowance.
 function bmsInNarrow(tr, y0, bms, after) {
   const w0 = DIM_WALL, end = tr.L + tr.nx.L - w0;
-  const w = Math.max(1, bms - 2);
-  return { x: after != null ? after + 2 : end - w0 - w, y: y0 - w0, w, h: tr.nx.W };
+  const w = Math.max(1, bms);
+  return { x: after != null ? after : end - w0 - w, y: y0 - w0, w, h: tr.nx.W };
 }
 // The drawing for C: each group a line along the block, the lines side by side, band after band,
 // the series snaking so that one band's last group lies beside the next band's first. The group's
@@ -9513,7 +9516,7 @@ function alongPlan(o) {
   const bms = Math.max(0, o.extra || 0);
   const tr = o.tray && o.tray.nx ? o.tray : null, y0 = tr ? (tr.W - tr.nx.W) / 2 : 0;
   return { cells, dia, wMM, hMM, groups: true, numIn: true, outline: trayOutline(tr, y0),
-    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
+    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM, y: 0, w: Math.max(1, bms), h: hMM }) : null,
     split: layers > 1, note: layers > 1 ? `שכבה 1 מתוך ${layers}` : '' };
 }
 // The plan on screen. The numbers over the cells are the groups; B− and B+ are the two ends of
@@ -9695,7 +9698,7 @@ function staggerAdd(orient, pitch, rowPitch) {
 // round (same day: "ה-W זה בזיגזג, זה יותר צר ברוחב ויותר ארוך באורך. ב-Z ... משתלב אחד בתוך השני, אבל
 // זה יותר רחב"): W is B, a zigzag across at 19.66 and columns 22.7 apart; Z is A, straight across at 22.5
 // and the columns nesting 19.49 apart. That is exactly his count: Z 6 across x 21 = 126, W 8 x 17 = 136.
-const FILL_WAY = { 'diag-a': 'B', 'diag-b': 'A' };
+const FILL_WAY = { 'diag-a': 'B', 'diag-b': 'A', 'diag-185': 'A', 'diag-185w': 'B' };
 function nickelOfPair(pitch, rowPitch) {
   for (const [k, [p, rp]] of Object.entries(DIM_PITCH[21700])) if (Math.abs(p - pitch) < 0.01 && Math.abs(rp - rowPitch) < 0.01) return k;
   return null;
@@ -9801,15 +9804,15 @@ function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap, snake) {
     ext: { L: Math.max(...xs) + r - (Math.min(...xs) - r) + 2 * DIM_WALL, W: Math.max(...ys) + r - (Math.min(...ys) - r) + 2 * DIM_WALL } };
 }
 // "הזיגזג חל על הכל ב W. Z, כל הכלים" (Daniel, 2026-10-17): every tray, not the OX alone.
-function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap) {
+function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap, h) {
   let first = null;
-  const nk = dia >= DIM_ALONG_BELOW ? nickelOfPair(pitch, rowPitch) : null;
+  const nk = h && FILL_WAY[h] ? h : dia >= DIM_ALONG_BELOW ? nickelOfPair(pitch, rowPitch) : null;
   // Standing 21700: each layer filled across the whole width (trayFill), each nickel its own way. A layer
   // holds its share of the groups, the same plan in each.
   // The OX in 18650 is filled the same way (Daniel, 2026-10-18: "כמה תאים נכנסים יותר בox ב18650 בצורת z או
   // h"): across the whole width and on into the narrow part, straight rows across (A). Laid group by group it
   // took 16S11P at 60V on both nickels; filled, 16S14P on Z and 16S12P on H. Other trays keep their 18650 way.
-  if (tub && (dia >= DIM_ALONG_BELOW || tub.nx)) {
+  if (tub) {
     const orient = rowPitch < pitch - 0.01 ? FILL_WAY[nk] || 'A' : 'A';
     const sPer = Math.ceil(S / (layers || 1));
     // The OX — the one two-part tray — is built a row per group and nothing else (Daniel, 2026-10-17, with
@@ -9825,7 +9828,11 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap) {
     const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, true);
     const across = f ? f.across : acrossFit(tub.W, orient === 'B' ? rowPitch : pitch, dia);
     const lay = { inRow: Math.max(1, across), g: 1, rowsAlong: f ? f.rowsAlong : Math.ceil(sPer * P / Math.max(1, across)), orient };
-    return f ? { ...lay, tail: f, fits: true } : { ...lay, fits: false };
+    if (f) return { ...lay, tail: f, fits: true };
+    // The 18650 in every tray since 2026-10-18 (his answer: "כן, בכל הכלים"): filled the whole width first, and
+    // when that does not take the build, the ways it was laid before (a group a row, or along) — so each
+    // tray gets the most of the two. The 21700 stays on the fill alone.
+    if (dia >= DIM_ALONG_BELOW) return { ...lay, fits: false };
   }
   const ways = [['A', pitch, rowPitch], ['B', rowPitch, pitch]].filter(([o]) => !nk || !FILL_WAY[nk] || FILL_WAY[nk] === o);
   if (cap != null && S * P > cap) return { ...groupLayout(S, P, layers, 1), orient: ways[0][0], fits: false };
@@ -9905,8 +9912,8 @@ function fitAlong(tub, S, P, layers, pitch, rowPitch, dia) {
   return { orient: 'C', inRow: per, g: 1, rowsAlong: bands * P, bands, fits: acrossMM <= tub.W + 0.5 && alongMM <= tub.L + 0.5 };
 }
 // The fewest layers that take the build (1 if none do — the verdict then says why).
-function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia, cap) {
-  for (let l = 1; l <= maxLayers; l++) if (hisFit(tub, S, P, l, pitch, rowPitch, dia, cap).fits) return l;
+function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia, cap, h) {
+  for (let l = 1; l <= maxLayers; l++) if (hisFit(tub, S, P, l, pitch, rowPitch, dia, cap, h).fits) return l;
   return 0;
 }
 
@@ -9916,17 +9923,17 @@ function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia, cap) {
 // Densest first — the recommendation takes the first that fits.
 // The 18650 nickels he has are Z and H (Daniel, 2026-10-18: "Z ל-18650", "H ל-18650"); the square 20.25 is not
 // one of them, so it is not offered (its pitch stays in DIM_PITCH for a row that names it).
-const HOLDERS_BY_FMT = { 21700: ['diag-b', 'diag-a', 'square-225', 'square-23'], 18650: ['diag-185', 'sq-19'] };
+const HOLDERS_BY_FMT = { 21700: ['diag-b', 'diag-a', 'square-225', 'square-23'], 18650: ['diag-185', 'diag-185w', 'sq-19'] };
 // The order the list shows them in, which is the order he knows them by.
-const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-225', 'square-23'], 18650: ['diag-185', 'sq-19'] };
+const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-225', 'square-23'], 18650: ['diag-185', 'diag-185w', 'sq-19'] };
 const HOLDER_ORDER = HOLDERS_BY_FMT[21700];
 function holdersFor(fmt) { return HOLDERS_BY_FMT[fmt] || HOLDER_ORDER; }
 // His names for the 21700 nickels, by their shape (Daniel, 2026-10-15): W 22.7, Z 22.5, H 23; and H 22.5
 // (2026-10-17).
 const HOLDER_NAME = { 'diag-b': 'ניקל Z (22.5)', 'diag-a': 'ניקל W (22.7)', 'square-225': 'ניקל H (22.5)', 'square-23': 'ניקל H (23)',
-  'sq-19': 'ניקל H (19)', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z (18.5)' };
+  'sq-19': 'ניקל H (19)', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z (18.5)', 'diag-185w': 'ניקל W (18.5)' };
 const HOLDER_LABEL = { 'diag-a': 'ניקל W — 22.7', 'diag-b': 'ניקל Z — 22.5', 'square-225': 'ניקל H — 22.5', 'square-23': 'ניקל H — 23',
-  'sq-19': 'ניקל H — 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z — 18.5' };
+  'sq-19': 'ניקל H — 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z — 18.5', 'diag-185w': 'ניקל W — 18.5' };
 // Rebuilds the holder list for the cell size, keeping the choice when it is still valid.
 function refreshHolderOptions(fmt) {
   const sel = document.getElementById('dimHolder');
@@ -9945,7 +9952,7 @@ function refreshHolderOptions(fmt) {
 function holderTakes(v, tub, fmt, h, S, P, c, maxLayers) {
   const [p, rp] = (DIM_PITCH[fmt] || {})[h] || [];
   if (!p) return 0;
-  return layersFor(tub, S, P, maxLayers, p, rp, c.dia, v && v.caps && v.caps[h] != null ? v.caps[h] : null);
+  return layersFor(tub, S, P, maxLayers, p, rp, c.dia, v && v.caps && v.caps[h] != null ? v.caps[h] : null, h);
 }
 // The biggest P a holder takes in this tray at this voltage, his way (0 when nothing fits).
 // Used to say, per nickel and per voltage, how much goes in (Daniel, 2026-09-27: "תכתוב מה
@@ -10076,8 +10083,8 @@ function calcPackDims() {
     if (judged) {
       // Where he COUNTED this holder in this tray (the OX), his count caps the holder's cells (hisFit).
       const cap = dimVehicle.caps && dimVehicle.caps[h] != null ? dimVehicle.caps[h] : null;
-      layersH = layersFor(tub, S, P, maxLayers, p, rp, c.dia, cap) || 1;
-      lay = hisFit(tub, S, P, layersH, p, rp, c.dia, cap);
+      layersH = layersFor(tub, S, P, maxLayers, p, rp, c.dia, cap, h) || 1;
+      lay = hisFit(tub, S, P, layersH, p, rp, c.dia, cap, h);
       fits = lay.fits;
     } else if (tub) fits = false;
     const orient = lay.orient || 'A', rows = lay.rowsAlong, cols = lay.inRow;
