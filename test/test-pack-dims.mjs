@@ -844,8 +844,8 @@ const n18 = await page.evaluate((SELF) => {
   const opts21 = [...hold.options].map((o) => o.value);
   return { opts18, opts21, res };
 }, SELFTEST);
-// his two 18650 nickels, Z and H, since 2026-10-18 ("Z ל-18650", "H ל-18650"); the square 20.25 is not his
-check('choosing 18650 offers his two 18650 nickels, Z and H', JSON.stringify(n18.opts18) === JSON.stringify(['diag-185', 'sq-19', 'custom']), n18.opts18);
+// his 18650 nickels since 2026-10-18 ("Z ל-18650", "H ל-18650", then "כן, יש לי W ל-18650"); the square 20.25 is not his
+check('choosing 18650 offers his three 18650 nickels, Z, W and H', JSON.stringify(n18.opts18) === JSON.stringify(['diag-185', 'diag-185w', 'sq-19', 'custom']), n18.opts18);
 check('and 21700 gets its own four back', JSON.stringify(n18.opts21) === JSON.stringify(['diag-a', 'diag-b', 'square-225', 'square-23', 'custom']), n18.opts21);
 // 16S4P on the 18.5 diagonal: four across = 3 x 18.5 + 9.25 (the half cell) + 18.35 + 3 = 86;
 // sixteen rows along at 16.02 = 15 x 16.02 + 21.35 + 22 (BMS at 60V) = 284. It is the first card.
@@ -1432,9 +1432,33 @@ check('the chosen card\'s top side draws the length and the width, in the card\'
 check('…the length line from the first cell to the end of the BMS, and the bottom side without lines',
   o.x1 != null && Math.abs(o.x1 - o.left) < 1.5 && Math.abs(o.x2 - o.bmsEnd) < 0.6 && o.botLines === 0, o);
 check('the OX 16S8P on H 22.5: the narrow part has cells, and the room left is at B−', o.n === 128 && o.inNarrow > 0 && o.roomAtStart > 10, o);
-check('…and the BMS comes right after the last cells', o.bmsGap != null && o.bmsGap >= 0 && o.bmsGap <= 3, o);
+// flush, no gap (the same day: "שה-BMS יהיה ממש אחרי התאים. לא שיהיה מרחק")
+check('…and the BMS sits flush against the last cells', o.bmsGap != null && Math.abs(o.bmsGap) < 0.01, o);
 check('the OX in 18650 at 60V: 16S14P on Z and 16S12P on H, the narrow part filled', drawn.m18.z === 14 && drawn.m18.h === 12 && drawn.m18.cells === 224 && drawn.m18.inNarrow > 0, drawn.m18);
-check('…its nickels named Z and H', drawn.m18.names === 'ניקל Z — 18.5,ניקל H — 19,מותאם אישית ↓', drawn.m18.names);
+check('…its nickels named Z, W and H', drawn.m18.names === 'ניקל Z — 18.5,ניקל W — 18.5,ניקל H — 19,מותאם אישית ↓', drawn.m18.names);
+
+// ---- 2026-10-18, later: W for the 18650, and the 18650 filled in every tray ----
+// "כן, יש לי W ל-18650"; "כן, בכל הכלים" — the whole width first, the old ways when that does not take it.
+// --selftest gives W the way of Z and puts the 18650 back on the old ways outside the OX.
+const w18 = await page.evaluate((SELF) => {
+  const realFill = trayFill, realWay = FILL_WAY['diag-185w'];
+  if (SELF) {
+    FILL_WAY['diag-185w'] = 'A';
+    trayFill = (tub, o, need, p, rp, dia, ...r) => dia < 20 && tub && !tub.nx ? null : realFill(tub, o, need, p, rp, dia, ...r);
+  }
+  const c = DIM_CELLS['18650-35v'], m = (name, V, h) => { const v = vehicleByName(name); return maxPFor(v, cellTub(tubOf(v), dimExtraFor(V, v)), 18650, h, V, c); };
+  const ox = { z: m('Inokim OX', 60, 'diag-185'), w: m('Inokim OX', 60, 'diag-185w'), h: m('Inokim OX', 60, 'sq-19') };
+  const zero = { z11w: m('Zero 11X', 60, 'diag-185w'), z11z: m('Zero 11X', 60, 'diag-185'), z10w72: m('Zero 10X', 72, 'diag-185w') };
+  // the W card is drawn as a zigzag across (B), the Z card straight across (A)
+  const v = vehicleByName('Zero 11X'), tb = cellTub(tubOf(v), dimExtraFor(60, v)), [p, rp] = DIM_PITCH[18650]['diag-185'];
+  const ways = { w: hisFit(tb, 16, 12, 1, p, rp, c.dia, null, 'diag-185w').orient, z: hisFit(tb, 16, 12, 1, p, rp, c.dia, null, 'diag-185').orient };
+  FILL_WAY['diag-185w'] = realWay; trayFill = realFill;
+  return { ox, zero, ways };
+}, SELFTEST);
+check('the OX in 18650 at 60V: Z 16S14P, W 16S13P, H 16S12P', w18.ox.z === 14 && w18.ox.w === 13 && w18.ox.h === 12, w18.ox);
+check('W is the 18.5 nickel the other way round: a zigzag across (B), Z straight across (A)', w18.ways.w === 'B' && w18.ways.z === 'A', w18.ways);
+check('the Zero 11X at 60V takes 16S13P on W (16S12P on Z), the whole width filled; the Zero 10X at 72V 20S9P on W',
+  w18.zero.z11w === 13 && w18.zero.z11z === 12 && w18.zero.z10w72 === 9, w18.zero);
 
 await browser.close();
 srv.close();
