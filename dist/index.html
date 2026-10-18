@@ -2712,7 +2712,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v467';
+const HUB_BUILD = 'v468';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9790,11 +9790,13 @@ function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap, snake) {
     }
     if (!use) return null;
   }
+  // and a build smaller than the tray leaves its room at B−, not in the narrow part (the same answer) — in
+  // whole rows, so every group still starts a row of its own (a part one at B− split them all)
+  if (nx) { let n = count(use); while (use.length > 1 && n - use[0].length >= need) { n -= use[0].length; use = use.slice(1); } }
   use.forEach((c, i) => c.forEach((q) => { q.row = i; }));
   const slots = [];
   use.forEach((c, i) => slots.push(...(i % 2 ? c.slice().reverse() : c)));
-  // and a build smaller than the tray leaves its room at B−, not in the narrow part (the same answer)
-  const pts = nx ? slots.slice(slots.length - need) : slots.slice(0, need);
+  const pts = slots.slice(0, need);
   if (nx) { const used = new Set(pts); bareCols = use.filter((c) => c.some((q) => q.bare && used.has(q))).length; }
   const firstNarrow = pts.findIndex((c) => c.narrow), firstBare = pts.findIndex((c) => c.bare);
   const acrossNarrow = Math.max(0, ...use.filter((c) => c.some((q) => q.narrow) && !c.some((q) => q.bare)).map((c) => c.length));
@@ -9825,7 +9827,14 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap, h) {
     // "תעשה רק כמו בתמונות ... לא לעשות צורות אחרות".
     // Since the same night's questions: rows the whole width in every tray, the OX too ("נחש בכל הכלים, גם
     // OX"), even where a row per group would go in ("ג׳: נחש לכל הרוחב").
-    const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, true);
+    // A group is one straight row when it fits across, so his nickel — a ladder of two rows, one group each
+    // (WELLGO's 2S strips, 1× at the ends) — lies on it (Daniel, 2026-10-18, on the drawing: "הציורים של הניקל
+    // שלך זה לא הניקל שלי ... זה כאילו מקושקש", and on a row per group: "כן, ככה"). A group wider than the
+    // tray runs on into the next row ("הקבוצה ממשיכה לשורה הבאה"). Rows the whole width whatever the group, as
+    // from the night of 2026-10-17, split a 6P or 7P group over two rows — the scribble. They stay the fallback
+    // where a row per group runs past the tray's length (Sur-Ron, Talaria, Zero 11X, OXO at 72V), as they were
+    // before that night.
+    const f = trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, false) || trayFill(tub, orient, sPer * P, pitch, rowPitch, dia, P, cap, true);
     const across = f ? f.across : acrossFit(tub.W, orient === 'B' ? rowPitch : pitch, dia);
     const lay = { inRow: Math.max(1, across), g: 1, rowsAlong: f ? f.rowsAlong : Math.ceil(sPer * P / Math.max(1, across)), orient };
     if (f) return { ...lay, tail: f, fits: true };
@@ -11139,7 +11148,7 @@ const VEHICLE_PACKS = [
     // Room for a riser of up to 12mm (Daniel, 2026-10-15: "65mm אם אפשרות להגבה של עוד 1.2 סמ").
     tub: '425×165×65 מ"מ + צר 60×140', bms: 14, riserMax: 12, caps: { 'square-23': 140, 'diag-a': 136, 'diag-b': 126 } },
   { g: 'קורקינטים', m: 'Zero 10X', riser: true, src: 'AI', p: 21.5, s60: 16, p60: 4, s72: 20, p72: 3, upg: '52V 23.4Ah', upgSrc: 'falconpev.com.sg', max: 72, oem: '60V 24Ah', oemSrc: 'falconpev', pack: '315×133×57', packSrc: 'falconpev' ,
-    tub: '455×134×58 מ"מ פנימי (נמדד 22.9.2026) · רדוד — אף תא לא עומד בו' },
+    tub: '455×134×65 מ"מ פנימי (נמדד 22.9.2026; הגובה 65, לא 58 — תיקן 18.10.2026)' },
   { g: 'קורקינטים', m: 'Zero 11X', riser: true, src: 'AI', p: 22.5, s60: 16, p60: 12, s72: 20, p72: 10, max: 240, oem: '72V 32Ah', oemSrc: 'zeroelectricscooter', pack: '360×210×70', packSrc: 'zeroelectricscooter' ,
     tub: '360×210×70 מ"מ — לפי מידות הסוללה המקורית (zeroelectricscooter), לא נמדד' },
   { g: 'קורקינטים', m: 'Vsett 10+', src: 'AI', p: 22.5, s60: 16, p60: 6, s72: 20, p72: 5, upg: '60V 28Ah', upgSrc: 'falconpev.com.sg', max: 100, oem: '60V 28Ah', oemSrc: 'maxblinker', pack: '320×155×70', packSrc: 'falconpev' ,

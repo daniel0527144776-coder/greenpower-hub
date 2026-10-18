@@ -193,7 +193,8 @@ check('a deep enough tray is left alone', !/לא נכנס לאמבטיה/.test(h
 // OX is 65mm, "חייב להשים מגביה") — planned on the footprint, and told how tall the riser is.
 check('a riser vehicle is not refused for its height', !/לא נכנס לאמבטיה/.test(heights.compound) && !/לא נכנס לאמבטיה/.test(heights.riserZero),
   heights.compound.replace(/<[^>]*>/g, '').slice(0, 90));
-check('and it says how tall the riser must be', /מגביה 10 מ"מ/.test(heights.compound.replace(/<[^>]*>/g, '')) && /מגביה 17 מ"מ/.test(heights.riserZero.replace(/<[^>]*>/g, '')),
+// the Zero 10X is 65 high since his correction of 2026-10-18 ("סליחה הגבה 6.5cm"), so 10mm, not 17
+check('and it says how tall the riser must be', /מגביה 10 מ"מ/.test(heights.compound.replace(/<[^>]*>/g, '')) && /מגביה 10 מ"מ/.test(heights.riserZero.replace(/<[^>]*>/g, '')),
   heights.compound.replace(/<[^>]*>/g, '').slice(0, 260));
 
 // ---- 4c. the 18650 offer that comes with a shallow tray ----
