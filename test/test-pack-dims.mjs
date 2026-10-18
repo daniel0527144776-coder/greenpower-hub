@@ -202,7 +202,7 @@ const big = await page.evaluate((SELF) => {
   const v = vehicleByName('Inokim OX'), c = DIM_CELLS['18650-35v'];
   const out = [];
   for (const V of [60, 72]) {
-    const tb = cellTub(tubOf(v), V >= 72 ? 26 : 22);
+    const tb = cellTub(tubOf(v), dimExtraFor(V, v));
     const most = Math.max(...holdersFor(18650).map((h) => maxPFor(v, tb, 18650, h, V, c) || 0));
     useVehiclePack('Inokim OX', V);
     const shown = (document.getElementById('dimResult').innerText.match(/(\d+)S (\d+)P/) || []);
@@ -213,8 +213,9 @@ const big = await page.evaluate((SELF) => {
   window.tubBest = real;
   return out;
 }, SELFTEST);
-check('tapping the OX with 18650 opens on the biggest build its tray takes (60V 16S11P, and at 72V too)',
-  big.length === 2 && big.every((b) => b.P === b.most && b.ok) && big[0].most === 11, big);
+// 16S14P since 2026-10-18: the OX in 18650 is filled across the whole width and into the narrow part
+check('tapping the OX with 18650 opens on the biggest build its tray takes (60V 16S14P, and at 72V too)',
+  big.length === 2 && big.every((b) => b.P === b.most && b.ok) && big[0].most === 14, big);
 
 // ---- the OX's tub is drawn as it is: wide, then narrow (2026-10-09) ----
 // Daniel: "אמרתי לך שזה יהיה לא מלבן אחיד. זה אמור להיות רחב וזה מתקטן, נהיה צר". The tray was drawn
@@ -232,7 +233,7 @@ const tub = await page.evaluate((SELF) => {
     const pl = dimLast && dimLast.plan;
     return { V, cell, filled: (document.getElementById('dimResult').innerText.match(/\d+S \d+P/) || [''])[0],
       pts: poly ? poly.getAttribute('points').trim().split(/\s+/).length : 0,
-      outline: pl && pl.outline, bms: pl && pl.bms };
+      outline: pl && pl.outline, bms: pl && pl.bms, last: pl ? Math.max(...pl.cells.map((q) => q.x)) + pl.dia / 2 : 0 };
   };
   const r = [one(72, '21700-50e'), one(60, '21700-50e'), one(60, '18650-35v')];
   document.getElementById('dimCell').value = '21700-50e';
@@ -246,9 +247,10 @@ const tubOk = (t) => {
   const mid = (o[0][1] + o[6][1]) / 2, nmid = (o[3][1] + o[4][1]) / 2;
   const end = o[3][0];                                                   // the far end of the narrow part
   return Math.abs(wide - 165) < 0.01 && Math.abs(narrow - 140) < 0.01 && Math.abs(mid - nmid) < 0.01
-    && t.bms && t.bms.x > o[1][0] && t.bms.x + t.bms.w <= end + 0.01 && t.bms.x + t.bms.w > end - 5;
+    && t.bms && t.bms.x > o[1][0] && t.bms.x + t.bms.w <= end + 0.01 && t.bms.x - t.last >= 0 && t.bms.x - t.last <= 3;
 };
-check('the OX tub is drawn wide then narrow, round 20S6P at 72V, 16S8P at 60V and the 18650 build, the BMS at its far end',
+// The BMS right after the last cells since 2026-10-18 ("תאים עד הסוף, וה-BMS אחריהם"), in the narrow part.
+check('the OX tub is drawn wide then narrow, round 20S6P at 72V, 16S8P at 60V and the 18650 build, the BMS right after the cells',
   tub.every(tubOk), tub.map((t) => `${t.V}V ${t.cell} ${t.filled}: ${t.pts} pts ${JSON.stringify(t.bms)}`));
 
 // ---- the OX's narrow part (2026-10-08) ----
@@ -327,8 +329,10 @@ const oxc = await page.evaluate((SELF) => {
   // the drawing's 0 is one wall in from the tray's side: the tray's middle across is W/2 - wall
   const mid = tb.W / 2 - DIM_WALL;
   // the whole width: the first row is seven on the square, group 1's six and the first of group 2
-  const first = cells.filter((c) => Math.abs(c.x - cells[0].x) < 0.01);
-  const sameCols = first.length === 7 && first.filter((c) => c.g === 0).length === 6 && first.filter((c) => c.g === 1).length === 1;
+  // the second column: the first may be part of one, the room a smaller build leaves being at B− (2026-10-18)
+  const xsSorted = [...new Set(cells.map((c) => +c.x.toFixed(2)))].sort((a, b) => a - b);
+  const second = cells.filter((c) => Math.abs(c.x - xsSorted[1]) < 0.01);
+  const sameCols = second.length === 7 && new Set(second.map((c) => c.g)).size <= 2;
   const out = { extra, res: document.getElementById('dimResult').innerText.slice(0, 160), n: cells.length,
     off: Math.abs((lo + hi) / 2 - mid), sameCols, max: maxPFor(vehicleByName('Inokim OX'), cellTub(tb, 14), 21700, 'square-23', 72, DIM_CELLS['21700-50e']) };
   dimExtraTouched = false;
@@ -840,11 +844,12 @@ const n18 = await page.evaluate((SELF) => {
   const opts21 = [...hold.options].map((o) => o.value);
   return { opts18, opts21, res };
 }, SELFTEST);
-check('choosing 18650 offers his three 18650 nickels', JSON.stringify(n18.opts18) === JSON.stringify(['diag-185', 'sq-19', 'sq-2025', 'custom']), n18.opts18);
+// his two 18650 nickels, Z and H, since 2026-10-18 ("Z ל-18650", "H ל-18650"); the square 20.25 is not his
+check('choosing 18650 offers his two 18650 nickels, Z and H', JSON.stringify(n18.opts18) === JSON.stringify(['diag-185', 'sq-19', 'custom']), n18.opts18);
 check('and 21700 gets its own four back', JSON.stringify(n18.opts21) === JSON.stringify(['diag-a', 'diag-b', 'square-225', 'square-23', 'custom']), n18.opts21);
 // 16S4P on the 18.5 diagonal: four across = 3 x 18.5 + 9.25 (the half cell) + 18.35 + 3 = 86;
 // sixteen rows along at 16.02 = 15 x 16.02 + 21.35 + 22 (BMS at 60V) = 284. It is the first card.
-check('an 18650 block is measured on the 18650 nickel', /^[\s\S]*?אלכסוני 18\.5[\s\S]*?גודל סוללה\s*284 × 86 × 69/.test(n18.res) && !/משוער/.test(n18.res), n18.res.slice(0, 260));
+check('an 18650 block is measured on the 18650 nickel', /^[\s\S]*?ניקל Z — 18\.5[\s\S]*?גודל סוללה\s*284 × 86 × 69/.test(n18.res) && !/משוער/.test(n18.res), n18.res.slice(0, 260));
 
 // ---- the tray size sits at the top, right under the configuration (2026-10-04) ----
 // It sat under the battery size until the blocks moved into one card per nickel; now it is the
@@ -1049,9 +1054,13 @@ check('the Plus is not judged against its frame standing (no "does not fit" on h
 // so the most was 16S9P / 22.9Ah — while Inokim's own OX Super pack is 16S10P of 18650 in that tray,
 // 60V 26Ah. With the group along the tray, ten in a line, eight lines across, two bands, it is 16S10P,
 // 26Ah at the cell's rated 2.6Ah. 16S12P still does not go in. The 21700 is left on his method.
-// --selftest takes the layout away.
+// Since 2026-10-18 ("כמה תאים נכנסים יותר בox ב18650 בצורת z או h") the OX in 18650 is filled as the 21700 is:
+// straight rows across the whole width (A), on into the narrow part, the BMS after the cells. With this
+// check's 22mm allowance that is 16S11P on H 19 and 16S13P on Z 18.5 (16S12P and 16S14P on his own 14mm).
+// --selftest lays the 18650 without the narrow part.
 const ox18 = await page.evaluate((SELF) => {
-  if (SELF) window.fitAlong = () => null;
+  const realFit = hisFit;
+  if (SELF) hisFit = (tub, S, P, l, pitch, rp, dia, cap) => realFit(tub && dia < 20 ? { ...tub, nx: null } : tub, S, P, l, pitch, rp, dia, cap);
   navigateTo('dims');
   document.getElementById('dimExtra').value = '22'; dimExtraTouched = true;   // the allowance he opens it on at 60V
   document.getElementById('dimCell').value = '18650-26v';
@@ -1061,7 +1070,7 @@ const ox18 = await page.evaluate((SELF) => {
   const tub = cellTub(tubOf(v), 22);
   const max19 = maxPFor(v, tub, 18650, 'sq-19', 60, c), max185 = maxPFor(v, tub, 18650, 'diag-185', 60, c);
   const fits12 = holderTakes(v, tub, 18650, 'sq-19', 16, 12, c, 1) > 0;
-  const lay10 = hisFit(tub, 16, 10, 1, 19, 19, c.dia);
+  const lay10 = hisFit(tub, 16, 10, 1, 19, 19, c.dia), filled = !!(lay10.tail && lay10.tail.fill);
   // his own numbers: 60V 30Ah (16S12P) does not go in, and the best offered is 16S10P
   dimAhPending = 30; calcPackDims();
   const best = dimBest ? dimBest.S + 'S' + dimBest.P + 'P' : '';
@@ -1073,19 +1082,19 @@ const ox18 = await page.evaluate((SELF) => {
   // and the 21700 in the same tray is unchanged: no group laid along
   document.getElementById('dimCell').value = '21700-50e'; calcPackDims();
   const r21 = document.getElementById('dimResult').innerText;
-  clearDimVehicle();
-  return { best, ah: c.ah, max19, max185, fits12, orient: lay10.orient, bands: lay10.bands, res, nums: nums.length, label, r21along: /קבוצה לאורך/.test(r21) };
+  clearDimVehicle(); hisFit = realFit;
+  return { best, ah: c.ah, max19, max185, fits12, orient: lay10.orient, filled, res, nums: nums.length, label, r21along: /קבוצה לאורך/.test(r21) };
 }, SELFTEST);
 check('the EVE 26V is counted at its rated 2.6Ah', ox18.ah === 2.6, ox18.ah);
 // 16S11P since 2026-10-08: the BMS sits in the OX's narrow part now (cellTub takes it off there
 // first), so the main part's whole 425mm is the cells' — eleven in a line, two bands, 420mm. It
 // was 16S10P on the 403 the BMS used to leave, which is also Inokim's own OX Super pack.
-check('the OX takes 16S11P of 18650 on the square 19 and the 18.5 diagonal, the BMS in the narrow part', ox18.max19 === 11 && ox18.max185 === 11, [ox18.max19, ox18.max185]);
-check('laid along the tray: ten in a line, two bands', ox18.orient === 'C' && ox18.bands === 2, [ox18.orient, ox18.bands]);
-check('16S12P still does not go in, and the best offered for it is 16S11P', !ox18.fits12 && ox18.best === '16S11P', [ox18.fits12, ox18.best]);
-check('the card says 16S10P fits and the most is 16S11P; the drawing has no numbers; the label says how it is laid',
+check('the OX takes 16S11P of 18650 on H 19 and 16S13P on Z 18.5 (a 22mm allowance), the narrow part filled', ox18.max19 === 11 && ox18.max185 === 13, [ox18.max19, ox18.max185]);
+check('filled across the whole width in straight rows, on into the narrow part', ox18.orient === 'A' && ox18.filled, [ox18.orient, ox18.filled]);
+check('16S12P does not go in on H 19, and the best offered for it is 16S13P (on Z)', !ox18.fits12 && ox18.best === '16S13P', [ox18.fits12, ox18.best]);
+check('the card says 16S10P fits and the most on H is 16S11P; the drawing has no numbers; the label says the length',
   /✅ נכנס ל-Inokim OX/.test(ox18.res) && /16S 10P · 160 תאים/.test(ox18.res) && /60V: 16S11P · 28.6Ah/.test(ox18.res)
-  && ox18.nums === 0 && /קבוצה לאורך 10P/.test(ox18.label || ''), [ox18.res.slice(0, 300), ox18.nums, ox18.label]);
+  && ox18.nums === 0 && /אורך 16S/.test(ox18.label || ''), [ox18.res.slice(0, 300), ox18.nums, ox18.label]);
 check('the 21700 in the same tray is still laid his way', !ox18.r21along, ox18.r21along);
 
 // ---- the worker's plate for a lying build (2026-10-06) ----
@@ -1312,7 +1321,7 @@ const oxw = await page.evaluate((SELF) => {
   }
   useVehiclePack('Inokim OX', 60); document.getElementById('dimHolder').value = 'square-23'; dimAhPending = 40; calcPackDims();
   const h60 = document.querySelector('#dimResult .dim-nk[data-holder="square-23"]');
-  out.h60 = { svg: !!h60.querySelector('svg.pack-svg'), narrow: h60.dataset.narrow === '16', ok: /✓ נכנס/.test(h60.textContent) };
+  out.h60 = { svg: !!h60.querySelector('svg.pack-svg'), narrow: +h60.dataset.narrow >= 1 && +h60.dataset.narrow <= 16, at: h60.dataset.narrow, ok: /✓ נכנס/.test(h60.textContent) };
   useVehiclePack('Inokim OX', 72); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 35; calcPackDims();
   const w72 = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]');
   out.w72 = { ok: /✓ נכנס/.test(w72.textContent), bareTxt: w72.dataset.bare === '1',
@@ -1322,7 +1331,7 @@ const oxw = await page.evaluate((SELF) => {
   useVehiclePack('Inokim OX', 60); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 40; calcPackDims();
   const w60 = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]'), cs = dimLast.plan.cells, cols = new Map();
   for (const q of cs) { const k = Math.floor((q.x - dimLast.plan.dia / 2 + 1) / 22.7); (cols.get(k) || cols.set(k, new Set()).get(k)).add(q.g); }
-  out.w60 = { txt: w60.dataset.across === '8' && w60.dataset.snake === '0', oneEach: [...cols.values()].every((g) => g.size === 1), cols: cols.size };
+  out.w60 = { txt: w60.dataset.across === '8' && w60.dataset.snake === '0', n: cs.length, narrow: cs.some((q) => q.x - dimLast.plan.dia / 2 > (dimLast.plan.outline ? dimLast.plan.outline[1][0] : Infinity)) };
   useVehiclePack('Inokim OX', 72); document.getElementById('dimHolder').value = 'diag-a';
   dimAhPending = 40; calcPackDims();
   const w80 = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]');
@@ -1337,13 +1346,15 @@ check('the OX: across the wide and the narrow part, W 8/6, Z 6/5, the square 7/5
 check('the OX: the maxima — the holder up to his counts (136 W, 126 Z, 140 H), then at most three bare rows',
   oxw.max.join(' ') === '36diag-a:15 36diag-b:13 36square-23:13 48diag-a:11 48diag-b:10 48square-23:10 52diag-a:10 52diag-b:9 52square-23:9 60diag-a:9 60diag-b:8 60square-23:8 72diag-a:7 72diag-b:6 72square-23:6', oxw.max.join(' '));
 check('the OX: every cell of every maximum lies inside the tray, wide part or narrow', oxw.outside.length === 0, oxw.outside.join(' '));
-check('the OX at 60V 16S8P on ניקל H: it goes in, group 16 in the narrow part, drawn', oxw.h60.ok && oxw.h60.svg && oxw.h60.narrow, oxw.h60);
-// Rows the whole width again, the OX too (his list of questions, the same night): his 136 in the holder and
-// four bare cells in one row at the end.
-check('the OX at 72V 20S7P on ניקל W: his 136 in the holder and four bare cells, one row at the end, drawn dashed, the whole width',
-  oxw.w72.ok && oxw.w72.bareTxt && oxw.w72.bare === 4 && oxw.w72.cells === 140 && oxw.w72.snake, oxw.w72);
+check('the OX at 60V 16S8P on ניקל H: it goes in, its last groups in the narrow part, drawn', oxw.h60.ok && oxw.h60.svg && oxw.h60.narrow, oxw.h60);
+// Rows the whole width again, the OX too (his list of questions, the same night). Since 2026-10-18 the narrow
+// part is filled to its end ("תאים עד הסוף, וה-BMS אחריהם"): W's holder places are his 136 in the wide part,
+// so the narrow part's cells are bare, drawn dashed, and the room is at B−.
+check('the OX at 72V 20S7P on ניקל W: the narrow part filled with bare cells, drawn dashed, the whole width',
+  oxw.w72.ok && oxw.w72.bare > 4 && oxw.w72.cells === 140 && oxw.w72.snake, oxw.w72);
 check('the OX at 72V 20S8P on ניקל W: ✗ and no drawing', oxw.w80.no && !oxw.w80.svg && oxw.w80.note, oxw.w80);
-check('the OX at 60V 16S8P on ניקל W: a row of eight per group, sixteen rows, no row shared', oxw.w60.txt && oxw.w60.oneEach && oxw.w60.cols === 16, oxw.w60);
+// A row of eight per group until 2026-10-18; filled to the narrow part's end, the groups run on from row to row.
+check('the OX at 60V 16S8P on ניקל W: eight across, 128 cells, the narrow part filled', oxw.w60.txt && oxw.w60.n === 128 && oxw.w60.narrow, oxw.w60);
 
 // THE NICKEL AS IT SITS (Daniel, 2026-10-17, night, over his list of questions with example drawings): two
 // drawings, the top side and the bottom; on the top a strip joins 1+2, 3+4 …, on the bottom 1 alone (B−),
@@ -1372,6 +1383,58 @@ check('the top side\'s strips join 1+2, 3+4 … 15+16', tidy.top === pairs(0, 16
 check('the bottom side\'s: 1 alone, 2+3 … 14+15, 16 alone', tidy.bottom === pairs(1, 16), tidy);
 // no numbers: none over the top (2026-10-18, "וגם תמחוק את המספרים מעל"), none in the cells
 check('no numbers over the top or in the cells, B− and B+', tidy.rowsFirst === undefined && tidy.inCells === 0 && tidy.ends === 'B−,B+', tidy);
+
+// ---- 2026-10-18: the size drawn, the OX's narrow part filled, the OX in 18650 ----
+// "קו עם כמה מילימטר אורך, קו כמה מילימטר רוחב ... בצורה של תרשים"; on the OX "החלק הצר חסר", answered
+// "תאים עד הסוף, וה-BMS אחריהם"; and "כמה תאים נכנסים יותר בox ב18650 בצורת z או h".
+// --selftest: the dimension lines go, the BMS goes back to the far end of the tray, every build starts at
+// B− (the narrow part left empty), and the OX in 18650 is laid without its narrow part.
+const drawn = await page.evaluate((SELF) => {
+  const realLines = dimLinesSvg, realBms = bmsInNarrow, realFill = trayFill, realFit = hisFit;
+  if (SELF) {
+    dimLinesSvg = () => '';
+    bmsInNarrow = (tr, y0, bms) => realBms(tr, y0, bms, null);
+    trayFill = (tub, ...a) => { const f = realFill(tub && tub.nx ? { ...tub, nx: null, L: tub.L } : tub, ...a); return f; };
+    hisFit = (tub, S, P, l, pitch, rp, dia, cap) => realFit(tub && dia < 20 ? { ...tub, nx: null } : tub, S, P, l, pitch, rp, dia, cap);
+  }
+  dimExtraTouched = false; dimExtraAuto = null;
+  const card = () => document.querySelector('#dimResult .dim-nk.sel');
+  // the OX at 60V on H 22.5, 16S8P: smaller than the tray takes
+  document.getElementById('dimCell').value = '21700-50e';
+  useVehiclePack('Inokim OX', 60); document.getElementById('dimHolder').value = 'square-225'; dimAhPending = 40; calcPackDims();
+  const c = card(), size = (c.querySelector('.dim-size').textContent.match(/(\d+) × (\d+)/) || []).slice(1);
+  const top = c.querySelector('svg.pack-side-top'), bot = c.querySelector('svg.pack-side-bottom');
+  const labels = top ? [...top.querySelectorAll('.pack-dim-label')].map((e) => e.textContent) : [];
+  const len = top && top.querySelector('.pack-dim-len'), bmsR = top && top.querySelector('.pack-bms');
+  const circ = top ? [...top.querySelectorAll('circle')] : [];
+  const left = Math.min(...circ.map((e) => +e.getAttribute('cx') - +e.getAttribute('r') / 0.94));
+  const pl = dimLast.plan, r = pl.dia / 2, wideEnd = pl.outline ? pl.outline[1][0] : Infinity;
+  const xs = pl.cells.map((q) => q.x), lastEdge = Math.max(...xs) + r;
+  const ox = { size, labels, botLines: bot ? bot.querySelectorAll('.pack-dims').length : -1,
+    x1: len ? +len.getAttribute('x1') : null, x2: len ? +len.getAttribute('x2') : null, left,
+    bmsEnd: bmsR ? +bmsR.getAttribute('x') + +bmsR.getAttribute('width') : null,
+    inNarrow: pl.cells.filter((q) => q.x - r > wideEnd).length, roomAtStart: Math.min(...xs) - r,
+    bmsGap: pl.bms ? +(pl.bms.x - lastEdge).toFixed(1) : null, n: pl.cells.length };
+  // the OX in 18650: the most at 60V on each nickel, and the drawing at Z's most
+  const v = dimVehicle, tub = cellTub(tubOf(v), dimExtraFor(60, v));
+  const m18 = { z: maxPFor(v, tub, 18650, 'diag-185', 60, DIM_CELLS['18650-35v']), h: maxPFor(v, tub, 18650, 'sq-19', 60, DIM_CELLS['18650-35v']) };
+  document.getElementById('dimCell').value = '18650-35v'; useVehiclePack('Inokim OX', 60); document.getElementById('dimCell').value = '18650-35v'; calcPackDims();
+  document.getElementById('dimHolder').value = 'diag-185'; dimAhPending = 3.5 * m18.z; calcPackDims();
+  const p18 = dimLast.plan, we18 = p18.outline ? p18.outline[1][0] : Infinity;
+  m18.cells = p18.cells.length; m18.inNarrow = p18.cells.filter((q) => q.x - p18.dia / 2 > we18).length;
+  m18.names = [...document.getElementById('dimHolder').options].map((o) => o.textContent).join(',');
+  document.getElementById('dimCell').value = '21700-50e';
+  dimLinesSvg = realLines; bmsInNarrow = realBms; trayFill = realFill; hisFit = realFit; clearDimVehicle();
+  return { ox, m18 };
+}, SELFTEST);
+const o = drawn.ox;
+check('the chosen card\'s top side draws the length and the width, in the card\'s own millimetres', o.labels.join('|') === o.size[0] + ' מ״מ|' + o.size[1] + ' מ״מ', o);
+check('…the length line from the first cell to the end of the BMS, and the bottom side without lines',
+  o.x1 != null && Math.abs(o.x1 - o.left) < 1.5 && Math.abs(o.x2 - o.bmsEnd) < 0.6 && o.botLines === 0, o);
+check('the OX 16S8P on H 22.5: the narrow part has cells, and the room left is at B−', o.n === 128 && o.inNarrow > 0 && o.roomAtStart > 10, o);
+check('…and the BMS comes right after the last cells', o.bmsGap != null && o.bmsGap >= 0 && o.bmsGap <= 3, o);
+check('the OX in 18650 at 60V: 16S14P on Z and 16S12P on H, the narrow part filled', drawn.m18.z === 14 && drawn.m18.h === 12 && drawn.m18.cells === 224 && drawn.m18.inNarrow > 0, drawn.m18);
+check('…its nickels named Z and H', drawn.m18.names === 'ניקל Z — 18.5,ניקל H — 19,מותאם אישית ↓', drawn.m18.names);
 
 await browser.close();
 srv.close();

@@ -2712,7 +2712,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v465';
+const HUB_BUILD = 'v466';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -9471,8 +9471,10 @@ function fillPlan(o) {
   const tr = o.tray && o.tray.nx ? o.tray : null, y0 = tr ? (tr.W - tr.nx.W) / 2 : 0;
   const layers = o.layers || 1, bms = Math.max(0, o.extra || 0), sPer = Math.ceil(o.N / P / layers);
   const notes = [layers > 1 ? `שכבה 1 מתוך ${layers} · קבוצות 1–${sPer}` : ''].filter(Boolean);
+  // In a two-part tray the BMS comes right after the last cells (2026-10-18: "תאים עד הסוף, וה-BMS אחריהם"),
+  // so the pack drawn is the pack the card's size counts, cells and BMS.
   return { cells, dia, wMM, hMM, groups: true, nickel: true, pitch: o.pitch, rowPitch: o.rowPitch, outline: trayOutline(tr, y0),
-    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, null) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
+    bms: bms ? (tr ? bmsInNarrow(tr, y0, bms, wMM) : { x: wMM + 2, y: 0, w: Math.max(1, bms - 2), h: hMM }) : null,
     split: layers > 1, note: notes.join(' · ') };
 }
 // The outline of a two-part tray in the drawing's own coordinates (0 is the first cell's edge, one
@@ -9537,16 +9539,32 @@ function nickelPieces(G, side) {
   else { out.push([0]); for (let k = 1; k < G; k += 2) out.push(k + 1 < G ? [k, k + 1] : [k]); }
   return out;
 }
-function nickelSvg(plan, side) {
-  const PX = 24, PT = 8, PB = 8;
+// THE PACK'S SIZE AS A DRAWING (Daniel, 2026-10-18: "קו עם כמה מילימטר אורך, קו כמה מילימטר רוחב ... בצורה של
+// תרשים"): on the top side, a dimension line under the cells for the length and one beside them for the width,
+// each with its end ticks and the card's own millimetres. `dims` is { L, W } of the card; without it, none.
+function dimLinesSvg(x1, x2, yL, y1, y2, xW, L, W) {
+  const st = 'stroke="var(--accent, #22d3ee)" stroke-width="1"', t = 4;
+  const lab = (x, y, s, rot) => `<text class="pack-dim-label" x="${x}" y="${y}" fill="var(--accent, #22d3ee)" font-size="11" font-weight="700" text-anchor="middle"${rot ? ` transform="rotate(-90 ${x} ${y})"` : ''}>${s}</text>`;
+  return `<g class="pack-dims">`
+    + `<line class="pack-dim-len" x1="${x1}" y1="${yL}" x2="${x2}" y2="${yL}" ${st}/>`
+    + `<line x1="${x1}" y1="${yL - t}" x2="${x1}" y2="${yL + t}" ${st}/><line x1="${x2}" y1="${yL - t}" x2="${x2}" y2="${yL + t}" ${st}/>`
+    + lab(((x1 + x2) / 2).toFixed(1), (yL + 14).toFixed(1), L + ' מ״מ')
+    + `<line class="pack-dim-wid" x1="${xW}" y1="${y1}" x2="${xW}" y2="${y2}" ${st}/>`
+    + `<line x1="${xW - t}" y1="${y1}" x2="${xW + t}" y2="${y1}" ${st}/><line x1="${xW - t}" y1="${y2}" x2="${xW + t}" y2="${y2}" ${st}/>`
+    + lab((xW - 7).toFixed(1), ((y1 + y2) / 2).toFixed(1), W + ' מ״מ', true)
+    + '</g>';
+}
+function nickelSvg(plan, side, dims) {
+  const withDims = !!(dims && side === 'top');
+  const PX = 24, PL = withDims ? 46 : PX, PT = 8, PB = withDims ? 30 : 8;
   const { x: ext, y: hh } = planExt(plan);
-  const sc = Math.min(1.2, (340 - 2 * PX) / ext, 260 / hh);
-  const W = Math.round(ext * sc) + 2 * PX, H = Math.round(hh * sc) + PT + PB;
-  const X = (x) => (PX + x * sc).toFixed(1), Y = (y) => (PT + y * sc).toFixed(1);
+  const sc = Math.min(1.2, (340 - PL - PX) / ext, 260 / hh);
+  const W = Math.round(ext * sc) + PL + PX, H = Math.round(hh * sc) + PT + PB;
+  const X = (x) => (PL + x * sc).toFixed(1), Y = (y) => (PT + y * sc).toFixed(1);
   const txt = (x, y, s, more) => `<text x="${x}" y="${y}" fill="var(--text-muted)" font-size="10" text-anchor="middle"${more || ''}>${s}</text>`;
   let g = plan.outline
     ? `<polygon class="pack-outline" points="${plan.outline.map(([x, y]) => X(x) + ',' + Y(y)).join(' ')}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`
-    : `<rect x="${PX - 3}" y="${PT - 3}" width="${(ext * sc + 6).toFixed(1)}" height="${(plan.hMM * sc + 6).toFixed(1)}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`;
+    : `<rect x="${PL - 3}" y="${PT - 3}" width="${(ext * sc + 6).toFixed(1)}" height="${(plan.hMM * sc + 6).toFixed(1)}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`;
   const cells = plan.cells, G = Math.max(...cells.map((c) => c.g)) + 1;
   // Two cells are neighbours under one strip when they are as close as the bracket puts them. A tray
   // plan knows its pitches; any other plan is measured: the closest two cells in it, and a little over.
@@ -9572,21 +9590,30 @@ function nickelSvg(plan, side) {
   // a bare cell dashed orange; a place left empty (a Bomber's frame) dashed and faint
   for (const c of cells) g += `<circle${c.bare ? ' class="pack-bare" stroke-dasharray="2 1.5"' : c.g < 0 ? ' class="pack-empty" stroke-dasharray="2 2" opacity=".45"' : ''} cx="${X(c.x)}" cy="${Y(c.y)}" r="${r}" fill="none" stroke="${c.bare ? 'var(--warning,#f59e0b)' : 'var(--text-muted, #cbd5e1)'}" stroke-width="1"/>`;
   if (plan.bms) {
-    const b = plan.bms, bwid = b.w * sc, bh = b.h * sc, bx = PX + b.x * sc, by = PT + b.y * sc;
+    const b = plan.bms, bwid = b.w * sc, bh = b.h * sc, bx = PL + b.x * sc, by = PT + b.y * sc;
     g += `<rect class="pack-bms" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bwid.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>`
       + (bwid >= 24 ? txt((bx + bwid / 2).toFixed(1), (by + bh / 2 + 3.5).toFixed(1), 'BMS', ' font-weight="700"')
         : `<g transform="translate(${(bx + bwid / 2 + 3.5).toFixed(1)},${(by + bh / 2).toFixed(1)}) rotate(-90)">` + txt(0, 0, 'BMS', ' font-weight="700"') + '</g>');
   }
   const yMid = Y(plan.hMM / 2);
-  g += `<text x="${PX - 4}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="end" dominant-baseline="middle">B−</text>`
-    + (plan.split ? '' : `<text x="${(PX + ext * sc + 4).toFixed(1)}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="start" dominant-baseline="middle">B+</text>`);
+  // B− beside the first cell: in the OX the room a smaller build leaves is at B−, so the cells may start well in
+  const xB = Math.min(...cells.map((c) => c.x)) - plan.dia / 2;
+  g += `<text class="pack-bminus" x="${(+X(xB) - 4).toFixed(1)}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="end" dominant-baseline="middle">B−</text>`
+    + (plan.split ? '' : `<text x="${(PL + ext * sc + 4).toFixed(1)}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="start" dominant-baseline="middle">B+</text>`);
+  if (withDims) {
+    // the length from the first cell's edge to the far end of the pack (its BMS), the width over the cells
+    const r0 = plan.dia / 2, xs = plan.cells.map((c) => c.x), ys = plan.cells.map((c) => c.y);
+    const xa = Math.min(...xs) - r0, xb = Math.max(Math.max(...xs) + r0, plan.bms ? plan.bms.x + plan.bms.w : 0);
+    const ya = Math.min(...ys) - r0, yb = Math.max(...ys) + r0;
+    g += dimLinesSvg(+X(xa), +X(xb), +Y(hh) + 12, +Y(ya), +Y(yb), PL - 26, dims.L, dims.W);
+  }
   return `<div class="dim-nk-side">${side === 'top' ? 'צד עליון' : 'צד תחתון'}</div>`
     + `<svg class="pack-svg pack-side-${side}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" direction="ltr" style="max-width:100%;height:auto;direction:ltr;">${g}</svg>`;
 }
 // Every plan of a pack in groups is drawn with its nickel (nickelSvg); what is left here is a plan with no
 // groups — a frame or a block not yet split into a build — drawn as the cells and what surrounds them.
-function packSvg(plan) {
-  if (plan.nickel || (plan.groups && plan.cells.some((c) => c.g >= 0))) return nickelSvg(plan, 'top') + nickelSvg(plan, 'bottom') + (plan.note ? `<div class="dim-nk-note">${plan.note}</div>` : '');
+function packSvg(plan, dims) {
+  if (plan.nickel || (plan.groups && plan.cells.some((c) => c.g >= 0))) return nickelSvg(plan, 'top', dims) + nickelSvg(plan, 'bottom') + (plan.note ? `<div class="dim-nk-note">${plan.note}</div>` : '');
   const PX = 24, PT = 8, PB = 8;
   const { x: ext, y: hh } = planExt(plan);
   const sc = Math.min(1.2, (340 - 2 * PX) / ext, 260 / hh);
@@ -9735,7 +9762,15 @@ function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap, snake) {
   };
   const count = (cs) => cs.reduce((t, c) => t + c.length, 0);
   let use = cols, bareCols = 0;
-  if (count(cols) < need) {
+  // A two-part tray is filled to the end of its narrow part, the BMS after the cells (Daniel, 2026-10-18,
+  // on the OX: "החלק הצר חסר" — "תאים עד הסוף, וה-BMS אחריהם"). Past the holder's places the narrow part
+  // takes bare cells to its end, and a build smaller than the tray leaves its room at B− instead (below).
+  if (nx) {
+    const xStart = cols.length ? Math.max(...cols[cols.length - 1].map((c) => c.x + dia / 2)) + BARE_GAP : DIM_WALL;
+    const extra = bare(xStart).slice(0, BARE_MAX);
+    if (extra.length && count(cols) + count(extra) >= need) { use = cols.concat(extra); bareCols = extra.length; }
+  }
+  if (count(use) < need) {
     use = null;
     for (let m = cols.length; m >= Math.max(0, cols.length - BARE_MAX); m--) {
       const kept = cols.slice(0, m);
@@ -9755,7 +9790,9 @@ function trayFill(tub, orient, need, pitch, rowPitch, dia, P, cap, snake) {
   use.forEach((c, i) => c.forEach((q) => { q.row = i; }));
   const slots = [];
   use.forEach((c, i) => slots.push(...(i % 2 ? c.slice().reverse() : c)));
-  const pts = slots.slice(0, need);
+  // and a build smaller than the tray leaves its room at B−, not in the narrow part (the same answer)
+  const pts = nx ? slots.slice(slots.length - need) : slots.slice(0, need);
+  if (nx) { const used = new Set(pts); bareCols = use.filter((c) => c.some((q) => q.bare && used.has(q))).length; }
   const firstNarrow = pts.findIndex((c) => c.narrow), firstBare = pts.findIndex((c) => c.bare);
   const acrossNarrow = Math.max(0, ...use.filter((c) => c.some((q) => q.narrow) && !c.some((q) => q.bare)).map((c) => c.length));
   const r = dia / 2, xs = pts.map((q) => q.x), ys = pts.map((q) => q.y);
@@ -9769,7 +9806,10 @@ function hisFit(tub, S, P, layers, pitch, rowPitch, dia, cap) {
   const nk = dia >= DIM_ALONG_BELOW ? nickelOfPair(pitch, rowPitch) : null;
   // Standing 21700: each layer filled across the whole width (trayFill), each nickel its own way. A layer
   // holds its share of the groups, the same plan in each.
-  if (tub && dia >= DIM_ALONG_BELOW) {
+  // The OX in 18650 is filled the same way (Daniel, 2026-10-18: "כמה תאים נכנסים יותר בox ב18650 בצורת z או
+  // h"): across the whole width and on into the narrow part, straight rows across (A). Laid group by group it
+  // took 16S11P at 60V on both nickels; filled, 16S14P on Z and 16S12P on H. Other trays keep their 18650 way.
+  if (tub && (dia >= DIM_ALONG_BELOW || tub.nx)) {
     const orient = rowPitch < pitch - 0.01 ? FILL_WAY[nk] || 'A' : 'A';
     const sPer = Math.ceil(S / (layers || 1));
     // The OX — the one two-part tray — is built a row per group and nothing else (Daniel, 2026-10-17, with
@@ -9874,17 +9914,19 @@ function layersFor(tub, S, P, maxLayers, pitch, rowPitch, dia, cap) {
 // "the densest that fits", so the recommendation is the first one that gets the pack in.
 // Per cell size: a holder is made for one cell and the list must follow the cell chosen.
 // Densest first — the recommendation takes the first that fits.
-const HOLDERS_BY_FMT = { 21700: ['diag-b', 'diag-a', 'square-225', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
+// The 18650 nickels he has are Z and H (Daniel, 2026-10-18: "Z ל-18650", "H ל-18650"); the square 20.25 is not
+// one of them, so it is not offered (its pitch stays in DIM_PITCH for a row that names it).
+const HOLDERS_BY_FMT = { 21700: ['diag-b', 'diag-a', 'square-225', 'square-23'], 18650: ['diag-185', 'sq-19'] };
 // The order the list shows them in, which is the order he knows them by.
-const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-225', 'square-23'], 18650: ['diag-185', 'sq-19', 'sq-2025'] };
+const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-225', 'square-23'], 18650: ['diag-185', 'sq-19'] };
 const HOLDER_ORDER = HOLDERS_BY_FMT[21700];
 function holdersFor(fmt) { return HOLDERS_BY_FMT[fmt] || HOLDER_ORDER; }
 // His names for the 21700 nickels, by their shape (Daniel, 2026-10-15): W 22.7, Z 22.5, H 23; and H 22.5
 // (2026-10-17).
 const HOLDER_NAME = { 'diag-b': 'ניקל Z (22.5)', 'diag-a': 'ניקל W (22.7)', 'square-225': 'ניקל H (22.5)', 'square-23': 'ניקל H (23)',
-  'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
+  'sq-19': 'ניקל H (19)', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z (18.5)' };
 const HOLDER_LABEL = { 'diag-a': 'ניקל W — 22.7', 'diag-b': 'ניקל Z — 22.5', 'square-225': 'ניקל H — 22.5', 'square-23': 'ניקל H — 23',
-  'sq-19': 'ריבועי 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'אלכסוני 18.5' };
+  'sq-19': 'ניקל H — 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z — 18.5' };
 // Rebuilds the holder list for the cell size, keeping the choice when it is still valid.
 function refreshHolderOptions(fmt) {
   const sel = document.getElementById('dimHolder');
@@ -10159,7 +10201,7 @@ function calcPackDims() {
       + (dimVehicle && tub && k.h !== 'custom' ? kv('מקסימום', maxLine(k.h)) : '')
       // A build that does not go in a two-part tray has no layout to draw: the fold it was given ran past
       // the tray, the BMS in among the cells (the OX, 60V on ניקל H, 2026-10-17). The badge says ✗.
-      + warn + (k.fits === false && tubAll && tubAll.nx ? '' : packSvg(k.plan)) + '</div>';
+      + warn + (k.fits === false && tubAll && tubAll.nx ? '' : packSvg(k.plan, { L: k.L, W: k.W })) + '</div>';
   };
   // The label for the worker draws the chosen card's plan; its two text lines are said here.
   const sPer = Math.ceil(S / layers), gRows = Math.ceil(P / cols);
@@ -10618,7 +10660,7 @@ function caseHtml(v, c, fmt, V, S, P, N) {
     + `<div class="dim-nk-head"><b>${HOLDER_LABEL[cs.holder]}</b><span class="dim-badge ${fits ? 'ok' : 'no'}">${fits ? '✓ נכנס' : '✗ לא נכנס'}</span></div>`
     + kv('גודל סוללה', `<span class="dim-size">${iso(L + ' × ' + W)}</span> מ"מ`)
     + kv('מקסימום במארז', iso(`${V}V: ${mp ? S + 'S' + mp + 'P · ' + +(mp * c.ah).toFixed(1) + 'Ah' : '—'}`))
-    + packSvg(pl) + '</div>';
+    + packSvg(pl, { L, W }) + '</div>';
   return {
     html: top + kv('תצורה', `${iso(S + 'S ' + P + 'P')} · ${N} תאים`) + caseRow + `<div class="dim-nks">${card}</div>`,
     // The label's line has no comma and no "ה-BMS": its own right-to-left layout splits on spaces.
