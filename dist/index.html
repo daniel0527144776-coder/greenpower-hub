@@ -270,6 +270,7 @@ body { min-height: 100vh; }
 .notice-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 10001; display: none; align-items: center; justify-content: center; padding: 16px; }
 .notice-backdrop.active { display: flex; }
 .notice { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+.so-preview { margin: 6px 0; padding: 8px 10px; min-height: 18px; background: var(--bg); border: 1px dashed var(--border); border-radius: 6px; font-family: monospace; font-size: 12px; text-align: left; word-break: break-word; }
 .notice-body { padding: 18px 16px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
 .notice-footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
 
@@ -1643,6 +1644,58 @@ body { min-height: 100vh; }
     <div id="inventoryList"></div>
   </div>
 </section>
+<!-- הזמנה לספק (Daniel, 2026-10-18: "תעשה לי טאב של מה להזמין ... שהספק ידע בדיוק את מה שאני צריך ... שאני
+     אוכל להזמין את כל הפרטים בפעם אחת"). His orders go to Chinese suppliers as one numbered English list, re-sent
+     whole after every change, edits by line number. Suppliers, their numbers and his ship-to details are DATA in
+     the synced 'sorder' key — this file is public, so none of them is written here. -->
+<section id="page-sorder" class="page">
+  <div class="page-header">
+    <h2 class="page-title">🛒 הזמנה לספק</h2>
+  </div>
+  <div class="card">
+    <div class="form-row"><label>ספק</label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select class="form-select" id="soSup" onchange="soPickSup(this.value)"></select>
+        <button class="btn btn-secondary btn-sm" onclick="soEditSup(null)">➕ ספק</button>
+        <button class="btn btn-secondary btn-sm" id="soSupEditBtn" onclick="soEditSup(document.getElementById('soSup').value)">✏️</button>
+      </div>
+    </div>
+    <div id="soLines" style="margin-top:8px;"></div>
+    <div id="soNeeds" style="margin-top:8px;"></div>
+  </div>
+  <div class="card">
+    <div class="form-row"><label>פריט</label>
+      <select class="form-select" id="soType" onchange="soSetType(this.value)"></select>
+    </div>
+    <div id="soFields"></div>
+    <div id="soPreview" class="so-preview" dir="ltr"></div>
+    <div id="soMissing" style="font-size:12px;color:var(--warning,#f59e0b);"></div>
+    <button class="btn btn-primary btn-block" id="soAddBtn" onclick="soAddLine()">➕ הוסף לרשימה</button>
+  </div>
+  <div class="card">
+    <label style="display:flex;gap:6px;align-items:center;font-size:13px;"><input type="checkbox" id="soFooter" onchange="soSetOpt('footer', this.checked)"> TOTAL / Shipping בסוף</label>
+    <div class="form-row"><label>פרטי משלוח</label><select class="form-select" id="soShip" onchange="soSetOpt('ship', this.value)"></select></div>
+    <div class="form-row"><label>הערה בסוף</label><input class="form-input" id="soNote" dir="ltr" style="width:100%;" placeholder="All BMS common port" onchange="soSetOpt('note', this.value)"></div>
+    <textarea id="soText" class="form-input" dir="ltr" rows="10" style="width:100%;font-family:monospace;font-size:12px;text-align:left;" readonly></textarea>
+    <div class="btn-group" style="margin-top:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="soSend('full')">📤 שלח רשימה מלאה</button>
+      <button class="btn btn-secondary" id="soChangesBtn" onclick="soSend('changes')">✏️ שלח רק שינויים</button>
+      <button class="btn btn-secondary" onclick="soCopy()">📋 העתק</button>
+      <button class="btn btn-secondary" onclick="soDone()">✅ ההזמנה הושלמה</button>
+    </div>
+    <div id="soStatus" style="font-size:12px;color:var(--text-muted);margin-top:6px;"></div>
+  </div>
+  <details class="fold" id="soShipsFold" data-fold="soships" ontoggle="foldToggled(this)">
+    <summary><span class="fold-title">📍 פרטי משלוח</span></summary>
+    <div class="fold-body"><div id="soShips"></div>
+      <button class="btn btn-secondary btn-sm" onclick="soEditShip(null)">➕ נמען</button></div>
+  </details>
+  <details class="fold" id="soHistFold" data-fold="sohist" ontoggle="foldToggled(this)">
+    <summary><span class="fold-title">🕘 הזמנות קודמות</span></summary>
+    <div class="fold-body"><div id="soHist"></div></div>
+  </details>
+</section>
+
 
 </main>
 
@@ -1881,7 +1934,7 @@ const MERGE_KEYS = ['inventory', 'worktime', 'wage_payments', 'customers', 'jobs
 // Single objects and maps: merged field by field, each field stamped when it changed, the stamps
 // synced beside them in fs_<key>. Not merged: supplier_prices (no row ids — and "החלף רשימה" is
 // meant to replace it), sticker_history (its own merge), worktime_trash (a local-ish log).
-const MAP_KEYS = ['settings', 'biz', 'costs', 'diag_notes', 'bms_pick', 'supplier_costs'];
+const MAP_KEYS = ['settings', 'biz', 'costs', 'diag_notes', 'bms_pick', 'supplier_costs', 'sorder'];
 const TOMB_DAYS = 180;
 const mRowId = (r) => (r && r.id != null ? String(r.id) : null);
 function stampRows(key, next) {
@@ -2012,6 +2065,8 @@ const SYNC_KEYS = ['customers', 'jobs', 'incomes', 'settings', 'biz', 'expenses'
   'tomb_inventory', 'tomb_worktime', 'tomb_wage_payments', 'tomb_customers', 'tomb_jobs', 'tomb_incomes', 'tomb_expenses',
   'tomb_workers', 'tomb_orders', 'tomb_dims', 'tomb_biz_payments', 'inv_log', 'tomb_inv_log',
   'fs_settings', 'fs_biz', 'fs_costs', 'fs_diag_notes', 'fs_bms_pick', 'fs_supplier_costs',
+  // הזמנה לספק: suppliers, ship-to blocks and open orders — private data, never in this file
+  'sorder', 'fs_sorder',
   // the WhatsApp bot's slim copy of jobs and orders (2026-10-04) — see botIndex
   'bot_index'];
 
@@ -2445,6 +2500,8 @@ const PAGE_GROUPS = [
   { tabs: [['catalog', '🏷️ מחירי מכירה'], ['supplier', '🔒 עלויות ספקים']] },
   { tabs: [['dims', '📐 מידות'], ['calcs', '🧰 מחשבונים'], ['diag', '🩺 אבחון']] },
   { tabs: [['wabot', '🤖 וואטסאפ'], ['fusion', '📈 מסחר']] },
+  // הזמנה לספק beside מלאי (2026-10-18, he chose "טאב ליד מלאי")
+  { tabs: [['inventory', '📦 מלאי'], ['sorder', '🛒 הזמנה לספק']] },
 ];
 // The views inside a tab, as one row of chips at the top of each of them.
 const PAGE_VIEWS = {
@@ -2513,6 +2570,7 @@ function navigateTo(page) {
   if (page === 'diag') renderDiag();
   if (page === 'films') return navigateTo('home');   // the films tab went on 2026-10-18; an old link lands home
   if (page === 'inventory') renderInventory();
+  if (page === 'sorder') renderSorder();
   if (page === 'supplier') renderSupplier();
 }
 
@@ -2712,7 +2770,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v470';
+const HUB_BUILD = 'v471';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -13258,6 +13316,522 @@ function renderNeedList() {
       <button class="btn btn-sm btn-secondary" onclick="toggleNeedOrdered(decodeURIComponent('${encodeURIComponent(r.id)}'))">${r.ordered ? '↩️ לא הוזמן' : '✓ הוזמן'}</button>
       <button class="btn btn-sm btn-secondary" title="התקבל / לא צריך" onclick="removeNeed(decodeURIComponent('${encodeURIComponent(r.id)}'))">🗑</button>
     </div>`).join('');
+}
+// ==== הזמנה לספק (v471, Daniel 2026-10-18) ====
+// His orders go to Chinese suppliers as one numbered English list. The list is re-sent whole
+// after every change and corrected by line number ("31. Cancel", "Add 29.", "21. 23mm not 22.7mm"),
+// and the supplier answers by number too — so a number, once sent, never moves: a removed line
+// stays in the list as "*cancel*". Each item type is a form of his own wording (the lines below are
+// copied from his WhatsApp orders, July–October 2026), and every field a supplier came back to ask
+// about (quantity, length, width, thickness, H/W/Z) is required, so the question is not asked twice.
+// One synced map key, 'sorder' (MAP_KEYS: merged field by field). Each supplier's open order is
+// its own field, cur_<id>, so an edit on the phone and one on the PC to two orders both survive.
+// Suppliers, their numbers and his ship-to blocks are DATA in that key: this file is public.
+const SO_PITCH = { 'H Type': '23mm', 'W Type': '22.7mm', 'Z Type': '22.5mm' };
+const SO_TYPES = [
+  { k: 'nickel', l: 'ניקל (רצועה)', f: [
+    { k: 'mat', l: 'חומר', o: [['pure', 'טהור (pure)'], ['plating', 'מצופה (plating)']] },
+    { k: 'cell', l: 'תא', o: ['21700', '18650'] },
+    { k: 'shape', l: 'צורה', o: ['H Type', 'W Type', 'Z Type'] },
+    { k: 'pitch', l: 'מרווח', o: ['23mm', '22.7mm', '22.5mm', '19mm'], other: 1 },
+    { k: 'vars', l: 'סוגים וכמות (ק"ג לכל סוג)', kind: 'vars', o: ['2S', '3S', '4S', '2P', '3P', '4P'], unit: 'kg' },
+    { k: 'thick', l: 'עובי', o: ['0.3mm', '0.25mm', '0.2mm', '0.15mm'], other: 1 },
+    { k: 'len', l: 'אורך', o: [['(800mm)', '800 מ"מ'], ['-', 'בלי']] }],
+    line: (v) => `Nickel ${v.mat} ${v.cell === '18650' ? '18650 ' : ''}${v.pitch} ${v.shape} ${v.vars} ${v.thick}${v.len === '-' ? '' : ' ' + v.len}` },
+  { k: 'busbar', l: 'פס נחושת-ניקל', f: [
+    { k: 'vars', l: 'סוגים', kind: 'multi', o: ['2S', '3S', '4S', '2Sx10P with flanges'] },
+    { k: 'shape', l: 'צורה', o: ['H Type', 'Z Type', 'W Type', ['-', 'בלי']] },
+    { k: 'pitch', l: 'מרווח', o: ['23mm', '22.7mm', '22.5mm', '19mm'], other: 1 },
+    { k: 'thick', l: 'עובי', o: ['0.5+0.2', '0.5mm', '0.3+0.2'], other: 1 },
+    { k: 'qty', l: 'כמות', kind: 'qty', units: ['KG', 'pc'] },
+    { k: 'len', l: 'אורך', o: [['(800MM)', '800 מ"מ'], ['-', 'בלי']] }],
+    line: (v) => `copper-nickel busbar ${v.vars}${v.shape === '-' ? '' : ' ' + v.shape} ${v.pitch} ${v.thick} ${v.qty}${v.len === '-' ? '' : ' ' + v.len}` },
+  { k: 'copper', l: 'רצועת נחושת', f: [
+    { k: 'width', l: 'רוחב', o: ['25mm', '23mm', '22.5mm', '20mm'], other: 1 },
+    { k: 'thick', l: 'עובי', o: ['0.5mm', '0.3mm', '0.8mm', '1mm'], other: 1 },
+    { k: 'qty', l: 'כמות', kind: 'qty', units: ['Kg', 'pc'] }],
+    line: (v) => `Copper strip ${v.width} ${v.thick} ${v.qty}` },
+  { k: 'holder', l: 'מחזיק תאים (פלסטיק)', f: [
+    { k: 'cell', l: 'תא', o: ['21700', '18650'] },
+    { k: 'pitch', l: 'מרווח', o: ['23mm', '22.7mm', '19mm'], other: 1 },
+    { k: 'vars', l: 'דגמים', kind: 'multi', o: ['1x2', '1x3', '4x3', '5x4', '1x10', '1x13', '8x20'], other: 1 },
+    { k: 'heat', l: 'קוטר החור', o: [['Heat diameter: 21.2 mm', '21.2 מ"מ'], ['-', 'בלי']] },
+    { k: 'qty', l: 'כמות (מכל דגם)', kind: 'qty', units: ['pc'] }],
+    line: (v) => `Plastic holder ${v.cell} ${v.pitch} ${v.vars}${v.heat === '-' ? '' : ' ' + v.heat} ${v.qty}${v.vars.includes('/') ? ' (Of each model)' : ''}` },
+  { k: 'daly', l: 'BMS דאלי', f: [
+    { k: 's', l: 'סדרות (S)', o: ['3S', '4S', '7S', '8S', '10S', '13S', '14S', '15S', '16S', '20S', '24S'], other: 1 },
+    { k: 'a', l: 'זרם', o: ['15A', '20A', '30A', '40A', '60A', '100A', '150A', '200A'], other: 1 },
+    { k: 'qty', l: 'כמות', kind: 'qty', units: ['pc'] },
+    { k: 'note', l: 'הערה (לא חובה)', kind: 'text', opt: 1, ph: '(Old version)' }],
+    line: (v) => `Daly li-ion common port ${v.s} ${v.a} ${v.qty}${v.note ? ' ' + v.note : ''}` },
+  { k: 'bms', l: 'BMS אחר', f: [
+    { k: 'brand', l: 'סוג', o: ['ANT', 'JK', ['(NO Daly)', 'לא דאלי']], other: 1 },
+    { k: 's', l: 'סדרות', kind: 'text', ph: '17-24S' },
+    { k: 'a', l: 'זרם', kind: 'text', ph: '420A/1050A' },
+    { k: 'qty', l: 'כמות', kind: 'qty', units: ['PC'] },
+    { k: 'note', l: 'הערה (לא חובה)', kind: 'text', opt: 1, ph: '(narrow)' }],
+    line: (v) => `BMS ${v.brand} ${v.s} ${v.a} ${v.qty}${v.note ? ' ' + v.note : ''}` },
+  { k: 'charger', l: 'מטען', f: [
+    { k: 'v', l: 'סדרות / מתח', o: ['10S', '13S', '14S', '16S', '20S', '48V', '60V', '72V'], other: 1 },
+    { k: 'a', l: 'זרם', o: ['2A', '3A', '5A', '10A'], other: 1 },
+    { k: 'qty', l: 'כמות', kind: 'qty', units: ['pc'] }],
+    line: (v) => `Charger ${v.v} ${v.a} ${v.qty}` },
+  { k: 'shrink', l: 'שרינק PVC', f: [
+    { k: 'color', l: 'צבע', o: [['BLU', 'כחול'], ['BLACK', 'שחור'], ['CLEAR', 'שקוף']] },
+    { k: 'thick', l: 'עובי', o: ['0.3mm', '0.2mm'], other: 1 },
+    { k: 'vars', l: 'רוחב שטוח ומטרים לכל רוחב', kind: 'vars', o: ['220', '260', '300', '350', '410', '450'], unit: 'M', other: 1 }],
+    line: (v) => `PVC shrink ${v.color} ${v.thick} ${v.vars}` },
+  { k: 'paper', l: 'נייר בידוד', f: [
+    { k: 'thick', l: 'עובי', o: ['0.3mm', '0.5mm', '0.2mm'], other: 1 },
+    { k: 'width', l: 'רוחב', o: ['450mm', '140mm', '200mm'], other: 1 },
+    { k: 'qty', l: 'כמות', kind: 'qty', units: ['M'] }],
+    line: (v) => `Green insulation paper Film Coated ${v.thick} ${v.width} ${v.qty}` },
+  { k: 'tape', l: 'סרט / טייפ', f: [
+    { k: 'tt', l: 'סוג', o: [['Kapton tape', 'קפטון'], ['Polyester tape', 'פוליאסטר'], ['Double-sided adhesive yellow', 'דו-צדדי צהוב'], ['Double-sided green adhesive tape', 'דו-צדדי ירוק'], ['Isolirband tape blue', 'בידוד כחול']] },
+    { k: 'width', l: 'רוחב', o: ['20mm', '30mm', '50mm', '70mm', '150mm', '200mm'], other: 1 },
+    { k: 'len', l: 'אורך הגליל', o: ['20m long', '25m long', '33m long'], other: 1 },
+    { k: 'qty', l: 'כמות', kind: 'qty', units: ['pc'] }],
+    line: (v) => `${v.tt} ${v.width} ${v.len} ${v.qty}` },
+  { k: 'cells', l: 'תאים', f: [
+    { k: 'model', l: 'דגם', o: ['EVE 50E', 'Tenpower 50SG', 'EVE 50PL', 'EVE 40P', 'EVE 26V', 'Samsung 25P', 'Samsung 35V'], other: 1 },
+    { k: 'qty', l: 'כמות', kind: 'qty', units: ['pc'] },
+    { k: 'price', l: 'מחיר מבוקש ליחידה $ (לא חובה)', kind: 'text', opt: 1, ph: '1.78' }],
+    line: (v) => `${v.model} ${v.qty}${v.price ? ' ' + String(v.price).replace(/\$/g, '') + '$' : ''}` },
+  { k: 'free', l: '✍️ טקסט חופשי', f: [{ k: 'text', l: 'השורה כפי שתישלח (באנגלית)', kind: 'text', ph: 'Temperature sensor for BMS DALY 10PC' }],
+    line: (v) => v.text },
+];
+const soEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+const soOpt = (o) => (Array.isArray(o) ? o : [o, o]);
+let soForm = { type: 'nickel', v: {}, need: null };
+let soEditing = null;   // the line a tap on ✏️ put back into the form
+function soGet() { const v = Store.get('sorder'); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; }
+function soPut(d) { return Store.set('sorder', d); }
+function soSups(d) { return Array.isArray(d.sups) ? d.sups : []; }
+function soCurSup(d) {
+  const s = soSups(d);
+  return s.some((x) => String(x.id) === String(d.pick)) ? String(d.pick) : (s[0] ? String(s[0].id) : '');
+}
+function soCur(d, sup) { const c = d['cur_' + sup]; return (c && Array.isArray(c.lines)) ? c : { lines: [] }; }
+function soNewId(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+// A sent line keeps its number. Lines added since the last send follow the highest number sent.
+function soRenumber(c) {
+  const sent = new Set(((c.sent && c.sent.lines) || []).map((l) => String(l.id)));
+  let n = 0;
+  for (const l of c.lines) if (sent.has(String(l.id))) n = Math.max(n, Number(l.n) || 0);
+  for (const l of c.lines) if (!sent.has(String(l.id))) l.n = ++n;
+  c.lines.sort((a, b) => a.n - b.n);
+  return c;
+}
+// The values of the form, with "אחר" read from its box. Missing = every required field left empty.
+function soValues() {
+  const T = SO_TYPES.find((t) => t.k === soForm.type) || SO_TYPES[0];
+  const out = {}, missing = [];
+  for (const f of T.f) {
+    let v = soForm.v[f.k];
+    if (f.kind === 'vars') {
+      const sel = (v && typeof v === 'object') ? v : {};
+      const parts = Object.keys(sel).filter((k) => sel[k] != null).map((k) => {
+        const q = String(sel[k] || '').trim();
+        if (!q) missing.push(f.l + ': כמות ל-' + k);
+        return k + '-' + q + f.unit;
+      });
+      if (!parts.length) missing.push(f.l);
+      v = parts.join('/');
+    } else if (f.kind === 'multi') {
+      const sel = Array.isArray(v) ? v : [];
+      if (!sel.length) missing.push(f.l);
+      v = sel.join('/');
+    } else if (f.kind === 'qty') {
+      const q = v && typeof v === 'object' ? v : {};
+      const n = String(q.n || '').trim();
+      if (!n) missing.push(f.l);
+      v = n + (q.u || f.units[0]);
+    } else {
+      v = String(v == null ? '' : v).trim();
+      if (v === '__other') v = String(soForm.v[f.k + '_o'] || '').trim();
+      if (!v && !f.opt) missing.push(f.l);
+    }
+    out[f.k] = v;
+  }
+  return { T, out, missing, text: missing.length ? '' : T.line(out).replace(/\s+/g, ' ').trim() };
+}
+// The defaults: the first option of each list, and the pitch that goes with the shape and cell.
+function soDefaults(type) {
+  const T = SO_TYPES.find((t) => t.k === type) || SO_TYPES[0];
+  const v = {};
+  for (const f of T.f) {
+    if (f.kind === 'vars') v[f.k] = {};
+    else if (f.kind === 'multi') v[f.k] = [];
+    else if (f.kind === 'qty') v[f.k] = { n: '', u: f.units[0] };
+    else if (f.kind === 'text') v[f.k] = '';
+    else v[f.k] = soOpt(f.o[0])[0];
+  }
+  return v;
+}
+function soSmartPitch() {
+  const v = soForm.v;
+  if (!('pitch' in v)) return;
+  if (v.cell === '18650') v.pitch = '19mm';
+  else if (SO_PITCH[v.shape]) v.pitch = SO_PITCH[v.shape];
+  else if (v.cell === '21700' && v.pitch === '19mm') v.pitch = '23mm';
+  if ('heat' in v && soForm.type === 'holder') v.heat = v.cell === '18650' ? '-' : 'Heat diameter: 21.2 mm';
+}
+function soSetType(type) { soForm = { type, v: soDefaults(type), need: soForm.need }; soSmartPitch(); soRenderFields(); }
+function soSetField(k, val) {
+  soForm.v[k] = val;
+  if (k === 'shape' || k === 'cell') soSmartPitch();
+  soRenderFields(k === 'shape' || k === 'cell' || val === '__other');
+}
+function soToggleVar(k, opt) {
+  const T = SO_TYPES.find((t) => t.k === soForm.type);
+  const f = T.f.find((x) => x.k === k);
+  if (f.kind === 'multi') {
+    const a = Array.isArray(soForm.v[k]) ? soForm.v[k] : [];
+    soForm.v[k] = a.includes(opt) ? a.filter((x) => x !== opt) : a.concat([opt]);
+  } else {
+    const o = soForm.v[k] || {};
+    if (opt in o) delete o[opt]; else o[opt] = '';
+    soForm.v[k] = o;
+  }
+  soRenderFields(true);
+  // straight away, not on a timer: a late focus lands in the box of the chip tapped before
+  if (f.kind === 'vars') { const el = document.getElementById('soVq_' + k + '_' + opt); if (el) el.focus(); }
+}
+function soVarQty(k, opt, q) { (soForm.v[k] = soForm.v[k] || {})[opt] = q; soRenderPreview(); }
+function soAddOther(k) {
+  const el = document.getElementById('soOther_' + k);
+  const t = String((el && el.value) || '').trim();
+  if (!t) return;
+  const T = SO_TYPES.find((x) => x.k === soForm.type);
+  const f = T.f.find((x) => x.k === k);
+  if (f.kind === 'multi') { const a = soForm.v[k] || []; if (!a.includes(t)) soForm.v[k] = a.concat([t]); }
+  else { const o = soForm.v[k] || {}; if (!(t in o)) o[t] = ''; soForm.v[k] = o; }
+  soRenderFields(true);
+}
+function soRenderFields() {
+  const sel = document.getElementById('soType');
+  if (!sel) return;
+  if (!sel.options.length) sel.innerHTML = SO_TYPES.map((t) => `<option value="${t.k}">${soEsc(t.l)}</option>`).join('');
+  sel.value = soForm.type;
+  const T = SO_TYPES.find((t) => t.k === soForm.type) || SO_TYPES[0];
+  const v = soForm.v;
+  const chip = (on, label, click) => `<button type="button" class="btn btn-sm ${on ? 'btn-primary' : 'btn-secondary'}" style="margin:2px;" onclick="${click}">${soEsc(label)}</button>`;
+  const arg = (s) => `decodeURIComponent('${encodeURIComponent(s)}')`;
+  document.getElementById('soFields').innerHTML = T.f.map((f) => {
+    let body = '';
+    if (f.kind === 'vars' || f.kind === 'multi') {
+      const cur = f.kind === 'multi' ? (v[f.k] || []) : Object.keys(v[f.k] || {});
+      const opts = [...new Set(f.o.concat(cur))];
+      body = `<div style="display:flex;flex-wrap:wrap;">${opts.map((o) => chip(cur.includes(o), o, `soToggleVar('${f.k}', ${arg(o)})`)).join('')}</div>`;
+      if (f.kind === 'vars') body += cur.map((o) => `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;" dir="ltr">
+          <b style="min-width:44px;">${soEsc(o)}</b><input class="form-input" id="soVq_${f.k}_${soEsc(o)}" inputmode="decimal" style="width:90px;" value="${soEsc(v[f.k][o])}"
+          oninput="soVarQty('${f.k}', ${arg(o)}, this.value)"><span>${soEsc(f.unit)}</span></div>`).join('');
+      if (f.other) body += `<div style="display:flex;gap:6px;margin-top:4px;"><input class="form-input" id="soOther_${f.k}" dir="ltr" placeholder="אחר"><button type="button" class="btn btn-sm btn-secondary" onclick="soAddOther('${f.k}')">➕</button></div>`;
+    } else if (f.kind === 'qty') {
+      const q = v[f.k] || {};
+      body = `<div style="display:flex;gap:6px;" dir="ltr"><input class="form-input" id="soQty_${f.k}" inputmode="decimal" style="width:110px;" value="${soEsc(q.n)}" oninput="soForm.v['${f.k}'].n=this.value;soRenderPreview()">
+        ${f.units.length > 1 ? `<select class="form-select" style="width:auto;" onchange="soForm.v['${f.k}'].u=this.value;soRenderPreview()">${f.units.map((u) => `<option${u === q.u ? ' selected' : ''}>${u}</option>`).join('')}</select>` : `<span style="align-self:center;">${soEsc(f.units[0])}</span>`}</div>`;
+    } else if (f.kind === 'text') {
+      body = `<input class="form-input" id="soTxt_${f.k}" dir="ltr" placeholder="${soEsc(f.ph || '')}" value="${soEsc(v[f.k])}" oninput="soForm.v['${f.k}']=this.value;soRenderPreview()">`;
+    } else {
+      body = `<select class="form-select" id="soSel_${f.k}" onchange="soSetField('${f.k}', this.value)">${f.o.map((o) => { const [val, lab] = soOpt(o); return `<option value="${soEsc(val)}"${val === v[f.k] ? ' selected' : ''}>${soEsc(lab)}</option>`; }).join('')}${f.other ? `<option value="__other"${v[f.k] === '__other' ? ' selected' : ''}>אחר…</option>` : ''}</select>`;
+      if (v[f.k] === '__other') body += `<input class="form-input" id="soOther_${f.k}" dir="ltr" style="margin-top:4px;" value="${soEsc(v[f.k + '_o'] || '')}" oninput="soForm.v['${f.k}_o']=this.value;soRenderPreview()">`;
+    }
+    return `<div class="form-row"><label>${soEsc(f.l)}</label>${body}</div>`;
+  }).join('');
+  const btn = document.getElementById('soAddBtn');
+  if (btn) btn.textContent = soEditing ? '💾 עדכן שורה ' + soEditing.n : '➕ הוסף לרשימה';
+  soRenderPreview();
+}
+function soRenderPreview() {
+  const r = soValues();
+  const pv = document.getElementById('soPreview'), ms = document.getElementById('soMissing');
+  if (pv) pv.textContent = r.text || '';
+  if (ms) ms.textContent = r.missing.length ? 'חסר: ' + r.missing.join(' · ') : '';
+}
+function soAddLine() {
+  const d = soGet(), sup = soCurSup(d);
+  if (!sup) { showNotice('הוסף קודם ספק (➕ ספק).'); return; }
+  const r = soValues();
+  if (r.missing.length) { showNotice('חסר: ' + r.missing.join(' · ') + '\nהספק ישאל על זה — עדיף למלא עכשיו.'); return; }
+  const c = soCur(d, sup);
+  if (soEditing) {
+    const l = c.lines.find((x) => String(x.id) === String(soEditing.id));
+    if (l) { l.t = r.text; l.f = { type: soForm.type, v: JSON.parse(JSON.stringify(soForm.v)) }; delete l.cancel; }
+    soEditing = null;
+  } else {
+    c.lines.push({ id: soNewId('l'), n: 0, t: r.text, f: { type: soForm.type, v: JSON.parse(JSON.stringify(soForm.v)) }, need: soForm.need || undefined });
+  }
+  d['cur_' + sup] = soRenumber(c);
+  if (!soPut(d)) return;
+  soForm = { type: soForm.type, v: soDefaults(soForm.type), need: null };
+  soSmartPitch();
+  renderSorder();
+}
+function soEditLine(id) {
+  const d = soGet(), c = soCur(d, soCurSup(d));
+  const l = c.lines.find((x) => String(x.id) === String(id));
+  if (!l) return;
+  if (l.f && SO_TYPES.some((t) => t.k === l.f.type)) soForm = { type: l.f.type, v: JSON.parse(JSON.stringify(l.f.v)), need: l.need || null };
+  else soForm = { type: 'free', v: { text: l.t }, need: l.need || null };
+  soEditing = { id: l.id, n: l.n };
+  soRenderFields();
+  const el = document.getElementById('soType');
+  if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+}
+// A line the supplier has seen is cancelled, not removed: its number stays his reference.
+function soRemoveLine(id) {
+  const d = soGet(), sup = soCurSup(d), c = soCur(d, sup);
+  const l = c.lines.find((x) => String(x.id) === String(id));
+  if (!l) return;
+  const sent = ((c.sent && c.sent.lines) || []).some((x) => String(x.id) === String(id));
+  if (sent) { if (l.cancel) delete l.cancel; else l.cancel = true; }
+  else c.lines = c.lines.filter((x) => x !== l);
+  if (soEditing && String(soEditing.id) === String(id)) soEditing = null;
+  d['cur_' + sup] = soRenumber(c);
+  if (soPut(d)) renderSorder();
+}
+function soFullText(d, sup) {
+  const c = soCur(d, sup);
+  const out = c.lines.map((l) => `${l.n}. ${l.t}${l.cancel ? ' *cancel*' : ''}`);
+  if (c.note) out.push('', String(c.note));
+  if (c.footer) out.push('', 'TOTAL:', 'Shipping:');
+  const ship = (Array.isArray(d.ships) ? d.ships : []).find((s) => String(s.id) === String(c.ship));
+  if (ship && ship.text) out.push('', String(ship.text));
+  return out.join('\n');
+}
+// What changed since the last send, in the words he uses: "N. Cancel", "N. <new text>", "Add N. <text>".
+function soChangesText(d, sup) {
+  const c = soCur(d, sup);
+  const was = new Map(((c.sent && c.sent.lines) || []).map((l) => [String(l.id), l]));
+  const out = [];
+  for (const l of c.lines) {
+    const p = was.get(String(l.id));
+    if (!p) { if (!l.cancel) out.push(`Add ${l.n}. ${l.t}`); continue; }
+    if (l.cancel && !p.cancel) out.push(`${l.n}. Cancel`);
+    else if (!l.cancel && (p.cancel || p.t !== l.t)) out.push(`${l.n}. ${l.t}`);
+  }
+  return out.join('\n');
+}
+function soSetOpt(k, val) {
+  const d = soGet(), sup = soCurSup(d);
+  if (!sup) return;
+  const c = soCur(d, sup);
+  c[k] = val;
+  d['cur_' + sup] = c;
+  if (soPut(d)) soRenderText();
+}
+function soPickSup(id) { const d = soGet(); d.pick = String(id); soEditing = null; if (soPut(d)) renderSorder(); }
+function soMode() { return document.getElementById('soChangesBtn') && document.getElementById('soChangesBtn').dataset.mode; }
+function soRenderText() {
+  const d = soGet(), sup = soCurSup(d), c = soCur(d, sup);
+  const ta = document.getElementById('soText');
+  if (ta) ta.value = sup ? soFullText(d, sup) : '';
+  const ch = sup && c.sent ? soChangesText(d, sup) : '';
+  const cb = document.getElementById('soChangesBtn');
+  if (cb) { cb.disabled = !ch; cb.style.opacity = ch ? '' : '.5'; }
+  const st = document.getElementById('soStatus');
+  if (st) st.textContent = !sup ? '' : c.sent
+    ? 'נשלח לאחרונה ' + new Date(Number(c.sent.at)).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) + (ch ? ' · יש שינויים שלא נשלחו (' + ch.split('\n').length + ')' : ' · אין שינויים')
+    : (c.lines.length ? 'עוד לא נשלח' : '');
+}
+function soSend(mode) {
+  const d = soGet(), sup = soCurSup(d);
+  const s = soSups(d).find((x) => String(x.id) === sup);
+  const c = soCur(d, sup);
+  if (!s || !c.lines.length) { showNotice('אין מה לשלוח — הוסף שורות.'); return; }
+  const txt = mode === 'changes' ? soChangesText(d, sup) : soFullText(d, sup);
+  if (!txt) { showNotice('אין שינויים מאז השליחה האחרונה.'); return; }
+  c.sent = { at: Date.now(), lines: c.lines.map((l) => ({ id: l.id, n: l.n, t: l.t, cancel: !!l.cancel })) };
+  d['cur_' + sup] = c;
+  if (!soPut(d)) return;
+  const num = String(s.wa || '').replace(/\D/g, '');
+  openExternal('https://wa.me/' + num + '?text=' + encodeURIComponent(txt));
+  soRenderText();
+}
+function soCopy() {
+  const ta = document.getElementById('soText');
+  if (!ta || !ta.value) return;
+  try { const p = navigator.clipboard && navigator.clipboard.writeText(ta.value); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  ta.removeAttribute('readonly'); ta.focus(); ta.select(); ta.setAttribute('readonly', '');
+  const st = document.getElementById('soStatus'); if (st) st.textContent = '✓ הועתק';
+}
+// The order arrived (or was paid and closed): it goes to the history, and the "חסר" lines it
+// covered are marked ordered — they stay on the list until he removes them when the parts come.
+function soDone() {
+  const d = soGet(), sup = soCurSup(d), c = soCur(d, sup);
+  if (!sup || !c.lines.length) return;
+  askConfirm('לסגור את ההזמנה ולהעביר אותה להזמנות הקודמות?', () => {
+    const d2 = soGet(), c2 = soCur(d2, sup);
+    const s = soSups(d2).find((x) => String(x.id) === sup);
+    const hist = Array.isArray(d2.hist) ? d2.hist : [];
+    hist.unshift({ id: soNewId('h'), sup, name: s ? s.name : '', at: Date.now(), lines: c2.lines.map((l) => ({ n: l.n, t: l.t, cancel: !!l.cancel, f: l.f })) });
+    d2.hist = hist.slice(0, 60);
+    const needs = new Set(c2.lines.filter((l) => l.need && !l.cancel).map((l) => String(l.need)));
+    delete d2['cur_' + sup];
+    if (!soPut(d2)) return;
+    if (needs.size) {
+      const rows = getNeeds();
+      rows.forEach((r) => { if (needs.has(String(r.id)) && !r.ordered) r.ordered = Date.now(); });
+      Store.set('need_list', rows);
+    }
+    soEditing = null;
+    renderSorder();
+  });
+}
+// The same order again: its lines go into the open list as new lines, to change and send.
+function soReorder(hid) {
+  const d = soGet(), h = (d.hist || []).find((x) => String(x.id) === String(hid));
+  if (!h) return;
+  const sup = soSups(d).some((x) => String(x.id) === String(h.sup)) ? String(h.sup) : soCurSup(d);
+  if (!sup) return;
+  const c = soCur(d, sup);
+  for (const l of h.lines) if (!l.cancel) c.lines.push({ id: soNewId('l'), n: 0, t: l.t, f: l.f });
+  d['cur_' + sup] = soRenumber(c);
+  d.pick = sup;
+  if (soPut(d)) { renderSorder(); showNotice('השורות נוספו להזמנה הפתוחה — עדכן כמויות ושלח.'); }
+}
+// A list already sent from WhatsApp, pasted back: its numbers become this order's, as sent.
+function soPasteSent() {
+  openModal('📥 רשימה שכבר נשלחה', `<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">הדבק את הרשימה האחרונה ששלחת לספק. המספרים נשמרים, ומכאן ממשיכים לשנות לפיהם.</div>
+    <textarea id="soPasteTa" class="form-input" dir="ltr" rows="10" style="width:100%;font-family:monospace;font-size:12px;"></textarea>`,
+    `<button class="btn btn-primary" onclick="soPasteApply()">שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function soParseList(txt) {
+  const out = [];
+  for (const raw of String(txt || '').split(/\r?\n/)) {
+    const m = raw.match(/^\s*(\d{1,3})\s*[.)]\s*(.+?)\s*$/);
+    if (!m) continue;
+    let t = m[2], cancel = false;
+    if (/\*\s*cancel\s*\*\s*$/i.test(t)) { cancel = true; t = t.replace(/\*\s*cancel\s*\*\s*$/i, '').trim(); }
+    if (out.some((l) => l.n === Number(m[1]))) continue;
+    out.push({ n: Number(m[1]), t: t.replace(/\s+/g, ' '), cancel });
+  }
+  return out;
+}
+function soPasteApply() {
+  const ta = document.getElementById('soPasteTa');
+  const lines = soParseList(ta && ta.value);
+  if (!lines.length) { showNotice('לא נמצאו שורות ממוספרות ("1. ...").'); return; }
+  const d = soGet(), sup = soCurSup(d);
+  if (!sup) { closeModal(); showNotice('הוסף קודם ספק.'); return; }
+  const c = soCur(d, sup);
+  c.lines = lines.map((l) => ({ id: soNewId('l'), n: l.n, t: l.t, cancel: l.cancel || undefined }));
+  c.sent = { at: Date.now(), lines: c.lines.map((l) => ({ id: l.id, n: l.n, t: l.t, cancel: !!l.cancel })) };
+  d['cur_' + sup] = c;
+  if (!soPut(d)) return;
+  closeModal();
+  renderSorder();
+}
+function soEditSup(id) {
+  const d = soGet(), s = soSups(d).find((x) => String(x.id) === String(id)) || { name: '', wa: '' };
+  openModal(id ? '✏️ ספק' : '➕ ספק', `<div class="form-row"><label>שם</label><input class="form-input" id="soSupName" value="${soEsc(s.name)}"></div>
+    <div class="form-row"><label>מספר וואטסאפ (עם קידומת מדינה)</label><input class="form-input" id="soSupWa" dir="ltr" inputmode="tel" placeholder="86..." value="${soEsc(s.wa)}"></div>`,
+    `<button class="btn btn-primary" onclick="soSaveSup(${id ? `decodeURIComponent('${encodeURIComponent(id)}')` : 'null'})">שמור</button>${id ? `<button class="btn btn-danger" onclick="soDelSup(decodeURIComponent('${encodeURIComponent(id)}'))">🗑 מחק</button>` : ''}<button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function soSaveSup(id) {
+  const name = String(document.getElementById('soSupName').value || '').trim();
+  const wa = String(document.getElementById('soSupWa').value || '').replace(/\D/g, '');
+  if (!name) { showNotice('כתוב שם לספק.'); return; }
+  const d = soGet(), sups = soSups(d).slice();
+  const ex = sups.find((x) => String(x.id) === String(id));
+  if (ex) { ex.name = name; ex.wa = wa; } else { const nid = soNewId('s'); sups.push({ id: nid, name, wa }); d.pick = nid; }
+  d.sups = sups;
+  if (!soPut(d)) return;
+  closeModal();
+  renderSorder();
+}
+function soDelSup(id) {
+  askConfirm('למחוק את הספק? ההזמנה הפתוחה שלו תימחק איתו.', () => {
+    const d = soGet();
+    d.sups = soSups(d).filter((x) => String(x.id) !== String(id));
+    delete d['cur_' + id];
+    if (soPut(d)) { closeModal(); renderSorder(); }
+  });
+}
+function soEditShip(id) {
+  const d = soGet(), s = (d.ships || []).find((x) => String(x.id) === String(id)) || { label: '', text: '' };
+  openModal(id ? '✏️ פרטי משלוח' : '➕ פרטי משלוח', `<div class="form-row"><label>שם (רק לך)</label><input class="form-input" id="soShipLabel" value="${soEsc(s.label)}" placeholder="אלעד / איחוד בסין"></div>
+    <div class="form-row"><label>הטקסט שיישלח</label><textarea class="form-input" id="soShipText" dir="ltr" rows="5" style="width:100%;">${soEsc(s.text)}</textarea></div>`,
+    `<button class="btn btn-primary" onclick="soSaveShip(${id ? `decodeURIComponent('${encodeURIComponent(id)}')` : 'null'})">שמור</button>${id ? `<button class="btn btn-danger" onclick="soDelShip(decodeURIComponent('${encodeURIComponent(id)}'))">🗑 מחק</button>` : ''}<button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function soSaveShip(id) {
+  const label = String(document.getElementById('soShipLabel').value || '').trim();
+  const text = String(document.getElementById('soShipText').value || '').trim();
+  if (!label || !text) { showNotice('צריך שם וטקסט.'); return; }
+  const d = soGet(), ships = Array.isArray(d.ships) ? d.ships.slice() : [];
+  const ex = ships.find((x) => String(x.id) === String(id));
+  if (ex) { ex.label = label; ex.text = text; } else ships.push({ id: soNewId('a'), label, text });
+  d.ships = ships;
+  if (soPut(d)) { closeModal(); renderSorder(); }
+}
+function soDelShip(id) {
+  const d = soGet();
+  d.ships = (d.ships || []).filter((x) => String(x.id) !== String(id));
+  if (soPut(d)) { closeModal(); renderSorder(); }
+}
+// What he wrote under "חסר" is Hebrew shorthand ("ניקל 0.15"); a tap picks the item type it names
+// and the thickness, if it gives one, and the line he then adds closes that need when the order does.
+function soNeedGuess(text) {
+  const t = String(text || '').toLowerCase();
+  const pick = [['nickel', /ניקל|nickel/], ['busbar', /נחושת.?ניקל|busbar/], ['copper', /נחושת|copper/], ['holder', /מחזיק|תושבת|holder|ספייסר/],
+    ['daly', /דאלי|daly/], ['bms', /bms|ביאמאס|jk|ant\b/], ['charger', /מטען|charger/], ['shrink', /שרינק|shrink/],
+    ['paper', /נייר|paper|פיש/], ['tape', /סרט|טייפ|קפטון|tape|kapton/], ['cells', /תאים|תא\b|50e|50pl|50sg|26v|25p|35v|40p/]];
+  const hit = pick.find(([, re]) => re.test(t));
+  return hit ? hit[0] : 'free';
+}
+function soFromNeed(id) {
+  const r = getNeeds().find((x) => String(x.id) === String(id));
+  if (!r) return;
+  const type = soNeedGuess(r.text);
+  soEditing = null;
+  soForm = { type, v: soDefaults(type), need: String(r.id) };
+  const th = String(r.text).match(/\b0\.\d{1,2}\b/);
+  if (th && 'thick' in soForm.v) {
+    const T = SO_TYPES.find((t) => t.k === type), f = T.f.find((x) => x.k === 'thick');
+    const want = th[0] + 'mm';
+    if (f.o.some((o) => soOpt(o)[0] === want)) soForm.v.thick = want; else { soForm.v.thick = '__other'; soForm.v.thick_o = want; }
+  }
+  soSmartPitch();
+  soRenderFields();
+  showNotice('מתוך "חסר": ' + r.text + (r.qty ? ' — ' + r.qty : '') + '\nמלא את הפרטים באנגלית והוסף.');
+}
+function renderSorder() {
+  const d = soGet(), sup = soCurSup(d), c = soCur(d, sup);
+  const sel = document.getElementById('soSup');
+  if (!sel) return;
+  const sups = soSups(d);
+  sel.innerHTML = sups.length ? sups.map((s) => `<option value="${soEsc(s.id)}"${String(s.id) === sup ? ' selected' : ''}>${soEsc(s.name)}${d['cur_' + s.id] && (d['cur_' + s.id].lines || []).length ? ' •' : ''}</option>`).join('') : '<option value="">— אין ספקים —</option>';
+  const eb = document.getElementById('soSupEditBtn'); if (eb) eb.style.display = sup ? '' : 'none';
+  const sentIds = new Set(((c.sent && c.sent.lines) || []).map((l) => String(l.id)));
+  const lb = document.getElementById('soLines');
+  const arg = (s) => `decodeURIComponent('${encodeURIComponent(s)}')`;
+  lb.innerHTML = (c.lines.length ? c.lines.map((l) => `<div class="so-line" data-n="${soEsc(l.n)}" style="display:flex;gap:6px;align-items:center;padding:6px 2px;border-top:1px solid var(--border);${l.cancel ? 'opacity:.5;' : ''}">
+      <div dir="ltr" style="flex:1;min-width:0;font-size:12px;font-family:monospace;text-align:left;${l.cancel ? 'text-decoration:line-through;' : ''}"><b>${soEsc(l.n)}.</b> ${soEsc(l.t)}</div>
+      ${sentIds.has(String(l.id)) ? '' : '<span style="font-size:10px;color:var(--warning,#f59e0b);">חדש</span>'}
+      ${l.cancel ? '' : `<button class="btn btn-sm btn-secondary" onclick="soEditLine(${arg(l.id)})">✏️</button>`}
+      <button class="btn btn-sm btn-secondary" title="${sentIds.has(String(l.id)) ? 'בטל (המספר נשמר)' : 'מחק'}" onclick="soRemoveLine(${arg(l.id)})">${l.cancel ? '↩️' : '✖'}</button></div>`).join('')
+    : `<div style="font-size:12px;color:var(--text-muted);">${sup ? 'אין שורות בהזמנה הזאת.' : 'הוסף ספק כדי להתחיל.'}</div>`)
+    + (sup ? `<button class="btn btn-sm btn-secondary" style="margin-top:6px;" onclick="soPasteSent()">📥 הדבק רשימה שכבר נשלחה</button>` : '');
+  const used = new Set(Object.keys(d).filter((k) => k.startsWith('cur_')).flatMap((k) => ((d[k] && d[k].lines) || []).map((l) => String(l.need || ''))));
+  const supName = (sups.find((s) => String(s.id) === sup) || {}).name || '';
+  const needs = getNeeds().filter((r) => !r.ordered && r.text && !used.has(String(r.id)) && (!r.supplier || !supName || String(r.supplier).trim().toLowerCase() === supName.trim().toLowerCase()));
+  document.getElementById('soNeeds').innerHTML = needs.length ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">📝 מהרשימה "חסר להזמנה" — לחץ כדי להוסיף:</div>
+    <div style="display:flex;flex-wrap:wrap;">${needs.map((r) => `<button class="btn btn-sm btn-secondary so-need" style="margin:2px;" onclick="soFromNeed(${arg(r.id)})">${soEsc(r.text)}${r.qty ? ' — ' + soEsc(r.qty) : ''}</button>`).join('')}</div>` : '';
+  document.getElementById('soFooter').checked = !!c.footer;
+  const ships = Array.isArray(d.ships) ? d.ships : [];
+  const sh = document.getElementById('soShip');
+  sh.innerHTML = '<option value="">— בלי —</option>' + ships.map((s) => `<option value="${soEsc(s.id)}"${String(s.id) === String(c.ship || '') ? ' selected' : ''}>${soEsc(s.label)}</option>`).join('');
+  document.getElementById('soNote').value = c.note || '';
+  document.getElementById('soShips').innerHTML = ships.length ? ships.map((s) => `<div style="display:flex;gap:6px;align-items:center;padding:5px 0;border-top:1px solid var(--border);">
+      <b style="flex:1;">${soEsc(s.label)}</b><button class="btn btn-sm btn-secondary" onclick="soEditShip(${arg(s.id)})">✏️</button></div>`).join('') : '<div style="font-size:12px;color:var(--text-muted);">אין עדיין.</div>';
+  const hist = Array.isArray(d.hist) ? d.hist : [];
+  document.getElementById('soHist').innerHTML = hist.length ? hist.slice(0, 20).map((h) => `<div style="padding:6px 0;border-top:1px solid var(--border);">
+      <div style="display:flex;gap:6px;align-items:center;"><b style="flex:1;">${soEsc(h.name || '')} · ${new Date(Number(h.at)).toLocaleDateString('he-IL')}</b>
+      <button class="btn btn-sm btn-secondary" onclick="soReorder(${arg(h.id)})">♻️ הזמן שוב</button></div>
+      <div dir="ltr" style="font-size:11px;font-family:monospace;color:var(--text-muted);text-align:left;">${h.lines.filter((l) => !l.cancel).map((l) => soEsc(l.t)).join('<br>')}</div></div>`).join('') : '<div style="font-size:12px;color:var(--text-muted);">אין עדיין.</div>';
+  soRenderFields();
+  soRenderText();
 }
 const INV_OPEN = new Set();
 function toggleInvCat(c) { c = decodeURIComponent(c); if (INV_OPEN.has(c)) INV_OPEN.delete(c); else INV_OPEN.add(c); renderInventory(); }
