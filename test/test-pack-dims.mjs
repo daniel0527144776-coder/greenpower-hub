@@ -278,7 +278,8 @@ const oxn = await page.evaluate((SELF) => {
   set('dimAh', 25); calcPackDims();
   const res15 = document.getElementById('dimResult').innerText;
   const card = document.querySelector('#dimResult .dim-nk.sel');
-  const whole15 = !!(card && card.dataset.snake === '1' && card.dataset.across === '7');
+  // a row per group since 2026-10-18 (his nickel, a ladder of two rows): five across, not rows the whole width
+  const whole15 = !!(card && card.dataset.snake === '0' && card.dataset.across === '5');
   const svg = card && card.querySelector('svg.pack-svg');
   const bms = dimLast && dimLast.plan.bms;
   const out = { res, res15, whole15, tb, cells: svg ? svg.querySelectorAll('circle').length : 0, outline: !!(svg && svg.querySelector('.pack-outline')),
@@ -305,7 +306,7 @@ check('the tray row names the narrow part and the riser',
 check('maxima with a 26mm BMS at the end: 72V 20S6P on the square and Z, 20S7P on W; 60V 16S8P on the square',
   oxn.m72 === 6 && oxn.m60 === 8 && oxn.a72 === 7 && oxn.b72 === 6, [oxn.m72, oxn.m60, oxn.a72, oxn.b72]);
 // 20S5P with a 15mm BMS: rows of seven across the wide part, the groups running on from row to row.
-check('a 15mm BMS: 20S5P on the square goes in, rows the whole width', oxn.s15 === 6
+check('a 15mm BMS: 20S5P on the square goes in, a row of five per group', oxn.s15 === 6
   && /✅ נכנס ל-Inokim OX/.test(oxn.res15) && oxn.whole15, [oxn.s15, oxn.whole15, oxn.res15.slice(0, 200)]);
 check('its drawing: 100 cells, the tray round them, the BMS at the end of the narrow part',
   oxn.cells === 100 && oxn.outline && oxn.bmsDrawn && oxn.bmsInNarrow && oxn.label && oxn.label.n === 100,
@@ -332,7 +333,8 @@ const oxc = await page.evaluate((SELF) => {
   // the second column: the first may be part of one, the room a smaller build leaves being at B− (2026-10-18)
   const xsSorted = [...new Set(cells.map((c) => +c.x.toFixed(2)))].sort((a, b) => a - b);
   const second = cells.filter((c) => Math.abs(c.x - xsSorted[1]) < 0.01);
-  const sameCols = second.length === 7 && new Set(second.map((c) => c.g)).size <= 2;
+  // a row per group since 2026-10-18: six across, all of one group
+  const sameCols = second.length === 6 && new Set(second.map((c) => c.g)).size === 1;
   const out = { extra, res: document.getElementById('dimResult').innerText.slice(0, 160), n: cells.length,
     off: Math.abs((lo + hi) / 2 - mid), sameCols, max: maxPFor(vehicleByName('Inokim OX'), cellTub(tb, 14), 21700, 'square-23', 72, DIM_CELLS['21700-50e']) };
   dimExtraTouched = false;
@@ -340,7 +342,7 @@ const oxc = await page.evaluate((SELF) => {
   return out;
 }, SELFTEST);
 check('the OX\'s own BMS allowance is his 14mm, and with it the square takes 20S6P', oxc.extra === '14' && oxc.max === 6 && /✅ נכנס ל-Inokim OX/.test(oxc.res) && oxc.n === 120, oxc);
-check('the block is centred across the tray, its rows the whole width', oxc.off < 0.5 && oxc.sameCols, oxc);
+check('the block is centred across the tray, a row per group', oxc.off < 0.5 && oxc.sameCols, oxc);
 
 // The drawing is the answer to "how do I lay it out", so it has to BE the layout: one circle
 // per cell, in the grid the numbers above it describe. A picture that disagrees with the
@@ -1457,6 +1459,34 @@ const w18 = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('the OX in 18650 at 60V: Z 16S14P, W 16S13P, H 16S12P', w18.ox.z === 14 && w18.ox.w === 13 && w18.ox.h === 12, w18.ox);
 check('W is the 18.5 nickel the other way round: a zigzag across (B), Z straight across (A)', w18.ways.w === 'B' && w18.ways.z === 'A', w18.ways);
+
+// ---- his nickel is a ladder of two rows (WELLGO's 2S strips): a group is one straight row ----
+// "הציורים של הניקל שלך זה לא הניקל שלי ... זה כאילו מקושקש" and, shown a row per group, "כן, ככה"; a group
+// wider than the tray runs on ("הקבוצה ממשיכה לשורה הבאה"). --selftest fills every tray the whole width again.
+const ladder = await page.evaluate((SELF) => {
+  const realFill = trayFill;
+  if (SELF) trayFill = (tub, o, need, p, rp, dia, P, cap) => realFill(tub, o, need, p, rp, dia, P, cap, true);
+  const one = (name, V, h, ah, cell) => {
+    document.getElementById('dimCell').value = cell || '21700-50e';
+    useVehiclePack(name, V); document.getElementById('dimCell').value = cell || '21700-50e'; calcPackDims();
+    document.getElementById('dimHolder').value = h; dimAhPending = ah; calcPackDims();
+    const pl = dimLast.plan, wideEnd = pl.outline ? pl.outline[1][0] : Infinity, r = pl.dia / 2;
+    // every holder row (by its x) one group, and every group in one row, in the wide part
+    const rows = new Map(), groups = new Map();
+    for (const q of pl.cells.filter((q) => !q.bare && q.x + r <= wideEnd + 0.5)) {
+      const k = Math.round(q.x / 3);
+      (rows.get(k) || rows.set(k, new Set()).get(k)).add(q.g);
+      (groups.get(q.g) || groups.set(q.g, new Set()).get(q.g)).add(k);
+    }
+    const oneEach = [...rows.values()].every((g) => g.size === 1), inOne = [...groups.values()].every((k) => k.size === 1);
+    return { oneEach, inOne, rows: rows.size };
+  };
+  const out = { h7: one('Inokim OX', 60, 'square-225', 35), z6: one('Inokim OX', 72, 'diag-b', 30), z18: one('Inokim OX', 60, 'diag-185', 28, '18650-35v') };
+  trayFill = realFill; document.getElementById('dimCell').value = '21700-50e'; clearDimVehicle();
+  return out;
+}, SELFTEST);
+check('the OX 16S7P on H 22.5: every group one straight row, every row one group', ladder.h7.oneEach && ladder.h7.inOne, ladder.h7);
+check('…20S6P on Z 22.5 and 16S8P of 18650 on Z 18.5 the same', ladder.z6.oneEach && ladder.z6.inOne && ladder.z18.oneEach && ladder.z18.inOne, [ladder.z6, ladder.z18]);
 check('the Zero 11X at 60V takes 16S13P on W (16S12P on Z), the whole width filled; the Zero 10X at 72V 20S9P on W',
   w18.zero.z11w === 13 && w18.zero.z11z === 12 && w18.zero.z10w72 === 9, w18.zero);
 
