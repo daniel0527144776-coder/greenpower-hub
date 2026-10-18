@@ -1490,6 +1490,24 @@ check('…20S6P on Z 22.5 and 16S8P of 18650 on Z 18.5 the same', ladder.z6.oneE
 check('the Zero 11X at 60V takes 16S13P on W (16S12P on Z), the whole width filled; the Zero 10X at 72V 20S9P on W',
   w18.zero.z11w === 13 && w18.zero.z11z === 12 && w18.zero.z10w72 === 9, w18.zero);
 
+// W is drawn as one wide band per piece, its edges a zigzag (Daniel, 2026-10-18: "הW לא מצויר נכון כי זה בזיגזג
+// ממש כמו האות W"; on the drawing: "כן, ככה" — "ככה מעולה"). Thin bars read as a snake of one line.
+// --selftest draws W with the thin bars again.
+const wband = await page.evaluate((SELF) => {
+  if (SELF) W_STRIP.clear();
+  const bar = (holder, cell) => {
+    document.getElementById("dimCell").value = cell; useVehiclePack("Inokim OX", 60); document.getElementById("dimCell").value = cell; calcPackDims();
+    document.getElementById("dimHolder").value = holder; dimAhPending = cell === "18650-35v" ? 28 : 30; calcPackDims();
+    const g = document.querySelector("#dimResult .pack-side-top .pack-nickel"), ln = g && g.querySelector("line");
+    return { w: !!(g && g.classList.contains("pack-w")), sw: ln ? +ln.getAttribute("stroke-width") : 0 };
+  };
+  const out = { w: bar("diag-a", "21700-50e"), z: bar("diag-b", "21700-50e"), w18: bar("diag-185w", "18650-35v"), z18: bar("diag-185", "18650-35v") };
+  document.getElementById("dimCell").value = "21700-50e"; clearDimVehicle();
+  return out;
+}, SELFTEST);
+check("a W piece is one wide band (21700 and 18650), a Z keeps its bars", wband.w.w && wband.w18.w && !wband.z.w && !wband.z18.w
+  && wband.w.sw > wband.z.sw * 1.6 && wband.w18.sw > wband.z18.sw * 1.6, wband);
+
 await browser.close();
 srv.close();
 // finish() RETURNS the code, it does not exit. Bare, every check in this file could fail and

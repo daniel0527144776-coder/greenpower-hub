@@ -2775,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v474';
+const HUB_BUILD = 'v477';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6253,7 +6253,22 @@ function estimateBatteryCost(it, b2b = false, cell = null) {
   // 3 min/cell claimed 39 hours for a 200Ah pack. Must match packCost in the generator.
   // ₪45/hr — his instruction 2026-09-17, cost only; the published prices are unchanged.
   const labor = (cells * 0.0061 + (powerTool ? 0.75 : 1.68)) * 45;
+  // Sur-Ron is its own build (Daniel, 2026-10-18: "זה בנוי מנחושת גם ה Bms לא נכון"): an ANT 420A/1050A
+  // ($58), copper-nickel busbar at 4.4 g a cell and $165 a kilo, ₪150 of wire and connectors, the
+  // complete case, and 8 hours for about 300 cells. Mirrors SURRON in cost-model.mjs; sync-prices
+  // compares every row.
+  if (surronPack(it)) {
+    const s = surronParts(cells);
+    return Math.round(cellsCost + (picked ? picked.ils : s.bms) + s.copper + s.materials + s.enclosure + s.hours * 45);
+  }
   return Math.round(cellsCost + bms + nickel + materials + enclosure + labor);
+}
+// A Sur-Ron pack (sync-prices runs this block alone, from estimateBatteryCost to productCost, so the
+// helpers live inside it). Landed as the cost model lands everything: USD × 3.00 × 1.204.
+function surronPack(it) { return /^סוללות Sur-Ron/.test(String(it && it.cat || '')); }
+function surronParts(cells) {
+  const kg = cells * 4.4 / 1000;
+  return { bms: 58 * 3 * 1.204, kg, copper: kg * 165 * 3 * 1.204, materials: 150, enclosure: 1500, hours: 8 * cells / 300 };
 }
 // The same figures, itemised. A single number invited "that is not right" with no way to see
 // WHICH part was not right — and both parts he named were invisible: the BMS band and the fact
@@ -6303,6 +6318,17 @@ function batteryCostParts(it, b2b = false) {
   // caught this file 132 rows out of step within a minute of the model changing.
   const enclosure = /^סוללות אופניים/.test(it.cat) ? (Ah >= 30 ? 400 : 240)
     : /^סוללות Sur-Ron/.test(it.cat) ? 1500 : 0;
+  if (surronPack(it)) {
+    const s = surronParts(cells), sp = [
+      { k: cells + ' תאים × ₪' + cellPrice.toFixed(2), v: cells * cellPrice },
+      { k: picked ? 'BMS · ' + picked.name : 'BMS ANT 420A/1050A', v: picked ? picked.ils : s.bms, picked: !!picked, freightBasis: picked && picked.freightBasis },
+      { k: 'נחושת-ניקל 0.5+0.2 · ' + s.kg.toFixed(2) + ' ק"ג', v: s.copper },
+      { k: 'כבלים, מחברים, שרינק ובידוד', v: s.materials },
+      { k: 'מארז מקורי Sur-Ron (קומפלט)', v: s.enclosure },
+    ];
+    const mt = sp.reduce((a, x) => a + x.v, 0);
+    return { parts: sp, materialsTotal: mt, hours: s.hours, labour: s.hours * 45, total: mt + s.hours * 45, S, P, cells, cellPrice, route, chosen, fellBack, code: codeP };
+  }
   const hours = cells * 0.0061 + (powerTool ? 0.75 : 1.68);
   const labour = hours * 45;
   const parts = [
@@ -9641,7 +9667,11 @@ function nickelSvg(plan, side, dims) {
     near = (isFinite(d) ? d : plan.dia + 1) * 1.12;
   }
   near = Math.max(near, (plan.dia + 0.3) * 1.08);
-  const bw = (plan.dia * 0.34 * sc).toFixed(1), dotR = (plan.dia * 0.26 * sc).toFixed(1);
+  // A W strip is one wide piece over its two staggered columns, its edges a zigzag (Daniel, 2026-10-18, with a
+  // photo of the roll: "הW לא מצויר נכון כי זה בזיגזג ממש כמו האות W"; on the drawing: "כן, ככה"). Drawn with
+  // thin bars it read as a snake of one line, so a W piece is drawn with bars and pads that close the band.
+  const wide = !!plan.wStrip;
+  const bw = (plan.dia * (wide ? 0.62 : 0.34) * sc).toFixed(1), dotR = (plan.dia * (wide ? 0.40 : 0.26) * sc).toFixed(1);
   nickelPieces(G, side).forEach((pc, n) => {
     const cs = cells.filter((c) => pc.includes(c.g)), col = NICKEL_COLS[n % NICKEL_COLS.length];
     let piece = '';
@@ -9650,7 +9680,7 @@ function nickelSvg(plan, side, dims) {
         piece += `<line x1="${X(cs[a].x)}" y1="${Y(cs[a].y)}" x2="${X(cs[b].x)}" y2="${Y(cs[b].y)}" stroke="${col}" stroke-width="${bw}" stroke-linecap="round"/>`;
     // a dot under each cell as a zero-length round line, so the only circles in the drawing are the cells
     for (const c of cs) piece += `<line x1="${X(c.x)}" y1="${Y(c.y)}" x2="${X(c.x)}" y2="${Y(c.y)}" stroke="${col}" stroke-width="${(2 * dotR).toFixed(1)}" stroke-linecap="round"/>`;
-    g += `<g class="pack-nickel" data-groups="${pc.map((k) => k + 1).join('+')}" opacity=".8">${piece}</g>`;
+    g += `<g class="pack-nickel${wide ? ' pack-w' : ''}" data-groups="${pc.map((k) => k + 1).join('+')}" opacity=".8">${piece}</g>`;
   });
   const r = (plan.dia / 2 * sc * 0.94).toFixed(1);
   // a bare cell dashed orange; a place left empty (a Bomber's frame) dashed and faint
@@ -9678,6 +9708,9 @@ function nickelSvg(plan, side, dims) {
 }
 // Every plan of a pack in groups is drawn with its nickel (nickelSvg); what is left here is a plan with no
 // groups — a frame or a block not yet split into a build — drawn as the cells and what surrounds them.
+// the W nickels (21700 at 22.7, 18650 at 18.5) are drawn as one wide band per piece (nickelSvg)
+const W_STRIP = new Set(['diag-a', 'diag-185w']);
+function withStrip(plan, holder) { return plan && W_STRIP.has(holder) ? { ...plan, wStrip: true } : plan; }
 function packSvg(plan, dims) {
   if (plan.nickel || (plan.groups && plan.cells.some((c) => c.g >= 0))) return nickelSvg(plan, 'top', dims) + nickelSvg(plan, 'bottom') + (plan.note ? `<div class="dim-nk-note">${plan.note}</div>` : '');
   const PX = 24, PT = 8, PB = 8;
@@ -10280,7 +10313,7 @@ function calcPackDims() {
       + (dimVehicle && tub && k.h !== 'custom' ? kv('מקסימום', maxLine(k.h)) : '')
       // A build that does not go in a two-part tray has no layout to draw: the fold it was given ran past
       // the tray, the BMS in among the cells (the OX, 60V on ניקל H, 2026-10-17). The badge says ✗.
-      + warn + (k.fits === false && tubAll && tubAll.nx ? '' : packSvg(k.plan, { L: k.L, W: k.W })) + '</div>';
+      + warn + (k.fits === false && tubAll && tubAll.nx ? '' : packSvg(withStrip(k.plan, k.h), { L: k.L, W: k.W })) + '</div>';
   };
   // The label for the worker draws the chosen card's plan; its two text lines are said here.
   const sPer = Math.ceil(S / layers), gRows = Math.ceil(P / cols);
@@ -10673,7 +10706,7 @@ function bomberHtml(v, c, fmt, holder, V, N, pairOf) {
     + kv('בצד אחד', `${k.perSide} תאים × ${stackWord} = ${k.n}`)
     + kv('מקסימום', maxLine(k))
     // in its groups when the build goes in (a stack's groups, its nickel top and bottom), else the frame
-    + packSvg(map ? { ...plan(k), cells: map.flatMap((r) => r.cells), groups: true } : plan(k)) + '</div>';
+    + packSvg(withStrip(map ? { ...plan(k), cells: map.flatMap((r) => r.cells), groups: true } : plan(k), k.h)) + '</div>';
   const name = sel.h === 'custom' ? 'מותאם אישית' : HOLDER_NAME[sel.h];
   // The label (2026-10-06): what to build, in full, and the stack drawn row by row — each row's
   // count, each group's number, the places left empty. One stack is drawn; the others are the same
@@ -10739,7 +10772,7 @@ function caseHtml(v, c, fmt, V, S, P, N) {
     + `<div class="dim-nk-head"><b>${HOLDER_LABEL[cs.holder]}</b><span class="dim-badge ${fits ? 'ok' : 'no'}">${fits ? '✓ נכנס' : '✗ לא נכנס'}</span></div>`
     + kv('גודל סוללה', `<span class="dim-size">${iso(L + ' × ' + W)}</span> מ"מ`)
     + kv('מקסימום במארז', iso(`${V}V: ${mp ? S + 'S' + mp + 'P · ' + +(mp * c.ah).toFixed(1) + 'Ah' : '—'}`))
-    + packSvg(pl, { L, W }) + '</div>';
+    + packSvg(withStrip(pl, cs.holder), { L, W }) + '</div>';
   return {
     html: top + kv('תצורה', `${iso(S + 'S ' + P + 'P')} · ${N} תאים`) + caseRow + `<div class="dim-nks">${card}</div>`,
     // The label's line has no comma and no "ה-BMS": its own right-to-left layout splits on spaces.
