@@ -4,7 +4,7 @@
 //     the jobs with the customer on every row). The name opens the customer's card, one search finds
 //     a customer and a job, and warranties, stickers and business accounts are views at the top.
 //     The repair calculator is a "🔧 תיקון חדש" button.
-//   - the home page: 8 cards. כלים טכניים (sizes, calculators, diagnosis), מחירון (sale prices,
+//   - the home page: 7 cards (8 until the films tab went, 2026-10-18). כלים טכניים (sizes, calculators, diagnosis), מחירון (sale prices,
 //     supplier costs), בוטים (WhatsApp, trading) each one card with tabs; חסר להזמנה inside מלאי.
 //
 //   node test/test-nav-merge.mjs
@@ -49,7 +49,7 @@ await page.evaluate(() => { hideLogin(); closeModal(); closeNotice(); });
 // ---- the home page
 const cards = await page.evaluate(() => [...document.querySelectorAll('#page-home .quick-card')]
   .map((c) => [c.querySelector('.quick-card-title').textContent.trim(), c.getAttribute('onclick')]));
-check('the home page has 8 cards', cards.length === 8, cards.map((c) => c[0]));
+check('the home page has 7 cards (the films tab went on 2026-10-18)', cards.length === 7, cards.map((c) => c[0]));
 check('…the merged ones among them', ['לקוחות ועבודות', 'מחירון', 'מלאי', 'כלים טכניים', 'בוטים'].every((t) => cards.some((c) => c[0] === t))
   && !cards.some((c) => /חסר להזמנה|עלויות ספקים|בוט מסחר|מדבקות|אבחון|מחשבונים/.test(c[0])), cards.map((c) => c[0]));
 

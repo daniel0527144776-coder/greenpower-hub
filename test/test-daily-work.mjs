@@ -46,14 +46,31 @@ const price = await page.evaluate(() => {
   const gone = !document.getElementById('homePrice') && typeof homePriceSearch === 'undefined';
   navigateTo('catalog');
   const row = PRICING.find((p) => /72V 30Ah/.test(p.name));
-  const sel = document.getElementById('catalogCat');
-  sel.value = row.cat; renderCatalog();
-  const found = /72V 30Ah/.test(document.getElementById('catalogList').innerText);
-  sel.value = ''; renderCatalog(); navigateTo('home');
+  catOpenCats = new Set([row.cat]); renderCatalog();
+  const found = /72V 30Ah/.test(document.getElementById('catalogList').textContent);
+  catOpenCats = new Set(); renderCatalog(); navigateTo('home');
   return { gone, found };
 });
 check('the home page has no quick-price box (his call, 2026-09-28)', price.gone, price);
-check('choosing a category in the catalogue still shows its sizes', price.found, price);
+check('opening a category in the catalogue still shows its sizes', price.found, price);
+
+// ---- what was taken out as not needed (Daniel, 2026-10-18: "יש דברים שלא נצרכים ומיותרים") ----
+// The films tab, the quick repair packages, the hours' and the stock's restore-from-file buttons, the
+// AI note over the vehicles and the catalogue's category dropdown. --selftest puts the films tile back.
+const gone = await page.evaluate((SELF) => {
+  if (SELF) document.querySelector('.quick-grid, #page-home').insertAdjacentHTML('beforeend', '<div class="quick-card" onclick="navigateTo(\'films\')">🎬</div>');
+  const html = document.documentElement.innerHTML;
+  return { films: !!document.getElementById('page-films') || /navigateTo\('films'\)/.test(document.getElementById('page-home').innerHTML),
+    combos: /חבילות מהירות/.test(document.getElementById('page-calc').innerText) || typeof applyCombo === 'function',
+    hoursRestore: !!document.getElementById('restoreHoursFile') || typeof restoreFromPunches === 'function' || typeof restoreHoursFromBackup === 'function',
+    invRestore: !!document.getElementById('invRestoreFile') || typeof restoreInventoryFromBackup === 'function',
+    aiNote: /הנתונים כאן מ-AI/.test(document.getElementById('page-dims').innerHTML),
+    dropdown: !!document.getElementById('catalogCat') };
+}, SELFTEST);
+check('the films tab is gone', !gone.films, gone);
+check('the quick repair packages are gone', !gone.combos, gone);
+check('the hours\' restore tools and the stock\'s restore button are gone', !gone.hoursRestore && !gone.invRestore, gone);
+check('the AI note over the vehicles and the category dropdown are gone', !gone.aiNote && !gone.dropdown, gone);
 
 // ---- 2. a build takes cells off the shelf ----
 const stock = await page.evaluate(() => {
