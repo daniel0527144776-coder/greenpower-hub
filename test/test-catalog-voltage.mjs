@@ -169,20 +169,22 @@ const still = await page.evaluate(() => {
   const openAll = catOpenCats.size;
   catExpandAll(false);
   const closedAll = catOpenCats.size;
-  const sel = document.getElementById('catalogCat');
-  sel.value = PRICING.find((p) => /72V 30Ah/.test(p.name)).cat;
+  catOpenCats = new Set([PRICING.find((p) => /72V 30Ah/.test(p.name)).cat]);
   renderCatalog();
   const hits = document.getElementById('catalogList').querySelectorAll('.price-item').length;
-  sel.value = '';
+  catOpenCats = new Set();
+  const dropdown = !!document.getElementById('catalogCat');
   setCatalogTier('PRO');
   const proCats = [...document.getElementById('catalogList').querySelectorAll('.price-cat')].map((e) => e.textContent);
   setCatalogTier('');
   renderCatalog();
-  return { openAll, closedAll, hits, proOnly: proCats.every((c) => /PRO/.test(c)), proCount: proCats.length };
+  return { openAll, closedAll, hits, dropdown, proOnly: proCats.every((c) => /PRO/.test(c)), proCount: proCats.length };
 });
 check('open-all still opens every category', still.openAll === clicks.total, `${still.openAll} vs ${clicks.total}`);
 check('close-all still closes them', still.closedAll === 0, still.closedAll);
-check('a chosen category still shows its rows', still.hits > 0, still.hits);
+check('an opened category shows its rows', still.hits > 0, still.hits);
+// The "כל הקטגוריות" dropdown went on 2026-10-18 (his list of what is not needed): the families fold.
+check('and there is no category dropdown', !still.dropdown, still.dropdown);
 check('the tier filter still filters', still.proOnly && still.proCount > 0, still);
 
 if (SELFTEST) console.log('\n[selftest] catCatKeys was shifted out of step with the render;\n[selftest] the click-by-index check must have gone red.');
