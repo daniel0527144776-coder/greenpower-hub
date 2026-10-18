@@ -1677,9 +1677,13 @@ body { min-height: 100vh; }
     <label style="display:flex;gap:6px;align-items:center;font-size:13px;"><input type="checkbox" id="soFooter" onchange="soSetOpt('footer', this.checked)"> TOTAL / Shipping בסוף</label>
     <div class="form-row"><label>פרטי משלוח</label><select class="form-select" id="soShip" onchange="soSetOpt('ship', this.value)"></select></div>
     <div class="form-row"><label>הערה בסוף</label><input class="form-input" id="soNote" dir="ltr" style="width:100%;" placeholder="All BMS common port" onchange="soSetOpt('note', this.value)"></div>
+    <div class="form-row"><label>תשלום</label><select class="form-select" id="soPay" onchange="soSetOpt('pay', this.value)"></select></div>
+    <div class="form-row"><label>משלוח</label><select class="form-select" id="soVia" onchange="soSetOpt('via', this.value)"></select></div>
+    <div class="form-row"><label>הצהרה למכס (לא חובה)</label><input class="form-input" id="soDeclare" dir="ltr" style="width:100%;" placeholder="Please write &quot;nickel strip&quot; $120" onchange="soSetOpt('declare', this.value)"></div>
     <textarea id="soText" class="form-input" dir="ltr" rows="10" style="width:100%;font-family:monospace;font-size:12px;text-align:left;" readonly></textarea>
     <div class="btn-group" style="margin-top:8px;flex-wrap:wrap;">
-      <button class="btn btn-primary" onclick="soSend('full')">📤 שלח רשימה מלאה</button>
+      <button class="btn btn-primary" onclick="soSendPo()">📄 שלח הזמנה רשמית (PDF)</button>
+      <button class="btn btn-secondary" onclick="soSend('full')">📤 שלח רשימה מלאה</button>
       <button class="btn btn-secondary" id="soChangesBtn" onclick="soSend('changes')">✏️ שלח רק שינויים</button>
       <button class="btn btn-secondary" onclick="soCopy()">📋 העתק</button>
       <button class="btn btn-secondary" onclick="soDone()">✅ ההזמנה הושלמה</button>
@@ -2771,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v473';
+const HUB_BUILD = 'v474';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -13810,6 +13814,102 @@ async function soImportWa() {
     soImporting = false;
   }
 }
+// The order as a formal PDF, straight into the supplier's chat (2026-10-18: "הזמנה מסודרת לספק ... קובץ PDF
+// ... עם כל הפרטים הטכניים ... תשלום ... תמונה של כל מוצר"; his choices: sent to the supplier directly, a real
+// photo where there is one and a drawing where there is not, PayPal and DHL unless he picks otherwise).
+// The bot builds the file (po.js on the site's Worker) and fetches the photos itself: nothing here fetches an
+// image, and the WebView could not save or share a file anyway. A line's photo is a message id in that
+// supplier's chat; once he picks one for an item it is remembered for that supplier (ph_<id>), so the same
+// item ordered again carries it by itself.
+const SO_PAY = ['PayPal', 'Bank transfer (T/T)', 'Alipay', 'Cash on pickup'];
+const SO_VIA = ['DHL Express', 'Air freight', 'Sea freight', 'Delivery within China (to my agent)', 'AliExpress shipping'];
+function soPhotoKey(t) {
+  return String(t || '').toLowerCase().replace(/[：:=]\s*\$?\s*\d+(?:[.,]\d+)?\s*\$?/g, ' ').replace(/\b\d{1,2}[sp]\s*-\s*\d+(?:\.\d+)?\s*kg\b/g, '')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:kg|pcs?|m)\b(?!m)/g, '').replace(/\(of each model\)/g, '').replace(/[^a-z0-9.+x/]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function soLineImg(d, sup, l) { return String(l.img || ((d['ph_' + sup] || {})[soPhotoKey(l.t)]) || ''); }
+let soPicking = null;
+async function soPickPhoto(lineId) {
+  const d = soGet(), sup = soCurSup(d), s = soSups(d).find((x) => String(x.id) === sup);
+  const l = soCur(d, sup).lines.find((x) => String(x.id) === String(lineId));
+  if (!s || !l) return;
+  if (!s.wa) { showNotice('לספק הזה אין מספר וואטסאפ — אין מאיפה לקחת תמונה.'); return; }
+  soPicking = { lineId: String(l.id), media: [] };
+  openModal('📷 תמונה לשורה ' + l.n, '<div id="soPhotoBox" style="font-size:12px;color:var(--text-muted);">קורא את התמונות מהשיחה עם ' + soEsc(s.name) + '…</div>',
+    `<button class="btn btn-secondary" onclick="soSetImg('')">בלי תמונה (שרטוט)</button><button class="btn btn-secondary" onclick="closeModal()">סגור</button>`);
+  try {
+    const j = await soWaGet('chat=' + encodeURIComponent(s.wa + '@c.us') + '&count=400&thumbs=1');
+    const media = (j.media || []).filter((m) => m && m.kind === 'image' && /^[A-Za-z0-9_-]{4,80}$/.test(String(m.id))).sort((a, b) => b.at - a.at).slice(0, 80);
+    soPicking.media = media;
+    const box = document.getElementById('soPhotoBox');
+    if (!box) return;
+    if (!media.length) { box.textContent = 'אין תמונות בשיחה הזאת. השורה תצא עם שרטוט.'; return; }
+    const cur = soLineImg(d, sup, l);
+    box.innerHTML = `<div style="margin-bottom:6px;">${soEsc(l.t)}</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;">` + media.map((m, i) => {
+      const th = /^[A-Za-z0-9+/=]+$/.test(String(m.th || '')) ? `<img src="data:image/jpeg;base64,${m.th}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;display:block;">` : '<div style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--bg);border-radius:6px;font-size:22px;">🖼</div>';
+      const when = new Date(Number(m.at)).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+      return `<button type="button" onclick="soSetImg(${i})" style="padding:3px;border:2px solid ${String(m.id) === cur ? 'var(--primary)' : 'var(--border)'};border-radius:8px;background:var(--card);cursor:pointer;text-align:center;">${th}
+        <div style="font-size:10px;color:var(--text-muted);">${when} · ${m.dir === 'out' ? 'שלחת' : 'הספק'}</div></button>`;
+    }).join('') + '</div>';
+  } catch (e) {
+    const box = document.getElementById('soPhotoBox');
+    if (box) box.textContent = 'לא הצלחתי לקרוא את השיחה: ' + (e && e.message ? e.message : e);
+  }
+}
+// i: the picked photo's index in the list just shown, or '' for none
+function soSetImg(i) {
+  if (!soPicking) return;
+  const m = i === '' ? null : soPicking.media[Number(i)];
+  const d = soGet(), sup = soCurSup(d), c = soCur(d, sup);
+  const l = c.lines.find((x) => String(x.id) === soPicking.lineId);
+  if (!l) { closeModal(); return; }
+  const key = soPhotoKey(l.t), mem = Object.assign({}, d['ph_' + sup] || {});
+  if (m) { l.img = String(m.id); mem[key] = String(m.id); } else { l.img = ''; delete mem[key]; l.noImg = true; }
+  if (m) delete l.noImg;
+  d['cur_' + sup] = c;
+  d['ph_' + sup] = mem;
+  if (!soPut(d)) return;
+  soPicking = null;
+  closeModal();
+  renderSorder();
+}
+function soPoNumber(d, c) {
+  if (c.poNo) return c.poNo;
+  const t = new Date(), day = String(t.getFullYear()).slice(2) + String(t.getMonth() + 1).padStart(2, '0') + String(t.getDate()).padStart(2, '0');
+  const seq = (d.poSeq && d.poSeq.day === day ? d.poSeq.n : 0) + 1;
+  d.poSeq = { day, n: seq };
+  return 'GP-' + day + '-' + String(seq).padStart(2, '0');
+}
+function soSendPo() {
+  const d = soGet(), sup = soCurSup(d), c = soCur(d, sup);
+  const s = soSups(d).find((x) => String(x.id) === sup);
+  if (!s || !c.lines.length) { showNotice('אין מה לשלוח — הוסף שורות.'); return; }
+  if (!String(s.wa || '').replace(/\D/g, '')) { showNotice('לספק הזה אין מספר וואטסאפ. ✏️ ליד שם הספק.'); return; }
+  const open = c.lines.filter((l) => !l.cancel).length, photos = c.lines.filter((l) => !l.cancel && soLineImg(d, sup, l)).length;
+  askConfirm(`לשלוח ל-${s.name} הזמנה רשמית (PDF) עם ${open} פריטים?\n${photos} עם תמונה מהשיחה, השאר עם שרטוט.\nתשלום: ${c.pay || SO_PAY[0]} · משלוח: ${c.via || SO_VIA[0]}`, async () => {
+    const d2 = soGet(), c2 = soCur(d2, sup);
+    const no = soPoNumber(d2, c2);
+    c2.poNo = no;
+    const ship = (Array.isArray(d2.ships) ? d2.ships : []).find((x) => String(x.id) === String(c2.ship));
+    const po = { no, date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), supplier: s.name,
+      lines: c2.lines.map((l) => ({ n: l.n, t: l.t, cancel: !!l.cancel, img: l.cancel ? '' : soLineImg(d2, sup, l) })),
+      pay: c2.pay || SO_PAY[0], via: c2.via || SO_VIA[0], shipTo: ship ? ship.text : '', declare: c2.declare || '', note: c2.note || '' };
+    const st = document.getElementById('soStatus');
+    if (st) st.textContent = '📄 מכין את ה-PDF ושולח…';
+    try {
+      const r = await waAdmin({ op: 'po', to: s.wa, po });
+      c2.sent = { at: Date.now(), lines: c2.lines.map((l) => ({ id: l.id, n: l.n, t: l.t, cancel: !!l.cancel })) };
+      d2['cur_' + sup] = c2;
+      soPut(d2);
+      renderSorder();
+      showNotice(`📄 ההזמנה ${no} נשלחה ל-${s.name}: ${r.pages} עמודים, ${r.images} תמונות.`);
+    } catch (e) {
+      soPut(d2);
+      if (st) st.textContent = '';
+      showNotice('השליחה לא הצליחה: ' + (e && e.message ? e.message : e));
+    }
+  });
+}
 function soEditSup(id) {
   const d = soGet(), s = soSups(d).find((x) => String(x.id) === String(id)) || { name: '', wa: '' };
   openModal(id ? '✏️ ספק' : '➕ ספק', `<div class="form-row"><label>שם</label><input class="form-input" id="soSupName" value="${soEsc(s.name)}"></div>
@@ -13896,6 +13996,7 @@ function renderSorder() {
   lb.innerHTML = (c.lines.length ? c.lines.map((l) => `<div class="so-line" data-n="${soEsc(l.n)}" style="display:flex;gap:6px;align-items:center;padding:6px 2px;border-top:1px solid var(--border);${l.cancel ? 'opacity:.5;' : ''}">
       <div dir="ltr" style="flex:1;min-width:0;font-size:12px;font-family:monospace;text-align:left;${l.cancel ? 'text-decoration:line-through;' : ''}"><b>${soEsc(l.n)}.</b> ${soEsc(l.t)}</div>
       ${sentIds.has(String(l.id)) ? '' : '<span style="font-size:10px;color:var(--warning,#f59e0b);">חדש</span>'}
+      ${l.cancel ? '' : `<button class="btn btn-sm btn-secondary" title="תמונה ל-PDF" onclick="soPickPhoto(${arg(l.id)})">${soLineImg(d, sup, l) ? '🖼' : '📷'}</button>`}
       ${l.cancel ? '' : `<button class="btn btn-sm btn-secondary" onclick="soEditLine(${arg(l.id)})">✏️</button>`}
       <button class="btn btn-sm btn-secondary" title="${sentIds.has(String(l.id)) ? 'בטל (המספר נשמר)' : 'מחק'}" onclick="soRemoveLine(${arg(l.id)})">${l.cancel ? '↩️' : '✖'}</button></div>`).join('')
     : `<div style="font-size:12px;color:var(--text-muted);">${sup ? 'אין שורות בהזמנה הזאת.' : 'הוסף ספק כדי להתחיל.'}</div>`)
@@ -13910,6 +14011,10 @@ function renderSorder() {
   const sh = document.getElementById('soShip');
   sh.innerHTML = '<option value="">— בלי —</option>' + ships.map((s) => `<option value="${soEsc(s.id)}"${String(s.id) === String(c.ship || '') ? ' selected' : ''}>${soEsc(s.label)}</option>`).join('');
   document.getElementById('soNote').value = c.note || '';
+  const opt = (list, v) => list.map((x) => `<option${x === (v || list[0]) ? ' selected' : ''}>${soEsc(x)}</option>`).join('');
+  document.getElementById('soPay').innerHTML = opt(SO_PAY, c.pay);
+  document.getElementById('soVia').innerHTML = opt(SO_VIA, c.via);
+  document.getElementById('soDeclare').value = c.declare || '';
   document.getElementById('soShips').innerHTML = ships.length ? ships.map((s) => `<div style="display:flex;gap:6px;align-items:center;padding:5px 0;border-top:1px solid var(--border);">
       <b style="flex:1;">${soEsc(s.label)}</b><button class="btn btn-sm btn-secondary" onclick="soEditShip(${arg(s.id)})">✏️</button></div>`).join('') : '<div style="font-size:12px;color:var(--text-muted);">אין עדיין.</div>';
   // this supplier's, newest first

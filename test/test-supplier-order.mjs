@@ -2,7 +2,8 @@
 //
 //   node test/test-supplier-order.mjs
 //   node test/test-supplier-order.mjs --selftest   (numbers move on every change, a line with no quantity
-//                                                   goes in, and the import takes his oldest list — each must fail)
+//                                                   goes in, the import takes his oldest list, and a photo is
+//                                                   forgotten between orders — each must fail)
 //
 // The supplier answers by line number ("27. right?"), and he corrects by line number ("31. Cancel"),
 // so the one thing that must never happen is a sent number moving. The lines must read as he writes
@@ -218,6 +219,52 @@ check('his latest list is the open order, as sent, with its own numbers', imp.a 
 check('the list before it is in the history once; the quote the supplier sent is not his list', imp.aHist.length === 1 && imp.aHist[0].at === 2000, imp.aHist.map((h) => h.at));
 check('an order he is writing is left alone', imp.mine.join() === 'His own line', imp.mine);
 check('run twice, it adds nothing', imp.again === imp.n && imp.histAgain === imp.hist1, [imp.n, imp.again, imp.hist1, imp.histAgain]);
+// ---- 9. the formal order, as a PDF the bot builds and sends ----
+// A photo is picked from the supplier's own chat (as text: WhatsApp's small picture), remembered for the item,
+// and only its id goes to the bot, which fetches it itself. --selftest forgets the item between orders.
+const adminCalls = [];
+await page.route('https://energylabgreen.com/api/wa/admin**', (route) => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  adminCalls.push(body);
+  route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, pages: 2, images: 1, bytes: 9 }) });
+});
+await page.unroute('https://energylabgreen.com/api/wa/history**');
+await page.route('https://energylabgreen.com/api/wa/history**', (route) => {
+  const q = new URL(route.request().url()).searchParams;
+  const media = [{ id: 'PHOTO_A', at: 9000, kind: 'image', dir: 'in', th: '/9j/4AAQSkZJRg==' }, { id: 'PHOTO_B', at: 8000, kind: 'image', dir: 'out', th: '"><img src=x onerror=alert(1)>' }];
+  route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(q.get('chats') ? { chats: [] } : { media }) });
+});
+const pick = await page.evaluate(async (SELF) => {
+  if (SELF) window.soPhotoKey = () => String(Math.random());
+  const d = soGet(), a = soSups(d).find((s) => s.wa === '8611111111111');
+  d.pick = a.id; soPut(d); renderSorder();
+  const line = soCur(soGet(), a.id).lines[0];
+  await soPickPhoto(line.id);
+  const shown = document.querySelectorAll('#soPhotoBox button img').length, injected = !!document.querySelector('#soPhotoBox img[onerror]');
+  soSetImg(0);
+  const d2 = soGet(), c = soCur(d2, a.id);
+  // the same item again, another quantity: it carries the photo by itself
+  c.lines.push({ id: 'again', n: 99, t: line.t.replace(/2kg/i, '5kg') });
+  return { shown, injected, img: c.lines[0].img, again: soLineImg(d2, a.id, c.lines[c.lines.length - 1]), other: soLineImg(d2, a.id, c.lines[1]) };
+}, SELFTEST);
+check('the photos of that chat are offered, as text pictures; one carrying markup is not drawn', pick.shown === 1 && !pick.injected, pick);
+check('the picked photo becomes the line photo', pick.img === 'PHOTO_A', pick.img);
+check('and the same item ordered again carries it by itself; another item does not', pick.again === 'PHOTO_A' && pick.other === '', pick);
+const poRes = await page.evaluate(async () => {
+  const d = soGet(), a = soSups(d).find((s) => s.wa === '8611111111111');
+  soEditShip(null); document.getElementById('soShipLabel').value = 'אלעד'; document.getElementById('soShipText').value = 'SHIP LINE 1\nSHIP LINE 2'; soSaveShip(null);
+  soSetOpt('ship', soGet().ships.slice(-1)[0].id);
+  soSendPo(); noticeConfirm();
+  await new Promise((r) => setTimeout(r, 300));
+  const c = soCur(soGet(), a.id);
+  return { notice: document.getElementById('noticeBody').textContent, sent: !!(c.sent && c.sent.at > 5000), no: c.poNo };
+});
+const call = adminCalls.find((x) => x.op === 'po') || {};
+check("one call to the bot: the supplier's number and every line, in his words", call.to === '8611111111111' && call.po && call.po.lines.length >= 4 && call.po.lines[0].t.startsWith('Nickel pure 22.5mm H Type'), call.po && call.po.lines.map((l) => l.t));
+check('the photo goes as its id only; a line without one goes without', call.po && call.po.lines[0].img === 'PHOTO_A' && call.po.lines.some((l) => !l.img) && !JSON.stringify(call).includes('base64'), call.po && call.po.lines.map((l) => l.img));
+check('PayPal and DHL unless he picks otherwise, and the ship-to block he chose', call.po && call.po.pay === 'PayPal' && call.po.via === 'DHL Express' && call.po.shipTo === 'SHIP LINE 1\nSHIP LINE 2', call.po);
+check('an order number of the day, kept on the order', /^GP-\d{6}-\d{2}$/.test(call.po && call.po.no) && poRes.no === call.po.no, [call.po && call.po.no, poRes.no]);
+check('and the order counts as sent', poRes.sent && /נשלחה/.test(poRes.notice), poRes);
 // a Daly with no quantity, straight into soAddLine: still refused
 const refused = await page.evaluate((SELF) => {
   if (SELF) { const real = window.soValues; window.soValues = () => { const r = real(); return { ...r, missing: [], text: r.text || r.T.line(r.out) }; }; }
