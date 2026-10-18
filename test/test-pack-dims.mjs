@@ -356,20 +356,25 @@ const draw = await page.evaluate(() => {
   const fills = svg ? [...svg.querySelectorAll('circle')].map((c) => c.getAttribute('fill')) : [];
   return { circles: svg ? svg.querySelectorAll('circle').length : 0, hasSvg: !!svg,
            cards: cards.map((k) => k.dataset.holder + ':' + k.querySelectorAll('svg.pack-svg:not(.pack-side-bottom) circle').length).join(' '),
+           shorts: cards.filter((k) => k.classList.contains('short') && !k.querySelector('svg')).length,
            selHolder: sel ? sel.dataset.holder : '',
-           groups: svg ? [...svg.querySelectorAll('text.pack-group')].map((t) => t.textContent) : [],
+           groups: svg ? [...svg.querySelectorAll('text.pack-group, text.pack-row')].map((t) => t.textContent) : [],
+           pieces: svg ? [...svg.querySelectorAll('g.pack-nickel')].map((e) => e.dataset.groups).join(',') : '',
            ends: svg ? [...svg.querySelectorAll('text')].map((t) => t.textContent).filter((s) => /^B[−+]$/.test(s)).join(',') : '',
            // the first group and the second are shaded differently, the first and third alike
            bands: fills.length >= 18 && fills[0] !== fills[6] && fills[0] === fills[12],
            txt: svg ? svg.textContent : '', L: block[1], W: block[2], res: document.getElementById('dimResult').innerText };
 });
-// Four since 2026-10-17: an H at 22.5 beside the 23 ("וגם יש H אם 22.5M").
-check('four cards, one per nickel, each drawing the whole pack', draw.cards === 'diag-a:120 diag-b:120 square-225:120 square-23:120', draw.cards);
+// Four since 2026-10-17: an H at 22.5 beside the 23 ("וגם יש H אם 22.5M"). Only the chosen one is drawn since
+// 2026-10-18 ("שיראה רק לפי המחזיק שבחרתי"); the others are short rows.
+check('four cards, one per nickel, only the chosen one drawn, the others short rows', draw.cards === 'diag-a:120 diag-b:0 square-225:0 square-23:0' && draw.shorts === 3, [draw.cards, draw.shorts]);
 check('the chosen nickel is the outlined card', draw.selHolder === 'diag-a', draw.selHolder);
 check('the drawing has one circle per cell (120)', draw.circles === 120, String(draw.circles));
-// "צבע לסירוגין + מספר" (2026-10-04): the groups alternate in shade and are numbered B− to B+.
-check('the groups alternate in shade', draw.bands, String(draw.bands));
-check('and are numbered from the first to the last, 1 to 20', draw.groups[0] === '1' && draw.groups[draw.groups.length - 1] === '20' && draw.groups.length >= 10, draw.groups.join(' '));
+// The groups were shaded alternately and numbered (2026-10-04, "צבע לסירוגין + מספר"); since 2026-10-17
+// every drawing shows the nickel as it sits, each strip its colour, and since 2026-10-18 no numbers at all
+// ("וגם תמחוק את המספרים מעל").
+check('the groups drawn in their nickel strips, 1+2 … 19+20 on the top side', draw.pieces === '1+2,3+4,5+6,7+8,9+10,11+12,13+14,15+16,17+18,19+20', draw.pieces);
+check('and no numbers over the drawing or in it', draw.groups.length === 0, draw.groups.join(' '));
 check('with B− and B+ at the two ends', draw.ends === 'B−,B+', draw.ends);
 // The drawing's labels are the block's OWN size — they once read 473 beside a block of 476,
 // because the picture left the bracket walls out. Counts are said once, in the layout row.
@@ -620,15 +625,14 @@ const bomb = await page.evaluate(() => {
 check('the Bomber is listed as its three models', bomb.n === 3, String(bomb.n));
 check('and they are not the same battery bay', bomb.max[0] === 144 && bomb.max[2] === 330, bomb.max.join('/'));
 
-// The provenance warning is the most important thing on this page. The table reads like
-// measurements and is not — it came from another model — so the page has to say so where the
-// numbers are used, not only in a comment nobody opens.
+// Which sizes were measured is said on each row (✓ נמדד); the line over the list ("הנתונים כאן מ-AI, לא
+// נמדדו") went on 2026-10-18 as not needed, his call.
 const prov = await page.evaluate(() => {
   renderVehiclePacks();
-  const card = [...document.querySelectorAll('#calctab-dims p')].map(e => e.textContent).join(' ');
-  return { card };
+  const page = document.getElementById('page-dims').innerHTML, list = document.getElementById('vpList').innerHTML;
+  return { line: /הנתונים כאן מ-AI/.test(page), marked: (list.match(/✓ נמדד/g) || []).length };
 });
-check('the page says the vehicle data is AI, not measured', /מ-AI, לא נמדדו/.test(prov.card), prov.card.slice(0, 90));
+check('the measured sizes are marked on their rows, and the AI line over the list is gone', prov.marked >= 5 && !prov.line, prov);
 
 // ---- shallow trays: the 18650 option is costed on the CURRENT cell cost ----
 // Until 2026-09-25 these carried the March figures typed in by hand, while the margin they
@@ -775,6 +779,8 @@ const turn = await page.evaluate((SELF) => {
   VEHICLE_PACKS.push({ g: 'בדיקה', m: 'מגש מבחן', src: 'AI', p: 21.5, s60: 16, p60: 7, s72: 20, p72: 7, max: 140, tub: '500×145×75 מ"מ' });
   useVehiclePack('מגש מבחן', 72); document.getElementById('dimHolder').value = 'diag-b'; dimAhPending = 35; calcPackDims();
   const r = document.getElementById('dimResult').innerText;
+  // W is drawn once it is chosen (only the chosen nickel is drawn, 2026-10-18)
+  document.getElementById('dimHolder').value = 'diag-a'; calcPackDims();
   const w = document.querySelector('#dimResult .dim-nk[data-holder="diag-a"]');
   const circles = w.querySelectorAll('svg.pack-svg:not(.pack-side-bottom) circle').length, wTxt = w.innerText, wAcross = +w.dataset.across;
   FILL_WAY['diag-b'] = 'A';
@@ -814,7 +820,7 @@ const mx = await page.evaluate((SELF) => {
 // Talaria 385 x 171, no BMS allowance: since 2026-10-17, filled across its width, it has a maximum at both.
 check('the result says the most the tray takes with this nickel, per voltage', /מקסימום\s*60V: 16S\d+P · \d+Ah\s*72V: 20S\d+P · \d+Ah/.test(mx.res), mx.res.slice(0, 400));
 check('and each nickel\'s card says how much it takes', mx.cards.length === 4 && /^ניקל W — 22\.7/.test(mx.cards[0]) && /^ניקל Z — 22\.5/.test(mx.cards[1]) && /^ניקל H — 22\.5/.test(mx.cards[2]) && /^ניקל H — 23/.test(mx.cards[3])
-  && mx.cards.every((k) => /מקסימום\s*60V: (16S\d+P · \d+Ah|—)\s*72V: (20S\d+P · \d+Ah|—)/.test(k)), mx.cards.map((k) => k.slice(0, 120)));
+  && mx.cards.every((k) => /מקסימום\s*60V: (16S\d+P · \d+Ah|—)\s*72V: (20S\d+P · \d+Ah|—)/.test(k) || /מקס׳ 20S\d+P · \d+Ah/.test(k)), mx.cards.map((k) => k.slice(0, 120)));
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
 check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /385×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
 check('the cell and nickel are chosen after the tap, not above the list', !mx.sharedOnList && mx.sharedAfter, [mx.sharedOnList, mx.sharedAfter]);
@@ -1010,7 +1016,8 @@ check('his Bomber Plus comes back as 2 stacks of 165 = 330 cells', lying.stacks 
 check('which at 72V is 20S16P, 80Ah (his next build)', /20S16P · 80Ah/.test(lying.plus), lying.plus.slice(0, 260));
 // The 23-square card fills the outline of his own Plus: his rows, bottom to top, cell for cell.
 check('on its own nickel the Plus card is his 165 a side, row for row', lying.plusShape.rows === '16,16,17,17,17,17,17,16,13,11,8' && lying.plusShape.cells === 165, lying.plusShape);
-check('the Plus has a card per nickel, each drawn inside the frame\'s outline', /^diag-a:\d+:1 diag-b:\d+:1 square-225:\d+:1 square-23:165:1$/.test(lying.plusCards), lying.plusCards);
+// Only the chosen nickel is drawn since 2026-10-18; the others are short rows.
+check('the Plus has a card per nickel, the chosen one drawn inside the frame\'s outline', lying.plusCards === 'diag-a:0:0 diag-b:0:0 square-225:0:0 square-23:165:1', lying.plusCards);
 check('the regular Bomber in 18650 on the 19 square is his blue 20S17P: 170 a side, 340', lying.regShape.cells === 170 && /170 תאים × 2 ערימות = 340/.test(lying.reg18) && /20S17P/.test(lying.reg18), [lying.regShape, lying.reg18.slice(0, 160)]);
 check('a Bomber frame too narrow for a lying cell says so', /צר מדי לתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
 check('the FC-1 (90 across, his tape) fits a 72V build lying on ניקל ב׳', /נכנס עד: 72V 20S8P · 40Ah|נכנסת — 20S8P · 40Ah, 160 תאים · המקסימום/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
@@ -1076,9 +1083,9 @@ check('the EVE 26V is counted at its rated 2.6Ah', ox18.ah === 2.6, ox18.ah);
 check('the OX takes 16S11P of 18650 on the square 19 and the 18.5 diagonal, the BMS in the narrow part', ox18.max19 === 11 && ox18.max185 === 11, [ox18.max19, ox18.max185]);
 check('laid along the tray: ten in a line, two bands', ox18.orient === 'C' && ox18.bands === 2, [ox18.orient, ox18.bands]);
 check('16S12P still does not go in, and the best offered for it is 16S11P', !ox18.fits12 && ox18.best === '16S11P', [ox18.fits12, ox18.best]);
-check('the card says 16S10P fits and the most is 16S11P; each group numbered once; the label says how it is laid',
+check('the card says 16S10P fits and the most is 16S11P; the drawing has no numbers; the label says how it is laid',
   /✅ נכנס ל-Inokim OX/.test(ox18.res) && /16S 10P · 160 תאים/.test(ox18.res) && /60V: 16S11P · 28.6Ah/.test(ox18.res)
-  && ox18.nums === 16 && /קבוצה לאורך 10P/.test(ox18.label || ''), [ox18.res.slice(0, 300), ox18.nums, ox18.label]);
+  && ox18.nums === 0 && /קבוצה לאורך 10P/.test(ox18.label || ''), [ox18.res.slice(0, 300), ox18.nums, ox18.label]);
 check('the 21700 in the same tray is still laid his way', !ox18.r21along, ox18.r21along);
 
 // ---- the worker's plate for a lying build (2026-10-06) ----
@@ -1136,14 +1143,17 @@ const sweep = await page.evaluate((SELF) => {
     if (SELF && v.m === 'Bomber Plus 15kW') r.insertAdjacentHTML('beforeend', '<div>הסוללות שבנית</div>');
     const cards = [...r.querySelectorAll('.dim-nk')];
     const want = v.case ? 1 : 4;
-    if (cards.length !== want || !cards.every((k) => k.querySelector('svg.pack-svg circle')) || /הסוללות שבנית/.test(r.textContent)) bad.push(v.m + ':' + cards.length + (cards.length === want ? ' ' + document.getElementById('dimV').value + 'V ' + (dimLast ? dimLast.S + 'S' + dimLast.P + 'P' : '') + ' extra ' + document.getElementById('dimExtra').value + ' ' + cards.filter((k) => !k.querySelector('svg.pack-svg circle')).map((k) => k.dataset.holder).join('/') : ''));
+    // the chosen card drawn, every other one a short row without a drawing (2026-10-18)
+    const drawn = cards.filter((k) => k.querySelector('svg.pack-svg circle'));
+    if (cards.length !== want || drawn.length !== 1 || !drawn[0].classList.contains('sel') || cards.some((k) => !k.classList.contains('sel') && !k.classList.contains('short'))
+      || /הסוללות שבנית/.test(r.textContent)) bad.push(v.m + ':' + cards.length + ':' + drawn.map((k) => k.dataset.holder).join('/'));
     const sel = r.querySelector('.dim-nk.sel');
     if (!sel || !dimLast || dimLast.plan.cells.length !== sel.querySelectorAll('svg.pack-svg:not(.pack-side-bottom) circle').length) bad.push(v.m + ' label');
   }
   clearDimVehicle();
   return bad;
 }, SELFTEST);
-check('every vehicle: its nickel cards and drawings, the label = the chosen card, no build list', sweep.length === 0, sweep.join(', '));
+check('every vehicle: its nickel cards, only the chosen one drawn, the label = the chosen card, no build list', sweep.length === 0, sweep.join(', '));
 
 // ---- the Silver Fish (Daniel, 2026-10-04) ----
 // His e-bike case, 850 × 95 × 70, and his 72V layout: "24 שורות כל שורה 4 תאים ואז עוד 8 שורות 3
@@ -1222,7 +1232,7 @@ const fish = await page.evaluate((SELF) => {
   return { text: out.textContent, cards: cards.map((k) => k.dataset.holder).join(' '), cells: cs.length,
            cols: xs.map((x) => cs.filter((xx) => xx === x).length).join(','),
            bms: !!(svg && svg.querySelector('.pack-bms') && /BMS/.test(svg.textContent)),
-           groups: svg ? [...svg.querySelectorAll('text.pack-group')].map((t) => t.textContent) : [],
+           groups: svg ? [...svg.querySelectorAll('g.pack-nickel')].map((e) => e.dataset.groups) : [],
            size: ((cards[0] && cards[0].querySelector('.dim-size')) || {}).textContent || '', label,
            chip: document.getElementById('dimVehChip').textContent,
            card: card ? card.textContent.replace(/\s+/g, ' ') : null, kind: v ? vehType(v) : '' };
@@ -1237,7 +1247,7 @@ check('24 rows of 4, then 8 rows of 3, cell by cell: a 737 x 93 block',
   fish.cells === 120 && fish.cols === Array(24).fill(4).concat(Array(8).fill(3)).join(',') && /737 × 93/.test(fish.size),
   [fish.cells, fish.cols, fish.size]);
 check('the BMS sits in the free strip beside the short rows', fish.bms, String(fish.bms));
-check('its twenty groups are numbered', fish.groups[0] === '1' && fish.groups[fish.groups.length - 1] === '20', fish.groups.join(' '));
+check('its twenty groups in their nickel strips, 1+2 to 19+20 on the top side', fish.groups[0] === '1+2' && fish.groups[fish.groups.length - 1] === '19+20' && fish.groups.length === 10, fish.groups.join(' '));
 check('no build history on the page', !/שבנית|24 שורות של 4|נבנה במעבדה/.test(fish.text + fish.chip), fish.text.slice(0, 200));
 check('the worker\'s label draws the same 120 cells', fish.label === 120, fish.label);
 check('the chip and the card say measured, with the case size', /✓ נמדד/.test(fish.chip) && !/הערכת AI/.test(fish.chip)
@@ -1360,8 +1370,8 @@ const pairs = (from, G) => { const o = from ? ['1'] : []; for (let k = from + 1;
 check('the Zero 11X 16S8P on W: two drawings, the top side and the bottom, each cell once in each', tidy.sides === 'צד עליון,צד תחתון' && tidy.cells === 128 && tidy.bottomCells === 128, tidy);
 check('the top side\'s strips join 1+2, 3+4 … 15+16', tidy.top === pairs(0, 16), tidy);
 check('the bottom side\'s: 1 alone, 2+3 … 14+15, 16 alone', tidy.bottom === pairs(1, 16), tidy);
-check('the rows numbered over the top, first to last, no number in the cells, B− and B+',
-  tidy.rowsFirst === 1 && tidy.rowsLast === tidy.lastRow && tidy.inCells === 0 && tidy.ends === 'B−,B+', tidy);
+// no numbers: none over the top (2026-10-18, "וגם תמחוק את המספרים מעל"), none in the cells
+check('no numbers over the top or in the cells, B− and B+', tidy.rowsFirst === undefined && tidy.inCells === 0 && tidy.ends === 'B−,B+', tidy);
 
 await browser.close();
 srv.close();

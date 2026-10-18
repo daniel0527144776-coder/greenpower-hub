@@ -160,6 +160,21 @@ console.log('\n4b. the 18650s, each computed from its own sheet');
   check('and every cell the hub sends is on the editor\'s list', sent.all.every((c) => opts.cells.includes(c)), sent.all.filter((c) => !opts.cells.includes(c)));
 }
 
+console.log('\n4c. the client details are not printed, and the form says so');
+{
+  // The name left the label on 2026-08-18; the heading over it said "להדפסה על המדבקה" until Daniel read it
+  // on 2026-10-18 and asked for "פרטי לקוח (לא מודפס)". --selftest puts the old heading back.
+  const r = await p.evaluate((self) => {
+    const h = [...document.querySelectorAll('h3')].find((e) => /פרטי לקוח/.test(e.textContent));
+    if (self && h) h.textContent = 'פרטי לקוח (להדפסה על המדבקה)';
+    document.getElementById('client-name-input').value = 'לקוח בדיקה';
+    document.getElementById('client-name-input').dispatchEvent(new Event('input', { bubbles: true }));
+    return { head: h ? h.textContent.trim() : '', onLabel: document.getElementById('sticker-to-capture').innerText.includes('לקוח בדיקה') };
+  }, SELFTEST);
+  check('the heading says the client details are not printed', r.head === 'פרטי לקוח (לא מודפס)', r.head);
+  check('and the name is indeed not on the label', !r.onLabel, r);
+}
+
 console.log('\n5. the safety marks cannot be pushed off the label');
 {
   // The left column had 8px of slack, and the same markup that measured +16px of clearance

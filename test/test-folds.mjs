@@ -127,9 +127,8 @@ const opened = await page.evaluate(async () => {
   navigateTo('warranties'); setWarrantyTab('expiring');
   const ex = [...document.querySelectorAll('#warrantiesList details.fold')];
   out.expiring = ex.length > 0 && ex.every((x) => x.open);
-  navigateTo('catalog'); document.getElementById('catalogCat').value = PRICING.find((p) => /72V/.test(p.name)).cat; renderCatalog();
-  out.catSearch = [...document.querySelectorAll('#catalogList details.fold')].length > 0 && [...document.querySelectorAll('#catalogList details.fold')].every((x) => x.open);
-  document.getElementById('catalogCat').value = ''; renderCatalog();
+  // the category dropdown that opened its topics went on 2026-10-18
+  navigateTo('catalog');
   catExpandAll(true); out.catAll = [...document.querySelectorAll('#catalogList details.fold')].every((x) => x.open);
   catExpandAll(false); out.catNone = [...document.querySelectorAll('#catalogList details.fold')].every((x) => !x.open);
   return out;
@@ -137,7 +136,7 @@ const opened = await page.evaluate(async () => {
 check('a filter opens the months it shows, and "הכל" folds them again', opened.search && opened.cleared, opened);
 check('a month he opened stays open when the page re-draws, its rows shown', opened.kept && opened.rowShown, opened);
 check('"פגות בקרוב" (the home banner\'s target) opens', opened.expiring === true, opened);
-check('the price list: a chosen category opens its topics; פתח הכל / סגור הכל open and close them', opened.catSearch && opened.catAll && opened.catNone, opened);
+check('the price list: פתח הכל / סגור הכל open and close its topics', opened.catAll && opened.catNone, opened);
 
 // On the two pages foldStatic folds: the price list nests its scooters' 21700 and 18650 sections inside
 // their topic on purpose (2026-10-17), and that is not a page folded twice.
