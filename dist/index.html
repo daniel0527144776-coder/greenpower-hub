@@ -2712,7 +2712,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v464';
+const HUB_BUILD = 'v465';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2750,6 +2750,17 @@ async function liveBuild() {
   const m = (await r.text()).match(/gp-hub-v(\d+)/);
   return m ? +m[1] : 0;
 }
+// A field counts as his work only once HE has touched it: its value when he first reached it
+// is kept here, and it counts while it differs from that. Comparing with the HTML default, as
+// v444 did, counted every field a page fills by itself — the dims calculator's extra 22mm,
+// the settings page's stored details — so an update waited for as long as one of those pages
+// was open, which on 2026-10-18 was the page he works on ("העדכון האוטומטי לא עובד").
+const hubFieldStart = new WeakMap();
+const hubFieldVal = (i) => (i.type === 'checkbox' || i.type === 'radio') ? i.checked : i.value;
+['focusin', 'pointerdown'].forEach((ev) => document.addEventListener(ev, (e) => {
+  const t = e.target;
+  if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName) && !hubFieldStart.has(t)) hubFieldStart.set(t, hubFieldVal(t));
+}, true));
 function safeToReload() {
   if (document.querySelector('#modalBackdrop.active, #noticeBackdrop.active')) return false;
   const a = document.activeElement;
@@ -2757,8 +2768,7 @@ function safeToReload() {
   const page = document.querySelector('.page.active');
   if (!page || page.id === 'page-stickers') return false;
   return ![...page.querySelectorAll('input, textarea')].some((i) =>
-    (i.type === 'checkbox' || i.type === 'radio') ? i.checked !== i.defaultChecked
-      : (i.type !== 'hidden' && i.type !== 'file' && i.type !== 'month' && i.type !== 'date' && i.value !== i.defaultValue));
+    hubFieldStart.has(i) && hubFieldVal(i) !== hubFieldStart.get(i));
 }
 let hubUpdateSeen = 0;
 async function checkForNewBuild() {
@@ -2771,10 +2781,25 @@ async function checkForNewBuild() {
     return true;
   } catch (e) { return false; }
 }
-function hubReload() { location.reload(); }   // its own name so a test can see it without leaving the page
+// One try per new version every two minutes. On a weak signal the reload can come back as the
+// cached old page, and with the look on opening that would be a reload every few seconds.
+function hubMayReload(live, now) {
+  try {
+    const t = JSON.parse(sessionStorage.getItem('gp_upd_try') || 'null');
+    if (t && t.v === live && now - t.at < 120000) return false;
+    sessionStorage.setItem('gp_upd_try', JSON.stringify({ v: live, at: now }));
+  } catch (e) { /* no sessionStorage: reload anyway */ }
+  return true;
+}
+function hubReload() { if (hubMayReload(hubUpdateSeen, Date.now())) location.reload(); }   // its own name so a test can see it without leaving the page
 if (location.protocol !== 'file:') {
   setInterval(checkForNewBuild, UPDATE_EVERY_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForNewBuild(); });
+  // Once on opening: the document race gives up after four seconds on a weak signal and serves
+  // the cached page, which then waited out the first five minutes. And on focus, which the
+  // WebView fires on coming back to the front where visibilitychange may not.
+  window.addEventListener('focus', () => checkForNewBuild());
+  setTimeout(checkForNewBuild, 3000);
 }
 
 // Reports what is actually running, IN WORDS.
