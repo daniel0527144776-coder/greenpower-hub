@@ -103,11 +103,16 @@ const surron = await page.evaluate(() => {
   // the comparison row is never found and the check passes vacuously on a null.
   const size = m[0];
   const j = PRICING.findIndex((x) => x.name === size && /^סוללות אינדורו/.test(x.cat) && /PRO/.test(x.cat));
+  const caseLine = batteryCostParts(it, false).parts.find((x) => /מארז/.test(x.k)) || null;
   return { name: it.name, cat: it.cat, surron: estimateBatteryCost(it, false),
-    heavy: j < 0 ? null : estimateBatteryCost(PRICING[j], false), V: +m[1] };
+    heavy: j < 0 ? null : estimateBatteryCost(PRICING[j], false), V: +m[1], caseLine };
 });
+// Since 2026-10-18 a Sur-Ron is not an enduro pack plus a case: it is copper-nickel and an
+// ANT 420A as well (test-surron-cost.mjs holds that sum), so the gap to the enduro row is the
+// case AND more, never less — and the case is still its own ₪1,500 line.
 check('a Sur-Ron pack carries its ₪1,500 OEM case',
-  !surron.missing && surron.heavy != null && surron.surron - surron.heavy === 1500, surron);
+  !surron.missing && surron.heavy != null && surron.surron - surron.heavy >= 1500, surron);
+check('the Sur-Ron breakdown names the case at ₪1,500', (surron.caseLine || {}).v === 1500, surron.caseLine);
 
 // ---------------------------------------------------------------- 4. the breakdown says so
 const parts = await page.evaluate(() => {
