@@ -1,8 +1,8 @@
 // הזמנה לספק (v471, Daniel 2026-10-18: "שהספק ידע בדיוק את מה שאני צריך, לפי ההזמנות ששלחתי בעבר").
 //
 //   node test/test-supplier-order.mjs
-//   node test/test-supplier-order.mjs --selftest   (numbers move on every change, and a line with no
-//                                                   quantity goes in — the checks on both must fail)
+//   node test/test-supplier-order.mjs --selftest   (numbers move on every change, a line with no quantity
+//                                                   goes in, and the import takes his oldest list — each must fail)
 //
 // The supplier answers by line number ("27. right?"), and he corrects by line number ("31. Cancel"),
 // so the one thing that must never happen is a sent number moving. The lines must read as he writes
@@ -173,6 +173,51 @@ check('done: the "חסר" line it covered is marked ordered', done.ordered, '');
 const again = await page.evaluate(() => { const d = soGet(); soReorder(d.hist[0].id); closeNotice(); const d2 = soGet(); return soCur(d2, soCurSup(d2)).lines.map((l) => l.n); });
 check('"הזמן שוב" brings its lines back, numbered from 1', again[0] === 1 && again.length >= 4, again);
 check('each supplier\'s order is its own synced field', done.fields.includes('sups') && done.fields.includes('hist'), done.fields);
+// ---- 8. the suppliers and their lists, from his WhatsApp ----
+// Two Chinese suppliers with orders, one without, one Israeli chat and one unnamed Chinese number.
+// Made-up numbers and names: nothing of his is in this repo either.
+const WA = {
+  chats: [{ id: '8611111111111@c.us', n: 'Parts A' }, { id: '8622222222222@c.us', n: 'Parts B' }, { id: '8633333333333@c.us', n: 'Quote only' },
+    { id: '972500000000@c.us', n: 'לקוח' }, { id: '8644444444444@c.us', n: '' }],
+  '8611111111111@c.us': [
+    { at: 1000, dir: 'out', t: '1. Old item one 1pc\n2. Old item two 2pc\n3. Old item three 3pc' },
+    { at: 2000, dir: 'out', t: '1. Old item one 1pc\n2. Old item two 2pc\n3. Old item three 3pc' },
+    { at: 3000, dir: 'in', t: '1. Their quote 1$\n2. Their quote 2$\n3. Their quote 3$' },
+    { at: 4000, dir: 'out', t: '1. Nickel pure 22.5mm H Type 2S-2kg 0.3mm  (800mm)\n\n2. PVC shrink BLU 0.3mm 260-20M\n\n3. Copper strip 25mm 0.5mm 2Kg\n4. Daly li-ion common port 16S 60A 13pc:' },
+    { at: 5000, dir: 'out', t: '21. 23mm not 22.7mm' }],
+  '8622222222222@c.us': [{ at: 6000, dir: 'out', t: '1. Plastic holder 21700 22.5mm  Z Type 200pc\n2. Plastic holder 21700 22.5mm  H Type 200pc\n3. Daly li-ion common port 7S 60A 4pc:' }],
+  '8633333333333@c.us': [{ at: 7000, dir: 'out', t: 'Price?' }],
+};
+let waCalls = 0;
+await page.route('https://energylabgreen.com/api/wa/history**', (route) => {
+  waCalls++;
+  const q = new URL(route.request().url()).searchParams;
+  const body = q.get('chats') ? { chats: WA.chats } : { lines: WA[q.get('chat')] || [] };
+  route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
+});
+const imp = await page.evaluate(async (SELF) => {
+  if (SELF) window.soWaLists = ((real) => (lines) => real(lines).reverse())(window.soWaLists);
+  Sync.token = async () => 't';
+  // Parts B already has an order he is writing: the import must not touch it
+  const d0 = soGet();
+  d0.sups = soSups(d0).concat([{ id: 'mine', name: 'B by hand', wa: '8622222222222' }]);
+  d0['cur_mine'] = { lines: [{ id: 'x1', n: 1, t: 'His own line' }] };
+  soPut(d0);
+  await soImportWa(); closeNotice();
+  const d = soGet(), by = (wa) => soSups(d).find((s) => s.wa === wa);
+  const a = by('8611111111111');
+  const res = { names: soSups(d).map((s) => s.name), a: a && soCur(d, a.id), aHist: (d.hist || []).filter((h) => a && h.sup === a.id), mine: soCur(d, 'mine').lines.map((l) => l.t),
+    n: soSups(d).length };
+  await soImportWa(); closeNotice();
+  res.again = soSups(soGet()).length; res.histAgain = (soGet().hist || []).length; res.hist1 = (d.hist || []).length;
+  return res;
+}, SELFTEST);
+check('the named Chinese chats become suppliers; not a customer, not an unnamed number', imp.names.includes('Parts A') && imp.names.includes('Quote only') && !imp.names.includes('לקוח') && !imp.names.some((n) => !n), imp.names);
+check('a supplier already there is not added twice', imp.names.filter((n) => n === 'Parts B' || n === 'B by hand').length === 1, imp.names);
+check('his latest list is the open order, as sent, with its own numbers', imp.a && imp.a.lines.map((l) => l.n + '. ' + l.t).join('|') === '1. Nickel pure 22.5mm H Type 2S-2kg 0.3mm (800mm)|2. PVC shrink BLU 0.3mm 260-20M|3. Copper strip 25mm 0.5mm 2Kg|4. Daly li-ion common port 16S 60A 13pc:' && imp.a.sent && imp.a.sent.at === 4000, imp.a && imp.a.lines.map((l) => l.t));
+check('the list before it is in the history once; the quote the supplier sent is not his list', imp.aHist.length === 1 && imp.aHist[0].at === 2000, imp.aHist.map((h) => h.at));
+check('an order he is writing is left alone', imp.mine.join() === 'His own line', imp.mine);
+check('run twice, it adds nothing', imp.again === imp.n && imp.histAgain === imp.hist1, [imp.n, imp.again, imp.hist1, imp.histAgain]);
 // a Daly with no quantity, straight into soAddLine: still refused
 const refused = await page.evaluate((SELF) => {
   if (SELF) { const real = window.soValues; window.soValues = () => { const r = real(); return { ...r, missing: [], text: r.text || r.T.line(r.out) }; }; }

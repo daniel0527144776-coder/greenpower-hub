@@ -1654,9 +1654,10 @@ body { min-height: 100vh; }
   </div>
   <div class="card">
     <div class="form-row"><label>ספק</label>
-      <div style="display:flex;gap:6px;align-items:center;">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <select class="form-select" id="soSup" onchange="soPickSup(this.value)"></select>
         <button class="btn btn-secondary btn-sm" onclick="soEditSup(null)">➕ ספק</button>
+        <button class="btn btn-secondary btn-sm" onclick="soImportWa()" title="ספקים ורשימות מהוואטסאפ">📥 מוואטסאפ</button>
         <button class="btn btn-secondary btn-sm" id="soSupEditBtn" onclick="soEditSup(document.getElementById('soSup').value)">✏️</button>
       </div>
     </div>
@@ -2770,7 +2771,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v472';
+const HUB_BUILD = 'v473';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -13666,7 +13667,7 @@ function soDone() {
     const s = soSups(d2).find((x) => String(x.id) === sup);
     const hist = Array.isArray(d2.hist) ? d2.hist : [];
     hist.unshift({ id: soNewId('h'), sup, name: s ? s.name : '', at: Date.now(), lines: c2.lines.map((l) => ({ n: l.n, t: l.t, cancel: !!l.cancel, f: l.f })) });
-    d2.hist = hist.slice(0, 60);
+    d2.hist = hist.slice(0, 200);
     const needs = new Set(c2.lines.filter((l) => l.need && !l.cancel).map((l) => String(l.need)));
     delete d2['cur_' + sup];
     if (!soPut(d2)) return;
@@ -13722,6 +13723,92 @@ function soPasteApply() {
   if (!soPut(d)) return;
   closeModal();
   renderSorder();
+}
+// "תבדוק דבר ראשון, כל ההזמנות שעשיתי מספקים ותוסיף אותם" (Daniel, 2026-10-18): the suppliers and
+// their lists come from his WhatsApp, through the bot's history door (his login, owner-only; nothing
+// is kept there). A supplier is a NAMED chat on a Chinese or Hong Kong number; a list is a message HE
+// sent with three numbered lines or more. Each supplier's latest list becomes its open order, marked as
+// sent, so the numbers are the ones the supplier already holds; the lists before it go to the history,
+// to order again. An open order he has lines in is never replaced, and an import run twice adds nothing.
+const SO_WA_URL = 'https://energylabgreen.com/api/wa/history';
+const SO_WA_RE = /^(86|852)\d{7,}@c\.us$/;
+async function soWaGet(qs) {
+  const t = await Sync.token();
+  if (!t) throw new Error('צריך להתחבר ללוח הבקרה');
+  const r = await fetch(SO_WA_URL + '?' + qs, { headers: { authorization: 'Bearer ' + t } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+// His sent lists in one chat, oldest first, each the same list once (he re-sends one many times).
+function soWaLists(lines) {
+  const out = [];
+  for (const m of (Array.isArray(lines) ? lines : [])) {
+    if (!m || m.dir !== 'out') continue;
+    const list = soParseList(m.t);
+    if (list.length < 3) continue;
+    const key = list.map((l) => l.n + '.' + l.t + (l.cancel ? '*' : '')).join('\n');
+    if (out.length && out[out.length - 1].key === key) { out[out.length - 1].at = Number(m.at) || 0; continue; }
+    out.push({ at: Number(m.at) || 0, lines: list, key });
+  }
+  return out;
+}
+let soImporting = false;
+async function soImportWa() {
+  if (soImporting) return;
+  soImporting = true;
+  const st = document.getElementById('soStatus');
+  const say = (t) => { if (st) st.textContent = t; };
+  try {
+    say('קורא את רשימת השיחות…');
+    const chats = ((await soWaGet('chats=1')).chats || []).filter((c) => SO_WA_RE.test(String(c.id || '')) && String(c.n || '').trim());
+    const found = [];
+    let i = 0;
+    const next = async () => {
+      while (i < chats.length) {
+        const c = chats[i++];
+        say(`קורא שיחות עם ספקים… ${i}/${chats.length}`);
+        let lists = [];
+        try { lists = soWaLists((await soWaGet('chat=' + encodeURIComponent(c.id) + '&count=400&text=1')).lines); } catch (e) { /* one chat that failed: the rest still come in */ }
+        found.push({ c, lists });
+      }
+    };
+    await Promise.all([next(), next(), next(), next()]);
+    const d = soGet(), sups = soSups(d).slice(), hist = Array.isArray(d.hist) ? d.hist.slice() : [];
+    let added = 0, orders = 0, old = 0;
+    // the ones with orders first in the list, then by name
+    found.sort((a, b) => (b.lists.length ? 1 : 0) - (a.lists.length ? 1 : 0) || String(a.c.n).localeCompare(String(b.c.n)));
+    for (const { c, lists } of found) {
+      const wa = String(c.id).split('@')[0];
+      let s = sups.find((x) => String(x.wa || '') === wa);
+      if (!s) { s = { id: 'wa' + wa, name: String(c.n).trim().slice(0, 60), wa }; sups.push(s); added++; }
+      if (!lists.length) continue;
+      const last = lists[lists.length - 1];
+      const cur = soCur(d, s.id);
+      if (!cur.lines.length) {
+        const lines = last.lines.map((l) => ({ id: soNewId('l'), n: l.n, t: l.t, cancel: l.cancel || undefined }));
+        d['cur_' + s.id] = { lines, sent: { at: last.at, lines: lines.map((l) => ({ id: l.id, n: l.n, t: l.t, cancel: !!l.cancel })) }, from: 'wa' };
+        orders++;
+      }
+      // up to five earlier lists of each supplier, to order again
+      for (const L of lists.slice(0, -1).slice(-5)) {
+        if (hist.some((h) => String(h.sup) === String(s.id) && Number(h.at) === L.at)) continue;
+        hist.push({ id: soNewId('h'), sup: s.id, name: s.name, at: L.at, lines: L.lines.map((l) => ({ n: l.n, t: l.t, cancel: !!l.cancel })), from: 'wa' });
+        old++;
+      }
+    }
+    d.sups = sups;
+    d.hist = hist.sort((a, b) => Number(b.at) - Number(a.at)).slice(0, 200);
+    if (!d.pick && sups.length) d.pick = String(sups[0].id);
+    if (!soPut(d)) return;
+    renderSorder();
+    showNotice(`מוואטסאפ: ${added} ספקים חדשים, ${orders} הזמנות פתוחות (הרשימה האחרונה שנשלחה לכל ספק), ${old} רשימות קודמות בהיסטוריה.`);
+  } catch (e) {
+    say('');
+    showNotice('הייבוא לא הצליח: ' + (e && e.message ? e.message : e));
+  } finally {
+    soImporting = false;
+  }
 }
 function soEditSup(id) {
   const d = soGet(), s = soSups(d).find((x) => String(x.id) === String(id)) || { name: '', wa: '' };
@@ -13825,7 +13912,8 @@ function renderSorder() {
   document.getElementById('soNote').value = c.note || '';
   document.getElementById('soShips').innerHTML = ships.length ? ships.map((s) => `<div style="display:flex;gap:6px;align-items:center;padding:5px 0;border-top:1px solid var(--border);">
       <b style="flex:1;">${soEsc(s.label)}</b><button class="btn btn-sm btn-secondary" onclick="soEditShip(${arg(s.id)})">✏️</button></div>`).join('') : '<div style="font-size:12px;color:var(--text-muted);">אין עדיין.</div>';
-  const hist = Array.isArray(d.hist) ? d.hist : [];
+  // this supplier's, newest first
+  const hist = (Array.isArray(d.hist) ? d.hist : []).filter((h) => String(h.sup) === sup);
   document.getElementById('soHist').innerHTML = hist.length ? hist.slice(0, 20).map((h) => `<div style="padding:6px 0;border-top:1px solid var(--border);">
       <div style="display:flex;gap:6px;align-items:center;"><b style="flex:1;">${soEsc(h.name || '')} · ${new Date(Number(h.at)).toLocaleDateString('he-IL')}</b>
       <button class="btn btn-sm btn-secondary" onclick="soReorder(${arg(h.id)})">♻️ הזמן שוב</button></div>
