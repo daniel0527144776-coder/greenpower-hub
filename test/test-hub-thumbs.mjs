@@ -175,7 +175,7 @@ console.log('4. the technical spec line');
   // Categories are COLLAPSED by default — 788 rows in one scroll was the reason — so one is
   // chosen before any row exists to inspect (the search box went on 2026-10-06). A first version
   // asserted on an empty list and reported "0 of 0", which is a check passing over nothing.
-  await p.evaluate(() => { document.getElementById('catalogCat').value = PRICING.find((x) => /72V/.test(x.name) && /סוללות/.test(x.cat)).cat; renderCatalog(); });
+  await p.evaluate(() => { catExpandAll(true); });
   await p.waitForSelector('.price-item-name', { timeout: 8000 });
 
   const r = await p.evaluate(() => {
@@ -217,7 +217,7 @@ console.log('4. the technical spec line');
   check('markup in a spec is escaped, not executed',
     injected.img === 0 && !injected.pwned && injected.shown, JSON.stringify(injected));
 
-  await p.evaluate(() => { document.getElementById('catalogCat').value = ''; renderCatalog(); });
+  await p.evaluate(() => { catExpandAll(false); });
 }
 check('nothing was fetched from another origin', external.length === 0, external.slice(0, 5));
 check('none of this went through a dialog the phone cannot draw', dialogs.length === 0, dialogs);

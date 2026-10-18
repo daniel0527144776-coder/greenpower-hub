@@ -134,10 +134,10 @@ check('the list and the customer card still agree', merged.disagree === 0, merge
 const price = await page.evaluate(() => {
   navigateTo('catalog');
   const row = PRICING.find((p) => /72V 30Ah/.test(p.name) && /PRO/.test(p.cat));
-  const sel = document.getElementById('catalogCat');
-  sel.value = row.cat; renderCatalog();
-  const text = document.getElementById('catalogList').innerText;
-  sel.value = ''; renderCatalog();
+  // no category dropdown since 2026-10-18: the category is opened, as he taps it
+  catOpenCats = new Set([row.cat]); renderCatalog();
+  const text = document.getElementById('catalogList').textContent;
+  catOpenCats = new Set(); renderCatalog();
   return { found: /72V 30Ah/.test(text), gone: !document.getElementById('homePrice'), noSearch: !document.getElementById('catalogSearch'),
            matchesCatalogue: !!row && text.includes(row.retail.toLocaleString('he-IL')) };
 });

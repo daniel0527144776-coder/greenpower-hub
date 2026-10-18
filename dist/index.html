@@ -219,6 +219,9 @@ body { min-height: 100vh; }
 .dim-nk.sel { border-color:var(--primary); box-shadow:inset 0 0 0 1px var(--primary); }
 .dim-nk-head { display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:13px; margin-bottom:2px; }
 .dim-nk-head b { margin-inline-end:auto; }
+.dim-nk.short { padding:6px 10px; }
+.dim-nk.short .dim-nk-head { margin-bottom:0; }
+.dim-nk-max { font-size:12px; color:var(--text-muted); }
 .dim-badge { font-size:12px; font-weight:700; padding:2px 8px; border-radius:10px; white-space:nowrap; }
 .dim-badge.ok { color:#34d399; background:rgba(52,211,153,.12); }
 .dim-badge.no { color:var(--danger); background:rgba(239,68,68,.12); }
@@ -609,11 +612,6 @@ body { min-height: 100vh; }
         <div class="quick-card-title">בוטים</div>
         <div class="quick-card-desc">וואטסאפ · מסחר</div>
       </div>
-      <div class="quick-card" onclick="navigateTo('films')">
-        <span class="quick-card-icon">🎬</span>
-        <div class="quick-card-title">סרטונים</div>
-        <div class="quick-card-desc">כל הסרטונים שבאתר</div>
-      </div>
 
     </div>
   </div>
@@ -796,18 +794,6 @@ body { min-height: 100vh; }
     </div>
     <div style="font-size: 11px; color: var(--text-muted); text-align: left; margin-top: 4px;">
       מחיר BMS: <strong id="bmsPrice" style="color: var(--primary);">₪55</strong>
-    </div>
-  </div>
-
-  <!-- Popular combos -->
-  <div class="card">
-    <h3 class="card-title">🔥 חבילות מהירות</h3>
-    <div class="pills-grid pills-grid-2">
-      <div class="pill" onclick="applyCombo(['diag'])">🔍 אבחון בלבד</div>
-      <div class="pill" onclick="applyCombo(['bms','shrink','wires'])">🔌 BMS + שרינק + צמה</div>
-      <div class="pill" onclick="applyCombo(['nicfix','shrink','balance'])">⚡ נתקים + בידוד</div>
-      <div class="pill" onclick="applyCombo(['water','shrink','wires'])">💧 נזק מים</div>
-      <div class="pill" onclick="applyCombo(['bms_upgrade','shrink'])">⬆️ שדרוג BMS</div>
     </div>
   </div>
 
@@ -1149,7 +1135,6 @@ body { min-height: 100vh; }
 
   <div id="dimPane-veh">
   <div class="card">
-    <p style="font-size:11px;color:var(--warning,#f59e0b);margin:0 0 8px;">⚠ הנתונים כאן מ-AI, לא נמדדו — חוץ ממה שמסומן ✓ נמדד</p>
     <div id="vpList"></div>
     <button class="btn btn-secondary btn-block btn-sm" style="margin-top:10px;" onclick="openDimEditor(null)">➕ הוסף מדידה של מגש</button>
   </div>
@@ -1381,7 +1366,6 @@ body { min-height: 100vh; }
       <div class="sub-tab" data-tier="PRO" onclick="setCatalogTier('PRO')">PRO</div>
       <div class="sub-tab" data-tier="OTHER" onclick="setCatalogTier('OTHER')">ללא סדרה</div>
     </div>
-    <select class="form-select" id="catalogCat" style="width:100%; margin-bottom:10px;" onchange="renderCatalog()"></select>
     <div class="btn-group" style="margin-bottom:10px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(true)">⊕ פתח הכל</button>
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(false)">⊖ סגור הכל</button>
@@ -1515,10 +1499,6 @@ body { min-height: 100vh; }
     <summary><span class="fold-title">🗑 נמחקו לאחרונה</span></summary>
     <div class="fold-body"><div id="wtTrashBody">
       <div id="wtTrashList"></div>
-      <div class="wt-muted" style="margin:10px 0 6px;">שעות שנמחקו לפני שהיה סל:</div>
-      <button class="btn btn-secondary btn-block btn-sm" onclick="restoreFromPunches()">📱 שחזור מדיווחי הטלפון של העובדים</button>
-      <button class="btn btn-secondary btn-block btn-sm" style="margin-top:6px;" onclick="document.getElementById('restoreHoursFile').click()">💾 שחזור מקובץ גיבוי</button>
-      <input type="file" id="restoreHoursFile" accept=".json" style="display: none;" onchange="restoreHoursFromBackup(this)">
     </div></div>
   </details>
 </section>
@@ -1622,24 +1602,6 @@ body { min-height: 100vh; }
 </section>
 
 <!-- ============ INVENTORY PAGE ============ -->
-<!-- The site's animations, all on its hidden /films page, shown here in a frame (Daniel,
-     2026-09-28: "תעשה טאב בלוח בקרה של הסרטונים שהכנת"). A frame and not a copy: the films are
-     the site's own components, so one fix reaches both. It loads only when the tab is opened. -->
-<section id="page-films" class="page">
-  <div class="page-header">
-    <div>
-      <h2 class="page-title">🎬 סרטונים</h2>
-      <p class="page-subtitle">הסרטונים שבאתר — מהאתר עצמו</p>
-    </div>
-    <div class="btn-group">
-      <button class="btn btn-secondary btn-sm" onclick="openExternal(FILMS_URL)">🔗 פתח באתר</button>
-    </div>
-  </div>
-  <div class="card" style="padding:0;overflow:hidden;">
-    <iframe id="filmsFrame" title="סרטונים" loading="lazy" allow="autoplay"
-      style="display:block;width:100%;height:calc(100vh - 170px);min-height:480px;border:0;background:#0f172a;"></iframe>
-  </div>
-</section>
 
 <section id="page-diag" class="page">
   <div class="page-header">
@@ -1657,8 +1619,6 @@ body { min-height: 100vh; }
     <div class="btn-group">
       <button class="btn btn-secondary btn-sm" onclick="copyOrderList()">🛒 מה להזמין</button>
       <button class="btn btn-secondary btn-sm" onclick="openInventoryBulkImport()">📥 ייבוא מהיר</button>
-      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('invRestoreFile').click()">♻️ שחזור מגיבוי</button>
-      <input type="file" id="invRestoreFile" accept=".json" style="display:none;" onchange="restoreInventoryFromBackup(this)">
       <button class="btn btn-primary btn-sm" onclick="openInventoryEditor(null)">➕ פריט</button>
     </div>
   </div>
@@ -2515,28 +2475,7 @@ function renderPageTabs(page) {
   hdr.insertAdjacentElement('afterbegin', bar);
 }
 
-const FILMS_URL = 'https://energylabgreen.com/films';
-// Set once, on the first visit: a frame with its src in the markup would load the whole site's
-// animations every time the hub opens.
-function renderFilms() {
-  const fr = document.getElementById('filmsFrame');
-  if (fr && !fr.getAttribute('src')) fr.setAttribute('src', FILMS_URL);
-}
 
-// The films page in the frame asks the hub for what it cannot do from inside a frame (2026-10-05):
-// 'share' opens WhatsApp with the film's watch page; 'send-me' has the bot send the upright MP4 to
-// the business number's own chat, from where it is one forward to a status (the WebView cannot
-// download). Only messages from the site itself, and only links to its own /videos, are acted on.
-function onFilmShare(e) {
-  if (e.origin !== 'https://energylabgreen.com') return;
-  const m = e.data || {};
-  if (m.gp !== 'film-share') return;
-  const ours = (u) => typeof u === 'string' && u.indexOf('https://energylabgreen.com/videos/') === 0;
-  const title = String(m.title || '').slice(0, 120);
-  if (m.action === 'share' && ours(m.page)) return openExternal('https://wa.me/?text=' + encodeURIComponent(title + '\n' + m.page));
-  if (m.action === 'send-me' && ours(m.mp4)) return waDo({ op: 'sendfile', url: m.mp4, caption: title }, '✅ הסרטון נשלח אליך בוואטסאפ, לצ׳אט של העסק — משם אפשר להעביר אותו לסטטוס');
-}
-window.addEventListener('message', onFilmShare);
 
 function navigateTo(page) {
   if (page === 'customers') page = 'orders';   // merged into לקוחות ועבודות (2026-10-08); old links still land
@@ -2572,7 +2511,7 @@ function navigateTo(page) {
   if (page === 'stickers') openStickerEditor();
   if (page === 'stickerlog') renderStickerLog();
   if (page === 'diag') renderDiag();
-  if (page === 'films') renderFilms();
+  if (page === 'films') return navigateTo('home');   // the films tab went on 2026-10-18; an old link lands home
   if (page === 'inventory') renderInventory();
   if (page === 'supplier') renderSupplier();
 }
@@ -2773,7 +2712,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v461';
+const HUB_BUILD = 'v464';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3076,14 +3015,6 @@ function toggleJob(job) {
   recalc();
 }
 
-function applyCombo(jobs) {
-  state.jobs = new Set(jobs);
-  document.querySelectorAll('[data-job]').forEach(el => el.classList.toggle('checked', state.jobs.has(el.dataset.job)));
-  document.getElementById('rowsInputCard').style.display = state.jobs.has('rows') ? 'block' : 'none';
-  document.getElementById('surgicalInputCard').style.display = state.jobs.has('surgical') ? 'block' : 'none';
-  document.getElementById('swellingInputCard').style.display = state.jobs.has('swelling') ? 'block' : 'none';
-  recalc();
-}
 
 function adjRows(d) {
   state.rowsToReplace = Math.max(1, state.rowsToReplace + d);
@@ -6499,10 +6430,6 @@ function tierMatches(it) {
 function setCatalogTier(t) {
   catalogTier = t;
   document.querySelectorAll('#catalogTiers .sub-tab').forEach(e => e.classList.toggle('active', (e.dataset.tier || '') === t));
-  // Reset the category dropdown: picking PRO while "סוללות אופניים - 48V CLASSIC" is selected
-  // would show an empty list and look broken. The two filters are AND-ed, so one has to yield.
-  const sel = document.getElementById('catalogCat');
-  if (sel && t) sel.value = '';
   renderCatalog();
 }
 
@@ -6549,14 +6476,8 @@ function renderCatRoute() {
 }
 function renderCatalog() {
   addShallowCatalogRows();   // idempotent — also run from init()
-  const sel = document.getElementById('catalogCat');
-  if (sel && sel.options.length === 0) {
-    const cats = [...new Set(PRICING.map(c => c.cat))];
-    sel.innerHTML = '<option value="">כל הקטגוריות</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
-  }
-  const cat = document.getElementById('catalogCat')?.value || '';
-  const items = PRICING.filter(it => (!cat || it.cat === cat)
-    && tierMatches(it));
+  // No category dropdown since 2026-10-18 (his list of what is not needed): the families fold.
+  const items = PRICING.filter((it) => tierMatches(it));
   const groups = {};
   items.forEach(it => { (groups[it.cat] = groups[it.cat] || []).push(it); });
   // Collapsed by default, same as עלויות ספקים: 805 rows over 68 categories was a single
@@ -6616,7 +6537,6 @@ function renderCatalog() {
     }
   }
   catCatKeys = plan.filter((p) => p.cat).map((p) => p.cat);
-  const forceOpen = !!cat;
   // Each topic is a fold (2026-10-05, "בכל הטאבים … הכל מקופל"): the page opens as five lines. Its
   // title keeps the price-series class, so the order of topics, voltages and categories reads the
   // same off the DOM as before. A chosen category opens them.
@@ -6625,12 +6545,12 @@ function renderCatalog() {
   let out = '', html = '', ci = -1, topic = null, sub = null, subHtml = '';
   const topics = [...byTopic.keys()];
   const flushSub = () => {
-    if (sub !== null) html += fold('cat-topic-' + topics.indexOf(topic) + '-' + sub.replace(/\D/g, ''), '<span class="price-series">' + sub + '</span>', subHtml, { open: forceOpen, sub: true });
+    if (sub !== null) html += fold('cat-topic-' + topics.indexOf(topic) + '-' + sub.replace(/\D/g, ''), '<span class="price-series">' + sub + '</span>', subHtml, { sub: true });
     sub = null; subHtml = '';
   };
   const flushTopic = () => {
     flushSub();
-    if (topic !== null) out += fold('cat-topic-' + topics.indexOf(topic), '<span class="price-series">' + topic + '</span>', html, { open: forceOpen, sub: true });
+    if (topic !== null) out += fold('cat-topic-' + topics.indexOf(topic), '<span class="price-series">' + topic + '</span>', html, { sub: true });
     html = '';
   };
   for (const p of plan) {
@@ -6653,7 +6573,7 @@ function renderCatalog() {
     {
     const c = p.cat;
     ci++;
-    const open = forceOpen || catOpenCats.has(c);
+    const open = catOpenCats.has(c);
     // The tier STAYS in the row now. It used to be stripped because a PRO banner sat above
     // and repeating it fourteen times was noise — with topics as the heading there is no
     // banner to make it redundant, and "סוללות אופניים - 48V" alone would name three
@@ -9307,50 +9227,6 @@ function restoreFromTrash(i) {
   showNotice('הוחזר.');
 }
 
-// ---- recovering reports from the workers' phones ----
-// Every punch a worker sends from /clock/ is a row in worker_punches, which the hub never
-// deletes — approving one only marks it. So an approved punch whose hours are gone from the
-// hub can be brought back from there. Matched by punchId, then by day + worker + hours, so a
-// row he retyped by hand is not paid twice. The rate is the hub's own, never the report's.
-async function restoreFromPunches() {
-  if (!Sync.isAuthed()) { showNotice('צריך להיות מחובר לענן כדי לשחזר דיווחים.'); return; }
-  let rows;
-  try {
-    const h = await Sync._headers();
-    const r = await fetch(SB_URL + '/rest/v1/worker_punches?status=eq.approved&select=*&order=work_date.asc', { headers: h });
-    if (!r.ok) { showNotice('לא הצלחתי לקרוא את הדיווחים מהשרת (' + r.status + ').'); return; }
-    rows = await r.json();
-  } catch (e) { showNotice('אין חיבור לענן — נסה שוב.'); return; }
-  const now = Store.get('worktime') || [];
-  const trashIds = new Set(getWorktimeTrash().filter((t) => t.kind !== 'payment').map((t) => t.row && t.row.punchId).filter(Boolean));
-  const havePunch = new Set(now.map((x) => x.punchId).filter(Boolean));
-  const sig = (day, name, hours) => day + '|' + name + '|' + (Math.round(Number(hours) * 100) / 100);
-  const haveSig = new Set(now.map((x) => sig(String(x.date).slice(0, 10), wtName(x), x.hours)));
-  const add = [], unknown = new Set();
-  let inTrash = 0;
-  for (const p of rows) {
-    if (havePunch.has(p.id)) continue;
-    if (trashIds.has(p.id)) { inTrash++; continue; }
-    const w = findWorkerFor(p.worker);
-    if (!w) { unknown.add(p.worker); continue; }
-    const s = sig(p.work_date, w.name, p.hours);
-    if (haveSig.has(s)) continue;
-    haveSig.add(s);
-    add.push({ id: 'w' + Date.now() + '_' + add.length, workerName: w.name, rate: w.rate, hours: Number(p.hours),
-      note: p.note || '', date: new Date(p.work_date + 'T12:00:00').toISOString(), paid: false, punchId: p.id });
-  }
-  const tail = (unknown.size ? `\n\nלא זוהו (לא ברשימת העובדים): ${[...unknown].join(', ')}` : '')
-    + (inTrash ? `\n${inTrash} נמצאים בסל — החזר אותם משם.` : '');
-  if (!add.length) { showNotice(`לא חסר כלום — ${rows.length} הדיווחים המאושרים כבר נמצאים אצלך.` + tail); return; }
-  const hours = add.reduce((s, x) => s + x.hours, 0), wage = add.reduce((s, x) => s + wtWage(x), 0);
-  const lines = add.slice(0, 15).map((x) => String(x.date).slice(0, 10) + ' · ' + x.workerName + ' · ' + wtHrs(x.hours) + ' שעות');
-  askConfirm(`נמצאו ${add.length} דיווחים מהטלפון שחסרים אצלך:\n${wtHrs(hours)} שעות · ${shek(wage)}\n\n${lines.join('\n')}`
-    + (add.length > 15 ? `\n…ועוד ${add.length - 15}` : '') + tail + '\n\nלהחזיר אותם?', () => {
-    if (!Store.set('worktime', now.concat(add))) return;
-    renderWorktime();
-    showNotice(`✅ הוחזרו ${add.length} דיווחים · ${wtHrs(hours)} שעות · ${shek(wage)}`);
-  });
-}
 
 // A clock row's note is "שעון: 09:02–15:32". In a right-to-left line the times are neutral
 // runs and flipped to "15:32–09:02", so a shift read backwards. The span is isolated LTR.
@@ -9625,8 +9501,10 @@ function planExt(pl) {
 // כמו שהניקל באמת יושב על התאים", in two drawings, "כן, ככה"). On one side a strip joins groups 1+2, 3+4 …;
 // on the other group 1 is alone (B−), then 2+3, 4+5 …, and the last alone (B+) when the count comes out so.
 // Each strip one colour, laid over every cell of its groups and between neighbours; the cells' outlines on
-// top, and the rows numbered over the top ("ב׳: מספר השורה"). No number in the cells (his, on the draft:
-// "תמחוק את מספר התאים שכתוב בשחור באמצע הציור").
+// top. No numbers at all: none in the cells (his, on the draft: "תמחוק את מספר התאים שכתוב בשחור באמצע
+// הציור") and none over the top ("וגם תמחוק את המספרים מעל", 2026-10-18).
+// Every drawing of a pack in groups is drawn so since 2026-10-18 — the 18650 blocks, the cells laid along,
+// the Silver Fish's case and the Bomber's frame too ("למה חלק הציורים צבעוניים וחלק לא").
 const NICKEL_COLS = ['#f59e0b', '#22d3ee', '#a3e635', '#f472b6', '#a78bfa', '#fb7185'];
 function nickelPieces(G, side) {
   const out = [];
@@ -9635,7 +9513,7 @@ function nickelPieces(G, side) {
   return out;
 }
 function nickelSvg(plan, side) {
-  const PX = 24, PT = 20, PB = 8;
+  const PX = 24, PT = 8, PB = 8;
   const { x: ext, y: hh } = planExt(plan);
   const sc = Math.min(1.2, (340 - 2 * PX) / ext, 260 / hh);
   const W = Math.round(ext * sc) + 2 * PX, H = Math.round(hh * sc) + PT + PB;
@@ -9644,7 +9522,16 @@ function nickelSvg(plan, side) {
   let g = plan.outline
     ? `<polygon class="pack-outline" points="${plan.outline.map(([x, y]) => X(x) + ',' + Y(y)).join(' ')}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`
     : `<rect x="${PX - 3}" y="${PT - 3}" width="${(ext * sc + 6).toFixed(1)}" height="${(plan.hMM * sc + 6).toFixed(1)}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`;
-  const cells = plan.cells, G = Math.max(...cells.map((c) => c.g)) + 1, near = Math.max(plan.pitch || 0, plan.rowPitch || 0, plan.dia + 0.3) * 1.08;
+  const cells = plan.cells, G = Math.max(...cells.map((c) => c.g)) + 1;
+  // Two cells are neighbours under one strip when they are as close as the bracket puts them. A tray
+  // plan knows its pitches; any other plan is measured: the closest two cells in it, and a little over.
+  let near = Math.max(plan.pitch || 0, plan.rowPitch || 0) * 1.08;
+  if (!near) {
+    let d = Infinity;
+    for (let a = 0; a < cells.length; a++) for (let b = a + 1; b < cells.length; b++) d = Math.min(d, Math.hypot(cells[a].x - cells[b].x, cells[a].y - cells[b].y));
+    near = (isFinite(d) ? d : plan.dia + 1) * 1.12;
+  }
+  near = Math.max(near, (plan.dia + 0.3) * 1.08);
   const bw = (plan.dia * 0.34 * sc).toFixed(1), dotR = (plan.dia * 0.26 * sc).toFixed(1);
   nickelPieces(G, side).forEach((pc, n) => {
     const cs = cells.filter((c) => pc.includes(c.g)), col = NICKEL_COLS[n % NICKEL_COLS.length];
@@ -9657,30 +9544,25 @@ function nickelSvg(plan, side) {
     g += `<g class="pack-nickel" data-groups="${pc.map((k) => k + 1).join('+')}" opacity=".8">${piece}</g>`;
   });
   const r = (plan.dia / 2 * sc * 0.94).toFixed(1);
-  for (const c of cells) g += `<circle${c.bare ? ' class="pack-bare" stroke-dasharray="2 1.5"' : ''} cx="${X(c.x)}" cy="${Y(c.y)}" r="${r}" fill="none" stroke="${c.bare ? 'var(--warning,#f59e0b)' : 'var(--text-muted, #cbd5e1)'}" stroke-width="1"/>`;
+  // a bare cell dashed orange; a place left empty (a Bomber's frame) dashed and faint
+  for (const c of cells) g += `<circle${c.bare ? ' class="pack-bare" stroke-dasharray="2 1.5"' : c.g < 0 ? ' class="pack-empty" stroke-dasharray="2 2" opacity=".45"' : ''} cx="${X(c.x)}" cy="${Y(c.y)}" r="${r}" fill="none" stroke="${c.bare ? 'var(--warning,#f59e0b)' : 'var(--text-muted, #cbd5e1)'}" stroke-width="1"/>`;
   if (plan.bms) {
     const b = plan.bms, bwid = b.w * sc, bh = b.h * sc, bx = PX + b.x * sc, by = PT + b.y * sc;
     g += `<rect class="pack-bms" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bwid.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>`
       + (bwid >= 24 ? txt((bx + bwid / 2).toFixed(1), (by + bh / 2 + 3.5).toFixed(1), 'BMS', ' font-weight="700"')
         : `<g transform="translate(${(bx + bwid / 2 + 3.5).toFixed(1)},${(by + bh / 2).toFixed(1)}) rotate(-90)">` + txt(0, 0, 'BMS', ' font-weight="700"') + '</g>');
   }
-  // the rows, over the top: every one where there is room, else every other or every fifth, and the last
-  const rows = [];
-  for (const c of cells) if (c.row != null) (rows[c.row] = rows[c.row] || []).push(c.x);
-  const mid = rows.map((a) => (a ? a.reduce((s, v) => s + v, 0) / a.length : null));
-  let gap = Infinity;
-  for (let i = 1; i < mid.length; i++) if (mid[i] != null && mid[i - 1] != null) gap = Math.min(gap, (mid[i] - mid[i - 1]) * sc);
-  const step = gap >= 15 ? 1 : gap >= 7.5 ? 2 : 5, last = mid.length - 1;
-  mid.forEach((m, i) => { if (m != null && ((i % step === 0 && last - i >= step) || i === last)) g += txt(X(m), PT - 7, String(i + 1), ' class="pack-row"'); });
   const yMid = Y(plan.hMM / 2);
   g += `<text x="${PX - 4}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="end" dominant-baseline="middle">B−</text>`
     + (plan.split ? '' : `<text x="${(PX + ext * sc + 4).toFixed(1)}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="start" dominant-baseline="middle">B+</text>`);
   return `<div class="dim-nk-side">${side === 'top' ? 'צד עליון' : 'צד תחתון'}</div>`
     + `<svg class="pack-svg pack-side-${side}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" direction="ltr" style="max-width:100%;height:auto;direction:ltr;">${g}</svg>`;
 }
+// Every plan of a pack in groups is drawn with its nickel (nickelSvg); what is left here is a plan with no
+// groups — a frame or a block not yet split into a build — drawn as the cells and what surrounds them.
 function packSvg(plan) {
-  if (plan.nickel) return nickelSvg(plan, 'top') + nickelSvg(plan, 'bottom') + (plan.note ? `<div class="dim-nk-note">${plan.note}</div>` : '');
-  const PX = 24, PT = plan.groups ? 20 : 8, PB = 8;
+  if (plan.nickel || (plan.groups && plan.cells.some((c) => c.g >= 0))) return nickelSvg(plan, 'top') + nickelSvg(plan, 'bottom') + (plan.note ? `<div class="dim-nk-note">${plan.note}</div>` : '');
+  const PX = 24, PT = 8, PB = 8;
   const { x: ext, y: hh } = planExt(plan);
   const sc = Math.min(1.2, (340 - 2 * PX) / ext, 260 / hh);
   const W = Math.round(ext * sc) + 2 * PX, H = Math.round(hh * sc) + PT + PB;
@@ -9690,47 +9572,12 @@ function packSvg(plan) {
     ? `<polygon class="pack-outline" points="${plan.outline.map(([x, y]) => X(x) + ',' + Y(y)).join(' ')}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`
     : `<rect x="${PX - 3}" y="${PT - 3}" width="${(ext * sc + 6).toFixed(1)}" height="${(plan.hMM * sc + 6).toFixed(1)}" fill="none" stroke="var(--border, #334155)" stroke-dasharray="4 3"/>`;
   const r = (plan.dia / 2 * sc * 0.94).toFixed(1);
-  for (const c of plan.cells) {
-    const band = c.g >= 0 && c.g % 2 === 1;
-    const fill = plan.snake ? (band ? '#a78bfa' : 'var(--primary)') : band ? 'var(--primary)' : 'var(--bg-card, #1e293b)';
-    const op = plan.snake ? 0.5 : band ? 0.35 : 0.9, line = c.bare ? 'var(--warning,#f59e0b)' : plan.snake && band ? '#a78bfa' : 'var(--primary)';
-    g += `<circle${c.bare ? ' class="pack-bare" stroke-dasharray="2 1.5"' : ''} cx="${X(c.x)}" cy="${Y(c.y)}" r="${r}" fill="${fill}" fill-opacity="${op}" stroke="${line}" stroke-width="1"/>`;
-  }
-  // The nickel, on rows the whole width: a line from each cell to the next of its group, in the order the
-  // series runs, so the eye follows a group round the corner (Daniel, 2026-10-17, choosing ב׳ of three
-  // drawings: "נחש עם קו ניקל"). Under the numbers, over the cells.
-  if (plan.snake) {
-    const sw = Math.max(1.5, plan.dia * sc * 0.18).toFixed(1);
-    for (let i = 1; i < plan.cells.length; i++) {
-      const a = plan.cells[i - 1], b = plan.cells[i];
-      if (a.g !== b.g) continue;
-      g += `<line class="pack-nickel" x1="${X(a.x)}" y1="${Y(a.y)}" x2="${X(b.x)}" y2="${Y(b.y)}" stroke="var(--text, #f8fafc)" stroke-width="${sw}" stroke-linecap="round"/>`;
-    }
-  }
+  for (const c of plan.cells) g += `<circle${c.bare ? ' class="pack-bare" stroke-dasharray="2 1.5"' : ''} cx="${X(c.x)}" cy="${Y(c.y)}" r="${r}" fill="none" stroke="${c.bare ? 'var(--warning,#f59e0b)' : 'var(--text-muted, #cbd5e1)'}" stroke-width="1"/>`;
   if (plan.bms) {
     const b = plan.bms, bw = b.w * sc, bh = b.h * sc, bx = PX + b.x * sc, by = PT + b.y * sc;
     g += `<rect class="pack-bms" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="var(--warning,#f59e0b)" fill-opacity=".18" stroke="var(--warning,#f59e0b)"/>`
       + (bw >= 24 ? txt((bx + bw / 2).toFixed(1), (by + bh / 2 + 3.5).toFixed(1), 'BMS', ' font-weight="700"')
         : `<g transform="translate(${(bx + bw / 2 + 3.5).toFixed(1)},${(by + bh / 2).toFixed(1)}) rotate(-90)">` + txt(0, 0, 'BMS', ' font-weight="700"') + '</g>');
-  }
-  if (plan.groups && plan.numIn) {
-    for (const c of plan.cells) if (c.first) g += `<text x="${X(c.x)}" y="${(PT + c.y * sc + 3.5).toFixed(1)}" fill="var(--text)" font-size="${Math.max(7, Math.min(10, plan.dia * sc * 0.6)).toFixed(0)}" font-weight="700" text-anchor="middle" class="pack-group">${c.g + 1}</text>`;
-  } else if (plan.groups) {
-    // Each group's number over its middle: every one where there is room, else every other or
-    // every fifth, and always the last, so the far end of the series is never unnumbered.
-    const xs = [];
-    for (const c of plan.cells) if (c.g >= 0) (xs[c.g] = xs[c.g] || []).push(c.x);
-    const mid = xs.map((a) => a.reduce((s, v) => s + v, 0) / a.length);
-    let gap = Infinity;
-    for (let i = 1; i < mid.length; i++) gap = Math.min(gap, (mid[i] - mid[i - 1]) * sc);
-    const step = gap >= 15 ? 1 : gap >= 7.5 ? 2 : 5, last = mid.length - 1;
-    mid.forEach((m, i) => { if ((i % step === 0 && last - i >= step) || i === last) g += txt(X(m), PT - 7, String(i + 1), ' class="pack-group"'); });
-  }
-  if (plan.groups && (!plan.numIn || plan.snake)) {
-    const yMid = Y(plan.hMM / 2);
-    // B+ is the end of the series — not on a first layer the string goes on from.
-    g += `<text x="${PX - 4}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="end" dominant-baseline="middle">B−</text>`
-      + (plan.split ? '' : `<text x="${(PX + ext * sc + 4).toFixed(1)}" y="${yMid}" fill="var(--text-muted)" font-size="10" text-anchor="start" dominant-baseline="middle">B+</text>`);
   }
   return `<svg class="pack-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" direction="ltr" style="max-width:100%;height:auto;direction:ltr;">${g}</svg>`
     + (plan.note ? `<div class="dim-nk-note">${plan.note}</div>` : '');
@@ -10268,6 +10115,16 @@ function calcPackDims() {
     // width or not, bare rows, the first group in the narrow part, layers.
     const tl = k.lay && k.lay.tail && k.lay.tail.fill ? k.lay.tail : null;
     const facts = tl ? ` data-across="${tl.across}" data-snake="${tl.snake ? 1 : 0}" data-bare="${tl.bareCols || 0}" data-narrow="${tl.narrowFrom == null ? '' : tl.narrowFrom + 1}" data-layers="${k.layers || 1}"` : ` data-layers="${k.layers || 1}"`;
+    // Only the chosen nickel is drawn (Daniel, 2026-10-18: "למה בכל כלי זה מראה את כל ה 4 ציורים שיראה רק לפי
+    // המחזיק שבחרתי"); every other one is a short row — its name, ✓ or ✗, the most it takes at this voltage
+    // — and a tap on it chooses it ("שורה קצרה לכל אחד").
+    if (k !== sel) {
+      const mp = dimVehicle && tub && k.h !== 'custom' ? maxPFor(dimVehicle, tub, fmt, k.h, V, c) : 0;
+      return `<div class="dim-nk short" data-holder="${k.h}"${facts} onclick="pickDimHolder('${k.h}')">`
+        + `<div class="dim-nk-head"><b>${k.h === 'custom' ? 'מותאם אישית' : HOLDER_LABEL[k.h]}</b>`
+        + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '') + badge
+        + (mp ? `<span class="dim-nk-max">מקס׳ ${iso(seriesForV(V) + 'S' + mp + 'P · ' + (+(mp * c.ah).toFixed(1)) + 'Ah')}</span>` : '') + '</div></div>';
+    }
     return `<div class="dim-nk${k === sel ? ' sel' : ''}" data-holder="${k.h}"${facts} onclick="pickDimHolder('${k.h}')">`
       + `<div class="dim-nk-head"><b>${k.h === 'custom' ? 'מותאם אישית' : HOLDER_LABEL[k.h]}</b>`
       + (k === sel ? '<span class="dim-tag">נבחר</span>' : '') + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '') + badge + '</div>'
@@ -10657,13 +10514,20 @@ function bomberHtml(v, c, fmt, holder, V, N, pairOf) {
     return iso(`${vv}V: ${mp ? s + 'S' + mp + 'P · ' + ah(mp) + 'Ah' : '—'}`);
   }).join('<br>');
   const plan = (k) => ({ cells: k.cells, dia: c.dia, wMM: fr.L, hMM: fr.H, outline: k.outline, groups: false, bms: null, note: '' });
-  const cardHtml = (k) => `<div class="dim-nk${k === sel ? ' sel' : ''}" data-holder="${k.h}" onclick="pickDimHolder('${k.h}')">`
+  // Only the chosen nickel drawn, as on the standing cards (2026-10-18); the others a short row: name, ✓/✗,
+  // how many cells the frame takes on it.
+  const cardHtml = (k) => k !== sel
+    ? `<div class="dim-nk short" data-holder="${k.h}" onclick="pickDimHolder('${k.h}')"><div class="dim-nk-head"><b>${k.h === 'custom' ? 'מותאם אישית' : HOLDER_LABEL[k.h]}</b>`
+      + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '') + `<span class="dim-badge ${k.fits ? 'ok' : 'no'}">${k.fits ? '✓ נכנס' : '✗ לא נכנס'}</span>`
+      + `<span class="dim-nk-max">${k.n} תאים</span></div></div>`
+    : `<div class="dim-nk sel" data-holder="${k.h}" onclick="pickDimHolder('${k.h}')">`
     + `<div class="dim-nk-head"><b>${k.h === 'custom' ? 'מותאם אישית' : HOLDER_LABEL[k.h]}</b>`
-    + (k === sel ? '<span class="dim-tag">נבחר</span>' : '') + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '')
+    + '<span class="dim-tag">נבחר</span>' + (k === win ? '<span class="dim-tag ok">מומלץ</span>' : '')
     + `<span class="dim-badge ${k.fits ? 'ok' : 'no'}">${k.fits ? '✓ נכנס' : '✗ לא נכנס'}</span></div>`
     + kv('בצד אחד', `${k.perSide} תאים × ${stackWord} = ${k.n}`)
     + kv('מקסימום', maxLine(k))
-    + packSvg(plan(k)) + '</div>';
+    // in its groups when the build goes in (a stack's groups, its nickel top and bottom), else the frame
+    + packSvg(map ? { ...plan(k), cells: map.flatMap((r) => r.cells), groups: true } : plan(k)) + '</div>';
   const name = sel.h === 'custom' ? 'מותאם אישית' : HOLDER_NAME[sel.h];
   // The label (2026-10-06): what to build, in full, and the stack drawn row by row — each row's
   // count, each group's number, the places left empty. One stack is drawn; the others are the same
@@ -10725,11 +10589,9 @@ function caseHtml(v, c, fmt, V, S, P, N) {
     : `<div class="dim-over">⛔ גדולה מדי — ${pack}, ${N} תאים · במארז נכנסים ${v.max}</div>`;
   const mp = Math.floor(v.max / S);
   const shortRows = pl.cols - pl.full;
-  const layout = `רוחב ${cs.lanes} · ${pl.cols} שורות` + (shortRows ? ` · ${shortRows} האחרונות של ${cs.lanes - 1}, ליד ה-BMS` : '');
   const card = `<div class="dim-nk sel" data-holder="${cs.holder}">`
     + `<div class="dim-nk-head"><b>${HOLDER_LABEL[cs.holder]}</b><span class="dim-badge ${fits ? 'ok' : 'no'}">${fits ? '✓ נכנס' : '✗ לא נכנס'}</span></div>`
     + kv('גודל סוללה', `<span class="dim-size">${iso(L + ' × ' + W)}</span> מ"מ`)
-    + kv('פריסה', layout)
     + kv('מקסימום במארז', iso(`${V}V: ${mp ? S + 'S' + mp + 'P · ' + +(mp * c.ah).toFixed(1) + 'Ah' : '—'}`))
     + packSvg(pl) + '</div>';
   return {
@@ -13407,37 +13269,6 @@ function invCatOf(it) {
   for (const k of ['BMS', 'מטען', 'תא', 'ניקל']) { if (n === k || n.startsWith(k + ' ')) return k; }
   return 'אחר';
 }
-// Stock rows that went missing (2026-09-25: four of seven cell models were gone from the shelf
-// list, while the 10.9 backup still held them). The general "יבוא גיבוי" REPLACES every key —
-// two weeks of customers and sales with it — so this touches the inventory only and only ADDS:
-// a row whose name is already on the shelf is left exactly as it is. The quantity comes from
-// the backup's day and is marked so, because stock has moved since.
-function restoreInventoryFromBackup(input) {
-  const file = input.files && input.files[0];
-  if (!file) return;
-  const rd = new FileReader();
-  rd.onload = () => {
-    input.value = '';
-    let d;
-    try { d = JSON.parse(rd.result); } catch (e) { showNotice('❌ הקובץ לא נקרא: ' + e.message); return; }
-    let from = d.inventory;
-    if (typeof from === 'string') { try { from = JSON.parse(from); } catch (e) { from = null; } }
-    if (!Array.isArray(from) || !from.length) { showNotice('❌ אין מלאי בקובץ הזה. בחר קובץ גיבוי של לוח הבקרה.'); return; }
-    const when = d.lastBackup ? new Date(Number(d.lastBackup)).toLocaleDateString('he-IL') : 'הגיבוי';
-    const now = getInventory();
-    const add = from.filter((r) => r && r.name && !invFindRow(now, r.name) && !now.some((x) => x.id === r.id));
-    if (!add.length) { showNotice('לא חסר כלום — כל ' + from.length + ' הפריטים בגיבוי כבר נמצאים במלאי.'); return; }
-    askConfirm('להחזיר ' + add.length + ' פריטים שחסרים במלאי?\n\n'
-      + add.map((r) => (r.name || '') + ' · ' + (Number(r.qty) || 0) + " יח'").join('\n')
-      + '\n\nהכמות היא מה שהיה ב-' + when + ' — כדאי לספור ולתקן. פריטים שכבר במלאי לא ישתנו.', () => {
-      const rows = add.map((r) => ({ ...r, note: ((r.note ? r.note + ' · ' : '') + 'שוחזר מגיבוי ' + when + ' — לספור') }));
-      if (!Store.set('inventory', now.concat(rows))) return;
-      renderInventory();
-      showNotice('✅ הוחזרו ' + rows.length + ' פריטים. בדוק את הכמויות שלהם.');
-    });
-  };
-  rd.readAsText(file, 'utf-8');
-}
 // The datasheet of each cell on the shelf (2026-10-08, Daniel: "תן מפרט טכני מלא של כל תא שנמצא במלאי
 // של התאים"; he chose a card on each cell in stock). Every figure is the MAKER's, read off the sheet:
 // the PDFs the site publishes (public/datasheets), and for the JP30 Ampace's own product page. A figure
@@ -14056,71 +13887,6 @@ function exportData() {
   if (banner) banner.style.display = 'none';
 }
 
-// Restore ONLY the hours, and only the ones that are missing.
-//
-// The whole-backup import next to this replaces every key in the file, which against an old
-// backup means restoring the hours and losing everything recorded since. This touches the
-// 'worktime' key and nothing else, and it never overwrites — it adds what is absent.
-//
-// Two ways an entry counts as already there: the same id, or the same day + worker + hours.
-// The second matters because re-typing a lost hour by hand gives it a new id, and without
-// that test a merge would pay the same hour twice.
-function restoreHoursFromBackup(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    let data;
-    try { data = JSON.parse(e.target.result); }
-    catch (err) { showNotice('❌ הקובץ לא נקרא: ' + err.message); input.value = ''; return; }
-    const from = Array.isArray(data.worktime) ? data.worktime : null;
-    if (!from) {
-      showNotice('❌ אין שעות בקובץ הזה. בחר קובץ גיבוי של לוח הבקרה.');
-      input.value = '';
-      return;
-    }
-    const now = Store.get('worktime') || [];
-    const sig = (x) => [String(x.date || "").slice(0, 10), x.workerName || x.workerId || "", Number(x.hours) || 0].join("|");
-    const haveId = new Set(now.map((x) => String(x.id)));
-    const haveSig = new Set(now.map(sig));
-    const add = [];
-    let sameId = 0, sameShift = 0;
-    for (const x of from) {
-      if (haveId.has(String(x.id))) { sameId++; continue; }
-      if (haveSig.has(sig(x))) { sameShift++; continue; }
-      add.push(x);
-      haveSig.add(sig(x));
-    }
-    if (!add.length) {
-      showNotice('לא נוסף כלום — כל ' + from.length + ' השורות בקובץ כבר קיימות אצלך.');
-      input.value = '';
-      return;
-    }
-    const hours = add.reduce((s, x) => s + (Number(x.hours) || 0), 0);
-    const wage = add.reduce((s, x) => s + (Number(x.hours) || 0) * (Number(x.rate) || 0), 0);
-    const lines = add.slice(0, 12).map((x) =>
-      (String(x.date || '').slice(0, 10)) + ' · ' + (x.workerName || '?') + ' · ' + (Number(x.hours) || 0) + ' שעות');
-    askConfirm(
-      'להוסיף ' + add.length + ' רשומות שעות שחסרות אצלך?\n' +
-      hours.toFixed(1) + ' שעות · ' + shek(Math.round(wage)) + '\n\n' + lines.join('\n') +
-      (add.length > 12 ? '\n…ועוד ' + (add.length - 12) : '') +
-      (sameId + sameShift ? '\n\n(' + (sameId + sameShift) + ' שורות בקובץ כבר קיימות ולא ייגעו)' : ''),
-      () => {
-        const merged = now.concat(add);
-        // Store.set returns false when localStorage is full, and an import that announced
-        // success over a failed write is exactly how the accountant data went missing.
-        const ok = Store.set('worktime', merged);
-        if (!ok) {
-          showNotice('❌ לא הצלחתי לשמור — האחסון מלא. פנה מקום ונסה שוב.');
-          return;
-        }
-        showNotice('✅ הוחזרו ' + add.length + ' רשומות · ' + hours.toFixed(1) + ' שעות · ' + shek(Math.round(wage)),
-          '<button class="btn btn-primary" onclick="location.reload()">אישור</button>');
-      });
-    input.value = '';
-  };
-  reader.readAsText(file);
-}
 
 
 // Two questions, deliberately, and they stay two: this is the only button in the hub that

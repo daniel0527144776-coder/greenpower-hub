@@ -150,28 +150,6 @@ const tr = await page.evaluate(async () => {
 check('deleting hours moves them to the trash', tr.gone && tr.inTrash === 1, tr);
 check('and they can be restored from it', tr.back && tr.trashAfter === 0, tr);
 
-// ---- v318: approved phone reports can be brought back, at the hub's rate ----
-const pr = await page.evaluate(async () => {
-  Sync.isAuthed = () => true;
-  Sync._headers = async () => ({});
-  const realFetch = window.fetch;
-  window.fetch = async (url) => /worker_punches/.test(String(url))
-    ? new Response(JSON.stringify([
-        { id: 'u-1', worker: 'אבי', work_date: '2026-05-04', hours: 5, note: '' },        // already there (same shift)
-        { id: 'u-2', worker: 'אבי', work_date: '2026-05-11', hours: 3.5, note: 'שעון: 08:00–11:30' },
-        { id: 'u-3', worker: 'זר', work_date: '2026-05-12', hours: 9, note: '' },          // not a known worker
-      ]), { status: 200 })
-    : realFetch(url);
-  await restoreFromPunches();
-  await new Promise((r) => setTimeout(r, 100));
-  noticeConfirm();
-  window.fetch = realFetch;
-  const rows = (Store.get('worktime') || []).filter((e) => e.punchId);
-  return { rows: rows.map((e) => [e.punchId, e.workerName, e.hours, e.rate]) };
-});
-check('a missing approved report comes back, once, at the rate in the workers list',
-  pr.rows.length === 1 && pr.rows[0][0] === 'u-2' && pr.rows[0][3] === 40, pr);
-
 // ---- v321: tapping a worker's name opens his own page with everything on it ----
 if (SELFTEST) {
   // Break it the way it would really break: the page renders the FIRST worker, not the one tapped.
