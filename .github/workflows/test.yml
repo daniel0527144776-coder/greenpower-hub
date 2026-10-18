@@ -121,6 +121,10 @@ jobs:
       - name: Stock that moves by itself
         run: node test/test-inventory.mjs
 
+      # The supplier corrects by line number, so a number once sent must never move.
+      - name: The order to a supplier
+        run: node test/test-supplier-order.mjs
+
       - name: The daily-work shortcuts
         run: node test/test-daily-work.mjs
 
