@@ -134,13 +134,13 @@ check('the list of lab customers has no button that scans the chats again',
 await page.evaluate(() => document.querySelectorAll('#wabotBody details.fold').forEach((d) => { d.open = d.dataset.fold === 'settings'; }));
 await page.waitForTimeout(50);
 await page.evaluate(() => { document.getElementById('wbPause').value = '3'; document.getElementById('wbModel').value = 'saving'; document.getElementById('wbVoice').checked = false; document.getElementById('wbSaved').checked = true;
-  document.getElementById('wbLength').value = 'short'; document.getElementById('wbTone').value = 'formal'; document.getElementById('wbEmoji').value = 'none'; document.getElementById('wbHold').checked = false; document.getElementById('wbLater').checked = false; waSaveSettings(); });
+  document.getElementById('wbLength').value = 'short'; document.getElementById('wbTone').value = 'formal'; document.getElementById('wbEmoji').value = 'none'; document.getElementById('wbHold').checked = false; document.getElementById('wbLater').checked = false; document.getElementById('wbClosed').checked = false; waSaveSettings(); });
 let p = await lastPost(1);
 check('the section he saved in is still open after the page re-draws, the others folded again',
   await page.evaluate(() => { const o = Object.fromEntries([...document.querySelectorAll('#wabotBody details.fold')].map((d) => [d.dataset.fold, d.open])); return o.settings === true && o.log === false && o.know === false && o.blocked === false; }), '');
 check('saving the settings sends what he set', p && p.op === 'settings' && p.settings.pauseHours === 3 && p.settings.model === 'saving' && p.settings.voice === false && p.settings.skipSaved === true
   && p.settings.shabbat === true && p.settings.israelOnly === true && p.settings.hours === 'always' && p.settings.custom.days.length === 7
-  && p.settings.length === 'short' && p.settings.tone === 'formal' && p.settings.emoji === 'none' && p.settings.holdLine === false && p.settings.answerLater === false && p.settings.menu === true, p);
+  && p.settings.length === 'short' && p.settings.tone === 'formal' && p.settings.emoji === 'none' && p.settings.holdLine === false && p.settings.answerLater === false && p.settings.closedNotice === false && p.settings.menu === true, p);
 await page.evaluate(() => { document.getElementById('wbHours').value = 'custom'; for (let i = 0; i < 7; i++) document.getElementById('wbDay' + i).checked = false; waSaveSettings(); });
 await page.waitForTimeout(300);
 check('his own hours with no day at all are not saved — the bot would never answer', posts.length === 1

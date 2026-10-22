@@ -2775,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v485';
+const HUB_BUILD = 'v486';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -12220,6 +12220,7 @@ function waSettingsHtml() {
     + chk('wbIntro', st.introduce, '👋 מציג את עצמו כעוזר אוטומטי')
     + chk('wbMenu', st.menu !== false, '📋 ללקוח חדש שכתב רק "היי" — שולח תפריט')
     + chk('wbLater', st.answerLater !== false, '🕐 הודעה שהגיעה כשסגור — עונה לה כשהמעבדה נפתחת')
+    + chk('wbClosed', st.closedNotice !== false, '🌙 מחוץ לשעות הפעילות — אומר ללקוח שהמעבדה סגורה')
     + chk('wbLearn', st.learn, '📚 לומד מהשיחות שלך')
     + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="waSaveSettings()">💾 שמור</button>');
 }
@@ -12368,7 +12369,7 @@ function waSaveSettings() {
     custom: { days, from: wbVal('wbFrom') || '00:00', to: wbVal('wbTo') || '23:59' }, model: wbVal('wbModel'),
     length: wbVal('wbLength'), tone: wbVal('wbTone'), emoji: wbVal('wbEmoji'), holdLine: on('wbHold'),
     shabbat: on('wbShabbat'), israelOnly: on('wbIsrael'), skipSaved: on('wbSaved'), voice: on('wbVoice'), media: on('wbMedia'), askDaniel: on('wbAsk'),
-    hubFacts: on('wbFacts'), introduce: on('wbIntro'), menu: on('wbMenu'), answerLater: on('wbLater'), learn: on('wbLearn') } }, '✅ ההגדרות נשמרו');
+    hubFacts: on('wbFacts'), introduce: on('wbIntro'), menu: on('wbMenu'), answerLater: on('wbLater'), closedNotice: on('wbClosed'), learn: on('wbLearn') } }, '✅ ההגדרות נשמרו');
 }
 function waSaveInstructions() {
   waDo({ op: 'settings', settings: { instructions: document.getElementById('wbInstr').value } }, '✅ ההוראות נשמרו — הבוט יפעל לפיהן מההודעה הבאה');
