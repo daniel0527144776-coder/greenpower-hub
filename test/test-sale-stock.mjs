@@ -55,6 +55,8 @@ const R = await page.evaluate(() => {
   const seed = () => Store.set('inventory', [
     { name: 'תאי EVE 21700 50E', qty: 1000 },
     { name: 'EVE 50PL', qty: 500 },
+    { name: 'תאי EVE 18650 26V', qty: 350 },
+    { name: 'תאי EVE 18650 25P', qty: 100 },
     { name: 'BMS 20S 100A', qty: 10 },
     { name: 'BMS 13S 60A', qty: 10 },
     { name: 'מטען 72V 5A', qty: 4 },
@@ -72,6 +74,9 @@ const R = await page.evaluate(() => {
   const classic = row(/^72V 30Ah$/, /אופניים.*CLASSIC/);
   const pro = row(/^72V 30Ah$/, /אופניים.*PRO/);
   const small = row(/^48V 20Ah$/, /אופניים.*CLASSIC/);
+  // The 18650 scooter rows (v479): CLASSIC and ADVANCED by category, EVE 26V / 25P by build.
+  const s26 = row(/^48V 26Ah · 13S10P EVE 26V$/, /קורקינטים 18650.*CLASSIC/);
+  const s25 = row(/^36V 15Ah · 10S6P EVE 25P$/, /קורקינטים 18650.*ADVANCED/);
 
   // The repair side, through the SHIPPING helpers with what saveJob computes for the same pack.
   seed();
@@ -85,6 +90,8 @@ const R = await page.evaluate(() => {
     salePro: sell(pro),
     sale48: sell(small),
     saleTwo: sell(classic, 2),
+    sale26: s26 ? sell(s26) : null,
+    sale25: s25 ? sell(s25) : null,
     // An ACCESSORY is stocked as a unit and must keep matching by name. Taken from the real
     // catalogue rather than invented — the first version of this check used a category that
     // does not exist, found nothing, and reported null instead of testing anything.
@@ -119,6 +126,16 @@ check('a 48V pack takes the 13S 60A board, not the 20S 100A',
   R.sale48.after['BMS 13S 60A'] === 9 && R.sale48.after['BMS 20S 100A'] === 10, R.sale48.after);
 check('selling two packs takes two packs worth',
   R.saleTwo.after['תאי EVE 21700 50E'] === 760 && R.saleTwo.after['BMS 20S 100A'] === 8, R.saleTwo.after);
+
+// Daniel, 2026-10-18: "בחרתי תאים 18650-26V, וירד במלאי תאים של 50E". The 18650 row's category
+// says CLASSIC, and the tier word alone picked the 50E shelf — at 5Ah a cell, so 78 of them.
+check('an 18650 EVE 26V pack takes 26V cells — its 13S10P, 130 of them',
+  !!R.sale26 && R.sale26.after['תאי EVE 18650 26V'] === 220, R.sale26);
+check('…and leaves the 50E shelf alone',
+  !!R.sale26 && R.sale26.after['תאי EVE 21700 50E'] === 1000, R.sale26);
+check('an 18650 EVE 25P pack takes 25P cells — its 10S6P, 60 of them',
+  !!R.sale25 && R.sale25.after['תאי EVE 18650 25P'] === 40 && R.sale25.after['Tenpower 50SG'] === undefined
+  && R.sale25.after['תאי EVE 21700 50E'] === 1000, R.sale25);
 
 // ---------------------------------------------------------------- what must NOT change
 check('an accessory still matches by NAME and is not decomposed',

@@ -975,7 +975,7 @@
                     if ([...capSel.options].some((o) => o.value === c)) capSel.value = c;
                 }
 
-                const cells = byText('cells-value');
+                const cells = cellOptionValue(byText('cells-value'));
                 const cellSel = document.getElementById('cells-select');
                 if (cells && cellSel && [...cellSel.options].some((o) => o.value === cells)) {
                     cellSel.value = cells;
@@ -1007,7 +1007,7 @@
             // is not a hypothetical: the address, the type scale and the standards line
             // were each edited, deployed, verified live — and still did not appear on the
             // owner's phone, because his save kept restoring the old ones on top.
-            const STICKER_TEMPLATE_VERSION = '2026-08-24a';
+            const STICKER_TEMPLATE_VERSION = '2026-10-22a';
 
             // Record of every sticker produced. The hub's stickerlog page, its home card and
             // the "מדבקות שהונפקו" block on a customer card all read this key; between
@@ -1366,6 +1366,10 @@
             }
             window.fitRepairPanels = fitRepairPanels;
 
+            function cellPrintName(v) { return String(v || '').replace(/^Tenpower\b/, 'TP'); }
+            function cellOptionValue(t) { return String(t || '').replace(/^TP\b/, 'Tenpower'); }
+            window.cellPrintName = cellPrintName;
+            window.syncDropdownsFromElements = (els) => syncDropdownsFromElements(els);
             function getCellRates(cellsText) {
                 // THE 18650s (Daniel, 2026-10-17: "שיהיה גם את התאים של ה-18650 גם כן במדבקות, שיחשב אותם").
                 // Each from its maker's sheet, the same sheets the hub's cell card shows (CELL_SHEETS):
@@ -1470,7 +1474,10 @@
 
                 document.getElementById('voltage-value').innerText = `${voltage}V`;
                 document.getElementById('capacity-value').innerText = `${totalCapacity}Ah`;
-                document.getElementById('cells-value').innerText = cell;
+                // The label prints Tenpower as TP (Daniel, 2026-10-18: "בתאים של 10 power במדבקות ... תעשה TP"):
+                // "Tenpower 21700 50SG" is the one value longer than the rest, and the row shrank it below
+                // the size every other value prints at. The option keeps the maker's full name.
+                document.getElementById('cells-value').innerText = cellPrintName(cell);
 
                 if (!isNaN(voltage) && !isNaN(totalCapacity)) {
                     document.getElementById('power-value').innerText = `${parseFloat(voltage) * totalCapacity}Wh`;

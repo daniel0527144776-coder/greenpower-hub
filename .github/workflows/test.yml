@@ -262,6 +262,11 @@ jobs:
       - name: A sold battery leaves the shelf like a built one
         run: node test/test-sale-stock.mjs
 
+      # Every charger was costed at 60% of its price because none was linked to a supplier
+      # quote; and the hub sold thirteen the shop no longer carried (2026-10-22).
+      - name: A charger costs its supplier quote, and only the shelf's eight are sold
+        run: node test/test-charger-cost.mjs
+
       # The sweep that runs on HIS records rather than seeded ones: work with no price,
       # money with no owner, stock gone negative, a month claiming no costs. It must NAME each
       # one — a report that counts sends him through a year of records.

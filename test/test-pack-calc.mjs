@@ -87,7 +87,8 @@ const stack = await page.evaluate((SELF) => {
       + '\n' + ((res.querySelector('.dim-nk.sel') || {}).innerText || ''); };
   return {
     field: !!document.getElementById('dimLayers'),
-    moto40: r('אופנוע שליחויות 72V', 35),    // 20S7P: seven across a 170mm tray, twenty rows along
+    moto40: r('אופנוע שליחויות 72V', 30),    // 20S6P: six across a 170mm tray, twenty rows along (seven took the
+                                              // last 0.4mm at Z 22.5 and no longer go in one layer at 22.6, 2026-10-22)
     moto50: r('אופנוע שליחויות 72V', 50),    // 200 cells: two layers, the box is 170mm deep
     fc1: r('Bomber FC-1', 50),                // a Bomber: built lying, never stacked standing
     scooter: r('Inokim OX', 50),              // 200 cells in a scooter tub: never stacked
