@@ -116,6 +116,32 @@ console.log('\n4. a restored record recomputes it the same way');
   check('the restore path agrees with the build path', r === '1500A/2160A', r);
 }
 
+console.log('\n4a. Tenpower prints as TP, at the size of the rest');
+{
+  // Daniel, 2026-10-18: "בתאים של 10 power במדבקות … תעשה TP". "Tenpower 21700 50SG" was the one
+  // value too long for its row, so fitValueSpansToRow shrank it below every other value.
+  const tp = opts.cells.find((c) => c.includes('50SG'));
+  const size = () => p.evaluate(() => {
+    const e = document.getElementById('cells-value');
+    return { text: e.innerText.trim(), px: parseFloat(getComputedStyle(e).fontSize) };
+  });
+  await build(volt, cap, classic, 'DALY 30A');
+  const e50 = await size();
+  await build(volt, cap, tp, 'DALY 30A');
+  const sg = await size();
+  check('the label says TP 21700 50SG', sg.text === (SELFTEST ? tp : 'TP 21700 50SG'), sg);
+  // The row is shared with a flex sibling, so a pixel either way follows the other value's width;
+  // the full name printed at 18px where the 50E prints at 25-26.
+  check('at the size the 50E prints (within the pixel its row-mate takes)', Math.abs(sg.px - e50.px) <= 1 && sg.px >= 24, [sg, e50]);
+  // A label saved as TP restores the editor to the Tenpower option, not to the default 50E.
+  await build(volt, cap, classic, 'DALY 30A');
+  const back = await p.evaluate(() => {
+    window.syncDropdownsFromElements([{ id: 'cells-value', innerHTML: 'TP 21700 50SG' }]);
+    return document.getElementById('cells-select').value;
+  });
+  check('a saved TP label restores the Tenpower option', back === tp, back);
+}
+
 console.log('\n4b. the 18650s, each computed from its own sheet');
 {
   // Daniel, 2026-10-17: "ואין אפשרות ל-18650 ... שיהיה גם את התאים של ה-18650 גם כן במדבקות, שיחשב
