@@ -2773,7 +2773,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v492';
+const HUB_BUILD = 'v493';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7721,10 +7721,19 @@ function deleteOrder(id) {
 }
 // Cell + C-rate per tier. Same three tiers as products.ts TIERS — if those change, change
 // these. Used to fill the spec block of a quote straight from the catalog category.
+// The C-rates are the ones the sticker prints for the cell (getCellRates in stickers.html);
+// test/test-quote-spec.mjs holds the two equal.
 const TIER_SPEC = {
   CLASSIC:  { cell: 'EVE 21700 50E (Classic)',           crate: '2C~3C' },
   ADVANCED: { cell: 'Tenpower 21700 50SG (Advanced)',    crate: '4C~10C' },
   PRO:      { cell: 'EVE 21700 50PL Tabless (Pro)',      crate: '25C~36C' },
+};
+// The 18650 scooter packs (shallowCatalogRows) are built on their own cell, not the tier's 21700:
+// until v493 the quote for "48V 26Ah · 13S10P EVE 26V" said "EVE 21700 50E (Classic)" and 2C~3C.
+// Keyed by the name stickerCellFromText gives; a cell missing here prints no spec, never the 21700's.
+const CELL_SPEC_18650 = {
+  'EVE 18650 26V': { cell: 'EVE 18650 26V (Classic)',          crate: '3C~4C' },
+  'EVE 18650 25P': { cell: 'EVE 18650 25P (Advanced)',         crate: '12C' },
 };
 // A catalog category carries the family and the tier: 'סוללות אינדורו וטרקטורונים - 60V CLASSIC'.
 // Returns null for anything that is not a battery row, so the quote drops the spec block
@@ -7733,6 +7742,12 @@ function orderItemSpec(it) {
   if (!it || !it.cat) return null;
   const m = it.cat.match(/^סוללות\s+(.+?)\s+-\s+\d+V(?:\s+(PRO|ADVANCED|CLASSIC))?$/);
   if (!m) return null;
+  // A saved sale line keeps only its name and category: an 18650 row says so in its category and
+  // ends its name in the cell ("13S10P EVE 26V"), which is where the sticker reads it from too.
+  if (/18650/.test(it.cat)) {
+    const cell = stickerCellFromText(it.cat + ' ' + (it.name || ''));
+    return { fit: m[1], tier: m[2] || '', spec: CELL_SPEC_18650[cell] || null };
+  }
   return { fit: m[1], tier: m[2] || '', spec: TIER_SPEC[m[2]] || null };
 }
 function orderWhatsApp(id) {
