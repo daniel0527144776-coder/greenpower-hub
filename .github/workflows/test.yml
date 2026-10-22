@@ -267,6 +267,14 @@ jobs:
       - name: A charger costs its supplier quote, and only the shelf's eight are sold
         run: node test/test-charger-cost.mjs
 
+      # Sales: a main category, then a sub-category. Stock: every row filed by its name.
+      - name: Every product and stock row has a category and a sub-category
+        run: node test/test-categories.mjs
+
+      # The cost window explains every product: its parts, when the figures are from, the shipping.
+      - name: The cost window says what a cost is made of, from when, and the shipping in it
+        run: node test/test-cost-window.mjs
+
       # The sweep that runs on HIS records rather than seeded ones: work with no price,
       # money with no owner, stock gone negative, a month claiming no costs. It must NAME each
       # one — a report that counts sends him through a year of records.
