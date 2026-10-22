@@ -2775,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v484';
+const HUB_BUILD = 'v485';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2982,6 +2982,11 @@ async function runSelfTest() {
     const owed = (typeof Sync !== 'undefined' && Sync.pending) ? Sync.pending() : [];
     L.push('לא הועלה לענן: ' + (owed.length ? owed.join(', ') : 'הכול מסונכרן'));
   } catch (e) { L.push('אחסון: לא ניתן לקרוא'); }
+  // Sales stocked with the wrong cells before v479 (orderStockFixes): named here, so 'is it fixed?' has an answer.
+  try {
+    const bad = (Store.get('orders') || []).filter((o) => orderStockFixes(o).length);
+    L.push('מכירות עם מלאי תאים שגוי: ' + (bad.length ? bad.map((o) => o.customer || o.id).join(', ') + ' — בכרטיס המכירה: "תקן מלאי"' : 'אין'));
+  } catch (e) { L.push('מכירות עם מלאי תאים שגוי: לא ניתן לבדוק'); }
   L.push('גשר הדפסה: ' + (window.GPPrint ? 'יש' : 'אין'));
   // What the bridge SEES, not just that it exists. "ההדפסה נכשלה: חסרה הרשאת בלוטות" was
   // answered with "but it is granted", and both were defensible — two causes shared one
@@ -7380,7 +7385,7 @@ function saleRow(o) {
       <div class="list-item-header">
         <div><div class="list-item-title">${salesBadge('sale')} ${custLinkHtml(o.customer, o.phone)} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
           <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')}${custPhoneHtml(o.phone)} · ${(o.items || []).length === 1 ? 'פריט אחד' : (o.items || []).length + ' פריטים'}${o.bms ? ' · BMS ' + o.bms : ''}</div>
-          <div class="list-item-subtitle" style="font-size:10.5px;">${saleCats(o)}</div></div>
+          <div class="list-item-subtitle" style="font-size:10.5px;">${saleCats(o)}</div>${orderStockFixHtml(o)}</div>
         <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div>${Number(o.discount) ? `<div data-discount style="font-size:10.5px;color:var(--accent);">הנחה ${shek(o.discount)}</div>` : ''}${(() => { const pr = saleProfit(o); return pr ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(pr.profit)}</div>` : ''; })()}<div style="margin-top:3px;">${saleStatusPill(o.status)}${quoteAgePill(o)}</div></div>
       </div>
       <div class="btn-group" style="margin-top:8px;">
@@ -7615,6 +7620,66 @@ function takeOrderStock(o) {
   // the stock figure was wrong with no sign of it. Only he can say which shelf row it should
   // have hit, so it has to be said out loud.
   if (missed.length) showNotice('⚠ לא נמצא במלאי ולא הופחת: ' + missed.join(' · '));
+}
+// A sale stocked BEFORE v479 (2026-10-22) took the tier's 21700 for an 18650 pack — one 13S10P EVE 26V
+// took 78 EVE 50E and no 26V. The fix in batteryStockParts covers every sale from then on; a sale
+// already stocked stays wrong until it is put right, and nothing did that. Daniel asked about one
+// (ישראל כהן's). This finds them by their own evidence — the stock log line that the old rule wrote
+// (that shelf row, that count, that customer) — and the button puts the old cells back and takes the
+// pack's own. Without that line nothing is changed: a guess would be a second wrong deduction.
+function orderStockFixes(o) {
+  if (!o || !o.stockTaken || o.stockFixed || !Array.isArray(o.items)) return [];
+  const inv = getInventory(), log = Store.get('inv_log') || [];
+  const who = String(o.customer || '').slice(0, 40);
+  const out = [];
+  for (const it of o.items) {
+    if (it.custom) continue;
+    const right = batteryStockParts(it);
+    if (!right || !/^EVE (26V|25P)$/.test(right.cellModel)) continue;
+    const m = String(it.name || '').match(/(\d+)V\s*(\d+(?:\.\d+)?)Ah/);
+    if (!m) continue;
+    const qty = Number(it.qty) || 1;
+    const oldModel = /PRO/.test(it.cat) ? 'EVE 50PL' : /ADVANCED/.test(it.cat) ? 'Tenpower 50SG' : 'EVE 50E';
+    const oldCells = seriesForV(+m[1]) * Math.ceil(+m[2] / 5) * qty;
+    const oldRow = invFindCellRow(inv, oldModel);
+    if (!oldRow) continue;
+    const key = String(oldRow.id != null ? oldRow.id : oldRow.name);
+    const line = log.find((e) => e.row === key && Number(e.qty) === oldCells && String(e.note || '') === who
+      && !out.some((x) => x.logId === e.id));
+    if (!line) continue;
+    out.push({ logId: line.id, item: it.name, wrongName: oldRow.name, wrongCells: oldCells, rightModel: right.cellModel, rightCells: right.cells * qty });
+  }
+  return out;
+}
+function orderStockFixHtml(o) {
+  const fx = orderStockFixes(o);
+  if (!fx.length) return '';
+  return '<div data-stock-fix style="margin-top:6px;font-size:11.5px;color:var(--warning,#f59e0b);">'
+    + fx.map((x) => '⚠ ירדו ' + x.wrongCells + ' ' + x.wrongName + ' במקום ' + x.rightCells + ' ' + x.rightModel).join('<br>')
+    + ' <button class="btn btn-sm btn-secondary" onclick="fixOrderStock(\'' + o.id + '\')">🔧 תקן מלאי</button></div>';
+}
+function fixOrderStock(id) {
+  const orders = Store.get('orders') || [], o = orders.find((x) => String(x.id) === String(id));
+  const fx = orderStockFixes(o);
+  if (!fx.length) return;
+  const inv = getInventory();
+  const said = [];
+  for (const x of fx) {
+    const back = inv.find((r) => r.name === x.wrongName);
+    if (back) { back.qty = (Number(back.qty) || 0) + x.wrongCells; back.lastUsed = new Date().toISOString(); said.push('הוחזרו ' + x.wrongCells + ' ' + back.name); }
+  }
+  Store.set('inventory', inv);
+  // The old line is not usage that happened; it would go on counting in the pace of the 50E.
+  const gone = new Set(fx.map((x) => x.logId));
+  Store.set('inv_log', (Store.get('inv_log') || []).filter((e) => !gone.has(e.id)));
+  for (const x of fx) {
+    const t = inventoryDeduct(x.rightModel, x.rightCells, o.customer || '');
+    said.push(t && t.matched ? 'ירדו ' + x.rightCells + ' ' + t.name + ' · נשארו ' + t.left : '⚠ ' + x.rightModel + ' לא נמצא במלאי — לא הופחת');
+  }
+  o.stockFixed = true;
+  Store.set('orders', orders);
+  showNotice('תוקן: ' + said.join(' · '));
+  if (typeof renderOrders === 'function') renderOrders();
 }
 function cycleOrderStatus(id) {
   const orders = Store.get('orders') || [], o = orders.find(x => x.id === id);

@@ -91,6 +91,29 @@ const R = await page.evaluate(() => {
     sale48: sell(small),
     saleTwo: sell(classic, 2),
     sale26: s26 ? sell(s26) : null,
+    // A sale stocked BEFORE the fix (v479): the old rule took 78 EVE 50E for this 13S10P and logged it.
+    old26: s26 ? (() => {
+      seed();
+      const inv = getInventory();
+      inv.find((r) => r.name === 'תאי EVE 21700 50E').qty = 922;
+      Store.set('inventory', inv);
+      Store.set('inv_log', [{ id: 'iuold', at: '2026-10-19T10:00:00.000Z', row: 'תאי EVE 21700 50E', name: 'תאי EVE 21700 50E', qty: 78, note: 'ישראל כהן' }]);
+      const o = { id: 'old1', customer: 'ישראל כהן', status: 'שולם', stockTaken: true, date: '2026-10-19T10:00:00.000Z',
+        items: [{ name: s26.name, cat: s26.cat, qty: 1, price: s26.retail }] };
+      Store.set('orders', [o]);
+      const found = orderStockFixes(o).length;
+      const selfTest = (Store.get('orders') || []).filter((x) => orderStockFixes(x).length).length;
+      fixOrderStock('old1');
+      const after = snap();
+      const again = orderStockFixes((Store.get('orders') || [])[0]).length;
+      return { found, selfTest, after, again, log: (Store.get('inv_log') || []).map((e) => e.name + ':' + e.qty) };
+    })() : null,
+    // A sale stocked AFTER the fix has no such line, and is left alone.
+    new26: s26 ? (() => {
+      sell(s26);
+      const o = { id: 'new1', customer: 'לקוח', status: 'שולם', stockTaken: true, items: [{ name: s26.name, cat: s26.cat, qty: 1 }] };
+      return { found: orderStockFixes(o).length };
+    })() : null,
     sale25: s25 ? sell(s25) : null,
     // An ACCESSORY is stocked as a unit and must keep matching by name. Taken from the real
     // catalogue rather than invented — the first version of this check used a category that
@@ -136,6 +159,15 @@ check('…and leaves the 50E shelf alone',
 check('an 18650 EVE 25P pack takes 25P cells — its 10S6P, 60 of them',
   !!R.sale25 && R.sale25.after['תאי EVE 18650 25P'] === 40 && R.sale25.after['Tenpower 50SG'] === undefined
   && R.sale25.after['תאי EVE 21700 50E'] === 1000, R.sale25);
+
+// ישראל כהן's sale (Daniel, 2026-10-22: "תבדוק בעסקה של ישראל כהן האם הטעות תוקנה"): a sale stocked before
+// the fix keeps its wrong cells until it is put right. Found by the old rule's own log line, fixed once.
+check('an 18650 sale stocked before the fix is found by its log line', !!R.old26 && R.old26.found === 1 && R.old26.selfTest === 1, R.old26);
+check('the fix gives the 78 50E back and takes its 130 26V',
+  !!R.old26 && R.old26.after['תאי EVE 21700 50E'] === 1000 && R.old26.after['תאי EVE 18650 26V'] === 220, R.old26 && R.old26.after);
+check('the wrong log line is gone, the right one is there, and it cannot run twice',
+  !!R.old26 && R.old26.again === 0 && !R.old26.log.includes('תאי EVE 21700 50E:78') && R.old26.log.includes('תאי EVE 18650 26V:130'), R.old26);
+check('a sale stocked after the fix is left alone', !!R.new26 && R.new26.found === 0, R.new26);
 
 // ---------------------------------------------------------------- what must NOT change
 check('an accessory still matches by NAME and is not decomposed',
