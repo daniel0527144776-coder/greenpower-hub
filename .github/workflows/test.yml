@@ -205,6 +205,11 @@ jobs:
       - name: A discount on a repair or a sale
         run: node test/test-discount.mjs
 
+      # A sale opened again keeps the price it was sold at (2026-10-22): a September sale opened to
+      # correct a phone number was re-saved at October's prices, and September's income moved with it.
+      - name: A sale opened again keeps its sold prices
+        run: node test/test-sale-edit.mjs
+
       # Wages paid on the 1st, and a report changed by hand (2026-10-06): past months due now, this month
       # on the next 1st, an alert from the 1st until it is paid; a report corrected before or after approval.
       - name: Wages on the 1st, and editing a report
