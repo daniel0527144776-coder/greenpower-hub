@@ -2775,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v488';
+const HUB_BUILD = 'v489';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7634,24 +7634,40 @@ function takeOrderStock(o) {
 // (ישראל כהן's). This finds them by their own evidence — the stock log line that the old rule wrote
 // (that shelf row, that count, that customer) — and the button puts the old cells back and takes the
 // pack's own. Without that line nothing is changed: a guess would be a second wrong deduction.
+//
+// And the line must be the old rule's, for this sale (2026-10-22 review): a log line of that row, count and
+// customer from any day was taken as evidence, so an 18650 sale stocked right after v479, beside the same
+// customer's CLASSIC 48V 30Ah (13S6P, the same 78 50E), was flagged, and the button gave back cells that
+// were used and took the 26V a second time. So the line is written between the sale's day and the end of
+// the old rule; a sale that has its own cells' line was stocked right; and a power tool never was wrong,
+// the old rule took its 25P all along. v479 reached the site at 05:40 UTC that day and the fix (v484) at
+// 08:52; a device that kept the old build open could write the old rule's line until it reloaded.
+const OLD_CELL_RULE_UNTIL = Date.parse('2026-10-22T09:00:00Z');
 function orderStockFixes(o) {
   if (!o || !o.stockTaken || o.stockFixed || !Array.isArray(o.items)) return [];
   const inv = getInventory(), log = Store.get('inv_log') || [];
   const who = String(o.customer || '').slice(0, 40);
+  const day = new Date(o.date || 0); day.setHours(0, 0, 0, 0);
+  const from = day.getTime();
+  const keyOf = (row) => String(row.id != null ? row.id : row.name);
   const out = [];
   for (const it of o.items) {
-    if (it.custom) continue;
+    if (it.custom || /כלי עבודה/.test(String(it.cat || ''))) continue;
     const right = batteryStockParts(it);
     if (!right || !/^EVE (26V|25P)$/.test(right.cellModel)) continue;
     const m = String(it.name || '').match(/(\d+)V\s*(\d+(?:\.\d+)?)Ah/);
     if (!m) continue;
     const qty = Number(it.qty) || 1;
+    const rightRow = invFindCellRow(inv, right.cellModel);
+    if (rightRow && log.some((e) => e.row === keyOf(rightRow) && Number(e.qty) === right.cells * qty
+      && String(e.note || '') === who && Date.parse(e.at) >= from)) continue;
     const oldModel = /PRO/.test(it.cat) ? 'EVE 50PL' : /ADVANCED/.test(it.cat) ? 'Tenpower 50SG' : 'EVE 50E';
     const oldCells = seriesForV(+m[1]) * Math.ceil(+m[2] / 5) * qty;
     const oldRow = invFindCellRow(inv, oldModel);
     if (!oldRow) continue;
-    const key = String(oldRow.id != null ? oldRow.id : oldRow.name);
+    const key = keyOf(oldRow);
     const line = log.find((e) => e.row === key && Number(e.qty) === oldCells && String(e.note || '') === who
+      && Date.parse(e.at) >= from && Date.parse(e.at) < OLD_CELL_RULE_UNTIL
       && !out.some((x) => x.logId === e.id));
     if (!line) continue;
     out.push({ logId: line.id, item: it.name, wrongName: oldRow.name, wrongCells: oldCells, rightModel: right.cellModel, rightCells: right.cells * qty });
