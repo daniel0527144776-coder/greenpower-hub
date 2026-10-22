@@ -179,6 +179,12 @@ jobs:
       - name: Choosing the BMS, and keeping supplier prices out of a public file
         run: node test/test-bms-pick.mjs
 
+      # Every file under dist/ is served to anyone with the URL (2026-10-22): its comments had come to
+      # carry the suppliers' quotes in dollars, five freight invoices and a proforma number. The names
+      # of suppliers and people need a private list, so the tools repo checks those in sync-prices.
+      - name: A served file carries no dollar price and no proforma number
+        run: node test/test-public-file.mjs
+
       # The WhatsApp bot tells a customer about his own jobs from bot_index (2026-10-04). It is
       # read by a model talking to customers, so what it must NOT hold — photos, cost, profit,
       # notes — is checked as hard as what it must.
