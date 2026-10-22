@@ -47,7 +47,7 @@ const R = await page.evaluate((SELF) => {
   Store.set('supplier_prices', [
     quote('מטענים פלסטיק', '48V 3A'), quote('מטענים פלסטיק', '60V 3A'),
     quote('מטענים אלומיניום', '60V 5A XLR'), quote('מטענים אלומיניום', '72V 5A XLR'),
-    quote('מטענים אלומיניום', '60V 8A XLR'), quote('מטענים אלומיניום', '72V 8A XLR'),
+    quote('מטענים אלומיניום', '60V 8A XLR'), quote('מטענים אלומיניום', '72V 8A XLR'), quote('מטענים אלומיניום', '72V 10A XLR'),
     quote('מטענים מתכווננים', 'ABC 72V 0-15A (מתכוונן)'),
     // A decoy: the aluminium 48V 3A must not be what costs the plastic one.
     { who: 'ספק', cat: 'מטענים אלומיניום', name: '48V 3A XLR', usd: 99 },
@@ -62,9 +62,9 @@ const R = await page.evaluate((SELF) => {
   };
 }, SELFTEST);
 
-const SHELF = ['מטען 36V 2A', 'מטען 48V 3A', 'מטען 60V 3A', 'מטען 60V 5A', 'מטען 72V 5A', 'מטען 60V 8A', 'מטען 72V 8A', 'מטען 72V 0-15A'];
-check('the hub sells the eight chargers on the shelf, and only those',
-  R.names.length === 8 && SHELF.every((n) => R.names.includes(n)), R.names);
+const SHELF = ['מטען 36V 2A', 'מטען 48V 3A', 'מטען 60V 3A', 'מטען 60V 5A', 'מטען 72V 5A', 'מטען 60V 8A', 'מטען 72V 8A', 'מטען 72V 10A', 'מטען 72V 0-15A'];
+check('the hub sells the nine chargers on the shelf, and only those',
+  R.names.length === 9 && SHELF.every((n) => R.names.includes(n)), R.names);
 for (const n of SHELF.slice(1)) {
   check(`${n} is costed from its quote, not ${'COST_PCT'}`, R.costs[n] === R.landed, { cost: R.costs[n], quote: R.landed, pct: R.pct[n] });
 }

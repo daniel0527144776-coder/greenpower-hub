@@ -264,7 +264,7 @@ jobs:
 
       # Every charger was costed at 60% of its price because none was linked to a supplier
       # quote; and the hub sold thirteen the shop no longer carried (2026-10-22).
-      - name: A charger costs its supplier quote, and only the shelf's eight are sold
+      - name: A charger costs its supplier quote, and only the nine on the shelf are sold
         run: node test/test-charger-cost.mjs
 
       # Sales: a main category, then a sub-category. Stock: every row filed by its name.
