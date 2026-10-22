@@ -178,11 +178,17 @@ console.log('\n4b. the 18650s, each computed from its own sheet');
     adv: stickerCellFromText('סוללות קורקינטים 18650 - 60V ADVANCED'),
     cls: stickerCellFromText('סוללות קורקינטים 18650 - 60V CLASSIC'),
     v21: stickerCellFromText('72V 30Ah PRO'),
+    // Sur-Ron ADVANCED (2026-10-22) is 50SG and says so; Sur-Ron with no tier word is the 50PL build
+    srAdv: stickerCellFromText('Sur-Ron Light Bee - 72V ADVANCED · Light Bee 72V 40Ah'),
+    srPro: stickerCellFromText('Sur-Ron Ultra Bee - 72V PRO · Ultra Bee 72V 55Ah'),
+    srBare: stickerCellFromText('Sur-Ron Light Bee 72V 40Ah'),
     all: [...Object.values(STICKER_CELLS), ...Object.values(STICKER_TIER_CELL), ...Object.values(STICKER_TIER_CELL_18650)],
   }));
   await hub.close();
   check('the hub: an 18650 line sends its own cell, not the 21700 of its tier',
     sent.line === 'EVE 18650 26V' && sent.adv === 'EVE 18650 25P' && sent.cls === 'EVE 18650 26V' && sent.v21 === 'EVE 21700 50PL', sent);
+  check('a Sur-Ron ADVANCED line sends Tenpower 50SG; PRO and a bare Sur-Ron line, the 50PL',
+    sent.srAdv === 'Tenpower 21700 50SG' && sent.srPro === 'EVE 21700 50PL' && sent.srBare === 'EVE 21700 50PL', sent);
   check('and every cell the hub sends is on the editor\'s list', sent.all.every((c) => opts.cells.includes(c)), sent.all.filter((c) => !opts.cells.includes(c)));
 }
 
