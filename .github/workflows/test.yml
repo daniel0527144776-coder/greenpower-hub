@@ -221,6 +221,11 @@ jobs:
       - name: Every repair is kept, and a refused save changes nothing
         run: node test/test-job-history.mjs
 
+      # A sale's quote names the cell its pack is built on (2026-10-22): the 18650 scooter packs went out
+      # as "EVE 21700 50E (Classic)" at 2C~3C, on a pack of EVE 26V; the C-rates are the sticker's.
+      - name: The quote names an 18650 pack's own cell
+        run: node test/test-quote-spec.mjs
+
       # Wages paid on the 1st, and a report changed by hand (2026-10-06): past months due now, this month
       # on the next 1st, an alert from the 1st until it is paid; a report corrected before or after approval.
       - name: Wages on the 1st, and editing a report
