@@ -2775,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v489';
+const HUB_BUILD = 'v490';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3533,8 +3533,12 @@ function saveJob() {
 
   const jobs = Store.get('jobs') || [];
   jobs.unshift(entry);
-  if (jobs.length > 500) jobs.pop();
-  Store.set('jobs', jobs);
+  // Every repair is kept (v490). A cap of 500 dropped the oldest, and jobs is a merged key: a row
+  // missing from a write is a deletion, so the 501st repair took the first off every device, with
+  // its month's income. What bounds the list is the storage, and a write it refuses ends the save
+  // here, before the shelf or the customer's card is touched, under Store.set's own notice ("✅ נשמר"
+  // used to replace it).
+  if (!Store.set('jobs', jobs)) return;
   // Only a FULL BUILD consumes cells. A BMS swap or a balance does not, and deducting for
   // those would drain the shelf on paper while the cells are still in the drawer.
   // A BMS is consumed by a full build, a BMS swap AND a BMS upgrade — the same three jobs the
@@ -7289,7 +7293,7 @@ function custLinkHtml(name, phone) {
   return i >= 0 ? `<a href="#" class="cust-link" data-cust="${i}" onclick="event.stopPropagation();openCustomerDetails(${i});return false;" style="color:inherit;text-decoration:underline;text-decoration-color:var(--primary);text-underline-offset:3px;">${nm}</a>` : nm;
 }
 const custPhoneHtml = (phone) => (phone ? ` · <span style="white-space:nowrap;">📱 <bdi dir="ltr">${custPickEsc(phone)}</bdi></span>` : '');
-// The list is capped and grown on demand. 500 jobs + every sale rendered as one innerHTML
+// The list is capped and grown on demand. Every job + every sale rendered as one innerHTML
 // is a visible freeze on a phone, and nobody scrolls past the first screen anyway.
 let salesLimit = 60;
 function setSalesFilter(f) { salesFilter = f; salesLimit = 60; renderOrders(); }

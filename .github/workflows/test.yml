@@ -210,6 +210,11 @@ jobs:
       - name: A sale opened again keeps its sold prices
         run: node test/test-sale-edit.mjs
 
+      # A repair saved is kept, however many came before it (2026-10-22): the 501st repair dropped the
+      # first from every device, and a save the storage refused still took the build off the shelf.
+      - name: Every repair is kept, and a refused save changes nothing
+        run: node test/test-job-history.mjs
+
       # Wages paid on the 1st, and a report changed by hand (2026-10-06): past months due now, this month
       # on the next 1st, an alert from the 1st until it is paid; a report corrected before or after approval.
       - name: Wages on the 1st, and editing a report
