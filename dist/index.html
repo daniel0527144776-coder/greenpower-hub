@@ -2775,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v481';
+const HUB_BUILD = 'v482';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4779,21 +4779,40 @@ const SUPPLIER_MATCH = {
 // Landed cost of a catalogue row from the supplier list, or null when nothing matches.
 // Freight and VAT both on, which is the only honest default: he is an עוסק פטור, so the
 // import VAT never comes back and is a real cost.
-function supplierCostFor(name) {
+// The quote row that costs a catalogue name, or null. supplierCostFor's own choice, exposed so the
+// cost window can show the quote it used, its date and its freight (2026-10-22).
+function supplierQuoteFor(name) {
   const want = SUPPLIER_MATCH[name];
   if (!want) return null;
   const names = Array.isArray(want) ? want : [want];
   const hit = (n) => names.some((w) => (w instanceof RegExp ? w.test(n) : w === n));
   const cands = supplierRows().filter((r) => hit(String(r.name || '')));
   if (!cands.length) return null;
-  // NEWEST WINS, and this is not a tidiness rule. The file keeps old quotes on purpose —
-  // they are the record of what was paid — but `.find()` returned whichever sat first in
-  // the array, which was the oldest. The DKD display was costed at the $55 quoted in 2022
-  // while the 2025 invoice says $34: 62% over, in the direction nobody questions, because
-  // an inflated cost only ever makes the margin look worse than it is. A dated quote beats
-  // an undated one; among undated, the order in the file stands.
+  // Newest first: a dated quote beats an undated one; among undated, the order in the file stands.
   cands.sort((a, b) => String(b.on || '').localeCompare(String(a.on || '')));
-  return Math.round(supplierIls(cands[0], true, true));
+  return cands[0];
+}
+// supplierIls(r, true, true), item by item: goods, freight (and how it was reckoned), VAT.
+// test-cost-window holds the sum to supplierIls itself, so the two cannot drift.
+function supplierIlsParts(r) {
+  if (r.ils != null) return { landedIls: Number(r.ils), goods: null, freight: null, vat: null, basis: 'ils', total: Number(r.ils) };
+  const goods = Number(r.usd) * SUPPLIER_USD;
+  let freight, basis;
+  if (r.frUsd != null) { freight = Number(r.frUsd) * SUPPLIER_USD; basis = 'quoted'; }
+  else if (r.kg != null) { freight = Number(r.kg) * freightPerKgFor(r) * SUPPLIER_USD; basis = 'kg'; }
+  else if (typicalKgFor(r.cat) != null) { freight = typicalKgFor(r.cat) * freightPerKgFor(r) * SUPPLIER_USD; basis = 'typical'; }
+  else { freight = goods * freightRateFor(r.cat); basis = 'share'; }
+  const vat = (goods + freight) * SUPPLIER_VAT;
+  return { goods, freight, vat, basis, total: goods + freight + vat };
+}
+function supplierCostFor(name) {
+  // NEWEST WINS (supplierQuoteFor sorts by date), and this is not a tidiness rule. The file keeps old
+  // quotes on purpose — they are the record of what was paid — but `.find()` returned whichever sat
+  // first in the array, which was the oldest. The DKD display was costed at the $55 quoted in 2022
+  // while the 2025 invoice says $34: 62% over, in the direction nobody questions, because an
+  // inflated cost only ever makes the margin look worse than it is.
+  const r = supplierQuoteFor(name);
+  return r ? Math.round(supplierIls(r, true, true)) : null;
 }
 
 // VAT is charged on CIF, so it applies after freight — not to the goods alone.
@@ -6292,9 +6311,14 @@ function batteryCostParts(it, b2b = false) {
   if (!m) return null;
   const V = +m[1], Ah = +m[2];
   const powerTool = /כלי עבודה/.test(it.cat);
-  const seaCellP = powerTool ? 4.51
+  // An 18650 scooter row names its own cell (v482): the breakdown showed its 13S10P EVE 26V as
+  // "130 תאים × ₪6.43" — the CLASSIC 21700 — under a cost line that used the 26V. Same mix-up as
+  // the stock one in v479: the tier word read for the cell.
+  const own = it.cell18650 ? String(it.cell18650) : '';
+  const seaCellP = own ? (typeof routeCellCostOn === 'function' ? routeCellCostOn(own, 'sea') : null) ?? 0
+    : powerTool ? 4.51
     : /PRO/.test(it.cat) ? 10.66 : /ADVANCED/.test(it.cat) ? 7.77 : 6.43;
-  const codeP = powerTool ? '25P' : /PRO/.test(it.cat) ? '50PL' : /ADVANCED/.test(it.cat) ? '50SG' : '50E';
+  const codeP = own || (powerTool ? '25P' : /PRO/.test(it.cat) ? '50PL' : /ADVANCED/.test(it.cat) ? '50SG' : '50E');
   const routedP = typeof routeCellCost === 'function' ? routeCellCost(codeP) : null;
   const cellPrice = routedP != null ? routedP : seaCellP;
   // Which route that price came from. On 2026-10-06 his phone was on 🏪 מקומי, a 50E cost
@@ -6303,7 +6327,7 @@ function batteryCostParts(it, b2b = false) {
   const chosen = typeof cellRoute === 'function' ? cellRoute() : 'sea';
   const onRoute = chosen !== 'sea' && typeof routeCellCostOn === 'function' ? routeCellCostOn(codeP, chosen) : null;
   const route = onRoute != null ? chosen : 'sea', fellBack = chosen !== 'sea' && onRoute == null;
-  const cellAh = powerTool ? 2.5 : 5;
+  const cellAh = own ? (Number(it.cellAh) || 2.5) : powerTool ? 2.5 : 5;
   const S = seriesForV(V);
   const P = powerTool ? Math.round(Ah / cellAh) : Math.ceil(Ah / cellAh);
   const cells = S * P;
@@ -6767,9 +6791,18 @@ function catExpandAll(open) {
 
 // What the estimate is made of, itemised, with his own hours kept OUT of the materials
 // subtotal and shown on their own line — that separation is the second thing he asked about.
+// What the cost is made of, WHEN its figures are from, and what the shipping in it comes to
+// (2026-10-22, Daniel: "הסבר שאני לוחץ על המוצר ממה מורכב ... ומאיזה תאריך ... אומדן משלוח"). Every
+// row gets one: a battery its parts, a resold item its supplier quote, and an item with neither
+// says that its cost is a share of the price and nothing more.
+const CELL_IMPORT_AS_OF = 'יבוא ימי, יוני 2026';   // the June import LANDED (1.204) is measured on
+const CELL_LANDED_FACTOR = 1.204;
+function costNoteRow(k, v) {
+  return '<div data-cost-note style="display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--text-muted);padding:1px 0;"><span>' + k + '</span><span>' + v + '</span></div>';
+}
 function costBreakdownHtml(it) {
   const b = typeof batteryCostParts === 'function' ? batteryCostParts(it, priceMode === 'b2b') : null;
-  if (!b) return '';
+  if (!b) return resaleBreakdownHtml(it);
   const row = (k, v, muted) =>
     '<div style="display:flex;justify-content:space-between;font-size:11.5px;' + (muted ? 'color:var(--text-muted);' : '') + 'padding:1px 0;">'
     + '<span>' + k + '</span><span>' + shek(Math.round(v)) + '</span></div>';
@@ -6783,7 +6816,64 @@ function costBreakdownHtml(it) {
     + row('עבודה — ' + b.hours.toFixed(1) + " שע' × ₪45 (הזמן שלך)", b.labour, true)
     + '<div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;">'
     + '<span>סה"כ</span><span>' + shek(Math.round(b.total)) + '</span></div>'
+    + batteryDatesHtml(it, b)
     + '</div>';
+}
+// The cells land at USD × 3 × 1.204: VAT is 18% of goods plus freight, so of the landed price
+// 1 − 1/1.18 is import VAT and 1/1.18 − 1/1.204 the freight and fees (measured on the June import).
+function batteryDatesHtml(it, b) {
+  const cellsIls = b.cells * b.cellPrice;
+  const sea = b.route === 'sea';
+  const picked = typeof pickedBms === 'function' ? pickedBms(it) : null;
+  const lines = [
+    ['תאים', sea ? CELL_IMPORT_AS_OF : 'מסלול ' + routeLabel(b.route)],
+    ['BMS', picked ? 'מרשימת הספק' + (picked.on ? ' · ' + String(picked.on).slice(0, 10) : ' · ללא תאריך') : 'אומדן לפי המתח'],
+    ['זמן עבודה', 'נמדד 07/2026 · ₪45 לשעה'],
+  ];
+  const ship = sea ? cellsIls * (1 / 1.18 - 1 / CELL_LANDED_FACTOR) : null;
+  const vat = sea ? cellsIls * (1 - 1 / 1.18) : null;
+  return '<div data-cost-dates style="border-top:1px dashed var(--border);margin-top:6px;padding-top:4px;">'
+    + '<div style="font-size:10.5px;font-weight:700;color:var(--text-muted);">📅 מאיזה תאריך</div>'
+    + lines.map(([k, v]) => costNoteRow(k, v)).join('')
+    + (sea ? '<div style="font-size:10.5px;font-weight:700;color:var(--text-muted);margin-top:4px;">🚚 משלוח (כלול במחיר התאים)</div>'
+      + costNoteRow('הובלה ועמלות', '≈ ' + shek(Math.round(ship)))
+      + costNoteRow('מע"מ יבוא', '≈ ' + shek(Math.round(vat))) : '')
+    + '</div>';
+}
+// A resold item: the supplier's quote it is costed on, item by item, and when it was given.
+function resaleBreakdownHtml(it) {
+  const q = typeof supplierQuoteFor === 'function' ? supplierQuoteFor(it.name) : null;
+  const box = (inner) => '<div data-cost-resale style="margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;">' + inner + '</div>';
+  // A single cell is known to the agora: its landed price off the June import, not a share of anything.
+  const unit = /^תאי ליתיום/.test(it.cat) ? CELL_UNIT_COST[String(it.name).split(/\s+—\s+/)[0]] : null;
+  if (!q && unit != null) {
+    return box('<div style="font-size:10.5px;color:var(--text-muted);">ממה מורכבת העלות</div>'
+      + costNoteRow('מחיר נחיתה של תא (כולל הובלה ומע"מ)', fmtIls(unit))
+      + costNoteRow('📅 מאיזה תאריך', CELL_IMPORT_AS_OF)
+      + costNoteRow('🚚 מזה הובלה ועמלות', '≈ ' + fmtIls(unit * (1 / 1.18 - 1 / CELL_LANDED_FACTOR))));
+  }
+  if (!q) {
+    // retailMid: the hand-kept RC / drill packs carry a price range, and productEstimate costs them at its midpoint.
+    const mid = typeof retailMid === 'function' ? retailMid(it.retail) : (typeof it.retail === 'number' ? it.retail : null);
+    const est = mid != null && COST_PCT > 0 ? Math.round(mid * COST_PCT / 100) : null;
+    if (est == null) return '';
+    return box('<div style="font-size:10.5px;color:var(--text-muted);">ממה מורכב האומדן</div>'
+      + costNoteRow('אין הצעת מחיר מספק לפריט הזה', '')
+      + costNoteRow(COST_PCT + '% מ' + (typeof it.retail === 'number' ? 'המחיר' : 'אמצע טווח המחיר') + ' (ההגדרה)', shek(est)));
+  }
+  const p = supplierIlsParts(q);
+  const BASIS = { quoted: 'משלוח שהספק ציטט', kg: 'לפי משקל', typical: 'לפי משקל טיפוסי', share: Math.round(freightRateFor(q.cat) * 100) + '% מערך הסחורה (ממוצע משלוחים)' };
+  const row = (k, v) => '<div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-muted);padding:1px 0;"><span>' + k + '</span><span>' + shek(Math.round(v)) + '</span></div>';
+  return box('<div style="font-size:10.5px;color:var(--text-muted);margin-bottom:4px;">ממה מורכבת העלות</div>'
+    + (p.basis === 'ils' ? row('מחיר נחיתה מהספק', p.total)
+      : row('סחורה · $' + (Math.round(Number(q.usd) * 100) / 100) + ' × ' + SUPPLIER_USD, p.goods)
+        + row('🚚 משלוח · ' + BASIS[p.basis], p.freight)
+        + row('מע"מ יבוא ' + Math.round(SUPPLIER_VAT * 100) + '%', p.vat))
+    + '<div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;"><span>סה"כ</span><span>' + shek(Math.round(p.total)) + '</span></div>'
+    + '<div data-cost-dates style="border-top:1px dashed var(--border);margin-top:6px;padding-top:4px;">'
+    + costNoteRow('📅 הצעת המחיר', q.on ? String(q.on).slice(0, 10) : 'ללא תאריך ברשימה')
+    + costNoteRow('ספק', String(q.who || '—'))
+    + '</div>');
 }
 
 // A select rather than a search box: 34 rows is a list you scan, and the price is the thing
@@ -6984,6 +7074,28 @@ function orderItemInfo(it, mode) {
   const p = PRICING[it.ci];
   return { name: p.name, unit: p[mode] };
 }
+// A catalogue category as a main category and a sub-category (2026-10-22, Daniel: "תחלק לי בבקשה את
+// כל המלאי לפי קטגוריות ותת קטגוריות ... אותו דבר גם לגבי מכירות"). The sale picker listed ~95 flat
+// categories alphabetically ("סוללות אופניים - 48V PRO" beside "סוללות אינדורו - 48V PRO"); now it is
+// ~13 main ones, then that one's voltage/tier or maker. Read off the name, so a new category files
+// itself: the part before " - " is the main one, the rest the sub-category. Sur-Ron's two bikes share
+// one main category, the bike going into the sub-category.
+function catPath(cat) {
+  const c = String(cat || '');
+  const sr = c.match(/^סוללות Sur-Ron (Light Bee|Ultra Bee) - (.+)$/);
+  if (sr) return ['סוללות Sur-Ron', sr[1] + ' ' + sr[2]];
+  const i = c.indexOf(' - ');
+  return i < 0 ? [c, ''] : [c.slice(0, i), c.slice(i + 3)];
+}
+// Sub-categories in the order he reads a price list: by voltage, then PRO / ADVANCED / CLASSIC.
+const CAT_TIER_ORDER = { PRO: 0, ADVANCED: 1, CLASSIC: 2 };
+function catSubCompare(a, b) {
+  const va = parseFloat((String(a).match(/(\d+(?:\.\d+)?)V\b/) || [])[1]), vb = parseFloat((String(b).match(/(\d+(?:\.\d+)?)V\b/) || [])[1]);
+  const ta = CAT_TIER_ORDER[(String(a).match(/\b(PRO|ADVANCED|CLASSIC)\b/) || [])[1]] ?? 9;
+  const tb = CAT_TIER_ORDER[(String(b).match(/\b(PRO|ADVANCED|CLASSIC)\b/) || [])[1]] ?? 9;
+  return String(a).replace(/\s*\d+(?:\.\d+)?V\b.*$/, '').localeCompare(String(b).replace(/\s*\d+(?:\.\d+)?V\b.*$/, ''), 'he')
+    || (isNaN(va) ? 1e9 : va) - (isNaN(vb) ? 1e9 : vb) || ta - tb || String(a).localeCompare(String(b), 'he');
+}
 function renderOrderModal() {
   const mode = orderDraft.isBusiness ? 'b2b' : 'retail';
   // Product picker grouped by category (optgroup) so the long list is easy to scan.
@@ -6993,8 +7105,15 @@ function renderOrderModal() {
   PRICING.forEach((c, i) => { if (typeof c.retail === 'number') (byCat[c.cat] = byCat[c.cat] || []).push({ c, i }); });
   const catNames = Object.keys(byCat).sort((a, b) => a.localeCompare(b, 'he'));
   if (!orderDraft.cat || !byCat[orderDraft.cat]) orderDraft.cat = catNames[0];
-  const catOpts = catNames.map(c =>
-    `<option value="${c.replace(/"/g, '&quot;')}"${c === orderDraft.cat ? ' selected' : ''}>${c}</option>`).join('');
+  const mains = [...new Set(catNames.map((c) => catPath(c)[0]))].sort((a, b) => a.localeCompare(b, 'he'));
+  if (!orderDraft.main || !mains.includes(orderDraft.main)) orderDraft.main = catPath(orderDraft.cat)[0];
+  const subs = catNames.filter((c) => catPath(c)[0] === orderDraft.main).sort((a, b) => catSubCompare(catPath(a)[1], catPath(b)[1]));
+  if (!subs.includes(orderDraft.cat)) orderDraft.cat = subs[0];
+  const q = (c) => c.replace(/"/g, '&quot;');
+  const mainOpts = mains.map((m) => `<option value="${q(m)}"${m === orderDraft.main ? ' selected' : ''}>${m}</option>`).join('');
+  const catOpts = subs.map(c =>
+    `<option value="${q(c)}"${c === orderDraft.cat ? ' selected' : ''}>${catPath(c)[1] || c}</option>`).join('');
+  const oneSub = subs.length === 1 && !catPath(subs[0])[1];
   const prodOpts = (byCat[orderDraft.cat] || []).map(x =>
     `<option value="${x.i}">${x.c.name} — ${shek(x.c[mode])}</option>`).join('');
   const lines = orderDraft.items.map((it, i) => {
@@ -7016,7 +7135,8 @@ function renderOrderModal() {
     <label class="check ${orderDraft.isBusiness ? 'checked' : ''}" onclick="toggleOrderBiz()"><div class="check-box"></div>לקוח עסקי (מחיר B2B)</label>
     ${orderDraft.isBusiness && orderDraft.items.length ? '<div style="font-size:10.5px;color:var(--text-muted);margin:2px 2px 0;">כל השורות מחושבות במחיר סוחר</div>' : ''}
     <div class="divider"></div>
-    <div class="form-row"><label>קטגוריה</label><select class="form-select" id="ordCat" style="width:200px;" onchange="onOrderCatChange()">${catOpts}</select></div>
+    <div class="form-row"><label>קטגוריה</label><select class="form-select" id="ordMain" style="width:200px;" onchange="onOrderMainChange()">${mainOpts}</select></div>
+    <div class="form-row"${oneSub ? ' hidden' : ''}><label>תת קטגוריה</label><select class="form-select" id="ordCat" style="width:200px;" onchange="onOrderCatChange()">${catOpts}</select></div>
     <div class="form-row"><label>מוצר</label><select class="form-select" id="ordProd" style="width:200px;">${prodOpts}</select></div>
     <div class="form-row"><label>כמות</label><input type="number" class="form-input" id="ordQty" value="1" min="1"></div>
     <button class="btn btn-secondary btn-block btn-sm" onclick="addOrderItem()">➕ הוסף מהקטלוג</button>
@@ -7062,6 +7182,7 @@ function pickOrderCustomer(i) {
   renderOrderModal();
 }
 function onOrderCatChange() { syncOrderFields(); orderDraft.cat = document.getElementById('ordCat').value; renderOrderModal(); }
+function onOrderMainChange() { syncOrderFields(); orderDraft.main = document.getElementById('ordMain').value; orderDraft.cat = ''; renderOrderModal(); }
 function toggleOrderBiz() { syncOrderFields(); orderDraft.isBusiness = !orderDraft.isBusiness; renderOrderModal(); }
 function addOrderItem() { syncOrderFields(); const ci = parseInt(document.getElementById('ordProd').value); const qty = Math.max(1, parseInt(document.getElementById('ordQty').value) || 1); orderDraft.items.push({ ci, qty }); renderOrderModal(); }
 function addCustomOrderItem() {
@@ -14100,8 +14221,8 @@ function renderInventory() {
     '';
   const list = document.getElementById('inventoryList');
   if (inv.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים.</div></div>'; return; }
-  const CAT_ORDER = ['BMS', 'מטען', 'תא', 'ניקל', 'אחר'];
-  const CAT_ICON = { 'BMS': '🛡️', 'מטען': '🔌', 'תא': '🔋', 'ניקל': '⚡', 'אחר': '📦' };
+  const CAT_ORDER = INV_CAT_LIST;
+  const CAT_ICON = INV_CAT_ICON;
   const groups = {};
   inv.forEach(i => { const c = invCatOf(i); (groups[c] = groups[c] || []).push(i); });
   const cats = Object.keys(groups).sort((a, b) => {
@@ -14143,7 +14264,9 @@ function renderInventory() {
       if (!axis) return list.map((i) => renderInvItem(i, c)).join('');
       const byKey = new Map();
       for (const x of list) { const k = axis(x) || 'אחר'; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(x); }
-      const keys = [...byKey.keys()].sort((a, b) => (a === 'אחר') - (b === 'אחר') || parseFloat(a) - parseFloat(b));
+      const order = INV_SUB[c] || [];
+      const rank = (k) => { const i = order.indexOf(k); return i < 0 ? 999 : i; };
+      const keys = [...byKey.keys()].sort((a, b) => (a === 'אחר') - (b === 'אחר') || (parseFloat(a) - parseFloat(b)) || rank(a) - rank(b) || a.localeCompare(b, 'he'));
       return keys.map((k) => {
         const l = byKey.get(k);
         const n = l.reduce((s, x) => s + (Number(x.qty) || 0), 0);
@@ -14170,12 +14293,31 @@ function renderInventory() {
 // Category of an inventory item: an explicit .cat wins; otherwise derived from the
 // name prefix so items seeded/imported before .cat existed still group correctly.
 const INV_CAT_ALIAS = { 'תאים': 'תא', 'מטענים': 'מטען' };
+const INV_CAT_LIST = ['BMS', 'מטען', 'תא', 'ניקל', 'מחזיקי תאים', 'בידוד וכיווץ', 'כבלים ומחברים', 'הנעה', 'מארזים', 'כלים וציוד', 'אחר'];
+const INV_CAT_ICON = { 'BMS': '🛡️', 'מטען': '🔌', 'תא': '🔋', 'ניקל': '⚡', 'מחזיקי תאים': '🧩', 'בידוד וכיווץ': '🧻',
+  'כבלים ומחברים': '🔗', 'הנעה': '⚙️', 'מארזים': '🗃️', 'כלים וציוד': '🛠️', 'אחר': '📦' };
 function invCatOf(it) {
-  if (it.cat) return INV_CAT_ALIAS[it.cat] || it.cat;
+  // 'אחר' is what the form offered when nothing fitted, not a choice: such a row is filed by its name too.
+  if (it.cat && it.cat !== 'אחר') return INV_CAT_ALIAS[it.cat] || it.cat;
   const n = (it.name || '').trim();
   for (const k of ['BMS', 'מטען', 'תא', 'ניקל']) { if (n === k || n.startsWith(k + ' ')) return k; }
+  for (const [cat, re] of INV_CAT_WORDS) if (re.test(n)) return cat;
   return 'אחר';
 }
+// Every row gets a home (2026-10-22, Daniel: "תחלק לי בבקשה את כל המלאי לפי קטגוריות ותת קטגוריות כדי
+// שאני ימצא מהר כל מוצר"). Before, everything that was not a BMS, charger, cell or nickel went under
+// אחר. The categories are the supplier's own sections (holders, shrink and insulation, cables and
+// connectors, drive parts), read off the name for rows saved without one. First match wins, so a
+// "מחבר XT90 לכבל" is a connector and not a cable.
+const INV_CAT_WORDS = [
+  ['מחזיקי תאים', /מחזיק|תושבת|holder|bracket|ספייסר|spacer/i],
+  // Before insulation: a סילבר פיש is a case, and פיש alone is fish paper.
+  ['מארזים', /מארז|קופס|case|סילבר\s?פיש|silver\s?fish/i],
+  ['בידוד וכיווץ', /כיווץ|שרוול|נייר|בידוד|קפטון|kapton|טייפ|tape|סרט|PVC|פיש|fish|דבק|ספוג|foam|EVA/i],
+  ['כבלים ומחברים', /כבל|חוט|AWG|מחבר|XT\s?\d|XLR|QS8|AS1[25]0|אנדרסון|anderson|טרמינל|terminal|נעל|lug|שקע|תקע|פיוז|fuse|מפסק|switch/i],
+  ['הנעה', /מנוע|motor|בקר|controller|צג|display|מצערת|throttle|QS\d|Sabvoton|Far\s?Driver|Votol|Fardriver/i],
+  ['כלים וציוד', /מלחם|רתכת|ריתוך|welder|מאזן|balancer|מולטימטר|מודד|tester|בודק|כלי|מברג|מסור|מחרטה|מספרי/i],
+];
 // The datasheet of each cell on the shelf (2026-10-08, Daniel: "תן מפרט טכני מלא של כל תא שנמצא במלאי
 // של התאים"; he chose a card on each cell in stock). Every figure is the MAKER's, read off the sheet:
 // the PDFs the site publishes (public/datasheets), and for the JP30 Ampace's own product page. A figure
@@ -14342,9 +14484,22 @@ function adjustInventory(id, d) {
 // choose one). Stored as .sub; the stock page groups by it first and falls back to reading the
 // number off the name.
 const INV_SUB = {
-  'BMS': ['3S', '4S', '5S', '7S', '10S', '13S', '14S', '16S', '17S', '20S', '23S', '24S'],
+  'BMS': ['3S', '4S', '5S', '7S', '8S', '10S', '13S', '14S', '15S', '16S', '17S', '20S', '23S', '24S'],
   'מטען': ['12V', '24V', '36V', '48V', '52V', '60V', '72V', '84V', '88V'],
   'תא': ['18650', '21700', '26650', '32700'],
+  'ניקל': ['18650', '21700', 'נחושת', 'פס'],
+  'מחזיקי תאים': ['18650', '21700'],
+  'בידוד וכיווץ': ['שרוולי כיווץ', 'נייר בידוד', 'סרטים ודבק', 'ספוג'],
+  'כבלים ומחברים': ['כבלים', 'מחברים', 'נעלים וטרמינלים', 'פיוזים ומפסקים'],
+  'הנעה': ['מנועים', 'בקרים', 'צגים', 'מצערות'],
+};
+// The sub-category a row's name says, for the categories whose axis is a word rather than a number.
+const INV_SUB_WORDS = {
+  'ניקל': [['נחושת', /נחושת|copper/i], ['21700', /21700|22\.[5-7]|23\b/], ['18650', /18650|18\.5|19\b|20\.25/], ['פס', /פס|גליל|roll/i]],
+  'מחזיקי תאים': [['21700', /21700/], ['18650', /18650/]],
+  'בידוד וכיווץ': [['שרוולי כיווץ', /כיווץ|שרוול|PVC/i], ['נייר בידוד', /נייר|פיש|fish/i], ['ספוג', /ספוג|foam|EVA/i], ['סרטים ודבק', /קפטון|kapton|טייפ|tape|סרט|דבק/i]],
+  'כבלים ומחברים': [['מחברים', /מחבר|XT\s?\d|XLR|QS8|AS1[25]0|אנדרסון|anderson|שקע|תקע/i], ['נעלים וטרמינלים', /טרמינל|terminal|נעל|lug/i], ['פיוזים ומפסקים', /פיוז|fuse|מפסק|switch/i], ['כבלים', /כבל|חוט|AWG/i]],
+  'הנעה': [['מצערות', /מצערת|throttle/i], ['צגים', /צג|display/i], ['בקרים', /בקר|controller|Sabvoton|Far\s?Driver|Votol|Fardriver/i], ['מנועים', /מנוע|motor|QS\d/i]],
 };
 // A nickel's own spec (Daniel, 2026-10-11: "יש לכל ניקל מפרט ייחודי משלו לכן תעשה לי אפשריות שאני יוכל
 // להזין את המפרט המדויק"). Every field optional, kept as .spec on the stock row (it syncs with the row),
@@ -14418,12 +14573,14 @@ function invSubFromName(cat, name) {
   if (cat === 'BMS') { const m = n.match(/(\d+)\s*S(?![A-Za-z\u0590-\u05FF])/i); return m ? m[1] + 'S' : ''; }
   if (cat === 'מטען') { const m = n.match(/(\d+(?:\.\d+)?)\s*V(?![A-Za-z\u0590-\u05FF])/i); return m ? m[1] + 'V' : ''; }
   if (cat === 'תא') { const m = n.match(/\b(18650|21700|26650|32700|4680)\b/); return m ? m[1] : ''; }
+  const words = INV_SUB_WORDS[cat];
+  if (words) { const hit = words.find(([, re]) => re.test(n)); return hit ? hit[0] : ''; }
   return '';
 }
 function invSubRowHtml(cat, cur) {
   const opts = INV_SUB[cat];
   if (!opts) return '';
-  const label = cat === 'BMS' ? 'מספר S' : cat === 'מטען' ? 'מתח' : 'סוג תא';
+  const label = cat === 'BMS' ? 'מספר S' : cat === 'מטען' ? 'מתח' : cat === 'תא' || cat === 'מחזיקי תאים' ? 'סוג תא' : 'תת קטגוריה';
   return `<label>${label}</label><select class="form-select" id="invSub"><option value="">—</option>`
     + opts.map((o) => `<option value="${o}"${o === cur ? ' selected' : ''}>${o}</option>`).join('') + '</select>';
 }
@@ -14448,7 +14605,7 @@ function openInventoryEditor(id) {
   // 'תאים' opening with BMS selected, and saving it moved the cell into BMS.
   const curCat = it.name ? invCatOf(it) : 'BMS';
   const curSub = it.sub || invSubFromName(curCat, it.name);
-  const catOpts = ['BMS', 'מטען', 'תא', 'ניקל', 'אחר'].map(c => `<option value="${c}"${c === curCat ? ' selected' : ''}>${c}</option>`).join('');
+  const catOpts = INV_CAT_LIST.map(c => `<option value="${c}"${c === curCat ? ' selected' : ''}>${c}</option>`).join('');
   openModal(id ? 'עריכת פריט' : 'פריט מלאי חדש', `
     <div class="form-row"><label>קטגוריה</label><select class="form-select" id="invCat" onchange="invCatChanged()">${catOpts}</select></div>
     <div class="form-row" id="invSubRow" style="${INV_SUB[curCat] ? '' : 'display:none;'}">${invSubRowHtml(curCat, curSub)}</div>
