@@ -2775,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v487';
+const HUB_BUILD = 'v488';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7035,7 +7035,12 @@ function openOrderEditor(id) {
         // A catalog row that no longer exists (renamed category, regenerated catalog) was
         // dropped here — so opening an old sale just to fix a phone number silently
         // deleted the line and re-saved a smaller total. Keep it, at the price it sold for.
-        return ci >= 0 ? { ci, qty: it.qty } : { custom: true, name: it.name, unit: Number(it.unit) || 0, qty: it.qty };
+        // A row that DOES exist keeps the price it sold for too (2026-10-22): it was re-priced to the
+        // list of the day, so a September sale opened to correct a phone number re-saved September's
+        // income at October's prices. `sold` holds for the price list it was sold on (`soldMode`); a
+        // line added now, or the sale moved to the other list, takes the list's price (orderItemInfo).
+        const sold = it.unit != null && Number.isFinite(Number(it.unit)) ? { sold: Number(it.unit), soldMode: o.isBusiness ? 'b2b' : 'retail' } : {};
+        return ci >= 0 ? { ci, qty: it.qty, ...sold } : { custom: true, name: it.name, unit: Number(it.unit) || 0, qty: it.qty };
       }) };
   } else {
     orderDraft = { id: null, date: new Date().toISOString(), customer: '', phone: '', custQuery: '', bms: '', bmsBrand: '', bmsAmps: '', isBusiness: false, status: 'הצעה', items: [], discVal: '', discUnit: 'nis' };
@@ -7086,7 +7091,8 @@ function bmsAmpsOpts(brand, sel) {
 function orderItemInfo(it, mode) {
   if (it.custom) return { name: it.name, unit: Number(it.unit) || 0 };
   const p = PRICING[it.ci];
-  return { name: p.name, unit: p[mode] };
+  // a line of a saved sale, on the list it was sold on: the price it was sold for (openOrderEditor)
+  return { name: p.name, unit: it.sold != null && it.soldMode === mode ? it.sold : p[mode] };
 }
 // A catalogue category as a main category and a sub-category (2026-10-22, Daniel: "תחלק לי בבקשה את
 // כל המלאי לפי קטגוריות ותת קטגוריות ... אותו דבר גם לגבי מכירות"). The sale picker listed ~95 flat
@@ -7216,7 +7222,8 @@ function saveOrder() {
   const items = orderDraft.items.map(it => {
     if (it.custom) return { name: it.name, cat: 'מותאם אישית', qty: it.qty, unit: Number(it.unit) || 0, custom: true };
     const p = PRICING[it.ci];
-    return { name: p.name, cat: p.cat, qty: it.qty, unit: p[mode] };
+    // the price on the screen, which for a saved line is the one it sold for (orderItemInfo)
+    return { name: p.name, cat: p.cat, qty: it.qty, unit: orderItemInfo(it, mode).unit };
   });
   // total is what the customer pays — income, profit and every ledger read it — and the
   // discount is kept beside it, so a quote can show the price, the discount and the total
