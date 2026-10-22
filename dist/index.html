@@ -1679,7 +1679,7 @@ body { min-height: 100vh; }
     <div class="form-row"><label>הערה בסוף</label><input class="form-input" id="soNote" dir="ltr" style="width:100%;" placeholder="All BMS common port" onchange="soSetOpt('note', this.value)"></div>
     <div class="form-row"><label>תשלום</label><select class="form-select" id="soPay" onchange="soSetOpt('pay', this.value)"></select></div>
     <div class="form-row"><label>משלוח</label><select class="form-select" id="soVia" onchange="soSetOpt('via', this.value)"></select></div>
-    <div class="form-row"><label>הצהרה למכס (לא חובה)</label><input class="form-input" id="soDeclare" dir="ltr" style="width:100%;" placeholder="Please write &quot;nickel strip&quot; $120" onchange="soSetOpt('declare', this.value)"></div>
+    <div class="form-row"><label>הצהרה למכס (לא חובה)</label><input class="form-input" id="soDeclare" dir="ltr" style="width:100%;" placeholder="Please write &quot;nickel strip&quot; and the value" onchange="soSetOpt('declare', this.value)"></div>
     <textarea id="soText" class="form-input" dir="ltr" rows="10" style="width:100%;font-family:monospace;font-size:12px;text-align:left;" readonly></textarea>
     <div class="btn-group" style="margin-top:8px;flex-wrap:wrap;">
       <button class="btn btn-primary" onclick="soSendPo()">📄 שלח הזמנה רשמית (PDF)</button>
@@ -1791,15 +1791,13 @@ const BMS_BRAND_LABEL = { daly: 'DALY', jk: 'JK Smart', ant: 'ANT' };
 // the supplier's own quotes; DALY had been 28-42% BELOW real cost at
 // every rating, so every BMS replacement was quoted off an understated part.
 //
-//   DALY quoted $: 20A→8 · 30A→11.5 · 40A→16.6-21.5 · 60A→17-28 · 100A→34-40 · 150A→52 · 200A→65
-//   ANT  quoted $: 220A→60 (the only ANT quote; the rest of the ANT curve is scaled to it)
-//   80/120/220/300A DALY are interpolated on the quoted points — marked here so nobody
-//   mistakes them for something the supplier actually said.
+// The quotes are not written here: this file is served to anyone with the URL. They are in
+// the tools repo, docs/hub-cost-evidence.md. DALY 80/120/220/300A are interpolated on the
+// quoted points, and the ANT curve is scaled to its one quote.
 //
-// DALY's real price depends on S count as well as amps (20S 60A is $28, 13S 60A is $17)
-// and this table is keyed by amps alone, so each entry is the average across the S values
-// Daniel actually buys. JK is left as it was: the quotes bracket it (20S 200A = ₪185,
-// 24S 200A = ₪250, table says 260), so there is no single number to correct it to.
+// DALY's real price depends on S count as well as amps, and this table is keyed by amps
+// alone, so each entry is the average across the S values Daniel actually buys. JK is left
+// as it was: its quotes bracket the table's figure, so there is no single number to correct it to.
 const BMS_PRICES = {
   daly: { 20: 40, 30: 55, 40: 95, 60: 105, 80: 145, 100: 180, 120: 210, 150: 255, 200: 320, 220: 345, 300: 450 },
   jk:   { 20: 110, 30: 120, 40: 135, 60: 150, 80: 170, 100: 175, 120: 195, 150: 220, 200: 260, 220: 285, 300: 380 },
@@ -2775,7 +2773,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v490';
+const HUB_BUILD = 'v491';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4571,12 +4569,10 @@ const SUPPLIER_VAT = 0.18;
 // nothing said which. Every stored price is now the supplier's ex-works quote, and the
 // freight is added here, once, to all of them.
 //
-// 0.39 is measured, not assumed: five documented shipments from the main supplier, goods vs freight —
-//   2024-07-18  $649.5 / $300    2025-07-17  $1,190.5 / $433   2026-02-10  $793 / $407
-//   2026-04-07  $1,033 / $582    2026-06-03  $2,451 / $660
-//   = $6,117 goods, $2,382 freight.
+// 0.39 is measured, not assumed: freight over goods on five documented shipments from the
+// main supplier (the shipments: docs/hub-cost-evidence.md in the tools repo).
 // It is high because this supplier's cargo is heavy and cheap per kilo (nickel, copper,
-// shrink, paper) and it all flies — DHL/FedEx/AliExpress at $11-16/kg, never sea. A
+// shrink, paper) and it all flies by courier, never sea. A
 // value-based share therefore over-charges a 200g BMS and under-charges a 1kg nickel
 // roll; correcting that needs per-item weights, which we do not have. Treat it as the
 // order-level average it is.
@@ -4587,22 +4583,21 @@ const SUPPLIER_FREIGHT = 0.39;
 // nickel roll; correcting that needs per-item weights, which we do not have". The QS Motor
 // WhatsApp exports (2026-08-26) carry the weights and the freight quotes that were missing.
 //
-// Twelve paired goods/freight quotes from those chats, weighted:
-//   controllers + displays   28%   ($420+$80, $380+$73, $340+$102, $330+$100, $144+$107)
-//   motors + stators        153%   ($265+$270, $192+$265, $158+$350, $291+$450, $107+$320)
+// Twelve paired goods/freight quotes from those chats, weighted: controllers + displays 28%,
+// motors + stators 153% (the pairs: docs/hub-cost-evidence.md in the tools repo).
 // Five times apart inside one supplier, and neither is 39%. A motor is heavy and cheap per
 // kilo; a controller is light and dear. Value-based freight cannot see that, so the rate is
 // per category instead of per shekel.
 //
 // THESE ARE THE DIRECT-TO-ISRAEL RATES, which is what makes them so high — the same chats
-// show him shipping to a Chinese agent for $3-7 and consolidating, which is the route the
+// show him shipping to a Chinese agent for a few dollars and consolidating, which is the route the
 // measured 0.39 came from. So 0.39 stays the default for anything with no category rate:
 // it is the route he actually uses. The numbers below say what a one-off direct order
 // really costs, which is the question a quote for a single motor has to answer.
 // $/kg, because freight is bought by the kilo and 0.39 is a share of VALUE. The comment on
-// SUPPLIER_FREIGHT above names the rate this supplier actually flies at — $11-16/kg — and
-// says in as many words that a value-based share "over-charges a 200g BMS and under-charges
-// a 1kg nickel roll". Where a weight is known, it is used instead of any percentage.
+// SUPPLIER_FREIGHT above says in as many words that a value-based share "over-charges a 200g
+// BMS and under-charges a 1kg nickel roll". Where a weight is known, it is used instead of any
+// percentage.
 //
 // The weights come from the QS Motor chats: a 1500W hub motor parcel is 31.5×31.5×32cm at
 // 14.5kg, a 3000W is 16kg, a bare stator is 9kg, and "motor and controller" together is
@@ -4611,40 +4606,34 @@ const SUPPLIER_FREIGHT = 0.39;
 // (Daniel, 2026-08-26: "המחיר משתנה מפעם לפעם"). It lives on the settings page beside the
 // dollar rate, and changing it re-costs every weighed row at once.
 //
-// 11 is MEASURED, not a market band. Three QS invoices state their own shipping charge:
+// The per-kilo rate is MEASURED, not a market band: three QS invoices state their own shipping
+// charge, and they fit a fixed charge plus a per-kilo rate to within 3% on all three (the
+// invoices and the fit: docs/hub-cost-evidence.md). That is the shape of every express tariff,
+// and the reason a single $/kg can only ever be right for one order size: the fixed part is
+// spread over whatever is in the box, so a 3 kg order pays over three times the per-kilo rate
+// of an 18 kg one.
 //
-//   2024-11-19   3.0 kg (svmc72150 + 2 displays)   $110   "Shipping to ISRAEL by DHL"
-//   2025-04-01  17.1 kg (QS165 + ND72680 + acc)    $200
-//   2025-04-02  17.6 kg (QS138 + ND72450 + acc)    $190
-//
-// Those fit **$93 fixed + $5.90/kg** to within 3% on all three — which is the shape of every
-// express tariff and the reason a single $/kg can only ever be right for one order size. The
-// fixed part is spread over whatever is in the box, so the EFFECTIVE rate is 93/W + 5.90:
-//
-//    3 kg order → $36.7/kg      12 kg → $13.6/kg      25 kg → $9.6/kg
-//    6 kg order → $21.3/kg      18 kg → $11.0/kg      40 kg → $8.2/kg
-//
-// His orders are a motor plus a controller plus accessories, ~18 kg, hence 11. Two things
-// follow that the number itself does not say. A SMALL order is punished brutally — a lone
-// SVMC72150 carries $110 of freight on a $200 part — so the real lever here is consolidating
-// orders, not haggling the rate. And this replaces a guess: 10 was the middle of a quoted
-// $8-12 forwarder band, and it happened to land within 10% of the truth, which is luck.
+// Two things follow that the number itself does not say. A SMALL order is punished brutally —
+// a lone controller carries freight worth over half its own price — so the real lever here is
+// consolidating orders, not haggling the rate. And this replaced a guess, the middle of a
+// forwarder's quoted band, which happened to land within 10% of the truth: luck.
 let FREIGHT_USD_PER_KG = 24;
-// The components supplier (BMS, nickel, shrink…) consolidates through an agent at $11-16/kg;
-// $13.5 is the middle, his call on 2026-09-25. QS's $24 is DHL direct and was being charged on
-// every weighed row, a BMS board included.
+// The components supplier (BMS, nickel, shrink…) consolidates through an agent; the rate below
+// is the middle of the agent's band, his call on 2026-09-25. QS's rate above is DHL direct and
+// was being charged on every weighed row, a BMS board included.
 const AGENT_FREIGHT_USD_PER_KG = 13.5;
 const freightPerKgFor = (r) => (/^QS/.test(String(r.who || '')) ? FREIGHT_USD_PER_KG : AGENT_FREIGHT_USD_PER_KG);
 
 // AND THE 0.39 DOES NOT BELONG TO THESE ROWS AT ALL (Daniel, 2026-08-26: the motors and
 // controllers do not come from the components supplier). NOTE: this file is served publicly
-// — the login gate is client-side JavaScript — so the components supplier is described here
-// and never named. It was named in this comment for a day, quoted verbatim out of a
-// WhatsApp message, and audit/audit-hub.mjs's secrets check is what caught it.
+// — the login gate is client-side JavaScript — so no supplier is named here unless the retail
+// site sells under that name, and no supplier's price is written out. A name and the price lists
+// crept back in after audit-hub's check stopped running; audit/audit-public-hub.mjs, inside
+// sync-prices, fails on them now.
 //
 // The 0.39 was measured on five shipments of nickel, copper, shrink and paper: heavy, cheap
-// building material. It never described a motor. At $13/kg a 16kg hub motor is 76% of its
-// own value and a 1.5kg controller is 17% — either side of 39%, and neither near it.
+// building material. It never described a motor. At the agent's rate a 16kg hub motor's freight
+// is 76% of its own value and a 1.5kg controller's 17% — either side of 39%, and neither near it.
 //
 // These are the CONSOLIDATED rates — the route through a Chinese agent that he actually
 // uses. The direct-to-Israel express quotes in the same chats run 102-299% on motors, and
@@ -4705,12 +4694,14 @@ function renderSettingsRoute() {
 const CELL_CODE_SEA = { '50E': 'EVE 50E', '50SG': 'Tenpower 50SG', '50PL': 'EVE 50PL (Tabless)', '40P': 'EVE 40P', '35V': 'EVE 35V', '25P': 'EVE 25P', '26V': 'EVE 26V' };
 const cellWords = (x) => String(x || '').toLowerCase().split(/[\s\-·—()\/,|]+/);
 // The landed cost of one cell by its model code, on a route; null when that route has no row.
+// Air is the distributor's ✈️ rows. Local is a row that says מקומי, or one priced in shekels with no
+// dollar quote and on neither import route: the local shop's, found without naming it (this file is public).
 function routeCellCostOn(code, route) {
   if (route === 'sea') { const k = CELL_CODE_SEA[code]; return k && CELL_UNIT_COST[k] != null ? CELL_UNIT_COST[k] : null; }
   const c = code.toLowerCase();
   const rows = Store.get('supplier_prices') || [];
   const hit = rows.find((r) => r.ils != null && cellWords(r.name).includes(c)
-    && (route === 'air' ? /אווירי/.test(r.cat || '') : /מקומי|LaBatteria/i.test((r.cat || '') + ' ' + (r.who || ''))));
+    && (route === 'air' ? /אווירי/.test(r.cat || '') : /מקומי/.test((r.cat || '') + ' ' + (r.who || '')) || (r.usd == null && !/ימי|אווירי/.test(r.cat || ''))));
   return hit ? Number(hit.ils) : null;
 }
 // What a cell costs HIM now, on the route he chose; the sea cost where that route has none.
@@ -4753,8 +4744,8 @@ function supplierRows() {
 // Hub catalogue name → the one supplier row that costs it. Keys are exactly what CATALOG
 // calls the product; values are the consolidated names built by generate/build-supplier-list.mjs,
 // which is now ONE row per product. Before that, three sources sat side by side and the same
-// DKD display appeared five times between $34 and $63; picking between them was left to
-// whoever read the screen, and to .find(), which took the oldest.
+// DKD display appeared five times at five prices, the dearest nearly twice the cheapest; picking
+// between them was left to whoever read the screen, and to .find(), which took the oldest.
 const SUPPLIER_MATCH = {
   'SVMC72100': 'Sabvoton SVMC72100',
   'SVMC72150': 'Sabvoton SVMC72150 + BT',
@@ -4773,8 +4764,8 @@ const SUPPLIER_MATCH = {
   'QS138 3000W (70H)': 'QS138 3000W 70H',
   'QS120 2000W (60H)': 'QS120 2000W (60H)',
   // The chargers (2026-10-22). Until today none was here, so every charger was costed at COST_PCT
-  // of its price — ₪282 for a 72V 5A whose IC GOGOGO quote lands at ₪123. The 3A ones are the
-  // AIYONG plastic, the 5A and 8A the MLC aluminium, as he buys them. The 36V 2A has no quote yet.
+  // of its price, more than twice what the supplier's quote lands at for a 72V 5A. The 3A ones are
+  // the plastic model, the 5A and 8A the aluminium one, as he buys them. The 36V 2A has no quote yet.
   'מטען 48V 3A': '48V 3A',
   'מטען 60V 3A': '60V 3A',
   'מטען 60V 5A': '60V 5A XLR',
@@ -4825,8 +4816,8 @@ function supplierIlsParts(r) {
 function supplierCostFor(name) {
   // NEWEST WINS (supplierQuoteFor sorts by date), and this is not a tidiness rule. The file keeps old
   // quotes on purpose — they are the record of what was paid — but `.find()` returned whichever sat
-  // first in the array, which was the oldest. The DKD display was costed at the $55 quoted in 2022
-  // while the 2025 invoice says $34: 62% over, in the direction nobody questions, because an
+  // first in the array, which was the oldest. The DKD display was costed at a 2022 quote 62% over
+  // what the 2025 invoice says, in the direction nobody questions, because an
   // inflated cost only ever makes the margin look worse than it is.
   const r = supplierQuoteFor(name);
   return r ? Math.round(supplierIls(r, true, true)) : null;
@@ -6274,13 +6265,13 @@ function estimateBatteryCost(it, b2b = false, cell = null) {
   const picked = typeof pickedBms === 'function' ? pickedBms(it) : null;
   // DALY STOPS AT 20S (Daniel, 2026-09-17: "רק חכמים כי Daly מוגבל ל-20s"). 72V is exactly 20S,
   // the last voltage it can do; 84V is 23S and 88V is 24S, so both must have a smart board —
-  // the 100A rung of his JK list, $41.88 landed = ₪172 against the DALY 100A's ₪180. A physical
+  // the 100A rung of his JK list, ₪172 landed against the DALY 100A's ₪180. A physical
   // limit, not a preference. Mirrors BMS_LADDER in cost-model.mjs; sync-prices checks every row.
   const bmsBand = seriesForV(V) > 20 ? 172 : (V >= 72 && !b2b ? 180 : 105);
   const bms = powerTool ? 0 : (picked ? picked.ils : bmsBand);
-  // Nickel off his own plate prices (2026-08-31): every shape on the shelf works out at
-  // ~$0.0109 per hole and a pack needs two contacts per cell. Folding does not double it —
-  // he folds the same piece to shorten it, not to add a second. This is the TRUE cost; the
+  // Nickel off his own plate prices (2026-08-31): every shape on the shelf works out at one price
+  // per hole (in dollars, below), and a pack needs two contacts per cell. Folding does not double
+  // it — he folds the same piece to shorten it, not to add a second. This is the TRUE cost; the
   // published prices were built on ₪3/S and that anchor lives in cost-model.mjs.
   const nickel = cells * 2 * 0.0109 * 3 * 1.204;
   const materials = powerTool ? 30 : 60;
@@ -6302,10 +6293,9 @@ function estimateBatteryCost(it, b2b = false, cell = null) {
   // 3 min/cell claimed 39 hours for a 200Ah pack. Must match packCost in the generator.
   // ₪45/hr — his instruction 2026-09-17, cost only; the published prices are unchanged.
   const labor = (cells * 0.0061 + (powerTool ? 0.75 : 1.68)) * 45;
-  // Sur-Ron is its own build (Daniel, 2026-10-18: "זה בנוי מנחושת גם ה Bms לא נכון"): an ANT 420A/1050A
-  // ($58), copper-nickel busbar at 4.4 g a cell and $165 a kilo, ₪150 of wire and connectors, the
-  // complete case, and 8 hours for about 300 cells. Mirrors SURRON in cost-model.mjs; sync-prices
-  // compares every row.
+  // Sur-Ron is its own build (Daniel, 2026-10-18: "זה בנוי מנחושת גם ה Bms לא נכון"): an ANT 420A/1050A,
+  // copper-nickel busbar at 4.4 g a cell, ₪150 of wire and connectors, the complete case, and 8 hours
+  // for about 300 cells. Mirrors SURRON in cost-model.mjs; sync-prices compares every row.
   if (surronPack(it)) {
     const s = surronParts(cells, it);
     return Math.round(cellsCost + (picked ? picked.ils : s.bms) + s.copper + s.materials + s.enclosure + s.hours * 45);
@@ -6315,7 +6305,7 @@ function estimateBatteryCost(it, b2b = false, cell = null) {
 // A Sur-Ron pack (sync-prices runs this block alone, from estimateBatteryCost to productCost, so the
 // helpers live inside it). Landed as the cost model lands everything: USD × 3.00 × 1.204.
 function surronPack(it) { return /^סוללות Sur-Ron/.test(String(it && it.cat || '')); }
-// The Light Bee's DHS case is ₪1,150 ($180 on PI0717), the Ultra Bee's ₪1,500 (SURRON_CASE_LIGHT / SURRON_CASE).
+// The Light Bee's DHS case is ₪1,150, the Ultra Bee's ₪1,500 (SURRON_CASE_LIGHT / SURRON_CASE).
 function surronParts(cells, it) {
   const kg = cells * 4.4 / 1000, light = /^סוללות Sur-Ron Light Bee/.test(String(it && it.cat || ''));
   return { bms: 58 * 3 * 1.204, kg, copper: kg * 165 * 3 * 1.204, materials: 150, enclosure: light ? 1150 : 1500, hours: 8 * cells / 300 };
@@ -6355,7 +6345,7 @@ function batteryCostParts(it, b2b = false) {
   const picked = typeof pickedBms === 'function' ? pickedBms(it) : null;
   // DALY STOPS AT 20S (Daniel, 2026-09-17: "רק חכמים כי Daly מוגבל ל-20s"). 72V is exactly 20S,
   // the last voltage it can do; 84V is 23S and 88V is 24S, so both must have a smart board —
-  // the 100A rung of his JK list, $41.88 landed = ₪172 against the DALY 100A's ₪180. A physical
+  // the 100A rung of his JK list, ₪172 landed against the DALY 100A's ₪180. A physical
   // limit, not a preference. Mirrors BMS_LADDER in cost-model.mjs; sync-prices checks every row.
   const bmsBand = seriesForV(V) > 20 ? 172 : (V >= 72 && !b2b ? 180 : 105);
   const bms = powerTool ? 0 : (picked ? picked.ils : bmsBand);
@@ -6456,7 +6446,7 @@ function bmsBrandKey(cat) {
   if (/DALY/i.test(c)) return 'DALY';
   if (/JK/i.test(c)) return 'JK';
   if (/ANT/i.test(c)) return 'ANT';
-  return null;                       // JBD and "מותגים אחרים": no range known, so no claim
+  return null;                       // any other brand ("מותגים אחרים"): no range known, so no claim
 }
 
 function getBmsPicks() { return Store.get('bms_pick') || {}; }
@@ -7635,7 +7625,7 @@ function takeOrderStock(o) {
 // A sale stocked BEFORE v479 (2026-10-22) took the tier's 21700 for an 18650 pack — one 13S10P EVE 26V
 // took 78 EVE 50E and no 26V. The fix in batteryStockParts covers every sale from then on; a sale
 // already stocked stays wrong until it is put right, and nothing did that. Daniel asked about one
-// (ישראל כהן's). This finds them by their own evidence — the stock log line that the old rule wrote
+// sale. This finds them by their own evidence — the stock log line that the old rule wrote
 // (that shelf row, that count, that customer) — and the button puts the old cells back and takes the
 // pack's own. Without that line nothing is changed: a guess would be a second wrong deduction.
 //
@@ -9079,7 +9069,7 @@ function rejectPunch(id) {
 // WORKER HOURS, PAYMENTS AND THE TRASH (rebuilt 2026-09-24, v318 → v323)
 // ============================================================
 // The questions this page exists to answer, in his words: "how much do I owe each worker",
-// "what did I pay him and when", and — v323 — "I paid שמואל ₪2,900 and I owe him nothing,
+// "what did I pay him and when", and — v323 — "I paid him and I owe him nothing,
 // mark it so". Months are not one of them: "לא רוצה לדפדף לפי חודשים, סתם מסובך". So there is
 // no month picker here any more; each worker has ONE running account.
 //
@@ -9429,8 +9419,8 @@ function saveWagePayment(close = false) {
 // "אין חוב" without a new payment: everything open until now is settled — whatever the
 // difference. For the case where the money already went out (and was recorded, or was not).
 // A payment recorded for money the old per-row "paid" flag already accounts for. Seen on
-// 2026-09-24: שמואל אמירי had ₪2,802 of hours flagged paid AND a ₪2,802 payment for the same
-// money, so "קיבל" read ₪5,604. Only an EXACT match counts — close is not evidence.
+// 2026-09-24: a worker had his hours flagged paid AND a payment of the same amount for the same
+// money, so "קיבל" read twice what he got. Only an EXACT match counts — close is not evidence.
 // A payment he brought back from the trash carries keep:true and is never matched again.
 function wtDupPayment(L) {
   if (!(L.legacyPaid >= 1)) return null;
@@ -9726,7 +9716,7 @@ const DIM_PITCH = {
   // Re-measured 2026-10-04 (Daniel): ניקל א׳ is the W-shaped strip at 22.7, ניקל ב׳ the diagonal at
   // 22.5 — both on nesting rows (he chose that for the W too), so each is d x 0.866 between rows.
   // The keys stay with the NICKELS, not the numbers: the OX's counted 136/126 were counted on them.
-  // Z is 22.6 since 2026-10-22 (Daniel, from IC GOGOGO's 21700 holder: 14 across 328mm, 10 rows in 200;
+  // Z is 22.6 since 2026-10-22 (Daniel, from the supplier's 21700 holder: 14 across 328mm, 10 rows in 200;
   // he chose 22.6 over the 22.5 the order lines name). Rows nest at 22.6 x 0.866 = 19.57.
   // And an H at 22.5 beside the 23 (Daniel, 2026-10-17: "וגם יש H אם 22.5M"), square like it.
   21700: { 'diag-a': [22.7, 19.66], 'diag-b': [22.6, 19.57], 'square-225': [22.5, 22.5], 'square-23': [23, 23] },
@@ -13380,8 +13370,8 @@ function copyOrderList() {
 
 // The shelf count Daniel gave on 2026-09-01: the 2026-07-22 import invoice, plus 500 more 50E,
 // 150 more 26V and 140 more 50PL bought since. The invoice unit costs match cost-model.mjs on
-// every line to within a rounding step (50E $1.78 -> ₪7.32 vs 7.34, 50PL $2.94 -> ₪12.09 vs
-// 12.15), which is the first independent confirmation the landed-cost factor has ever had.
+// every line to within a rounding step, which is the first independent confirmation the
+// landed-cost factor has ever had.
 //
 // It MERGES rather than replaces: a seeded cell already on the shelf has its quantity set, and
 // every other row — nickel, shrink, connectors — is left alone. Replacing would throw away
@@ -15161,7 +15151,7 @@ function init() {
     BIZ_DISCOUNT = (s.bizDisc != null) ? s.bizDisc : 15;
     LABOUR_COST = (s.labourCost != null) ? s.labourCost : 60;
     // Not read from settings since 2026-09-25: the field is gone from the screen, and a value
-    // saved before could be the old $11 — half the model's rate, invisibly. The model's $24
+    // saved before could be the old rate, half the model's, invisibly. The model's rate
     // (QS_BLENDED_USD_PER_KG, audited by audit-qs-landed) is used instead.
     document.getElementById('setHourly').value = HOURLY;
     document.getElementById('setMargin').value = Math.round(MARGIN * 100);
