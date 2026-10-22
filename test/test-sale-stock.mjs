@@ -48,7 +48,35 @@ await page.evaluate(() => { const o = document.getElementById('loginOverlay'); i
 
 if (SELFTEST) {
   // The bug: a battery that is not on the shelf under its own name consumes nothing.
-  await page.evaluate(() => { window.batteryStockParts = () => null; });
+  // And the old orderStockFixes (v484), which took any log line of that shelf row, that count and that
+  // customer, from any day and any event, power tools included — run on the real batteryStockParts, so
+  // the "left alone" checks below must go red with it.
+  await page.evaluate(() => {
+    const parts = window.batteryStockParts;
+    window.batteryStockParts = () => null;
+    window.orderStockFixes = (o) => {
+      if (!o || !o.stockTaken || o.stockFixed || !Array.isArray(o.items)) return [];
+      const inv = getInventory(), log = Store.get('inv_log') || [];
+      const who = String(o.customer || '').slice(0, 40);
+      const out = [];
+      for (const it of o.items) {
+        if (it.custom) continue;
+        const right = parts(it);
+        if (!right || !/^EVE (26V|25P)$/.test(right.cellModel)) continue;
+        const m = String(it.name || '').match(/(\d+)V\s*(\d+(?:\.\d+)?)Ah/);
+        if (!m) continue;
+        const qty = Number(it.qty) || 1;
+        const oldModel = /PRO/.test(it.cat) ? 'EVE 50PL' : /ADVANCED/.test(it.cat) ? 'Tenpower 50SG' : 'EVE 50E';
+        const oldCells = seriesForV(+m[1]) * Math.ceil(+m[2] / 5) * qty;
+        const oldRow = invFindCellRow(inv, oldModel);
+        if (!oldRow) continue;
+        const key = String(oldRow.id != null ? oldRow.id : oldRow.name);
+        const line = log.find((e) => e.row === key && Number(e.qty) === oldCells && String(e.note || '') === who && !out.some((x) => x.logId === e.id));
+        if (line) out.push({ logId: line.id, item: it.name, wrongName: oldRow.name, wrongCells: oldCells, rightModel: right.cellModel, rightCells: right.cells * qty });
+      }
+      return out;
+    };
+  });
 }
 
 const R = await page.evaluate(() => {
@@ -114,6 +142,35 @@ const R = await page.evaluate(() => {
       const o = { id: 'new1', customer: 'לקוח', status: 'שולם', stockTaken: true, items: [{ name: s26.name, cat: s26.cat, qty: 1 }] };
       return { found: orderStockFixes(o).length };
     })() : null,
+    // Sales the old rule did NOT stock, beside a 50E line of the same customer and the same count from
+    // something else (2026-10-22 review). Each must be left alone — the button would give back 50E cells
+    // that were really used and take the pack's own cells a second time.
+    falseFlags: s26 ? (() => {
+      const pt = PRICING.find((x) => /כלי עבודה/.test(x.cat) && /^21V 10Ah/.test(x.name));
+      const run = (label, orderDate, lines, item) => {
+        seed();
+        Store.set('inv_log', lines);
+        const o = { id: 'fp-' + label, customer: 'סוחר', status: 'שולם', stockTaken: true, date: orderDate, items: [item] };
+        Store.set('orders', [o]);
+        const found = orderStockFixes(o).length;
+        const before = snap();
+        if (found) fixOrderStock(o.id);
+        return { found, moved: JSON.stringify(before) !== JSON.stringify(snap()) };
+      };
+      const line50E = (id, at, qty) => ({ id, at, row: 'תאי EVE 21700 50E', name: 'תאי EVE 21700 50E', qty, note: 'סוחר' });
+      const line26V = (id, at, qty) => ({ id, at, row: 'תאי EVE 18650 26V', name: 'תאי EVE 18650 26V', qty, note: 'סוחר' });
+      const item26 = { name: s26.name, cat: s26.cat, qty: 1 };
+      return {
+        // the review's case: a CLASSIC 48V 30Ah (13S6P, 78 50E) and, after v479, the 18650 pack stocked right
+        afterV479: run('after', '2026-10-23T09:00:00.000Z', [line50E('l1', '2026-10-20T09:00:00.000Z', 78), line26V('l2', '2026-10-23T09:00:01.000Z', 130)], item26),
+        // an old 18650 sale whose only matching 50E line is from before the sale — another purchase
+        beforeSale: run('before', '2026-10-19T10:00:00.000Z', [line50E('l3', '2026-10-10T10:00:00.000Z', 78)], item26),
+        // an old sale that a device already on v479 stocked right, beside a 50E line of the same week
+        stockedRight: run('right', '2026-10-21T10:00:00.000Z', [line26V('l4', '2026-10-21T10:00:00.000Z', 130), line50E('l5', '2026-10-21T15:00:00.000Z', 78)], item26),
+        // a power tool: the old rule took 25P for those all along; a 10-cell 50E line is a repair's
+        powerTool: pt ? run('pt', '2026-10-19T10:00:00.000Z', [line50E('l6', '2026-10-19T12:00:00.000Z', 10)], { name: pt.name, cat: pt.cat, qty: 1 }) : null,
+      };
+    })() : null,
     sale25: s25 ? sell(s25) : null,
     // An ACCESSORY is stocked as a unit and must keep matching by name. Taken from the real
     // catalogue rather than invented — the first version of this check used a category that
@@ -168,6 +225,14 @@ check('the fix gives the 78 50E back and takes its 130 26V',
 check('the wrong log line is gone, the right one is there, and it cannot run twice',
   !!R.old26 && R.old26.again === 0 && !R.old26.log.includes('תאי EVE 21700 50E:78') && R.old26.log.includes('תאי EVE 18650 26V:130'), R.old26);
 check('a sale stocked after the fix is left alone', !!R.new26 && R.new26.found === 0, R.new26);
+// What the button must never touch: a sale the old rule did not stock, beside a 50E line of the same
+// customer and count that belongs to something else.
+const FF = R.falseFlags || {};
+check('an 18650 sale after v479, beside the customer\'s CLASSIC 48V 30Ah, is not flagged',
+  !!FF.afterV479 && FF.afterV479.found === 0 && !FF.afterV479.moved, FF.afterV479);
+check('an old 18650 sale is not matched to a 50E line from before it', !!FF.beforeSale && FF.beforeSale.found === 0 && !FF.beforeSale.moved, FF.beforeSale);
+check('an old sale already stocked with its own 26V is not flagged', !!FF.stockedRight && FF.stockedRight.found === 0 && !FF.stockedRight.moved, FF.stockedRight);
+check('a power-tool sale is never flagged (the old rule took 25P for it)', !!FF.powerTool && FF.powerTool.found === 0 && !FF.powerTool.moved, FF.powerTool);
 
 // ---------------------------------------------------------------- what must NOT change
 check('an accessory still matches by NAME and is not decomposed',
