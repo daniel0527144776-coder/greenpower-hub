@@ -91,28 +91,35 @@ const rest = await page.evaluate(() => {
 check('the scooter and the enduro pack cost the SAME — both are shrink, neither buys a case',
   rest.scooter != null && rest.heavy != null && rest.scooter === rest.heavy, rest);
 
-// ---------------------------------------------------------------- 3. Sur-Ron, ₪1,500
+// ---------------------------------------------------------------- 3. Sur-Ron, ₪1,500 / ₪1,150
 // This one was already wrong before today: SURRON_CASE went into the model on 2026-09-01 and
 // was applied inside audit-pricing only, so the hub showed every Sur-Ron pack ₪1,500 light.
-const surron = await page.evaluate(() => {
-  const i = PRICING.findIndex((x) => /^סוללות Sur-Ron/.test(x.cat) && /(\d+)V\s*(\d+)Ah/.test(x.name));
+// Two OEM cases since 2026-10-18: the Ultra Bee's ₪1,500 and the Light Bee's DHS case at ₪1,150
+// (SURRON_CASE_LIGHT, from its PI). Each is checked on a row of its own family, so the list's
+// order cannot decide which one is tested.
+const surronRow = (light) => page.evaluate((light) => {
+  const i = PRICING.findIndex((x) => /^סוללות Sur-Ron/.test(x.cat) && /^סוללות Sur-Ron Light Bee/.test(x.cat) === light
+    && /(\d+)V\s*(\d+)Ah/.test(x.name));
   if (i < 0) return { missing: true };
   const it = PRICING[i];
   const m = it.name.match(/(\d+)V\s*(\d+)Ah/);
-  // A Sur-Ron row is named 'Light Bee 72V 70Ah', not '72V 70Ah' — match on the V/Ah part or
+  // A Sur-Ron row is named 'Light Bee 72V 45Ah', not '72V 45Ah' — match on the V/Ah part or
   // the comparison row is never found and the check passes vacuously on a null.
   const size = m[0];
   const j = PRICING.findIndex((x) => x.name === size && /^סוללות אינדורו/.test(x.cat) && /PRO/.test(x.cat));
   const caseLine = batteryCostParts(it, false).parts.find((x) => /מארז/.test(x.k)) || null;
   return { name: it.name, cat: it.cat, surron: estimateBatteryCost(it, false),
     heavy: j < 0 ? null : estimateBatteryCost(PRICING[j], false), V: +m[1], caseLine };
-});
+}, light);
 // Since 2026-10-18 a Sur-Ron is not an enduro pack plus a case: it is copper-nickel and an
 // ANT 420A as well (test-surron-cost.mjs holds that sum), so the gap to the enduro row is the
-// case AND more, never less — and the case is still its own ₪1,500 line.
-check('a Sur-Ron pack carries its ₪1,500 OEM case',
-  !surron.missing && surron.heavy != null && surron.surron - surron.heavy >= 1500, surron);
-check('the Sur-Ron breakdown names the case at ₪1,500', (surron.caseLine || {}).v === 1500, surron.caseLine);
+// case AND more, never less — and the case is still its own line.
+for (const [label, light, amount] of [['Ultra Bee', false, 1500], ['Light Bee', true, 1150]]) {
+  const r = await surronRow(light);
+  check(`a Sur-Ron ${label} pack carries its ₪${amount.toLocaleString('en')} OEM case`,
+    !r.missing && r.heavy != null && r.surron - r.heavy >= amount, r);
+  check(`the ${label} breakdown names the case at ₪${amount.toLocaleString('en')}`, (r.caseLine || {}).v === amount, r.caseLine);
+}
 
 // ---------------------------------------------------------------- 4. the breakdown says so
 const parts = await page.evaluate(() => {
