@@ -2773,7 +2773,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v494';
+const HUB_BUILD = 'v495';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3526,7 +3526,7 @@ function saveJob() {
     warrantyMonths: warrantyFor(),
     // null, not a date. The warranties page lists every job that HAS a warrantyEnd, so a
     // zero-month job would appear there and expire the same day it was created.
-    warrantyEnd: warrantyFor() ? new Date(Date.now() + warrantyFor() * 30 * 24 * 60 * 60 * 1000).toISOString() : null
+    warrantyEnd: warrantyEndFrom(Date.now(), warrantyFor())
   };
 
   const jobs = Store.get('jobs') || [];
@@ -4095,17 +4095,15 @@ function customerLedger(c) {
     rows.push({ kind: 'repair', id: j.id, date: j.date, amount: Number(j.price) || 0,
       title: (j.voltage && j.capacity) ? `${j.voltage}V ${j.capacity}Ah` : 'תיקון',
       sub: [jobTypeLabel(j), VEHICLE_LABELS[j.vehicle]].filter(Boolean).join(' · '),
-      warrantyEnd: j.warrantyEnd });
+      warrantyEnd: jobWarrantyEnd(j) });
   }
   for (const o of (Store.get('orders') || [])) {
     if (!phones.size || !phones.has(o.phone)) continue;
-    const months = Math.max(...(o.items || []).map((it) => warrantyForItem(it)).concat([12]));
-    const end = new Date(o.date); end.setMonth(end.getMonth() + months);
     rows.push({ kind: 'sale', id: o.id, date: o.date, amount: Number(o.total) || 0,
       title: (o.items || []).length === 1 ? o.items[0].name : `${(o.items || []).length} פריטים`,
       sub: [...new Set((o.items || []).map((i) => i.cat).filter(Boolean))].slice(0, 3).join(' · '),
       status: o.status, income: saleIsIncome(o),
-      warrantyEnd: saleIsIncome(o) ? end.toISOString() : null });
+      warrantyEnd: saleWarrantyEnd(o) });
   }
   // Imported receipts have no phone for 27 of the customers, so they also match on name —
   // but only on the ONE record that owns that name. Six names in the accountant's list are held
@@ -4331,8 +4329,10 @@ function repairMessage(j) {
       '📍 ' + (B.address || LAB_ADDRESS) + '\n🕐 ' + LAB_HOURS, sign].join('\n\n');
   }
   if (st === 'נמסר') {
-    const months = warrantyFor(Array.isArray(j.jobs) ? j.jobs : []);
-    const end = j.warrantyEnd ? new Date(j.warrantyEnd).toLocaleDateString('he-IL') : '';
+    // the months recorded on the job, beside the end they make: the job types alone said 6 over
+    // the date of a repair given 12 in the job editor
+    const months = jobWarrantyMonths(j), we = jobWarrantyEnd(j);
+    const end = we ? new Date(we).toLocaleDateString('he-IL') : '';
     const lines = [spec ? '🔋 ' + spec : '', '🔧 ' + jobTypeLabel(j), price ? '💰 ' + shek(price) + (Number(j.discount) ? ' (כולל הנחה של ' + shek(j.discount) + ')' : '') : '',
       months ? '🛡️ אחריות ' + months + ' חודשים' + (end ? ' (עד ' + end + ')' : '') : ''].filter(Boolean);
     // "keep this message, it is your warranty" only where there is one: an inspection carries none
@@ -4388,10 +4388,11 @@ function setWarrantyTab(tab) {
 function warrantyEntries() {
   const out = [];
   (Store.get('jobs') || []).forEach((j) => {
-    if (!j.warrantyEnd) return;
+    const end = jobWarrantyEnd(j);
+    if (!end) return;
     out.push({
       kind: 'repair', id: j.id, name: j.customerName, phone: j.customerPhone,
-      date: j.date, end: j.warrantyEnd, amount: Number(j.price) || 0,
+      date: j.date, end, amount: Number(j.price) || 0,
       spec: (j.voltage && j.capacity)
         ? `🔋 ${j.voltage}V ${j.capacity}Ah${VEHICLE_LABELS[j.vehicle] ? ' · ' + VEHICLE_LABELS[j.vehicle] : ''}`
         : '🔧 ' + (j.quickRepair || 'תיקון'),
@@ -4399,14 +4400,11 @@ function warrantyEntries() {
     });
   });
   (Store.get('orders') || []).forEach((o) => {
-    if (!saleIsIncome(o)) return;
-    const months = (o.items || []).reduce((m, it) => Math.max(m, warrantyForItem(it)), 0);
-    if (!months) return;
-    const start = new Date(o.date);
-    if (isNaN(start)) return;
+    const end = saleWarrantyEnd(o);
+    if (!end) return;
     out.push({
       kind: 'sale', id: o.id, name: o.customer, phone: o.phone,
-      date: o.date, end: new Date(start.getTime() + months * 30 * 24 * 60 * 60 * 1000).toISOString(),
+      date: o.date, end,
       amount: Number(o.total) || 0,
       spec: '🛒 ' + (saleCats(o) || 'מכירה'),
       what: (o.items || []).map((it) => it.name).join(' · ') || 'מכירה',
@@ -7431,8 +7429,9 @@ function cycleJobStatus(id) {
 }
 function repairRow(j) {
   let warr = '';
-  if (j.warrantyEnd) {
-    const days = Math.ceil((new Date(j.warrantyEnd).getTime() - Date.now()) / 86400000);
+  const we = jobWarrantyEnd(j);
+  if (we) {
+    const days = Math.ceil((new Date(we).getTime() - Date.now()) / 86400000);
     warr = days > 0 ? `אחריות: ${days} ימים` : 'אחריות: פג';
   }
   const spec = (j.voltage && j.capacity) ? `🔋 ${j.voltage}V ${j.capacity}Ah` : '';
@@ -7809,7 +7808,10 @@ function buildQuoteText(o) {
     });
   });
   if (o.bms) sum.push(`✅ *מערכת ניהול (BMS):* ${o.bms}`);
-  sum.push(`✅ *אחריות:* ${WARRANTY_BUILD} חודשים`);
+  // the sale's own months, the ones the warranties page keeps: WARRANTY_BUILD here promised 12
+  // on a lab service the register holds for 6
+  const months = saleWarrantyMonths(o);
+  if (months) sum.push(`✅ *אחריות:* ${months} חודשים`);
   P.push(sum.join('\n'));
 
   // --- money ---
@@ -7837,7 +7839,7 @@ function buildQuoteText(o) {
     // The one thing a delivered customer needs from this message is what to do if something
     // goes wrong, and until when. A lead time is meaningless to him now.
     P.push(['*אחריות ושירות:*',
-      `• ${subj} מכוסה ב-*${WARRANTY_BUILD} חודשי אחריות* מהיום.`,
+      ...(months ? [`• ${subj} מכוסה ב-*${months} חודשי אחריות* מהיום.`] : []),
       '• כל תקלה, חריקה או ירידה בטווח — תכתוב לי ונטפל בזה.',
       '• מומלץ לא לאחסן את הסוללה ריקה לאורך זמן, ולטעון אחת לחודש גם כשלא בשימוש.'].join('\n'));
   } else if (paid) {
@@ -12047,24 +12049,23 @@ const BOT_INDEX_MONTHS = 18;
 function botIndex() {
   const since = Date.now() - BOT_INDEX_MONTHS * 30 * 86400000;
   const recent = (d) => !d || new Date(d).getTime() >= since;
-  const plusMonths = (d, m) => { const t = new Date(d); if (isNaN(t)) return ''; t.setMonth(t.getMonth() + m); return t.toISOString().slice(0, 10); };
+  const day = (iso) => (iso ? String(iso).slice(0, 10) : '');
   const customers = (Store.get('customers') || []).map((c) => ({ n: c.name || '', p: custPhones(c) })).filter((c) => c.p.length);
   const jobs = (Store.get('jobs') || []).filter((j) => j && j.customerPhone && recent(j.date)).map((j) => ({
     p: j.customerPhone, d: j.date,
     w: (j.jobs || []).map((k) => JOB_LABELS[k] || k).concat(j.quickRepair ? [j.quickRepair] : []),
     veh: j.vehicle || '', v: [j.voltage ? j.voltage + 'V' : '', j.capacity ? j.capacity + 'Ah' : ''].filter(Boolean).join(' '),
-    s: j.jobStatus || 'בעבודה', t: Math.round(j.price || 0), we: j.warrantyEnd ? String(j.warrantyEnd).slice(0, 10) : '',
+    s: j.jobStatus || 'בעבודה', t: Math.round(j.price || 0), we: day(jobWarrantyEnd(j)),
   }));
   const orders = (Store.get('orders') || []).filter((o) => o && o.phone && recent(o.date)).map((o) => {
     const items = Array.isArray(o.items) ? o.items : [];
-    const months = items.length ? Math.max(...items.map(warrantyForItem)) : 0;
     // What he pays: the sale's total, after its discount. It was the sum of the lines, so a customer who had a
     // discount heard the price before it from the bot (2026-10-22). A sale saved without a total falls back to the lines.
     const lines = items.reduce((s, it) => s + (Number(it.unit) || 0) * (Number(it.qty) || 0), 0);
     const paid = o.total != null && o.total !== '' && Number.isFinite(Number(o.total)) ? Number(o.total) : lines;
     return { p: o.phone, d: o.date, i: items.map((it) => it.name + (it.qty > 1 ? ' x' + it.qty : '')), s: o.status || 'הצעה',
       t: Math.round(paid),
-      we: saleIsIncome(o) && months ? plusMonths(o.date, months) : '' };
+      we: day(saleWarrantyEnd(o)) };
   });
   return { v: 1, customers, jobs, orders };
 }
@@ -12822,7 +12823,7 @@ function saveJobEdit(jobId) {
   // shorten or extend it. warrantyEnd is re-derived because the job DATE may have moved.
   const months = Math.max(0, parseInt(document.getElementById('jeWarranty').value, 10) || 0);
   j.warrantyMonths = months;
-  j.warrantyEnd = months ? new Date(new Date(j.date).getTime() + months * 30 * 24 * 60 * 60 * 1000).toISOString() : null;
+  j.warrantyEnd = warrantyEndFrom(j.date, months);
   Store.set('jobs', jobs);
   // Money follows the phone: a job moved to another customer has to leave the first card.
   if (phone === oldPhone) adjustCustomerTotals(phone, price - oldPrice, 0, name);
@@ -12910,7 +12911,7 @@ function openBizReport(phone) {
       <td style="padding:7px 8px;font-size:12px;white-space:nowrap;">${new Date(j.date).toLocaleDateString('he-IL')}</td>
       <td style="padding:7px 8px;font-size:12px;">${j.voltage}V ${j.capacity}Ah · ${VEHICLE_LABELS[j.vehicle] || ''}</td>
       <td style="padding:7px 8px;font-size:11px;">${(j.jobs || []).map(t => JOB_LABELS[t] || t).join(', ')}${j.customerNotes ? ` · ${j.customerNotes}` : ''}</td>
-      <td style="padding:7px 8px;font-size:11px;white-space:nowrap;">${j.warrantyEnd ? new Date(j.warrantyEnd).toLocaleDateString('he-IL') : '—'}</td>
+      <td style="padding:7px 8px;font-size:11px;white-space:nowrap;">${jobWarrantyEnd(j) ? new Date(jobWarrantyEnd(j)).toLocaleDateString('he-IL') : '—'}</td>
       <td style="padding:7px 8px;font-size:12px;font-weight:700;text-align:left;white-space:nowrap;">₪${(j.price || 0).toLocaleString('he-IL')}</td>
       <td class="no-print" style="padding:4px 6px;white-space:nowrap;">
         <span onclick="copyJobSummary('${j.id}')" title="העתק סיכום לקבוצה" style="cursor:pointer;font-size:15px;">📋</span>
@@ -14898,16 +14899,49 @@ function warrantyFor(jobs) {
   if (arr.length && arr.every((j) => INSPECTION_ONLY.includes(j))) return 0;
   return arr.includes('full') ? WARRANTY_BUILD : WARRANTY_MONTHS;
 }
-// Lab-service categories are repairs, everything else is a product.
-// NOTE: its only callers were in the quick pricer, deleted 2026-08-17, so nothing calls
-// this today. Kept deliberately — it is the canonical rule, and the 6/12-month warranty
-// was flattened into one number once already by code that re-derived it by hand.
+// Lab-service categories are repairs, everything else is a product. The canonical rule:
+// the 6/12-month warranty was flattened into one number once already by code that
+// re-derived it by hand, so a sale's months come from here (saleWarrantyMonths).
 function warrantyForItem(item) {
   // `svc` is an explicit flag rather than another category-name test, so renaming a
   // category cannot silently promote a repair to the 12-month build warranty.
   if (!item) return WARRANTY_BUILD;
   const isService = item.svc === true || /^שירותי מעבדה/.test(item.cat || '');
   return isService ? WARRANTY_MONTHS : WARRANTY_BUILD;
+}
+// When a warranty of `months` from `start` ends: the same day of the month, that many months
+// on, which is the date the battery's own sticker prints (stickers.html adds the months the
+// same way). Until v495 a repair's saved end and the warranties page counted a month as 30
+// days, so 12 months ended there five or six days before the sticker, the customer's card
+// and the bot. Every end date the hub works out comes from here.
+function warrantyEndFrom(start, months) {
+  const t = new Date(start);
+  if (!(months > 0) || isNaN(t)) return null;
+  t.setMonth(t.getMonth() + months);
+  return t.toISOString();
+}
+// A repair's months: the ones recorded on it (the job editor keeps them as typed, a promise
+// made), or on a job saved before they were recorded, what its work carries.
+function jobWarrantyMonths(j) {
+  const m = j && j.warrantyMonths != null && j.warrantyMonths !== '' ? Number(j.warrantyMonths) : NaN;
+  return Number.isFinite(m) ? Math.max(0, m) : warrantyFor(Array.isArray(j && j.jobs) ? j.jobs : []);
+}
+// A repair's end: its date and its months, worked out when it is read rather than taken from
+// the saved warrantyEnd, which every repair saved before v495 carries in 30-day months. A job
+// saved before its months were recorded keeps the end it was saved with.
+function jobWarrantyEnd(j) {
+  if (!j) return null;
+  if (j.warrantyMonths == null || j.warrantyMonths === '') return j.warrantyEnd || null;
+  const m = jobWarrantyMonths(j);
+  return m > 0 ? warrantyEndFrom(j.date, m) || j.warrantyEnd || null : null;
+}
+// A sale's: the longest of its lines, from the day of the sale, once it is money (a quote
+// covers nothing). The customer's card gave every sale at least 12 months, a lab service too.
+function saleWarrantyMonths(o) {
+  return ((o && o.items) || []).reduce((m, it) => Math.max(m, warrantyForItem(it)), 0);
+}
+function saleWarrantyEnd(o) {
+  return o && saleIsIncome(o) ? warrantyEndFrom(o.date, saleWarrantyMonths(o)) : null;
 }
 
 function saveBizDetails() {
