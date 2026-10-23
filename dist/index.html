@@ -2773,7 +2773,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v496';
+const HUB_BUILD = 'v497';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7676,23 +7676,41 @@ function orderStockFixHtml(o) {
     + fx.map((x) => '⚠ ירדו ' + x.wrongCells + ' ' + x.wrongName + ' במקום ' + x.rightCells + ' ' + x.rightModel).join('<br>')
     + ' <button class="btn btn-sm btn-secondary" onclick="fixOrderStock(\'' + o.id + '\')">🔧 תקן מלאי</button></div>';
 }
+// The whole fix is worked out first and written as two checked writes, the shelf and then its log
+// (2026-10-23). Each write used to go unchecked: on a full phone the shelf write was refused, the old
+// line was removed anyway (a smaller log goes in), and the pack's cells came off a shelf that never got
+// the old ones back. The button was gone, the 50E stayed missing, and "תוקן" covered Store.set's own
+// notice. Now a refused shelf write changes nothing, and a refused log write puts the shelf back, so the
+// button stays for another try. The order's flag is written last: once the old line is zeroed the fix
+// is not offered again, so a refused flag cannot run it twice.
 function fixOrderStock(id) {
   const orders = Store.get('orders') || [], o = orders.find((x) => String(x.id) === String(id));
   const fx = orderStockFixes(o);
   if (!fx.length) return;
-  const inv = getInventory();
-  const said = [];
+  const inv = getInventory(), shelfBefore = JSON.parse(JSON.stringify(inv));
+  const said = [], took = [], at = new Date().toISOString();
   for (const x of fx) {
     const back = inv.find((r) => r.name === x.wrongName);
-    if (back) { back.qty = (Number(back.qty) || 0) + x.wrongCells; back.lastUsed = new Date().toISOString(); said.push('הוחזרו ' + x.wrongCells + ' ' + back.name); }
+    if (back) { back.qty = (Number(back.qty) || 0) + x.wrongCells; back.lastUsed = at; said.push('הוחזרו ' + x.wrongCells + ' ' + back.name); }
   }
-  Store.set('inventory', inv);
-  // The old line is not usage that happened; it would go on counting in the pace of the 50E.
-  const gone = new Set(fx.map((x) => x.logId));
-  Store.set('inv_log', (Store.get('inv_log') || []).filter((e) => !gone.has(e.id)));
   for (const x of fx) {
-    const t = inventoryDeduct(x.rightModel, x.rightCells, o.customer || '');
-    said.push(t && t.matched ? 'ירדו ' + x.rightCells + ' ' + t.name + ' · נשארו ' + t.left : '⚠ ' + x.rightModel + ' לא נמצא במלאי — לא הופחת');
+    const row = invFindCellRow(inv, x.rightModel);
+    if (!row) { said.push('⚠ ' + x.rightModel + ' לא נמצא במלאי — לא הופחת'); continue; }
+    row.qty = Math.max(0, (Number(row.qty) || 0) - x.rightCells);
+    row.lastUsed = at;
+    if (o.customer) row.lastNote = String(o.customer).slice(0, 60);
+    took.push(invLogEntry(row, x.rightCells, o.customer || ''));
+    said.push('ירדו ' + x.rightCells + ' ' + row.name + ' · נשארו ' + row.qty);
+  }
+  if (!Store.set('inventory', inv)) return;
+  // The old line is not usage that happened; it would go on counting in the pace of the 50E. It is
+  // zeroed, not removed: a removed row leaves a tombstone (stampRows), written before the log itself,
+  // so a refused log write would still have deleted the line on every device at the next sync.
+  const gone = new Set(fx.map((x) => x.logId));
+  const log = (Store.get('inv_log') || []).map((e) => (gone.has(e.id) ? { ...e, qty: 0, was: Number(e.qty) } : e));
+  if (!Store.set('inv_log', invLogKept(log.concat(took)))) {
+    Store.set('inventory', shelfBefore);
+    return;
   }
   o.stockFixed = true;
   Store.set('orders', orders);
@@ -13198,13 +13216,16 @@ const INV_COVER_DAYS = 90;
 const INV_RATE_DAYS = 90;        // the window the rate is averaged over
 const INV_LOG_KEEP_DAYS = 400;
 const invIsCell = (row) => invCatOf(row) === 'תא';
+function invLogEntry(row, qty, note) {
+  return { id: 'iu' + Date.now() + Math.random().toString(36).slice(2, 6), at: new Date().toISOString(),
+    row: String(row.id != null ? row.id : row.name), name: row.name, qty: Number(qty), note: note ? String(note).slice(0, 40) : '' };
+}
+const invLogKept = (log) => { const cut = Date.now() - INV_LOG_KEEP_DAYS * 864e5; return log.filter((e) => Date.parse(e.at) >= cut); };
 function invLogUse(row, qty, note) {
   if (!row || !(qty > 0)) return;
   const log = Store.get('inv_log') || [];
-  log.push({ id: 'iu' + Date.now() + Math.random().toString(36).slice(2, 6), at: new Date().toISOString(),
-    row: String(row.id != null ? row.id : row.name), name: row.name, qty: Number(qty), note: note ? String(note).slice(0, 40) : '' });
-  const cut = Date.now() - INV_LOG_KEEP_DAYS * 864e5;
-  Store.set('inv_log', log.filter((e) => Date.parse(e.at) >= cut));
+  log.push(invLogEntry(row, qty, note));
+  Store.set('inv_log', invLogKept(log));
 }
 // Units used per shelf row over the window: { [row key]: qty }, plus the days that window covers.
 function invUsage(now = Date.now()) {
