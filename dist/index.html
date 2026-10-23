@@ -2775,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v500';
+const HUB_BUILD = 'v501';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7872,6 +7872,7 @@ function buildQuoteText(o) {
 
   // --- money ---
   const { pct, deposit, balance } = saleDeposit(o.total, B);
+  const diagOnly = saleIsDiagnosis(o);
   const acct = ['*חשבון:*'];
   if (Number(o.discount) > 0) acct.push(`• מחיר: ${money(o.total + Number(o.discount))}`, `• ${discountLine(Number(o.discount), o.discountPct)}`);
   acct.push(`• *מחיר סופי:* ${money(o.total)}${o.isBusiness ? ' (מחיר עסקי)' : ''}`);
@@ -7880,6 +7881,7 @@ function buildQuoteText(o) {
   // battery the customer was already riding on.
   if (delivered) acct.push('• *שולם במלואו* ✅');
   else if (paid) acct.push('• *התקבל תשלום* ✅');
+  else if (diagOnly) acct.push('• *התשלום:* אחרי הבדיקה, ומתקזז בתיקון אם מתקנים אצלנו.');
   else if (pct > 0 && pct < 100 && deposit > 0 && balance > 0) {
     acct.push(`• *מקדמה לתחילת עבודה:* ${money(deposit)}`);
     acct.push(`• *יתרה לתשלום במסירה:* ${money(balance)}`);
@@ -7901,6 +7903,8 @@ function buildQuoteText(o) {
       `• *סטטוס:* התשלום התקבל ו${subj} נכנסה לתור העבודה.`,
       `• *צפי לסיום:* ${subj} תהיה מוכנה תוך *${lead} ימי עסקים*.`,
       '• אעדכן אותך ברגע שזה מוכן לאיסוף.'].join('\n'));
+  } else if (diagOnly) {
+    P.push(['*תהליך ולוח זמנים:*', `• *תשובה והצעת מחיר:* ${DIAG_DAYS} מרגע שהסוללה אצלנו.`].join('\n'));
   } else {
     P.push(['*תהליך ולוח זמנים:*',
       `• *סטטוס:* תשלום המקדמה מכניס את ${subj} שלך מיידית לתור העבודה.`,
@@ -7916,7 +7920,9 @@ function buildQuoteText(o) {
     pay.push(`🔹 *העברה בנקאית:* ${bank}`);
   }
   if (B.address) pay.push(`🔹 *מזומן:* במעבדת ${B.name || 'Green Power'}, ${B.address}.`);
-  if (pay.length && !paid && !delivered) {
+  if (diagOnly && !paid && !delivered) {
+    P.push(`*איך יוצאים לדרך?*\nמתאמים מועד בוואטסאפ ומביאים את הסוללה למעבדה${B.address ? ', ' + B.address : ''}. התשלום אחרי הבדיקה.`);
+  } else if (pay.length && !paid && !delivered) {
     P.push(`*איך יוצאים לדרך?*\n${deposit > 0 && balance > 0 ? `לביצוע תשלום המקדמה (${money(deposit)})` : 'לביצוע התשלום'} ניתן להשתמש בדרכים הבאות:\n\n${pay.join('\n')}`);
     P.push('לאחר התשלום, אשמח לקבל צילום מסך לאישור, ואשלח לך הזמנה רשמית.');
   }
@@ -8092,7 +8098,7 @@ function payCandidates() {
     if (!saleIsIncome(o) || !(t > 0)) continue;
     out.push({ date: o.date, a: t, what: 'מכירה', total: t, who: o.customer || '' });
     const s = saleDeposit(t);
-    if (!s.split) continue;
+    if (!s.split || saleIsDiagnosis(o)) continue;   // a diagnosis is paid after the check: no deposit
     out.push({ date: o.date, a: s.deposit, what: 'מקדמה', total: t, who: o.customer || '' });
     if (s.balance !== s.deposit) out.push({ date: o.date, a: s.balance, what: 'יתרה', total: t, who: o.customer || '' });
   }
@@ -15081,6 +15087,17 @@ function warrantyFor(jobs) {
 // where the same inspection in the calculator carries none (Daniel, 2026-10-23: "ללא אחריות,
 // כמו בתיקון"). test-warranty-end.mjs holds this to exactly the two catalogue rows.
 const INSPECTION_ITEM = /^(אבחון|בדיקת קיבולת)/;
+// A sale of the diagnosis alone is paid after the check, not in advance (Daniel, 2026-10-23: "האבחון
+// ב-₪100 משולם רק אחרי הבדיקה, לא מראש"). Its quote asked for a ₪50 deposit "לתחילת עבודה" and promised a
+// build's lead time from the deposit; it now asks for nothing up front and gives the diagnosis's own
+// answer time (business.json diagnosis.days, audit-business-facts). The capacity test is not in it: a
+// service of its own, not set off against the repair, and he said nothing of when it is paid.
+const DIAG_DAYS = 'עד 2 ימי עסקים';
+const DIAGNOSIS_ITEM = /^אבחון/;
+function saleIsDiagnosis(o) {
+  const items = (o && o.items) || [];
+  return items.length > 0 && items.every((it) => DIAGNOSIS_ITEM.test(String(it.name || '')));
+}
 // Lab-service categories are repairs, everything else is a product, and an inspection is
 // neither. The canonical rule: the 6/12-month warranty was flattened into one number once
 // already by code that re-derived it by hand, so a sale's months come from here
