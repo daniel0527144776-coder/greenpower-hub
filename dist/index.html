@@ -2775,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v499';
+const HUB_BUILD = 'v500';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2988,7 +2988,7 @@ async function runSelfTest() {
   } catch (e) { L.push('אחסון: לא ניתן לקרוא'); }
   // Sales stocked with the wrong cells before v479 (orderStockFixes): named here, so 'is it fixed?' has an answer.
   try {
-    const bad = (Store.get('orders') || []).filter((o) => orderStockFixes(o).length);
+    const bad = withRenderMemo(() => (Store.get('orders') || []).filter((o) => orderStockFixes(o).length));
     L.push('מכירות עם מלאי תאים שגוי: ' + (bad.length ? bad.map((o) => o.customer || o.id).join(', ') + ' — בכרטיס המכירה: "תקן מלאי"' : 'אין'));
   } catch (e) { L.push('מכירות עם מלאי תאים שגוי: לא ניתן לבדוק'); }
   L.push('גשר הדפסה: ' + (window.GPPrint ? 'יש' : 'אין'));
@@ -6809,7 +6809,9 @@ function catExpandAll(open) {
 // (2026-10-22, Daniel: "הסבר שאני לוחץ על המוצר ממה מורכב ... ומאיזה תאריך ... אומדן משלוח"). Every
 // row gets one: a battery its parts, a resold item its supplier quote, and an item with neither
 // says that its cost is a share of the price and nothing more.
-const CELL_IMPORT_AS_OF = 'יבוא ימי, יוני 2026';   // the June import LANDED (1.204) is measured on
+// The import the landed cell costs are measured on, and its factor: cost-model's IMPORT_AS_OF and
+// IMPORT_FACTOR, which audit-cross-artifacts holds these two to. Both move at the next import.
+const CELL_IMPORT_AS_OF = 'יבוא ימי, יוני 2026';
 const CELL_LANDED_FACTOR = 1.204;
 function costNoteRow(k, v) {
   return '<div data-cost-note style="display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--text-muted);padding:1px 0;"><span>' + k + '</span><span>' + v + '</span></div>';
@@ -6833,8 +6835,8 @@ function costBreakdownHtml(it) {
     + batteryDatesHtml(it, b)
     + '</div>';
 }
-// The cells land at USD × 3 × 1.204: VAT is 18% of goods plus freight, so of the landed price
-// 1 − 1/1.18 is import VAT and 1/1.18 − 1/1.204 the freight and fees (measured on the June import).
+// The cells land at USD × 3 × CELL_LANDED_FACTOR: VAT is 18% of goods plus freight, so of the landed
+// price 1 − 1/1.18 is import VAT and 1/1.18 − 1/CELL_LANDED_FACTOR the freight and fees.
 function batteryDatesHtml(it, b) {
   const cellsIls = b.cells * b.cellPrice;
   const sea = b.route === 'sea';
@@ -7317,12 +7319,37 @@ function quoteAge(o) {
 //
 // Computed at READ time rather than stamped on the order: an order can be edited, and a
 // profit stamped at save would then describe a sale that no longer exists.
+// One render of the sales list reads each stored list once (v500, 2026-10-23). A keystroke in its
+// search re-renders it, and saleProfit, run on every sale in the filter for the month totals, costed
+// each line from storage again: on a year of sales, costs, settings and bms_pick were each parsed
+// some 400 times a keystroke, and the inventory and its log once per row shown, for a stock check
+// that only a sale from before OLD_CELL_RULE_UNTIL can need. withRenderMemo keeps one copy of each
+// for the length of one render; outside a render nothing is kept.
+let RENDER_MEMO = null;
+function withRenderMemo(fn) {
+  const prev = RENDER_MEMO;
+  if (!prev) RENDER_MEMO = { cost: new Map(), rows: null, inv: null, log: null };
+  try { return fn(); } finally { RENDER_MEMO = prev; }
+}
+function costOnce(row) {
+  const m = RENDER_MEMO && RENDER_MEMO.cost;
+  if (!m) return productCost(row);
+  if (!m.has(row)) m.set(row, productCost(row));
+  return m.get(row);
+}
+function pricingRowOf(it) {
+  if (typeof PRICING === 'undefined') return null;
+  const M = RENDER_MEMO;
+  if (!M) return PRICING.find((r) => r.name === it.name && r.cat === it.cat) || null;
+  if (!M.rows) { M.rows = new Map(); for (const r of PRICING) { const k = r.cat + '|' + r.name; if (!M.rows.has(k)) M.rows.set(k, r); } }
+  return M.rows.get(it.cat + '|' + it.name) || null;
+}
 function saleProfit(o) {
   if (!o || !Array.isArray(o.items)) return null;
   let cost = 0, known = 0;
   for (const it of o.items) {
-    const row = typeof PRICING !== 'undefined' ? PRICING.find((r) => r.name === it.name && r.cat === it.cat) : null;
-    const c = row ? productCost(row) : null;
+    const row = pricingRowOf(it);
+    const c = row ? costOnce(row) : null;
     if (c == null) continue;
     cost += c * (Number(it.qty) || 1);
     known++;
@@ -7459,7 +7486,8 @@ function repairRow(j) {
       </div>
     </div>`;
 }
-function renderOrders() {
+function renderOrders() { return withRenderMemo(renderOrdersNow); }
+function renderOrdersNow() {
   CUST_IDX = null;
   renderCustomers();
   const orders = (Store.get('orders') || []).map(o => ({ kind: 'sale', date: o.date, raw: o }));
@@ -7646,10 +7674,14 @@ function takeOrderStock(o) {
 const OLD_CELL_RULE_UNTIL = Date.parse('2026-10-22T09:00:00Z');
 function orderStockFixes(o) {
   if (!o || !o.stockTaken || o.stockFixed || !Array.isArray(o.items)) return [];
-  const inv = getInventory(), log = Store.get('inv_log') || [];
-  const who = String(o.customer || '').slice(0, 40);
   const day = new Date(o.date || 0); day.setHours(0, 0, 0, 0);
   const from = day.getTime();
+  // the line it fixes is from the sale's day on and from before the rule changed, so a later sale has none
+  if (from >= OLD_CELL_RULE_UNTIL) return [];
+  const M = RENDER_MEMO;
+  const inv = M ? (M.inv || (M.inv = getInventory())) : getInventory();
+  const log = M ? (M.log || (M.log = Store.get('inv_log') || [])) : (Store.get('inv_log') || []);
+  const who = String(o.customer || '').slice(0, 40);
   const keyOf = (row) => String(row.id != null ? row.id : row.name);
   const out = [];
   for (const it of o.items) {
