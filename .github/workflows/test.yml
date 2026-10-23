@@ -228,7 +228,8 @@ jobs:
 
       # One warranty, one end date (2026-10-23): a repair's saved end and the warranties page counted a
       # month as 30 days, so 12 months ended there five days before the battery's sticker, the card and
-      # the bot; the card and the sale's message gave a lab service 12 months, where it carries 6.
+      # the bot; the card and the sale's message gave a lab service 12 months, where it carries 6, and an
+      # inspection sold carried 6, where it carries none (v496).
       - name: A warranty ends on its sticker's date everywhere
         run: node test/test-warranty-end.mjs
 
