@@ -1,7 +1,8 @@
 // One warranty, one end date, wherever it is shown (2026-10-23).
 //
 //   node test/test-warranty-end.mjs
-//   node test/test-warranty-end.mjs --selftest   (warrantyEndFrom counting a month as 30 days again)
+//   node test/test-warranty-end.mjs --selftest   (warrantyEndFrom counting a month as 30 days again,
+//                                                  and an inspection sold carrying a repair's months)
 //
 // The battery's sticker prints the end of its warranty as the same day of the month, that many
 // months on (stickers.html adds them with setMonth), and so did the customer's card and the bot.
@@ -17,6 +18,10 @@
 //   - a battery sold ends on its sticker's date on the warranties page, the card and in the bot;
 //   - a lab service sold carries 6 months on all of them and in its summary message, not 12;
 //   - a quote carries none, and neither does a repair of 0 months.
+// And an inspection sold (2026-10-23, Daniel: "ללא אחריות, כמו בתיקון"): the lab's diagnosis or
+// capacity test, sold through the sale editor, carried a repair's 6 months, where the same
+// inspection in the calculator carries none. It carries none now, on every surface, unless the
+// sale has something else that does; and the rule names exactly the two catalogue rows.
 import { chromium } from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -35,6 +40,10 @@ if (SELFTEST) {
   const NOW = '  t.setMonth(t.getMonth() + months);\n';
   check('[selftest] the 30-day month could be put back', html.split(NOW).length === 2);
   html = html.replace(NOW, () => '  t.setTime(t.getTime() + months * 30 * 864e5);\n');
+  // …and an inspection sold carrying a repair's 6 months again
+  const INSP = "  if (isService && INSPECTION_ITEM.test(item.name || '')) return 0;\n";
+  check('[selftest] the inspection rule could be taken out', html.split(INSP).length === 2);
+  html = html.replace(INSP, () => '');
 }
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.png': 'image/png', '.webp': 'image/webp', '.json': 'application/json' };
@@ -217,9 +226,53 @@ const edited = await page.evaluate(() => {
 });
 const wantEdited = await stickerEnd('job', 'w-old6');
 check('a repair edited to 12 months saves the sticker\'s date for them', edited.months === 12 && dmy(edited.end) === wantEdited, [edited, wantEdited]);
+
+// ---- 5. an inspection sold through the sale editor carries no warranty, like the same inspection as a repair
+const I = await page.evaluate(() => {
+  const sellable = PRICING.map((r, ci) => ({ r, ci })).filter(({ r }) => typeof r.retail === 'number');
+  const none = sellable.filter(({ r }) => warrantyForItem(r) === 0).map(({ r }) => r.name);
+  const lab = (re) => sellable.find(({ r }) => /^שירותי מעבדה/.test(r.cat) && re.test(r.name));
+  const diag = lab(/^אבחון/), cap = lab(/^בדיקת קיבולת/);
+  const battery = sellable.find(({ r }) => r.cat === 'סוללות אופניים - 48V CLASSIC');
+  // a sale the way he makes one: the editor, the catalogue lines, the save; then paid or delivered
+  const sell = (phone, rows, status) => {
+    openOrderEditor();
+    document.getElementById('ordName').value = 'קונה ' + phone.slice(-2);
+    document.getElementById('ordPhone').value = phone;
+    rows.forEach((x) => orderDraft.items.push({ ci: x.ci, qty: 1 }));
+    saveOrder();
+    const orders = Store.get('orders') || [];
+    const o = orders.find((x) => x.phone === phone);
+    if (o) { o.status = status; Store.set('orders', orders); }
+    return o || null;
+  };
+  if (!diag || !cap || !battery) return { none, missing: [!!diag, !!cap, !!battery] };
+  const alone = sell('050-0001008', [diag], 'נמסר');
+  const mixed = sell('050-0001009', [cap, battery], 'שולם');
+  const card = (o) => customerLedger({ name: o.customer, phone: o.phone }).rows.find((r) => r.id === o.id);
+  const entry = (o) => warrantyEntries().find((e) => e.id === o.id);
+  const bot = (o) => (botIndex().orders.find((x) => x.p === o.phone) || {}).we;
+  const twelve = new Date(mixed.date); twelve.setMonth(twelve.getMonth() + 12);
+  return { none, saved: [Object.keys(alone.items[0] || {}).sort().join(), mixed.items.length],
+    alone: { entry: !!entry(alone), card: card(alone) && card(alone).warrantyEnd, bot: bot(alone), quote: buildQuoteText(alone) },
+    mixed: { entry: entry(mixed) && new Date(entry(mixed).end).toLocaleDateString('he-IL'), twelve: twelve.toLocaleDateString('he-IL'),
+      quote: buildQuoteText(mixed) } };
+});
+check('the catalogue has the two inspections, and the rule names exactly them',
+  !I.missing && I.none.length === 2 && I.none.some((n) => /^אבחון/.test(n)) && I.none.some((n) => /^בדיקת קיבולת/.test(n)), [I.none, I.missing]);
+if (!I.missing) {
+  check('a sold line keeps name, category, quantity and price, so the rule reads the name',
+    I.saved[0] === 'cat,name,qty,unit' && I.saved[1] === 2, I.saved);
+  check('a diagnosis sold alone is not on the warranties page', !I.alone.entry, I.alone.entry);
+  check('…nor under warranty on the customer\'s card, nor in the bot', !I.alone.card && !I.alone.bot, [I.alone.card, I.alone.bot]);
+  const lines = I.alone.quote.split('\n').filter((l) => /אחריות/.test(l));
+  check('…and its message promises no warranty, nor calls itself one', lines.length === 0, lines);
+  check('a capacity test sold with a battery: the battery\'s 12 months', I.mixed.entry === I.mixed.twelve
+    && /✅ \*אחריות:\* 12 חודשים/.test(I.mixed.quote), [I.mixed.entry, I.mixed.twelve, I.mixed.quote.split('\n').filter((l) => /אחריות/.test(l))]);
+}
 check('no page errors', errs.length === 0, errs.join(' | '));
 
 await browser.close();
 srv.close();
-if (SELFTEST) console.log('\n[selftest] a month counted as 30 days again; the date checks above must be red.');
+if (SELFTEST) console.log('\n[selftest] a month counted as 30 days again, and an inspection sold with 6 months; the checks above must be red.');
 process.exit(finish());
