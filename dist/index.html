@@ -2773,7 +2773,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v495';
+const HUB_BUILD = 'v496';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -7771,10 +7771,13 @@ function buildQuoteText(o) {
   // money"; נמסר is the one where the customer already has the battery in his hands.
   const delivered = /נמסר/.test(o.status || '');
   const paid = !delivered && saleIsIncome(o);
+  // the sale's own months, the ones the warranties page keeps: WARRANTY_BUILD here promised 12
+  // on a lab service the register holds for 6, and on an inspection, which carries none
+  const months = saleWarrantyMonths(o);
 
   P.push(`שלום ${o.customer || ''} 👋`.trim());
   P.push(delivered
-    ? 'תודה רבה, הנה סיכום מה שקיבלת. שמור את ההודעה — היא האחריות שלך.'
+    ? 'תודה רבה, הנה סיכום מה שקיבלת.' + (months ? ' שמור את ההודעה — היא האחריות שלך.' : '')
     : paid
       ? 'תודה על התשלום! ההזמנה נקלטה והעבודה נכנסה לתור. הנה הסיכום:'
       : 'כדי שנתחיל רשמית את התהליך, הנה סיכום ההזמנה ותוכנית הפעולה שלנו:');
@@ -7808,9 +7811,6 @@ function buildQuoteText(o) {
     });
   });
   if (o.bms) sum.push(`✅ *מערכת ניהול (BMS):* ${o.bms}`);
-  // the sale's own months, the ones the warranties page keeps: WARRANTY_BUILD here promised 12
-  // on a lab service the register holds for 6
-  const months = saleWarrantyMonths(o);
   if (months) sum.push(`✅ *אחריות:* ${months} חודשים`);
   P.push(sum.join('\n'));
 
@@ -7838,7 +7838,7 @@ function buildQuoteText(o) {
   if (delivered) {
     // The one thing a delivered customer needs from this message is what to do if something
     // goes wrong, and until when. A lead time is meaningless to him now.
-    P.push(['*אחריות ושירות:*',
+    P.push([months ? '*אחריות ושירות:*' : '*שירות:*',
       ...(months ? [`• ${subj} מכוסה ב-*${months} חודשי אחריות* מהיום.`] : []),
       '• כל תקלה, חריקה או ירידה בטווח — תכתוב לי ונטפל בזה.',
       '• מומלץ לא לאחסן את הסוללה ריקה לאורך זמן, ולטעון אחת לחודש גם כשלא בשימוש.'].join('\n'));
@@ -14899,14 +14899,21 @@ function warrantyFor(jobs) {
   if (arr.length && arr.every((j) => INSPECTION_ONLY.includes(j))) return 0;
   return arr.includes('full') ? WARRANTY_BUILD : WARRANTY_MONTHS;
 }
-// Lab-service categories are repairs, everything else is a product. The canonical rule:
-// the 6/12-month warranty was flattened into one number once already by code that
-// re-derived it by hand, so a sale's months come from here (saleWarrantyMonths).
+// The two lab services that only look at a battery, sold as catalogue lines: the 'diag' and
+// 'captest' of INSPECTION_ONLY. Sold through the sale editor they carried a repair's 6 months,
+// where the same inspection in the calculator carries none (Daniel, 2026-10-23: "ללא אחריות,
+// כמו בתיקון"). test-warranty-end.mjs holds this to exactly the two catalogue rows.
+const INSPECTION_ITEM = /^(אבחון|בדיקת קיבולת)/;
+// Lab-service categories are repairs, everything else is a product, and an inspection is
+// neither. The canonical rule: the 6/12-month warranty was flattened into one number once
+// already by code that re-derived it by hand, so a sale's months come from here
+// (saleWarrantyMonths).
 function warrantyForItem(item) {
   // `svc` is an explicit flag rather than another category-name test, so renaming a
   // category cannot silently promote a repair to the 12-month build warranty.
   if (!item) return WARRANTY_BUILD;
   const isService = item.svc === true || /^שירותי מעבדה/.test(item.cat || '');
+  if (isService && INSPECTION_ITEM.test(item.name || '')) return 0;
   return isService ? WARRANTY_MONTHS : WARRANTY_BUILD;
 }
 // When a warranty of `months` from `start` ends: the same day of the month, that many months
