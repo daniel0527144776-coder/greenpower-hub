@@ -17,6 +17,13 @@
 //
 // The anchor of this suite is that a SALE and the equivalent REPAIR move the shelf identically.
 // Asserting the numbers separately would let the two drift again, which is the whole defect.
+//
+// And "🔧 תקן מלאי" on a write the storage refuses (2026-10-23). Its writes went unchecked: on a full
+// phone the shelf write was refused, the old log line was removed anyway (a smaller log fits), and the
+// pack's cells came off a shelf that never got the old ones back. The button was gone, and the notice
+// said "תוקן". What must hold: a refused shelf write changes nothing and the fix stays offered, then
+// goes through once there is room; a refused log write puts the shelf back. --selftest also puts the
+// old fixOrderStock back, so those checks go red with it.
 import { chromium } from 'playwright';
 import http from 'http';
 import fs from 'fs';
@@ -76,6 +83,28 @@ if (SELFTEST) {
       }
       return out;
     };
+    // …and the old fixOrderStock (v496): every write unchecked, the old line removed
+    window.fixOrderStock = (id) => {
+      const orders = Store.get('orders') || [], o = orders.find((x) => String(x.id) === String(id));
+      const fx = orderStockFixes(o);
+      if (!fx.length) return;
+      const inv = getInventory();
+      const said = [];
+      for (const x of fx) {
+        const back = inv.find((r) => r.name === x.wrongName);
+        if (back) { back.qty = (Number(back.qty) || 0) + x.wrongCells; back.lastUsed = new Date().toISOString(); said.push('הוחזרו ' + x.wrongCells + ' ' + back.name); }
+      }
+      Store.set('inventory', inv);
+      const gone = new Set(fx.map((x) => x.logId));
+      Store.set('inv_log', (Store.get('inv_log') || []).filter((e) => !gone.has(e.id)));
+      for (const x of fx) {
+        const t = inventoryDeduct(x.rightModel, x.rightCells, o.customer || '');
+        said.push(t && t.matched ? 'ירדו ' + x.rightCells + ' ' + t.name + ' · נשארו ' + t.left : '⚠ ' + x.rightModel + ' לא נמצא במלאי — לא הופחת');
+      }
+      o.stockFixed = true;
+      Store.set('orders', orders);
+      showNotice('תוקן: ' + said.join(' · '));
+    };
   });
 }
 
@@ -125,8 +154,8 @@ const R = await page.evaluate(() => {
       const inv = getInventory();
       inv.find((r) => r.name === 'תאי EVE 21700 50E').qty = 922;
       Store.set('inventory', inv);
-      Store.set('inv_log', [{ id: 'iuold', at: '2026-10-19T10:00:00.000Z', row: 'תאי EVE 21700 50E', name: 'תאי EVE 21700 50E', qty: 78, note: 'ישראל כהן' }]);
-      const o = { id: 'old1', customer: 'ישראל כהן', status: 'שולם', stockTaken: true, date: '2026-10-19T10:00:00.000Z',
+      Store.set('inv_log', [{ id: 'iuold', at: '2026-10-19T10:00:00.000Z', row: 'תאי EVE 21700 50E', name: 'תאי EVE 21700 50E', qty: 78, note: 'לקוח ותיק' }]);
+      const o = { id: 'old1', customer: 'לקוח ותיק', status: 'שולם', stockTaken: true, date: '2026-10-19T10:00:00.000Z',
         items: [{ name: s26.name, cat: s26.cat, qty: 1, price: s26.retail }] };
       Store.set('orders', [o]);
       const found = orderStockFixes(o).length;
@@ -190,6 +219,50 @@ const R = await page.evaluate(() => {
   };
 });
 
+// The same fix on a phone whose storage is full, then with the log write alone refused.
+const W = await page.evaluate(() => {
+  const s26 = PRICING.find((x) => /^48V 26Ah · 13S10P EVE 26V$/.test(x.name) && /קורקינטים 18650.*CLASSIC/.test(x.cat));
+  if (!s26) return null;
+  const snap = () => Object.fromEntries(getInventory().map((r) => [r.name, r.qty]));
+  const setUp = () => {
+    Store.set('inventory', [{ id: 'c50e', name: 'תאי EVE 21700 50E', qty: 922 }, { id: 'c26v', name: 'תאי EVE 18650 26V', qty: 350 }]);
+    Store.set('inv_log', [{ id: 'iuw', at: '2026-10-19T10:00:00.000Z', row: 'c50e', name: 'תאי EVE 21700 50E', qty: 78, note: 'לקוח ותיק' }]);
+    Store.set('orders', [{ id: 'w1', customer: 'לקוח ותיק', status: 'שולם', stockTaken: true, date: '2026-10-19T10:00:00.000Z',
+      items: [{ name: s26.name, cat: s26.cat, qty: 1 }] }]);
+  };
+  const order = () => (Store.get('orders') || [])[0];
+  const lines = () => (Store.get('inv_log') || []).filter((e) => Number(e.qty)).map((e) => e.name + ':' + e.qty);
+  const tombs = () => Object.keys(Store.get('tomb_inv_log') || {});
+  const notice = () => { const t = document.getElementById('noticeBody').textContent; closeNotice(); return t; };
+  const state = () => ({ after: snap(), log: lines(), tombs: tombs(), offered: orderStockFixes(order()).length,
+    flagged: !!order().stockFixed, said: notice() });
+  // 1. all but a few characters of the storage taken, the way his phone runs: the shelf write cannot fit
+  setUp();
+  Store.set('tomb_inv_log', {});
+  const fits = (n) => { try { localStorage.setItem('zz_fill', 'x'.repeat(n)); return true; } catch (e) { return false; } };
+  let lo = 0, hi = 12e6;
+  while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (fits(mid)) lo = mid; else hi = mid; }
+  const filled = fits(Math.max(0, lo - 8));
+  fixOrderStock('w1');
+  const full = { filled, ...state() };
+  localStorage.removeItem('zz_fill');
+  // …and with room again, the same button
+  fixOrderStock('w1');
+  const room = state();
+  // 2. the shelf written, the log refused
+  setUp();
+  Store.set('tomb_inv_log', {});
+  const real = Storage.prototype.setItem;
+  let refused = 0;
+  Storage.prototype.setItem = function (k, v) {
+    if (k === 'gp_inv_log' && !refused) { refused++; throw new DOMException('full', 'QuotaExceededError'); }
+    return real.call(this, k, v);
+  };
+  try { fixOrderStock('w1'); } finally { Storage.prototype.setItem = real; }
+  const logRefused = { refused, ...state() };
+  return { full, room, logRefused };
+});
+
 // ---------------------------------------------------------------- the anchor
 check('a SALE moves the shelf exactly as the equivalent REPAIR does',
   JSON.stringify(R.sale.after) === JSON.stringify(R.repair), { sale: R.sale.after, repair: R.repair });
@@ -217,12 +290,12 @@ check('an 18650 EVE 25P pack takes 25P cells — its 10S6P, 60 of them',
   !!R.sale25 && R.sale25.after['תאי EVE 18650 25P'] === 40 && R.sale25.after['Tenpower 50SG'] === undefined
   && R.sale25.after['תאי EVE 21700 50E'] === 1000, R.sale25);
 
-// ישראל כהן's sale (Daniel, 2026-10-22: "תבדוק בעסקה של ישראל כהן האם הטעות תוקנה"): a sale stocked before
+// The sale Daniel asked about on 2026-10-22 ("האם הטעות תוקנה"), under a made-up name: a sale stocked before
 // the fix keeps its wrong cells until it is put right. Found by the old rule's own log line, fixed once.
 check('an 18650 sale stocked before the fix is found by its log line', !!R.old26 && R.old26.found === 1 && R.old26.selfTest === 1, R.old26);
 check('the fix gives the 78 50E back and takes its 130 26V',
   !!R.old26 && R.old26.after['תאי EVE 21700 50E'] === 1000 && R.old26.after['תאי EVE 18650 26V'] === 220, R.old26 && R.old26.after);
-check('the wrong log line is gone, the right one is there, and it cannot run twice',
+check('the wrong log line counts nothing now, the right one is there, and it cannot run twice',
   !!R.old26 && R.old26.again === 0 && !R.old26.log.includes('תאי EVE 21700 50E:78') && R.old26.log.includes('תאי EVE 18650 26V:130'), R.old26);
 check('a sale stocked after the fix is left alone', !!R.new26 && R.new26.found === 0, R.new26);
 // What the button must never touch: a sale the old rule did not stock, beside a 50E line of the same
@@ -233,6 +306,21 @@ check('an 18650 sale after v479, beside the customer\'s CLASSIC 48V 30Ah, is not
 check('an old 18650 sale is not matched to a 50E line from before it', !!FF.beforeSale && FF.beforeSale.found === 0 && !FF.beforeSale.moved, FF.beforeSale);
 check('an old sale already stocked with its own 26V is not flagged', !!FF.stockedRight && FF.stockedRight.found === 0 && !FF.stockedRight.moved, FF.stockedRight);
 check('a power-tool sale is never flagged (the old rule took 25P for it)', !!FF.powerTool && FF.powerTool.found === 0 && !FF.powerTool.moved, FF.powerTool);
+
+// "🔧 תקן מלאי" on a phone whose storage is full (2026-10-23)
+const F = (W && W.full) || {}, RM = (W && W.room) || {}, LR = (W && W.logRefused) || {};
+check('a fix the storage refuses changes nothing: still 922 50E and 350 26V',
+  !!W && F.filled && F.after['תאי EVE 21700 50E'] === 922 && F.after['תאי EVE 18650 26V'] === 350, F);
+check('…its old line still counts, so the button is still there, and the sale is not marked fixed',
+  F.log && F.log.join() === 'תאי EVE 21700 50E:78' && F.offered === 1 && !F.flagged && F.tombs.length === 0, F);
+check('…and the notice is the storage\'s, not "תוקן"', /האחסון/.test(F.said || '') && !/תוקן/.test(F.said || ''), F.said);
+check('with room again, the same button puts it right: 1000 50E and 220 26V, once',
+  RM.after && RM.after['תאי EVE 21700 50E'] === 1000 && RM.after['תאי EVE 18650 26V'] === 220
+  && RM.log.join() === 'תאי EVE 18650 26V:130' && RM.offered === 0 && /תוקן/.test(RM.said || ''), RM);
+check('the log write refused: the shelf goes back to 922 and 350, and the button stays',
+  LR.refused === 1 && LR.after && LR.after['תאי EVE 21700 50E'] === 922 && LR.after['תאי EVE 18650 26V'] === 350
+  && LR.log.join() === 'תאי EVE 21700 50E:78' && LR.offered === 1 && !/תוקן/.test(LR.said || ''), LR);
+check('…and leaves no tombstone that would delete the old line at the next sync', LR.tombs && LR.tombs.length === 0, LR.tombs);
 
 // ---------------------------------------------------------------- what must NOT change
 check('an accessory still matches by NAME and is not decomposed',
