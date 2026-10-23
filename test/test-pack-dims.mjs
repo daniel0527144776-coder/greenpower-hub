@@ -1487,7 +1487,7 @@ const ladder = await page.evaluate((SELF) => {
   return out;
 }, SELFTEST);
 check('the OX 16S7P on H 22.5: every group one straight row, every row one group', ladder.h7.oneEach && ladder.h7.inOne, ladder.h7);
-check('…20S6P on Z 22.5 and 16S8P of 18650 on Z 18.5 the same', ladder.z6.oneEach && ladder.z6.inOne && ladder.z18.oneEach && ladder.z18.inOne, [ladder.z6, ladder.z18]);
+check('…20S6P on Z 22.6 and 16S8P of 18650 on Z 18.5 the same', ladder.z6.oneEach && ladder.z6.inOne && ladder.z18.oneEach && ladder.z18.inOne, [ladder.z6, ladder.z18]);
 check('the Zero 11X at 60V takes 16S13P on W (16S12P on Z), the whole width filled; the Zero 10X at 72V 20S9P on W',
   w18.zero.z11w === 13 && w18.zero.z11z === 12 && w18.zero.z10w72 === 9, w18.zero);
 
@@ -1508,6 +1508,35 @@ const wband = await page.evaluate((SELF) => {
 }, SELFTEST);
 check("a W piece is one wide band (21700 and 18650), a Z keeps its bars", wband.w.w && wband.w18.w && !wband.z.w && !wband.z18.w
   && wband.w.sw > wband.z.sw * 1.6 && wband.w18.sw > wband.z18.sw * 1.6, wband);
+
+// Every holder says the pitch it is worked out at (2026-10-23). Z went to 22.6 on 2026-10-22 (DIM_PITCH) and its
+// list label and option moved with it, but HOLDER_NAME kept 22.5: the worker's label, the result line and
+// "הכי גדול" named "ניקל Z (22.5)" over a block worked out at 22.6. --selftest puts that name back.
+const names = await page.evaluate((SELF) => {
+  if (SELF) HOLDER_NAME['diag-b'] = 'ניקל Z (22.5)';
+  const num = (s) => { const m = String(s || '').match(/(\d+(?:\.\d+)?)/); return m ? +m[1] : null; };
+  const pitch = (h) => ((DIM_PITCH[21700] || {})[h] || (DIM_PITCH[18650] || {})[h] || [])[0];
+  const off = [];
+  for (const fmt of [21700, 18650]) {
+    for (const h of Object.keys(DIM_PITCH[fmt])) {
+      if (HOLDER_NAME[h] != null && num(HOLDER_NAME[h]) !== pitch(h)) off.push(['name', h, HOLDER_NAME[h], pitch(h)]);
+      if (HOLDER_LABEL[h] != null && num(HOLDER_LABEL[h]) !== pitch(h)) off.push(['label', h, HOLDER_LABEL[h], pitch(h)]);
+    }
+  }
+  // the list as the page first shows it, written in the markup for 21700, and as it is rebuilt for 18650
+  const options = () => [...document.querySelectorAll('#dimHolder option')].filter((o) => o.value !== 'custom').map((o) => [o.value, o.textContent]);
+  const shown = options();
+  refreshHolderOptions(18650); shown.push(...options()); refreshHolderOptions(21700);
+  for (const [h, t] of shown) if (num(t) !== pitch(h)) off.push(['option', h, t, pitch(h)]);
+  // and the worker's label for a block on Z
+  document.getElementById('dimCell').value = '21700-50e'; clearDimVehicle();
+  document.getElementById('dimV').value = '60'; dimAhPending = 20;
+  document.getElementById('dimHolder').value = 'diag-b'; calcPackDims();
+  return { off, shown: shown.length, line: (dimLast && dimLast.line) || '' };
+}, SELFTEST);
+check(`every holder's name, list label and option carry the pitch it is worked out at (${names.shown} options)`,
+  names.off.length === 0 && names.shown >= 7, names.off);
+check('…so the worker\'s label for a block on Z says 22.6', /ניקל Z \(22\.6\)/.test(names.line) && !/22\.5/.test(names.line), names.line);
 
 await browser.close();
 srv.close();

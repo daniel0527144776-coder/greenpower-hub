@@ -2773,7 +2773,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v497';
+const HUB_BUILD = 'v498';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -10307,8 +10307,10 @@ const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-225', 'square-23'], 
 const HOLDER_ORDER = HOLDERS_BY_FMT[21700];
 function holdersFor(fmt) { return HOLDERS_BY_FMT[fmt] || HOLDER_ORDER; }
 // His names for the 21700 nickels, by their shape (Daniel, 2026-10-15): W 22.7, Z 22.5, H 23; and H 22.5
-// (2026-10-17).
-const HOLDER_NAME = { 'diag-b': 'ניקל Z (22.5)', 'diag-a': 'ניקל W (22.7)', 'square-225': 'ניקל H (22.5)', 'square-23': 'ניקל H (23)',
+// (2026-10-17). Z is 22.6 since 2026-10-22 (DIM_PITCH); the name here kept 22.5 for a day over results
+// worked out at 22.6. Each number in these two tables and in #dimHolder is its DIM_PITCH figure, which
+// test-pack-dims holds.
+const HOLDER_NAME = { 'diag-b': 'ניקל Z (22.6)', 'diag-a': 'ניקל W (22.7)', 'square-225': 'ניקל H (22.5)', 'square-23': 'ניקל H (23)',
   'sq-19': 'ניקל H (19)', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z (18.5)', 'diag-185w': 'ניקל W (18.5)' };
 const HOLDER_LABEL = { 'diag-a': 'ניקל W — 22.7', 'diag-b': 'ניקל Z — 22.6', 'square-225': 'ניקל H — 22.5', 'square-23': 'ניקל H — 23',
   'sq-19': 'ניקל H — 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z — 18.5', 'diag-185w': 'ניקל W — 18.5' };
