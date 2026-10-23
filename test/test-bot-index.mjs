@@ -7,7 +7,8 @@
 // עצמו"). It reads them from bot_index, a slim copy the hub keeps beside `jobs` — because `jobs`
 // carries the photos, and because a cost, a profit or a private note must never reach a model
 // that is talking to a customer. So the index is checked for what it must hold and, harder, for
-// what it must not. --selftest builds it from the raw jobs instead, photos and profit included.
+// what it must not. --selftest builds it from the raw jobs instead, photos and profit included, and
+// gives a sale's amount as the sum of its lines again, the price before its discount (2026-10-22).
 import { chromium } from 'playwright';
 import http from 'http';
 import fs from 'fs';
@@ -20,8 +21,15 @@ const DIST = path.join(HERE, '..', 'dist');
 const SELFTEST = process.argv.includes('--selftest');
 const { check, finish } = checker();
 
+let html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
+if (SELFTEST) {
+  const old = html.replace('      t: Math.round(paid),\n', '      t: Math.round(lines),\n');
+  check('[selftest] the old amount could be put back', old !== html);
+  html = old;
+}
 const srv = http.createServer((q, r) => {
   const rel = decodeURIComponent(q.url.split('?')[0]).replace(/^\/+/, '') || 'index.html';
+  if (rel === 'index.html') { r.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); r.end(html); return; }
   const f = path.join(DIST, rel);
   if (!f.startsWith(DIST) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); r.end(); return; }
   r.writeHead(200); r.end(fs.readFileSync(f));
@@ -44,6 +52,9 @@ const r = await page.evaluate(async (SELF) => {
       items: [{ name: '72V 30Ah PRO', cat: 'סוללות אופניים - 72V PRO', qty: 1, unit: 5900 }] },
     { id: 'o2', date: new Date(now - 3 * day).toISOString(), customer: 'יוסי', phone: '050-123-4567', status: 'הצעה',
       items: [{ name: 'מטען 72V', cat: 'מטענים', qty: 2, unit: 300 }] },
+    // a paid sale with a discount: two chargers at 300, 60 off, 540 paid
+    { id: 'o5', date: new Date(now - 2 * day).toISOString(), customer: 'יוסי', phone: '050-123-4567', status: 'שולם',
+      items: [{ name: 'מטען 54.6V 4A', cat: 'מטענים', qty: 2, unit: 300 }], total: 540, discount: 60 },
   ]));
   // Store.set, the way the app saves — it must rebuild the index by itself
   Store.set('jobs', [
@@ -72,6 +83,8 @@ check('the index is a sliver of the jobs it comes from', r.size * 20 < r.raw, `$
 check('a job older than eighteen months is left out', !(idx.jobs || []).some((x) => x.t === 900), idx.jobs);
 check('a job with no phone cannot be matched to anyone, so it is left out', !(idx.jobs || []).some((x) => x.t === 100), idx.jobs);
 check('an order: items, status, total, and twelve months of warranty once paid', o.i && o.i[0] === '72V 30Ah PRO' && o.t === 5900 && /^\d{4}-\d{2}-\d{2}$/.test(o.we), o);
+const disc = (idx.orders || []).find((x) => x.i && x.i[0] === 'מטען 54.6V 4A x2') || {};
+check('a sale with a discount: the amount he paid (540), not the price before it (600)', disc.t === 540, disc);
 check('a quote has no warranty yet', ((idx.orders || []).find((x) => x.s === 'הצעה') || {}).we === '', idx.orders);
 check('every number the hub knows for a customer is in it', (idx.customers || []).some((c) => c.p.includes('050-123-4567') && c.p.includes('052-999-8888')), idx.customers);
 // His phone's storage runs close to full, and Store.set raises an error box when a write fails.
