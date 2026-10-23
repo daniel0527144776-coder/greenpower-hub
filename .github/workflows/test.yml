@@ -226,6 +226,12 @@ jobs:
       - name: The quote names an 18650 pack's own cell
         run: node test/test-quote-spec.mjs
 
+      # One warranty, one end date (2026-10-23): a repair's saved end and the warranties page counted a
+      # month as 30 days, so 12 months ended there five days before the battery's sticker, the card and
+      # the bot; the card and the sale's message gave a lab service 12 months, where it carries 6.
+      - name: A warranty ends on its sticker's date everywhere
+        run: node test/test-warranty-end.mjs
+
       # Wages paid on the 1st, and a report changed by hand (2026-10-06): past months due now, this month
       # on the next 1st, an alert from the 1st until it is paid; a report corrected before or after approval.
       - name: Wages on the 1st, and editing a report
