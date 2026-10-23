@@ -54,7 +54,7 @@ const report = await page.evaluate((selftest) => {
   Store.set('orders', [
     { id: 'o1', customer: 'דוד לוי', date: d(6), status: 'נמסר', items: [], total: 1400 },
     { id: 'o2', customer: 'שרה', date: d(7), status: 'שולם', items: [{ name: 'x', qty: 1, price: 0 }], total: 0 },
-    { id: 'o3', customer: 'מיכאל אבוטבול', date: d(8), status: 'הצעה', items: [], total: 0 },
+    { id: 'o3', customer: 'מיכאל דוגמה', date: d(8), status: 'הצעה', items: [], total: 0 },
   ]);
   Store.set('inventory', [{ name: 'EVE 50E', qty: -15 }, { name: 'BMS 13S 60A', qty: 0 }, { name: 'ניקל', qty: 200 }]);
   Store.set('expenses', []);
@@ -87,7 +87,7 @@ named('a month with work and no expenses is named', '2026-09');
 // ---------------------------------------------------------------- and what it must NOT say
 check('a healthy job is not flagged', !report.includes('דוד לוי · 3.9.2026'), report.slice(0, 200));
 // A quote is not money, so a quote with no items is not a fault.
-check('an unpaid quote with no items is not flagged', !report.includes('מיכאל אבוטבול'), report.slice(0, 200));
+check('an unpaid quote with no items is not flagged', !report.includes('מיכאל דוגמה'), report.slice(0, 200));
 check('stock that is simply in hand is not flagged', !report.includes('ניקל'), report.slice(0, 200));
 
 // ---------------------------------------------------------------- it says what it looked at

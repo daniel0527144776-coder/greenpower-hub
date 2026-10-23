@@ -90,7 +90,7 @@ if (SELFTEST) {
   // BY PHONE, so a merge that loses the survivor's number orphans everything filed under it.
   //
   // (A first version of this deleted `altPhones` instead and the suite stayed GREEN — on the
-  // real books only שמואל חנוך gets an altPhone and he is classified unsafe, so the safe-merge
+  // real books only one customer gets an altPhone and that one is classified unsafe, so the safe-merge
   // path never produces one. It broke something this path does not use, which is the same lie
   // as a check that cannot fail.)
   await page.evaluate(() => {

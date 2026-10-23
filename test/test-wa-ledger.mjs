@@ -30,9 +30,9 @@ const errs = [];
 page.on('pageerror', (e) => errs.push(String(e).split('\n')[0]));
 const posts = [];
 const ITEMS = [
-  { id: 'w1', d: '2026-10-13', a: 1325, kind: 'income', who: 'יואב קליין', note: 'מקדמה 48V 20Ah' },
-  { id: 'w2', d: '2026-10-08', a: 85, kind: 'expense', who: 'יעקב שליחים', note: 'אלעד - ת"א', cat: 'שילוח ומכס' },
-  { id: 'w3', d: '2026-07-22', a: 100, kind: 'income', who: '<img src=x onerror="window.__xss=1">', note: 'ביט' },
+  { id: 'w1', d: '2026-03-13', a: 1150, kind: 'income', who: 'יואב דוגמה', note: 'מקדמה 48V 20Ah' },   // made up, like every line here
+  { id: 'w2', d: '2026-03-08', a: 70, kind: 'expense', who: 'שליח לדוגמה', note: 'נסיעה', cat: 'שילוח ומכס' },
+  { id: 'w3', d: '2026-03-22', a: 100, kind: 'income', who: '<img src=x onerror="window.__xss=1">', note: 'ביט' },
 ];
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, POST' };
 await page.route(/energylabgreen\.com\/api\/wa\//, async (route) => {
@@ -74,18 +74,18 @@ await page.evaluate((SELF) => {
 }, SELFTEST);
 await page.waitForTimeout(500);
 s = await state();
-check('logged in: the lines from the bot, in one fold with their count', s.rows.join() === 'w1,w2,w3' && /מהוואטסאפ — לאישור\s*3/.test(s.text) && /1,325/.test(s.text), s);
+check('logged in: the lines from the bot, in one fold with their count', s.rows.join() === 'w1,w2,w3' && /מהוואטסאפ — לאישור\s*3/.test(s.text) && /1,150/.test(s.text), s);
 check('a name with markup stays text', !s.img && !s.xss && s.text.includes('<img src=x'), s.text.slice(0, 200));
 
 await page.evaluate(() => { document.querySelector('[data-wa-line="w1"] button').click(); });
 await page.waitForTimeout(400);
 s = await state();
-check('✓ books the income once, as his own line, and tells the bot', s.inc.length === 1 && s.inc[0].amount === 1325 && s.inc[0].src === 'wa' && /יואב קליין/.test(s.inc[0].note)
-  && s.inc[0].date.startsWith('2026-10-13') && posts.some((p) => p.op === 'waledger_done' && p.id === 'w1') && !s.rows.includes('w1'), s);
+check('✓ books the income once, as his own line, and tells the bot', s.inc.length === 1 && s.inc[0].amount === 1150 && s.inc[0].src === 'wa' && /יואב דוגמה/.test(s.inc[0].note)
+  && s.inc[0].date.startsWith('2026-03-13') && posts.some((p) => p.op === 'waledger_done' && p.id === 'w1') && !s.rows.includes('w1'), s);
 await page.evaluate(() => { document.querySelector('[data-wa-line="w2"] button').click(); });
 await page.waitForTimeout(400);
 s = await state();
-check('an expense line goes into the expenses, in its category', s.exp.length === 1 && s.exp[0].amount === 85 && s.exp[0].cat === 'שילוח ומכס', s.exp);
+check('an expense line goes into the expenses, in its category', s.exp.length === 1 && s.exp[0].amount === 70 && s.exp[0].cat === 'שילוח ומכס', s.exp);
 await page.evaluate(() => { document.querySelectorAll('[data-wa-line="w3"] button')[1].click(); });
 await page.waitForTimeout(400);
 s = await state();
