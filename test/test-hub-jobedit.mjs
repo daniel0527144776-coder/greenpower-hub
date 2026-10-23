@@ -551,7 +551,7 @@ console.log('\n13. work that another job drags in is priced once, and only when 
     ]));
     localStorage.setItem('gp_incomes', JSON.stringify([
       { id: 'lb', date: '2022-04-10T07:00:00.000Z', amount: 1000, cat: 'תיקונים ומכירות', note: 'קבלה ישנה',
-        customer: 'לקוח ציר', phone: '0509998888', invoice: '700227', src: 'books', locked: true },
+        customer: 'לקוח ציר', phone: '0509998888', invoice: '100227', src: 'books', locked: true },
     ]));
     const c = (Store.get('customers') || [])[0];
     const l = customerLedger(c);
@@ -577,7 +577,7 @@ console.log('\n13. work that another job drags in is priced once, and only when 
     if (close) close.click();
     return txt;
   });
-  check('the card shows the imported receipt with its invoice number', /700227/.test(shown), 'ok');
+  check('the card shows the imported receipt with its invoice number', /100227/.test(shown), 'ok');
   check('and tags what is still under warranty', /באחריות עוד/.test(shown), 'ok');
   check('and marks the quote as a quote', /הצעה/.test(shown), 'ok');
 }

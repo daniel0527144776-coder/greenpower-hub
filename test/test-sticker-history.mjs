@@ -76,11 +76,11 @@ await page.waitForFunction(() => typeof window.resetStickerDesign === 'function'
 await page.waitForTimeout(800);
 await page.evaluate(() => localStorage.removeItem('gp_sticker_history'));
 
-await makeSticker(page, { client: 'אוראל פיימן', ref: '1042', volt: '72', cap: '60' });
+await makeSticker(page, { client: 'אוראל דוגמה', ref: '1042', volt: '72', cap: '60' });
 let hist = await page.evaluate(() => JSON.parse(localStorage.getItem('gp_sticker_history') || '[]'));
 check('one record was written', hist.length === (SELFTEST ? 99 : 1), hist.length);
 if (hist[0]) {
-  check('it carries the customer', hist[0].client === 'אוראל פיימן', hist[0].client);
+  check('it carries the customer', hist[0].client === 'אוראל דוגמה', hist[0].client);
   check('it carries the order number', hist[0].ref === '1042', hist[0].ref);
   check('it carries the SKU', /^GP-72V-60A/.test(hist[0].sku || ''), hist[0].sku);
   check('it carries the spec', hist[0].voltage === '72V' && hist[0].capacity === '60Ah', [hist[0].voltage, hist[0].capacity]);
@@ -89,12 +89,12 @@ if (hist[0]) {
 }
 
 console.log('\n2. a second sticker appends rather than replaces');
-await makeSticker(page, { repair: true, client: 'מוסך אלעד', ref: '77' });
+await makeSticker(page, { repair: true, client: 'מוסך לדוגמה', ref: '77' });
 hist = await page.evaluate(() => JSON.parse(localStorage.getItem('gp_sticker_history') || '[]'));
 check('two records now', hist.length === 2, hist.length);
-check('newest first', hist[0].client === 'מוסך אלעד', hist[0].client);
+check('newest first', hist[0].client === 'מוסך לדוגמה', hist[0].client);
 check('the repair is typed as one', hist[0].type === 'repair', hist[0].type);
-check('the first one survived', hist[1] && hist[1].client === 'אוראל פיימן', hist[1] && hist[1].client);
+check('the first one survived', hist[1] && hist[1].client === 'אוראל דוגמה', hist[1] && hist[1].client);
 await page.close();
 
 console.log('\n3. the hub shows them');
@@ -110,7 +110,7 @@ const shown = await hub.evaluate(() => {
   return { rows: list.querySelectorAll('.list-item').length, html: list.innerHTML };
 });
 check('the hub lists both', shown.rows === 2, shown.rows);
-check('the customer names are listed', shown.html.includes('אוראל פיימן') && shown.html.includes('מוסך אלעד'));
+check('the customer names are listed', shown.html.includes('אוראל דוגמה') && shown.html.includes('מוסך לדוגמה'));
 check('it is not the empty state', !shown.html.includes('אין מדבקות'), shown.html.slice(0, 60));
 
 check('no page errors', errors.length === 0, errors);
