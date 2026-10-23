@@ -1441,6 +1441,8 @@ body { min-height: 100vh; }
 
   <div id="finChart"></div>
 
+  <div id="finDupes"></div>
+
   <div id="finWaLedger"></div>
 
   <div class="card">
@@ -2773,7 +2775,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v498';
+const HUB_BUILD = 'v499';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -2937,12 +2939,16 @@ function runDataCheck() {
     const d = findCustomerDupes() || [];
     add('לקוחות שנראים כפולים', d.map((g) => (g.name || (g[0] && g[0].name) || '')).filter(Boolean).slice(0, 12));
   }
+  // a chat payment that the sales page already counts (v499)
+  add('הכנסות מהוואטסאפ שאולי נספרו פעמיים',
+    incomeDupes().map((x) => shek(x.line.amount) + ' · ' + finDay(x.line.date) + ' — ' + payHitText(x.hit, String)).slice(0, 12));
 
   // What was checked and came back clean. Without this the report is unreadable when it is
   // short, and untrustworthy when it is empty.
   const checked = [
     'עבודות בלי מחיר', 'מכירות בלי פריטים', 'מכירות בסכום 0', 'רווח מנופח',
     'עבודות בלי לקוח', 'מלאי שלילי', 'פריטים שנגמרו', 'חודשים בלי הוצאות', 'לקוחות כפולים',
+    'הכנסות כפולות',
   ];
   const found = new Set(out.map((o) => o.title));
   for (const c of checked) if (![...found].some((f) => f.indexOf(c.split(' ')[0]) === 0)) ok.push(c);
@@ -7833,9 +7839,7 @@ function buildQuoteText(o) {
   P.push(sum.join('\n'));
 
   // --- money ---
-  const pct = B.depositPct != null ? B.depositPct : 50;
-  const deposit = Math.round((o.total * pct) / 100 / 50) * 50;
-  const balance = o.total - deposit;
+  const { pct, deposit, balance } = saleDeposit(o.total, B);
   const acct = ['*חשבון:*'];
   if (Number(o.discount) > 0) acct.push(`• מחיר: ${money(o.total + Number(o.discount))}`, `• ${discountLine(Number(o.discount), o.discountPct)}`);
   acct.push(`• *מחיר סופי:* ${money(o.total)}${o.isBusiness ? ' (מחיר עסקי)' : ''}`);
@@ -7992,11 +7996,14 @@ function renderWaLedger() {
   const have = new Set([...(Store.get('incomes') || []), ...(Store.get('expenses') || [])].map((r) => String(r.id)));
   const items = (waLedger || []).filter((x) => x && waLedgerId(x.id) && !have.has('wa_' + waLedgerId(x.id)));
   if (!items.length) { el.innerHTML = ''; return; }
+  const cands = payCandidates();
   const row = (x) => {
     const id = waLedgerId(x.id), out = x.kind === 'expense';
     const day = x.d ? new Date(x.d + 'T12:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' }) : '';
+    const was = waLedgerBooked(x, cands);
     return `<div class="fin-line" data-wa-line="${id}"><div><div>${escPunch(x.who || 'ללא שם')}${x.note ? ' — ' + escPunch(x.note) : ''}</div>`
-      + `<div class="fin-sub">${day} · ${out ? 'הוצאה' : 'הכנסה'}</div></div>`
+      + `<div class="fin-sub">${day} · ${out ? 'הוצאה' : 'הכנסה'}</div>`
+      + (was ? `<div class="fin-sub" data-wa-booked style="color:var(--warning);">⚠️ אולי כבר רשום: ${was}</div>` : '') + '</div>'
       + `<div class="${out ? 'fin-out' : 'fin-in'}" style="white-space:nowrap">${shek(x.a)} `
       + `<button class="btn btn-sm btn-secondary" onclick="waLedgerTake('${id}')" title="רשום">✓</button> `
       + `<button class="btn btn-sm btn-secondary" onclick="waLedgerDrop('${id}')" title="לא לרשום">✕</button></div></div>`;
@@ -8023,6 +8030,120 @@ function waLedgerTake(id) {
   renderFinances();
 }
 function waLedgerDrop(id) { waLedgerSettle(waLedgerId(id)); renderWaLedger(); }
+
+// The same money twice (v499, Daniel 2026-10-23: a warning, and the choice stays his). A line from his
+// chats is a payment: the WhatsApp import (finance-import.json, notes 'יובא מוואטסאפ …') or a line
+// booked from 📲 מהוואטסאפ (src 'wa'). The same payment is often on the sales page already, as a repair
+// or a paid sale, and finMonthly adds both. July had two: one line was the sale itself, the other was
+// the deposit on a sale. So a payment is matched against a repair's price, a paid sale's total, and that
+// sale's deposit and balance as its quote words them (saleDeposit), within DUP_PAY_DAYS. Nothing is
+// deleted here: the card offers מחק and לא כפול (notDup, kept on the row), and a line still waiting in
+// 📲 מהוואטסאפ only says what it may already be.
+const DUP_PAY_DAYS = 3;
+const isChatIncome = (r) => !!r && (r.src === 'wa' || /^יובא מוואטסאפ/.test(String(r.note || '')));
+// The deposit and the balance a quote asks for. buildQuoteText words them, the duplicate check reads them.
+function saleDeposit(total, B = bizDetails || {}) {
+  const pct = B.depositPct != null ? B.depositPct : 50;
+  const deposit = Math.round((total * pct) / 100 / 50) * 50;
+  const balance = total - deposit;
+  return { pct, deposit, balance, split: pct > 0 && pct < 100 && deposit > 0 && balance > 0 };
+}
+// Every payment the sales page counts as income, in one shape.
+function payCandidates() {
+  const out = [];
+  for (const j of Store.get('jobs') || []) {
+    const a = Math.round(Number(j.price) || 0);
+    if (a > 0) out.push({ date: j.date, a, what: 'תיקון', total: a, who: j.customerName || '' });
+  }
+  for (const o of Store.get('orders') || []) {
+    const t = Math.round(Number(o.total) || 0);
+    if (!saleIsIncome(o) || !(t > 0)) continue;
+    out.push({ date: o.date, a: t, what: 'מכירה', total: t, who: o.customer || '' });
+    const s = saleDeposit(t);
+    if (!s.split) continue;
+    out.push({ date: o.date, a: s.deposit, what: 'מקדמה', total: t, who: o.customer || '' });
+    if (s.balance !== s.deposit) out.push({ date: o.date, a: s.balance, what: 'יתרה', total: t, who: o.customer || '' });
+  }
+  return out;
+}
+const dayNo = (d) => Math.floor(new Date(d).getTime() / 864e5);
+// What a payment of `a` on `date` most likely is: the nearest day first, and a whole sale or repair
+// before a deposit or a balance.
+function payHit(a, date, cands) {
+  const d = dayNo(date);
+  if (!a || isNaN(d)) return null;
+  let best = null, bestKey = Infinity;
+  for (const c of cands) {
+    const dd = Math.abs(dayNo(c.date) - d);
+    if (c.a !== a || !(dd <= DUP_PAY_DAYS)) continue;
+    const key = dd * 2 + (c.what === 'מקדמה' || c.what === 'יתרה' ? 1 : 0);
+    if (key < bestKey) { best = c; bestKey = key; }
+  }
+  return best;
+}
+const finDay = (v) => new Date(v).toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric', year: '2-digit' });
+// `esc` is for markup; the data check escapes its rows itself and passes plain text through.
+function payHitText(c, esc = escPunch) {
+  const what = c.what === 'מקדמה' || c.what === 'יתרה' ? `${c.what} על מכירה של ${shek(c.total)}` : `${c.what} של ${shek(c.total)}`;
+  return `${what} ב-${finDay(c.date)}${c.who ? ' · ' + esc(c.who) : ''}`;
+}
+function incomeDupes() {
+  const cands = payCandidates(), out = [];
+  for (const r of Store.get('incomes') || []) {
+    if (!isChatIncome(r) || r.notDup) continue;
+    const hit = payHit(Math.round(Number(r.amount) || 0), r.date, cands);
+    if (hit) out.push({ line: r, hit });
+  }
+  return out.sort((x, y) => new Date(y.line.date) - new Date(x.line.date));
+}
+let incDupes = [];
+function renderIncomeDupes() {
+  const el = document.getElementById('finDupes');
+  if (!el) return;
+  incDupes = incomeDupes();
+  if (!incDupes.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="card" style="border-color:var(--warning);"><div style="font-weight:700;margin-bottom:4px;">⚠️ אולי נספר פעמיים</div>'
+    + incDupes.map(({ line, hit }, i) => `<div class="fin-line" data-dup="${i}"><div><div>${shek(line.amount)} מהוואטסאפ · ${finDay(line.date)}</div>`
+      + `<div class="fin-sub">וגם ${payHitText(hit)}</div></div><div style="white-space:nowrap">`
+      + `<button class="btn btn-sm btn-secondary" onclick="dropDupIncome(${i})">מחק</button> `
+      + `<button class="btn btn-sm btn-secondary" onclick="keepDupIncome(${i})">לא כפול</button></div></div>`).join('')
+    + '</div>';
+}
+function dropDupIncome(i) {
+  const d = incDupes[i];
+  if (!d) return;
+  askConfirm(`למחוק את ${shek(d.line.amount)} מהוואטסאפ? ${d.hit.what === 'תיקון' ? 'התיקון נשאר' : 'המכירה נשארת'}.`, () => {
+    // The removed row's tombstone is written before the list (stampRows, v497). If the storage refuses
+    // the list, that tombstone would still delete the line at the next sync, so it is put back.
+    const tomb = Store.get('tomb_incomes');
+    if (!Store.set('incomes', (Store.get('incomes') || []).filter((r) => String(r.id) !== String(d.line.id)))) {
+      Store.set('tomb_incomes', tomb || {});
+      return;
+    }
+    renderFinances();
+  });
+}
+function keepDupIncome(i) {
+  const d = incDupes[i];
+  if (!d) return;
+  const rows = Store.get('incomes') || [];
+  const r = rows.find((x) => String(x.id) === String(d.line.id));
+  if (!r) return;
+  r.notDup = true;
+  if (Store.set('incomes', rows)) renderFinances();
+}
+// What a line still waiting in 📲 מהוואטסאפ may already be: the same amount among his incomes or
+// expenses, or (an income) a payment the sales page counts. ✓ on it would book the same money twice.
+function waLedgerBooked(x, cands) {
+  const a = Math.round(Number(x && x.a) || 0), date = x && x.d ? x.d + 'T12:00:00' : '';
+  if (!a || !date) return '';
+  const out = x.kind === 'expense';
+  const same = (Store.get(out ? 'expenses' : 'incomes') || [])
+    .find((r) => Math.round(Number(r.amount) || 0) === a && Math.abs(dayNo(r.date) - dayNo(date)) <= DUP_PAY_DAYS);
+  if (same) return `${out ? 'הוצאה' : 'הכנסה'} של ${shek(a)} ב-${finDay(same.date)}`;
+  const hit = out ? null : payHit(a, date, cands || payCandidates());
+  return hit ? payHitText(hit) : '';
+}
 
 // The last twelve months as bars (v442, Daniel 2026-10-15: "גרף הכנסות חודשי"). The figures are
 // finMonthly's, the same ones the table under it shows, so the two cannot disagree. Drawn as inline
@@ -8163,6 +8284,7 @@ function renderFinances() {
       : '';
   }
   renderFinanceOverview();
+  renderIncomeDupes();
   loadWaLedger();
 }
 
