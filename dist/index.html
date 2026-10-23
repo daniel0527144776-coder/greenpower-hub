@@ -2773,7 +2773,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v493';
+const HUB_BUILD = 'v494';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -12058,8 +12058,12 @@ function botIndex() {
   const orders = (Store.get('orders') || []).filter((o) => o && o.phone && recent(o.date)).map((o) => {
     const items = Array.isArray(o.items) ? o.items : [];
     const months = items.length ? Math.max(...items.map(warrantyForItem)) : 0;
+    // What he pays: the sale's total, after its discount. It was the sum of the lines, so a customer who had a
+    // discount heard the price before it from the bot (2026-10-22). A sale saved without a total falls back to the lines.
+    const lines = items.reduce((s, it) => s + (Number(it.unit) || 0) * (Number(it.qty) || 0), 0);
+    const paid = o.total != null && o.total !== '' && Number.isFinite(Number(o.total)) ? Number(o.total) : lines;
     return { p: o.phone, d: o.date, i: items.map((it) => it.name + (it.qty > 1 ? ' x' + it.qty : '')), s: o.status || 'הצעה',
-      t: Math.round(items.reduce((s, it) => s + (Number(it.unit) || 0) * (Number(it.qty) || 0), 0)),
+      t: Math.round(paid),
       we: saleIsIncome(o) && months ? plusMonths(o.date, months) : '' };
   });
   return { v: 1, customers, jobs, orders };
