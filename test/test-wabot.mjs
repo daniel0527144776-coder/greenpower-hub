@@ -57,7 +57,7 @@ const DATA = {
 const gets = [], posts = [];
 let EMPTY = false;   // the bot answering 200 with no state at all
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, POST' };
-const CONTACTS = [{ p: '972501112222', n: 'אישתי המתוקה' }, { p: '972531112233', n: 'יוניפרטס חלקים' }, { p: '972541112233', n: 'אורן אספקה' }, { p: '972551112233', n: EVIL }];
+const CONTACTS = [{ p: '972501112222', n: 'אישתי המתוקה' }, { p: '972531112233', n: 'חלקי דוגמה בעמ' }, { p: '972541112233', n: 'אספקה לדוגמה' }, { p: '972551112233', n: EVIL }];
 await page.route(/energylabgreen\.com\/api\/wa\/admin/, async (route) => {
   const req = route.request();
   if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
@@ -215,15 +215,15 @@ check('his corrections to what it learned', p && p.op === 'knowledge' && p.text 
 await page.evaluate(() => waPickContacts());
 await page.waitForFunction(() => document.getElementById('wbPickList'), null, { timeout: 5000 });
 let pick = await page.evaluate(() => document.getElementById('wbPickList').innerText);
-check('his contacts are listed to pick from, the blocked ones marked, a strange name as text', /יוניפרטס חלקים/.test(pick) && /כבר חסום/.test(pick)
+check('his contacts are listed to pick from, the blocked ones marked, a strange name as text', /חלקי דוגמה בעמ/.test(pick) && /כבר חסום/.test(pick)
   && pick.includes('<img src=x') && await page.evaluate(() => window.__xss === undefined), pick.slice(0, 200));
-await page.evaluate(() => { document.getElementById('wbPickQ').value = 'יוני'; waPickList(); });
+await page.evaluate(() => { document.getElementById('wbPickQ').value = 'חלקי'; waPickList(); });
 pick = await page.evaluate(() => document.getElementById('wbPickList').innerText);
-check('the search narrows the list', /יוניפרטס/.test(pick) && !/אורן אספקה/.test(pick), pick);
+check('the search narrows the list', /חלקי דוגמה/.test(pick) && !/אספקה לדוגמה/.test(pick), pick);
 await page.evaluate(() => { waPickToggle(0); waPickToggle(1); waPickToggle(2); document.getElementById('wbPickQ').value = ''; waPickList(); waBlockPicked(); });
 p = await lastPost(X + 9);
 check('the picked ones are added to the blocked, an already-blocked one is not picked twice', p && p.op === 'settings' && p.settings.blocked.length === 3
-  && p.settings.blocked.some((b) => b.p === '972531112233' && b.n === 'יוניפרטס חלקים') && p.settings.blocked.some((b) => b.p === '972541112233'), p && p.settings.blocked);
+  && p.settings.blocked.some((b) => b.p === '972531112233' && b.n === 'חלקי דוגמה בעמ') && p.settings.blocked.some((b) => b.p === '972541112233'), p && p.settings.blocked);
 
 // an answer that is not the bot's state (200, '{}'): an error card, not a TypeError on settings.enabled
 EMPTY = true;

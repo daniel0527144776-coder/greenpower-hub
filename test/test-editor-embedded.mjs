@@ -197,7 +197,7 @@ if (frame) {
       jobs: ['full'], voltage: '72', capacity: '35', cellType: '21700-50pl',
       bmsBrand: 'daly', bmsAmps: '60', warrantyMonths: 12, price: 6000,
     }, {
-      id: 'jTEST2', date: new Date().toISOString(), customerName: 'מוסך אלעד',
+      id: 'jTEST2', date: new Date().toISOString(), customerName: 'מוסך לדוגמה',
       jobs: ['bms'], voltage: '60', capacity: '20', cellType: '21700-50e',
       bmsBrand: 'jk', bmsAmps: '150', warrantyMonths: 6, price: 700,
     }]);

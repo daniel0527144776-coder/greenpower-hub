@@ -48,8 +48,8 @@ await page.goto('http://localhost:4349/index.html', { waitUntil: 'load' });
 await page.waitForFunction(() => typeof window.navigateTo === 'function', null, { timeout: 30000 });
 
 // ---------------------------------------------------------------- 1. what is owed to whom
-// v323: one running account per worker, no months. Daniel: "שמואל קיבל 2900 ואין לו עוד חוב —
-// צריך לסמן שאין לי חוב עליו, לא רק מקדמה" and "לא רוצה לדפדף לפי חודשים".
+// v323: one running account per worker, no months. Daniel asked to mark that nothing more is owed
+// to a worker who was paid in full, not only an advance, and "לא רוצה לדפדף לפי חודשים".
 await page.evaluate(() => {
   const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString();
   localStorage.clear();
@@ -176,20 +176,20 @@ check('and it shows his balance, his rate and his hours',
 if (SELFTEST) await page.evaluate(() => { window.wtAutoFixDups = () => {}; });
 const dp = await page.evaluate(async () => {
   const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d, 9)).toISOString();
-  Store.set('workers', [{ id: 's', name: 'שמואל אמירי', rate: 45 }]);
+  Store.set('workers', [{ id: 's', name: 'נתן דוגמה', rate: 45 }]);
   Store.set('worktime', [
-    { id: 'L1', workerName: 'שמואל אמירי', rate: 45, hours: 40, date: iso(2026, 8, 3), paid: true },
-    { id: 'L2', workerName: 'שמואל אמירי', rate: 45, hours: 22.27, date: iso(2026, 8, 20), paid: true },
-    { id: 'L3', workerName: 'שמואל אמירי', rate: 45, hours: 3, date: iso(2026, 9, 1), paid: false },
+    { id: 'L1', workerName: 'נתן דוגמה', rate: 45, hours: 30, date: iso(2026, 3, 3), paid: true },
+    { id: 'L2', workerName: 'נתן דוגמה', rate: 45, hours: 12.5, date: iso(2026, 3, 20), paid: true },
+    { id: 'L3', workerName: 'נתן דוגמה', rate: 45, hours: 3, date: iso(2026, 4, 1), paid: false },
   ]);
-  const legacy = Math.round((40 + 22.27) * 45 * 100) / 100;
-  Store.set('wage_payments', [{ id: 'dupP', worker: 'שמואל אמירי', amount: legacy, date: iso(2026, 9, 23),
+  const legacy = Math.round((30 + 12.5) * 45 * 100) / 100;
+  Store.set('wage_payments', [{ id: 'dupP', worker: 'נתן דוגמה', amount: legacy, date: iso(2026, 4, 23),
     closes: { rows: ['L3'], pays: ['dupP'] } }]);
   Store.set('worktime_trash', []);
   navigateTo('worktime');
   await new Promise((r) => setTimeout(r, 100));
   closeNotice();
-  const L = workerLedger('שמואל אמירי');
+  const L = workerLedger('נתן דוגמה');
   const received = L.paidTotal + L.legacyPaid;
   const stillClosed = L.balance === 0;
   // he says "no, that payment was real" — bring it back; it must not be removed again
@@ -198,7 +198,7 @@ const dp = await page.evaluate(async () => {
   navigateTo('worktime');
   await new Promise((r) => setTimeout(r, 100));
   closeNotice();
-  const back = workerLedger('שמואל אמירי');
+  const back = workerLedger('נתן דוגמה');
   return { legacy, received, stillClosed, backReceived: back.paidTotal + back.legacyPaid };
 });
 check('a payment that duplicates the old "paid" hours is removed on its own', Math.round(dp.received) === Math.round(dp.legacy), dp);
@@ -242,7 +242,7 @@ const fin = await page.evaluate(() => {
   localStorage.setItem('gp_worktime', JSON.stringify([]));
   localStorage.setItem('gp_incomes', JSON.stringify([
     { id: 'o1', amount: 10000, date: iso(2021, 5, 4), src: 'books', locked: true, customer: 'היסטוריה', note: 'מכירה' },
-    { id: 'o2', amount: -2500, date: iso(2021, 5, 9), src: 'books', locked: true, customer: 'היסטוריה', note: 'מכירה', invoice: '700099' },
+    { id: 'o2', amount: -2500, date: iso(2021, 5, 9), src: 'books', locked: true, customer: 'היסטוריה', note: 'מכירה', invoice: '100099' },
     { id: 'n1', amount: 8000, date: iso(2026, 4, 1), note: 'יובא מוואטסאפ' },
   ]));
   localStorage.setItem('gp_expenses', JSON.stringify([{ id: 'e1', amount: 3000, date: iso(2026, 4, 5), cat: 'רכש', note: 'תאים' }]));

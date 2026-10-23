@@ -12,7 +12,7 @@
 // the scooter a shrink line and the e-bike an EMPTY string, so the one family that buys a case
 // was the one described as having none. His answer: "האופניים הם עם סילבר פיש, השאר זה עם שרינק
 // ואותו [דבר]". Checked against the supplier list before believing the other half — a 21700
-// holder for 140 cells is $0.59 and a kilo of PVC sleeve is $5-10, so the holders and the
+// holder for 140 cells and a kilo of PVC sleeve each cost a few dollars, so the holders and the
 // shrink genuinely are not a cost difference.
 //
 // This suite tests the HUB's copy of the model. sync-prices separately compares that copy

@@ -49,8 +49,8 @@ await page.goto('http://localhost:4207/index.html');
 
 // 3 recent customers he typed, plus 40 old ones shaped like the accountant's rows — enough
 // that the oldest are well past the 20 the picker shows unsearched.
-const OLD = 'אבנר קדוש';      // 40 visits ago, and one of the 27 with no phone on file
-const BIZ = 'קורקינטים ברמה';  // a business, 30 visits ago
+const OLD = 'אבנר דוגמה';     // 40 visits ago, and like 27 of the books' customers, no phone on file
+const BIZ = 'קורקינטים לדוגמה';  // a business, 30 visits ago (every name and number here is made up)
 await page.evaluate(({ OLD, BIZ }) => {
   const day = (n) => new Date(Date.now() - n * 86400000).toISOString();
   const rows = [
@@ -62,7 +62,7 @@ await page.evaluate(({ OLD, BIZ }) => {
     rows.push({ id: 'b' + i, name: 'לקוח ותיק ' + i, phone: '05' + String(40000000 + i), city: 'אלעד',
       lastVisit: day(100 + i), firstVisit: day(400 + i), isBusiness: false, src: 'books' });
   }
-  rows.push({ id: 'bz', name: BIZ, businessName: BIZ, phone: '0549954395', vatId: '33660234',
+  rows.push({ id: 'bz', name: BIZ, businessName: BIZ, phone: '0549990001', vatId: '123456782',
     city: 'תל אביב', lastVisit: day(30), isBusiness: true, src: 'books' });
   rows.push({ id: 'np', name: OLD, phone: '', city: 'ירכא', lastVisit: day(220), isBusiness: false, src: 'books' });
   localStorage.setItem('gp_customers', JSON.stringify(rows));
@@ -182,7 +182,7 @@ const sale = await page.evaluate((BIZ) => {
   };
 }, BIZ);
 check('the sales editor has an existing-customer picker at all', sale.had, String(sale.had));
-check('picking fills name and phone in the sale', sale.name.includes(BIZ) && sale.phone === '0549954395',
+check('picking fills name and phone in the sale', sale.name.includes(BIZ) && sale.phone === '0549990001',
   `"${sale.name}" / "${sale.phone}"`);
 check('a business customer switches the order to B2B', sale.biz, String(sale.biz));
 // Digits only: the total renders as ₪2,510 and a naive includes('2510') fails against a

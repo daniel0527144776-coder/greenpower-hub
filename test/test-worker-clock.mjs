@@ -208,7 +208,7 @@ console.log('\n5. an unmatched name is a question, not a dead end');
   await p.evaluate((id) => {
     localStorage.setItem('gp_workers', JSON.stringify([
       { id: 'wk1', name: 'יהודה', rate: 40 },
-      { id: 'wk2', name: 'שמואל', rate: 45 },
+      { id: 'wk2', name: 'נתן', rate: 45 },
     ]));
     localStorage.setItem('gp_worktime', JSON.stringify([]));
     // A session, so the approve path is not stopped by the auth guard before it starts.
@@ -361,7 +361,7 @@ console.log('\n8. the in-hub shift clock — Daniel punching a worker in and out
   await p.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
   await p.waitForFunction(() => typeof window.renderShifts === 'function', { timeout: 30000 });
   await p.evaluate(() => {
-    localStorage.setItem('gp_workers', JSON.stringify([{ id: 'wk-sh', name: 'שמואל אמירי', rate: 55 }]));
+    localStorage.setItem('gp_workers', JSON.stringify([{ id: 'wk-sh', name: 'נתן דוגמה', rate: 55 }]));
     localStorage.setItem('gp_worktime', JSON.stringify([]));
     const g = document.getElementById('loginOverlay'); if (g) g.remove();
     navigateTo('worktime');
@@ -408,7 +408,7 @@ console.log('\n8. the in-hub shift clock — Daniel punching a worker in and out
   const e = await p.evaluate(() => JSON.parse(localStorage.getItem('gp_worktime') || '[]')[0] || null);
   check('יציאה writes the measured hours, to two decimals',
     e && Math.abs(e.hours - (SELFTEST ? 9 : 2.5)) < 0.02, e && e.hours);
-  check('under the right worker, at the hub rate', e && e.workerName === 'שמואל אמירי' && e.rate === 55, e);
+  check('under the right worker, at the hub rate', e && e.workerName === 'נתן דוגמה' && e.rate === 55, e);
   check('the note records the actual times', e && e.note.includes('שעון:'), e && e.note);
   check('and it is unpaid until he says otherwise', e && e.paid === false);
   check('the clock is cleared', await p.evaluate(() => !getWorkers()[0].shiftStart));
