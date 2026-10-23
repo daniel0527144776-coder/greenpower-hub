@@ -4,12 +4,12 @@
 //   node test/test-cost-route.mjs --selftest   (the three fixes undone — must fail)
 //
 // Daniel sent two screenshots and "תחשוב על בעיות שיש כאן". His phone was on 🏪 מקומי, so an EVE
-// 50E cost LaBatteria's ₪14.80 instead of the sea import's ₪6.43, and the 88V CLASSIC 20Ah window
-// read "96 תאים ₪1,421 … עסקי −12% ⚠️ מתחת לעלות". Three things were wrong with the SCREEN, whatever
-// the pricing answer turns out to be:
-//   1. nothing said a cell cost ₪14.80 or that the local route was the reason;
+// 50E cost the local shop's price, more than twice the sea import's, and the 88V CLASSIC 20Ah window
+// read "עסקי … ⚠️ מתחת לעלות". Three things were wrong with the SCREEN, whatever the pricing answer
+// turns out to be (the suppliers and their prices below are made up; this repo is public):
+//   1. nothing said what a cell cost or that the local route was the reason;
 //   2. "💾 שמור" on the untouched window stored that route's estimate as HIS cost, so the row kept
-//      ₪1,748 for good — back on the sea route, after any price change, forever;
+//      it for good — back on the sea route, after any price change, forever;
 //   3. the spec line read out of order ("EVE · (96 תאים) 88V · 20Ah …") and broke "EVE 50E" in two.
 import { chromium } from 'playwright';
 import http from 'http';
@@ -58,10 +58,10 @@ await page.waitForFunction(() => typeof window.navigateTo === 'function', null, 
 await page.evaluate(() => {
   hideLogin(); closeModal(); closeNotice();
   Store.set('supplier_prices', [
-    { who: 'Vapcell', cat: 'Vapcell · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 6.43 },
-    { who: 'Vapcell', cat: 'Vapcell · 21700 · ✈️ אווירי', name: 'EVE 50E — CLASSIC · 21700', ils: 9.65 },
-    { who: 'Vapcell', cat: 'Vapcell · 21700 · ✈️ אווירי', name: 'EVE 50PL — PRO · 21700 Tabless', ils: 13.03 },
-    { who: 'LaBatteria', cat: 'LaBatteria · 21700', name: 'EVE 21700 50E', ils: 14.8 },
+    { who: 'ספק תאים', cat: 'ספק תאים · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 6.43 },
+    { who: 'ספק תאים', cat: 'ספק תאים · 21700 · ✈️ אווירי', name: 'EVE 50E — CLASSIC · 21700', ils: 9.2 },
+    { who: 'ספק תאים', cat: 'ספק תאים · 21700 · ✈️ אווירי', name: 'EVE 50PL — PRO · 21700 Tabless', ils: 12.4 },
+    { who: 'חנות מקומית', cat: 'חנות מקומית · 21700', name: 'EVE 21700 50E', ils: 13.9 },
   ]);
   Store.set('costs', {}); Store.set('bms_pick', {});
   const s = Store.get('settings') || {}; s.cellRoute = 'local'; Store.set('settings', s);
@@ -83,7 +83,7 @@ const w = await page.evaluate((i) => {
   };
   return r;
 }, CLASSIC);
-check('the cells line names the price per cell on this route', /96 תאים × ₪14\.80/.test(w.breakdown), w.breakdown.slice(0, 160));
+check('the cells line names the price per cell on this route', /96 תאים × ₪13\.90/.test(w.breakdown), w.breakdown.slice(0, 160));
 check('…and the route it came from', w.route === 'local' && /מקומי/.test(w.breakdown), w.route);
 check('the window says the number is an estimate, and on which route', /אומדן/.test(w.source) && /מקומי/.test(w.source), w.source);
 check('the box opens on that estimate', w.field === w.est && w.est > 1500, w);

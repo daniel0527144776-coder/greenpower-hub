@@ -7,7 +7,7 @@
 // onto a device, over data he typed himself, and the two rules that protect him are invisible
 // on screen: existing fields are FILLED and never overwritten, and re-importing REPLACES the
 // books rows rather than appending them. Both fail silently — the first loses a note he wrote,
-// the second doubles ₪269,845 — and neither shows up as an error.
+// the second doubles six years of turnover — and neither shows up as an error.
 import { chromium } from 'playwright';
 import http from 'http';
 import fs from 'fs';
@@ -43,7 +43,19 @@ await page.goto('http://localhost:4200/index.html');
 // the test is where I forgot it.
 const _n = new Date();
 const THIS_MONTH = _n.getFullYear() + '-' + String(_n.getMonth() + 1).padStart(2, '0');
-await page.evaluate((mk) => {
+
+// The import's payload: the real books when this machine has them, else one made-up business.
+// The business he typed himself (below) is one of the payload's, so no real name is written here:
+// this repo is public.
+const IMPORT = path.join(HERE, '..', '..', 'accounting-import.json');
+const haveReal = fs.existsSync(IMPORT);
+const payload = haveReal ? JSON.parse(fs.readFileSync(IMPORT, 'utf8')) : {
+  customers: [{ name: 'קורקינטים לדוגמה', phone: '', vatId: '123456782', isBusiness: true, city: 'תל אביב', address: '', email: '', contact: '', notes: '', acctNo: '9', firstVisit: '2022-01-01T00:00:00.000Z' }],
+  incomes: [{ id: 'bk1', date: '2022-03-01T00:00:00.000Z', amount: 1000, cat: 'תיקונים ומכירות', note: 'סוללה', customer: 'קורקינטים לדוגמה', phone: '' }],
+};
+const BIZ = payload.customers.find((c) => c.isBusiness && c.vatId && !c.phone) || payload.customers.find((c) => c.isBusiness && c.vatId) || {};
+
+await page.evaluate(({ mk, biz }) => {
   const d = (day) => new Date(mk + '-' + day + 'T10:00:00').toISOString();
   localStorage.setItem('gp_jobs', JSON.stringify([{ id: 'j1', date: d('05'), customerName: 'לקוח תיקון', customerPhone: '0501111111', price: 650, jobs: ['bms'] }]));
   localStorage.setItem('gp_orders', JSON.stringify([
@@ -54,12 +66,12 @@ await page.evaluate((mk) => {
   localStorage.setItem('gp_incomes', JSON.stringify([]));
   // A customer he typed himself, with a note the import must not touch.
   localStorage.setItem('gp_customers', JSON.stringify([
-    { id: 'c1', name: 'קורקינטים ברמה', phone: '', notes: 'שילם במזומן, לא לשכוח', isBusiness: false, city: '' },
+    { id: 'c1', name: biz.name, phone: biz.phone || '', notes: 'שילם במזומן, לא לשכוח', isBusiness: false, city: '' },
   ]));
   document.getElementById('loginOverlay').style.display = 'none';
   if (typeof init === 'function') init();
   navigateTo('finances');
-}, THIS_MONTH);
+}, { mk: THIS_MONTH, biz: { name: BIZ.name || '', phone: BIZ.phone || '' } });
 await page.waitForTimeout(300);
 
 // ---- 1. the month you are in, first ----
@@ -92,21 +104,15 @@ const opened = await page.evaluate((mk) => {
 check('clicking a month opens its detail in place', opened.open, String(opened.rows) + ' months');
 
 // ---- 3. the import ----
-const IMPORT = path.join(HERE, '..', '..', 'accounting-import.json');
-const haveReal = fs.existsSync(IMPORT);
-const payload = haveReal ? JSON.parse(fs.readFileSync(IMPORT, 'utf8')) : {
-  customers: [{ name: 'קורקינטים ברמה', phone: '', vatId: '207322942', isBusiness: true, city: 'תל אביב', address: '', email: '', contact: '', notes: '', acctNo: '9', firstVisit: '2022-01-01T00:00:00.000Z' }],
-  incomes: [{ id: 'bk1', date: '2022-03-01T00:00:00.000Z', amount: 2850, cat: 'תיקונים ומכירות', note: 'סוללה', customer: 'קורקינטים ברמה', phone: '' }],
-};
 console.log(`  --   ${haveReal ? 'accounting-import.json אמיתי' : 'נתוני דמה'} · ${payload.customers.length} לקוחות, ${payload.incomes.length} הכנסות`);
 
-const after = await page.evaluate((d) => {
+const after = await page.evaluate(({ d, name }) => {
   openAccountingImport();
   document.getElementById('acctJson').value = JSON.stringify(d);
   importAccounting();
   const cust = JSON.parse(localStorage.getItem('gp_customers') || '[]');
   const inc = JSON.parse(localStorage.getItem('gp_incomes') || '[]');
-  const mine = cust.find((c) => c.name === 'קורקינטים ברמה');
+  const mine = cust.find((c) => c.name === name);
   return {
     customers: cust.length,
     businesses: cust.filter((c) => c.isBusiness).length,
@@ -115,7 +121,7 @@ const after = await page.evaluate((d) => {
     vat: mine ? mine.vatId : '',
     biz: mine ? !!mine.isBusiness : false,
   };
-}, payload);
+}, { d: payload, name: BIZ.name || '' });
 
 // Against the PAYLOAD's own size, not a hardcoded `> 1`. accounting-import.json lives in the
 // tools root, which has no remote, so CI always takes the dummy branch — and that payload has

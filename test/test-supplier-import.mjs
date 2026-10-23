@@ -160,30 +160,31 @@ console.log('5. every mapped catalogue name still exists');
   const tidy = await p.evaluate(() => {
     const s = Store.get('settings') || {}; delete s.qsTidy20260925; Store.set('settings', s);
     Store.set('supplier_prices', [
-      { who: 'QS Motor', cat: 'QS Motor · בקרים', name: 'Sabvoton SVMC72150 + BT', usd: 215 },
-      { who: 'QS Motor', cat: 'QS Motor · בקרים', name: 'Far Driver ND72450', usd: 115 },
-      { who: 'QS Motor', cat: 'QS Motor · בקרים', name: 'מודול Bluetooth לבקר', usd: 11 },
-      { who: 'QS Motor', cat: 'QS Motor · מנועים', name: 'QS138 3000W 70H', usd: 180 },
-      { who: 'QS Motor', cat: 'QS Motor · מנועים', name: 'QS205 3000W V3', usd: 216.6 },
-      { who: 'QS Motor', cat: 'QS Motor · מנועים', name: 'סטטור QS205 3000W 4T', usd: 107 },
-      { who: 'QS Motor', cat: 'QS Motor · מנועי קורקינט', name: 'QS212 10" 2000W', usd: 95.8 },
-      { who: 'QS Motor', cat: 'QS Motor · צגים', name: 'צג H6', usd: 85 },
-      { who: 'QS Motor', cat: 'QS Motor · צגים', name: 'צג CT22', usd: 45.5 },
-      { who: 'QS Motor', cat: 'QS Motor · אביזרים', name: 'ידית גז', usd: 18 },
-      { who: 'QS Motor · קטלוג', cat: 'QS Motor · מחירון אתר · ערכות המרה', name: 'QSD165B-35 + ND72680', usd: 509.29 },
-      { who: 'QS Motor · קטלוג', cat: 'QS Motor · מחירון אתר · בלמים', name: 'בלם', usd: 30 },
-      { who: 'Vapcell', cat: 'Vapcell · 21700', name: 'EVE 50E', ils: 6.43 },
+      // the prices are made up, like every price in this repo (it is public)
+      { who: 'QS Motor', cat: 'QS Motor · בקרים', name: 'Sabvoton SVMC72150 + BT', usd: 200 },
+      { who: 'QS Motor', cat: 'QS Motor · בקרים', name: 'Far Driver ND72450', usd: 100 },
+      { who: 'QS Motor', cat: 'QS Motor · בקרים', name: 'מודול Bluetooth לבקר', usd: 10 },
+      { who: 'QS Motor', cat: 'QS Motor · מנועים', name: 'QS138 3000W 70H', usd: 170 },
+      { who: 'QS Motor', cat: 'QS Motor · מנועים', name: 'QS205 3000W V3', usd: 200 },
+      { who: 'QS Motor', cat: 'QS Motor · מנועים', name: 'סטטור QS205 3000W 4T', usd: 100 },
+      { who: 'QS Motor', cat: 'QS Motor · מנועי קורקינט', name: 'QS212 10" 2000W', usd: 90 },
+      { who: 'QS Motor', cat: 'QS Motor · צגים', name: 'צג H6', usd: 80 },
+      { who: 'QS Motor', cat: 'QS Motor · צגים', name: 'צג CT22', usd: 40 },
+      { who: 'QS Motor', cat: 'QS Motor · אביזרים', name: 'ידית גז', usd: 15 },
+      { who: 'QS Motor · קטלוג', cat: 'QS Motor · מחירון אתר · ערכות המרה', name: 'QSD165B-35 + ND72680', usd: 500 },
+      { who: 'QS Motor · קטלוג', cat: 'QS Motor · מחירון אתר · בלמים', name: 'בלם', usd: 25 },
+      { who: 'ספק תאים', cat: 'ספק תאים · 21700', name: 'EVE 50E', ils: 6.43 },
     ]);
     tidyQsSupplierOnce();
     const out = Store.get('supplier_prices');
     const qs = out.filter((r) => /^QS/.test(r.who));
     return { who: [...new Set(qs.map((r) => r.who))], cats: Object.fromEntries(qs.map((r) => [r.name, r.cat.replace('QS Motor · ', '')])),
-      kit: (qs.find((r) => /QSD165B/.test(r.name)) || {}).usd, other: out.some((r) => r.who === 'Vapcell') };
+      kit: (qs.find((r) => /QSD165B/.test(r.name)) || {}).usd, other: out.some((r) => r.who === 'ספק תאים') };
   });
   check('one QS supplier, not two', tidy.who.length === 1 && tidy.who[0] === 'QS Motor', tidy.who);
   check('controllers by company', tidy.cats['Sabvoton SVMC72150 + BT'] === 'בקרים — Sabvoton' && tidy.cats['Far Driver ND72450'] === 'בקרים — Far Driver', tidy.cats);
   check('motors by type', /Mid Drive/.test(tidy.cats['QS138 3000W 70H'] || '') && /Hub/.test(tidy.cats['QS205 3000W V3'] || '') && tidy.cats['QS212 10" 2000W'] === 'מנועי קורקינט', tidy.cats);
-  check('a ready kit from the website list stays, at list −35%', tidy.kit === Math.round(509.29 * 0.65 * 100) / 100, tidy.kit);
+  check('a ready kit from the website list stays, at list −35%', tidy.kit === Math.round(500 * 0.65 * 100) / 100, tidy.kit);
   check('the two displays the site sells stay; other displays, accessories, a stator and the BT module go',
     tidy.cats['צג H6'] === 'צגים' && !('צג CT22' in tidy.cats) && !('ידית גז' in tidy.cats) && !('סטטור QS205 3000W 4T' in tidy.cats) && !('מודול Bluetooth לבקר' in tidy.cats) && !('בלם' in tidy.cats), tidy.cats);
   check('other suppliers are untouched', tidy.other, tidy.other);
@@ -195,7 +196,7 @@ console.log('5. every mapped catalogue name still exists');
     const bms = { who: 'ספק רכיבים', cat: 'BMS DALY', name: 'DALY 13S 60A', usd: 30 };
     const kit = { who: 'QS Motor', cat: 'QS Motor · קיטים מוכנים', name: 'kit', usd: 500 };
     const motor = { who: 'QS Motor', cat: 'QS Motor · מנועים — גלגל (Hub)', name: 'm', usd: 200, kg: 16 };
-    const landed = { who: 'LaBatteria', cat: 'LaBatteria · 21700', name: 'c', ils: 14.8 };
+    const landed = { who: 'חנות מקומית', cat: 'חנות מקומית · 21700', name: 'c', ils: 13.9 };
     return {
       bms: supplierIls(bms, false, true) - supplierIls(bms, false, false),
       kit: supplierIls(kit, false, true) / supplierIls(kit, false, false),
@@ -206,7 +207,7 @@ console.log('5. every mapped catalogue name still exists');
   check('a BMS from the components supplier ships at the agent rate, $13.5/kg', Math.abs(fr.bms - 0.2 * 13.5 * 3) < 0.01, fr);
   check('a QS kit with no weight is charged the motor rate, not the components 39%', Math.abs(fr.kit - 1.75) < 0.001, fr);
   check('a weighed QS motor ships at the QS rate', Math.abs(fr.motor - 16 * fr.rate * 3) < 0.01, fr);
-  check('a landed or local price is never re-charged VAT or freight', fr.landedVat === 14.8, fr);
+  check('a landed or local price is never re-charged VAT or freight', fr.landedVat === 13.9, fr);
 }
 {
   // a per-kilo rate saved on the device before the field left the screen must not win
@@ -223,14 +224,14 @@ console.log('5. every mapped catalogue name still exists');
   await p.evaluate((s) => { window.__SELF = s; }, SELFTEST);
   const rt = await p.evaluate(() => {
     Store.set('supplier_prices', [
-      { who: 'Vapcell', cat: 'Vapcell · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 6.43 },
-      { who: 'Vapcell', cat: 'Vapcell · 21700 · ✈️ אווירי', name: 'EVE 50E — CLASSIC · 21700', ils: 9.65 },
-      { who: 'LaBatteria', cat: 'LaBatteria · 21700', name: 'EVE 21700 50E', ils: 14.8 },
+      { who: 'ספק תאים', cat: 'ספק תאים · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 6.43 },
+      { who: 'ספק תאים', cat: 'ספק תאים · 21700 · ✈️ אווירי', name: 'EVE 50E — CLASSIC · 21700', ils: 9.2 },
+      { who: 'חנות מקומית', cat: 'חנות מקומית · 21700', name: 'EVE 21700 50E', ils: 13.9 },
     ]);
     const it = PRICING.find((x) => /^סוללות/.test(x.cat) && /CLASSIC/.test(x.cat) && !/18650/.test(x.cat));
     const out = {};
     for (const r of ['sea', 'air', 'local']) { setCellRoute(r); out[r] = { cell: routeCellCost('50E'), pl: routeCellCost('50PL'), cost: productCost(it) }; }
-    setCellRoute('air'); navigateTo('supplier'); setSupWho(SUP_WHOS.indexOf('Vapcell')); toggleSupCat(0);
+    setCellRoute('air'); navigateTo('supplier'); setSupWho(SUP_WHOS.indexOf('ספק תאים')); toggleSupCat(0);
     const lines = document.querySelectorAll('#supplierList .sup-line').length;
     const both = [...document.querySelectorAll('#supplierList .sup-rt')].map((e) => e.textContent).join(' ');
     const supChips = document.querySelectorAll('#page-supplier .sup-chip[onclick*=setCellRoute]').length;
@@ -252,10 +253,10 @@ console.log('5. every mapped catalogue name still exists');
     const hiddenOff = !!(document.getElementById('catRoute') || {}).hidden;
     return { out, lines, both, supChips, setChips, chips, seaLine, airLine, onChip, onSetting, hiddenOff, calcRows: supplierRows().filter((r) => r.who === 'מחשבון תיקונים').length };
   });
-  check('each route gives its own cell cost', rt.out.sea.cell === 6.43 && rt.out.air.cell === 9.65 && rt.out.local.cell === 14.8, rt.out);
+  check('each route gives its own cell cost', rt.out.sea.cell === 6.43 && rt.out.air.cell === 9.2 && rt.out.local.cell === 13.9, rt.out);
   check('a cell the route does not carry falls back to the sea cost', rt.out.local.pl === rt.out.sea.pl, rt.out);
   check('and a pack cost moves with the route', rt.out.sea.cost < rt.out.air.cost && rt.out.air.cost < rt.out.local.cost, rt.out);
-  check('a cell with a sea and an air price is ONE row showing both', rt.lines === 1 && /6\.43/.test(rt.both) && /9\.65/.test(rt.both), rt);
+  check('a cell with a sea and an air price is ONE row showing both', rt.lines === 1 && /6\.43/.test(rt.both) && /9\.2/.test(rt.both), rt);
   check('the supplier page no longer carries the route choice', rt.supChips === 0, rt.supChips);
   check('the settings carry the three routes, the chosen one lit', rt.setChips === 3 && /אווירי/.test(rt.onSetting), rt);
   check('the price list names the route it costs on, with no chips of its own', rt.chips === 0 && /אווירי/.test(rt.onChip), rt);

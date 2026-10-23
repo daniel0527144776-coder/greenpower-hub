@@ -147,7 +147,7 @@ const unsent = await page.evaluate(() => {
 check('an unsent line removed leaves no gap', unsent === '5:X2', unsent);
 
 // ---- 6. a list already sent from WhatsApp, pasted in ----
-const parsed = await page.evaluate(() => soParseList('1. copper-nickel busbar 2S/3S Z Type 22.5mm 0.5+0.2 2KG (800MM)\n\n3. Nickel pure 22.5mm H Type 2S-2kg  (800mm)\n20. Nickel 1kg : 15$ *cancel*\nPaid: 888$\nTOTAL:'));
+const parsed = await page.evaluate(() => soParseList('1. copper-nickel busbar 2S/3S Z Type 22.5mm 0.5+0.2 2KG (800MM)\n\n3. Nickel pure 22.5mm H Type 2S-2kg  (800mm)\n20. Nickel 1kg : 10$ *cancel*\nPaid: 500$\nTOTAL:'));
 check('pasted: its own numbers, gaps and all, footer left out', parsed.map((l) => l.n).join() === '1,3,20' && parsed[2].cancel && parsed[1].t === 'Nickel pure 22.5mm H Type 2S-2kg (800mm)', parsed);
 
 // ---- 7. from "חסר להזמנה", and closed into the history ----
