@@ -68,6 +68,7 @@ await page.route(/energylabgreen\.com\/api\/wa\/admin/, async (route) => {
   // the polish answers with the message it wrote (and what it heard, for a recording); everything else just ok
   if (sent.op === 'polish') return route.fulfill({ status: 200, contentType: 'application/json', headers: CORS,
     body: JSON.stringify({ ok: true, text: 'שלום! המטען במלאי, אפשר לאסוף מחר. ' + EVIL, ...(sent.audio ? { heard: 'מוכן מחר' } : {}) }) });
+  if (sent.op === 'link') return route.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify({ ok: true, state: 'notAuthorized', code: 'AB12CD34' }) });
   return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}', headers: CORS });
 });
 await page.route('https://energylabgreen.com/api/wa/index', (route) => route.fulfill({ status: 200, body: '{}', headers: CORS }));
@@ -233,6 +234,28 @@ const emptyText = await text();
 check('a 200 with no state shows "could not reach the bot", and throws nothing', /לא הצלחתי להגיע לבוט/.test(emptyText) && errs.length === errsBefore, [emptyText.slice(0, 120), errs.slice(errsBefore)]);
 EMPTY = false;
 await page.evaluate(async () => { await renderWaBot(); });
+
+// unlinked after moving WhatsApp to a new phone (2026-10-29, "החלפתי טלפון והבוט כבר לא עובד"): the page says so and a
+// button asks the bot for a code to type in WhatsApp, with where to type it; linked, no button. --selftest leaves it off.
+if (SELFTEST) await page.evaluate(() => { const real = waStatusHtml; window.waStatusHtml = () => real().replace(/<button[^>]*data-wa-link[\s\S]*?<\/button>/, ''); });
+const linkedBtn = await page.evaluate(() => !!document.querySelector('[data-wa-link]'));
+DATA.wa = 'notAuthorized';
+await page.evaluate(async () => { waBot = null; await renderWaBot(); });
+const unlinked = await text();
+const hasBtn = await page.evaluate(() => !!document.querySelector('[data-wa-link]'));
+check('linked, no relink button; unlinked, the page says so and offers one', !linkedBtn && hasBtn && /וואטסאפ לא מחובר \(notAuthorized\)/.test(unlinked), [linkedBtn, hasBtn]);
+{
+  const n = posts.length;
+  if (hasBtn) await page.evaluate(() => waLink());
+  for (let i = 0; i < 30 && posts.length === n; i++) await page.waitForTimeout(100);
+  await page.waitForTimeout(150);
+  const notice = await page.evaluate(() => document.getElementById('noticeBody').textContent);
+  check('…which asks the bot for a code and shows it, with where in WhatsApp to type it', !!posts[n] && posts[n].op === 'link'
+    && /קוד החיבור: AB12-CD34/.test(notice) && /מכשירים מקושרים/.test(notice) && /קישור באמצעות מספר טלפון/.test(notice), [posts[n], notice]);
+  await page.evaluate(() => closeNotice());
+}
+DATA.wa = 'authorized';
+await page.evaluate(async () => { waBot = null; await renderWaBot(); });
 
 // the log's filter, and the way in from the home page
 await page.evaluate(() => waLogFilter('quiet'));
