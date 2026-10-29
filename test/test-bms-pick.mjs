@@ -26,11 +26,13 @@ const { check, finish } = checker();
 
 // ---------------------------------------------------------------- 1. nothing confidential inline
 const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
-// Prices that only appear on the supplier list. If any of these strings is in the served file,
-// the list has been baked in.
+// Boards that are on the supplier list. Since 2026-10-29 the boards are SOLD on the site under these
+// names ("תעשה מכירת BMS לעסקים ופרטי"), so the hub's catalogue carries them at their retail price, and a
+// name alone proves nothing any more. What must never be in the file is the LIST: a board's name beside
+// a supplier figure (usd, frUsd), the shape of a row of supplier_prices.
 const SECRET = ['JK B2A24S20P', 'DALY 20S 72V 200A', 'ANT BMS 220A', 'JK BD6A24S20P'];
-const leaked = SECRET.filter((s) => html.includes(s));
-check('no supplier BMS model name is baked into the public file', leaked.length === 0, leaked);
+const leaked = SECRET.filter((s) => new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[^\\n]{0,120}?["\']?(usd|frUsd)["\']?\\s*:').test(html));
+check('no supplier BMS row (a board beside its supplier price) is baked into the public file', leaked.length === 0, leaked);
 check('the picker reads the synced key instead', html.includes("Store.get('bms_pick')") && html.includes('supplierRows()'), 'missing');
 
 const srv = http.createServer((q, r) => {
