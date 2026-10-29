@@ -211,6 +211,16 @@ console.log('\n4b2. the Samsung 50S (2026-10-29): 5C continuous, 9C with the 80�
     return el('discharge-value').innerText.trim();
   });
   check('a restored 50S record recomputes the same', back === '300A/540A', back);
+  // It prints without its format (Daniel, 2026-10-29: "תוריד 21700"): the full name took the row down to 20px.
+  const size = () => p.evaluate(() => { const e = document.getElementById('cells-value'); return { text: e.innerText.trim(), px: parseFloat(getComputedStyle(e).fontSize) }; });
+  await build(volt, cap, classic, 'DALY 60A');
+  const e50 = await size();
+  await build(volt, cap, 'Samsung 21700 50S', 'DALY 60A');
+  const s50 = await size();
+  check('the label says Samsung 50S, at the size the 50E prints', s50.text === (SELFTEST ? 'never' : 'Samsung 50S') && Math.abs(s50.px - e50.px) <= 1 && s50.px >= 24, [s50, e50]);
+  await build(volt, cap, classic, 'DALY 60A');
+  const restored = await p.evaluate(() => { window.syncDropdownsFromElements([{ id: 'cells-value', innerHTML: 'Samsung 50S' }]); return document.getElementById('cells-select').value; });
+  check('a saved "Samsung 50S" label restores the Samsung 50S option', restored === 'Samsung 21700 50S', restored);
 }
 
 console.log('\n4c. the client details are not printed, and the form says so');
