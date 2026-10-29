@@ -3,8 +3,8 @@
 //   node test/test-cell-50s.mjs
 //   node test/test-cell-50s.mjs --selftest     (the 50S taken out of the repair calculator's cost)
 //
-// "רק כתא במלאי ובמחשבון, בלי סדרת סוללות חדשה באתר": $2.6 EXW, ₪9.39 landed; 5,000mAh, 72 g, 5C/9C.
-// What must hold: the repair calculator lays it out at 5Ah and costs it at ₪9.39, and quotes off that
+// "רק כתא במלאי ובמחשבון, בלי סדרת סוללות חדשה באתר": $2.6 EXW, ₪8.52 landed (no VAT since 2026-10-29; quoted off ₪9.39); 5,000mAh, 72 g, 5C/9C.
+// What must hold: the repair calculator lays it out at 5Ah and costs it at ₪8.52, and quotes off ₪9.39
 // same cost (it has no March anchor to mark up); the dims calculator measures its own body; the range
 // and charging calculators offer it; the cost window finds its sea cost by its code; and the 50SG, whose
 // name holds "50S", is not mistaken for it anywhere.
@@ -58,8 +58,8 @@ const rc = await page.evaluate(() => {
 check('the repair calculator offers the 50S', rc.opts.includes('21700-50s'), rc.opts);
 check('a 72V 30Ah of it is 20S6P, 120 cells, at 5,000mAh', rc.s50.mah === '5000' && /20S 6P \(120 תאים\)/.test(rc.s50.config), rc.s50);
 check('at 72 g a cell: ~9.1 kg', /9\.1/.test(rc.s50.weight), rc.s50.weight);
-// The same build and the same hours; only the cells differ: 120 × (₪9.39 − ₪7.77) = ₪194.4.
-check('"עלות לי" is its ₪9.39 a cell: ₪194 over the same build in 50SG', Math.abs(rc.s50.cost - rc.sg.cost - 194.4) <= 1, [rc.s50.cost, rc.sg.cost]);
+// The same build and the same hours; only the cells differ: 120 × (₪8.52 − ₪7.04) = ₪177.6 (no VAT since 2026-10-29).
+check('"עלות לי" is its ₪8.52 a cell: ₪178 over the same build in 50SG', Math.abs(rc.s50.cost - rc.sg.cost - 177.6) <= 1, [rc.s50.cost, rc.sg.cost]);
 check('and its quote costs more than the 50SG\'s, marked up from that same cost', rc.s50.price > rc.sg.price, [rc.s50.price, rc.sg.price]);
 
 // ---- the cost window, the dims, the range and the charging calculators ----
@@ -84,7 +84,7 @@ const rest = await page.evaluate(() => {
   out.sticker = STICKER_CELLS['21700-50s'];
   return out;
 });
-check('the cost window finds its sea cost by its code, ₪9.39, and the 50SG keeps ₪7.77', rest.sea === 9.39 && rest.unit === 9.39 && rest.sgSea === 7.77, rest);
+check('the cost window finds its sea cost by its code, ₪8.52, and the 50SG keeps ₪7.04', rest.sea === 8.52 && rest.unit === 8.52 && rest.sgSea === 7.04, rest);
 check('the dims calculator offers it, with its own body: 21.15 × 70.52 mm, 72 g, 5Ah', rest.dimOpt && rest.dim && rest.dim.dia === 21.15 && rest.dim.len === 70.52 && rest.dim.g === 72 && rest.dim.ah === 5, rest.dim);
 check('the calculators\' model carries it: 5Ah, 5C/9C, 72 g', rest.range && rest.range.ah === 5 && rest.range.cont === 5 && rest.range.peak === 9 && rest.range.g === 72 && rest.rangeOpt, rest.range);
 check('the charging calculator offers it, and a charge on it has no hole in it', rest.chargeOpt === true && rest.charge && rest.charge.ok, [rest.chargeOpt, rest.charge]);
