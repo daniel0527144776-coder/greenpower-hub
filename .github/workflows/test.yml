@@ -263,6 +263,11 @@ jobs:
       - name: DHS's ready Sur-Ron packs
         run: node test/test-dhs-packs.mjs
 
+      # BMS boards sold on their own (2026-10-29): a category per maker, the site's prices, 15% off for a
+      # dealer, and each board's cost found by the name it is sold under; no fixture holds a real price.
+      - name: BMS boards for sale
+        run: node test/test-bms-sale.mjs
+
       # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
       # reminder only after a week without it; a restore that adds what is missing, and gives back a count
       # only when ticked (2026-10-29).
