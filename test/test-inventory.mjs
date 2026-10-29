@@ -198,7 +198,8 @@ check('and it happens once — a second run adds nothing', auto.twice === 7, aut
 check('"out of stock" is still announced', /אזל/.test(auto.alert), auto.alert);
 check('"low stock" is not', !/מלאי נמוך/.test(auto.alert), auto.alert);
 
-// ---- 9. inside a category: chargers by voltage, cells by format, BMS by series ----
+// ---- 9. inside a category: chargers by voltage, cells by format, BMS by maker and then series ----
+// Since 2026-10-29 the groups fold, as the categories do; the sections below open every one, as he would.
 const grouped = await page.evaluate(() => {
   Store.set('inventory', [
     { id: 'g1', name: 'תאי EVE 21700 50E', qty: 10, cat: 'תאים' }, { id: 'g2', name: 'תאי EVE 18650 25P', qty: 5, cat: 'תאים' },
@@ -207,9 +208,10 @@ const grouped = await page.evaluate(() => {
   ]);
   navigateTo('inventory');
   ['תא', 'BMS', 'מטען'].forEach((c) => { if (!INV_OPEN.has(c)) toggleInvCat(encodeURIComponent(c)); });
-  return [...document.querySelectorAll('.inv-sub span:first-child')].map((x) => x.textContent.trim()).join(',');
+  for (let k = 0; k < 400; k++) { const g = document.querySelector('#inventoryList .inv-grp-fold[data-open="0"]'); if (!g) break; g.click(); }
+  return [...document.querySelectorAll('#inventoryList .inv-grp-name, #inventoryList .inv-sub span:first-child')].map((x) => x.textContent.trim()).join(',');
 });
-check('BMS by series, chargers by voltage, cells by format', grouped === '13S,24S,60V,72V,18650,21700', grouped);
+check('BMS by maker and then series, chargers by voltage, cells by format', grouped === 'DALY,13S,JK חכם,24S,60V,72V,18650,21700', grouped);
 
 // ---- 9b. new and second-hand never share a group (2026-10-09) ----
 // Daniel: "תעשה שיד 2 וחדש ב מלאי Bms לא יהיה מעורבב". Inside BMS the second-hand board sat in the
@@ -226,6 +228,7 @@ const cond = await page.evaluate((SELF) => {
   ]);
   navigateTo('inventory');
   ['BMS', 'מטען'].forEach((c) => { if (!INV_OPEN.has(c)) toggleInvCat(encodeURIComponent(c)); });
+  for (let k = 0; k < 400; k++) { const g = document.querySelector('#inventoryList .inv-grp-fold[data-open="0"]'); if (!g) break; g.click(); }
   // the old layout, for the selftest: second-hand rows back inside the new groups
   if (SELF) {
     document.querySelectorAll('#inventoryList [data-inv-cond]').forEach((h) => h.remove());
@@ -234,18 +237,20 @@ const cond = await page.evaluate((SELF) => {
     const old = rows.find((r) => /DALY 13S 60A \(יד 2\)/.test(r.querySelector('.list-item-title').textContent));
     if (nu && old) nu.after(old);
   }
-  const seq = [...document.querySelectorAll('#inventoryList [data-inv-cond], #inventoryList .inv-sub, #inventoryList .list-item-title')].map((el) =>
+  const seq = [...document.querySelectorAll('#inventoryList [data-inv-cond], #inventoryList .inv-grp-name, #inventoryList .inv-sub, #inventoryList .list-item-title')].map((el) =>
     el.hasAttribute('data-inv-cond') ? '#' + el.getAttribute('data-inv-cond')
       : el.classList.contains('inv-sub') ? '@' + el.firstElementChild.textContent.trim()
+      : el.classList.contains('inv-grp-name') ? '@' + el.textContent.trim()
       : el.textContent.trim());
-  // each series/voltage group, with the condition section it sits in
+  // each series/voltage group, with the condition section it sits in (a BMS maker heads its series
+  // groups and holds no row of its own, so the groups that hold rows are the ones counted)
   const groups = []; let condNow = null, g = null;
   for (const t of seq) {
     if (t[0] === '#') { condNow = t.slice(1); g = null; }
     else if (t[0] === '@') { g = { cond: condNow, head: t.slice(1), items: [] }; groups.push(g); }
     else if (g) g.items.push(t);
   }
-  return { seq, groups };
+  return { seq, groups: groups.filter((x) => x.items.length) };
 }, SELFTEST);
 const isUsedName = (n) => /יד\s*2|משומש/.test(n);
 const mixed = cond.groups.filter((g) => g.items.some(isUsedName) && g.items.some((n) => !isUsedName(n)));
@@ -631,6 +636,7 @@ const seed = await page.evaluate((SELF) => {
   // the rows on the stock page
   navigateTo('inventory');
   if (!INV_OPEN.has('ניקל')) toggleInvCat(encodeURIComponent('ניקל'));
+  for (let k = 0; k < 400; k++) { const g = document.querySelector('#inventoryList .inv-grp-fold[data-open="0"]'); if (!g) break; g.click(); }
   const lines = [...document.querySelectorAll('#inventoryList [data-nickel-spec]')].map((e) => e.textContent);
   const total = (document.querySelector('[data-inv-cat-total="ניקל"]') || {}).textContent || '';
   const qtys = [...document.querySelectorAll('#inventoryList [data-inv-qty]')].map((e) => e.textContent.trim());
