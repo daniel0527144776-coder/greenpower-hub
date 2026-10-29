@@ -46,6 +46,8 @@ const r = await page.evaluate(() => {
     { id: 'i3', name: 'תא 18650 EVE 26V', cat: 'תא', qty: 40 },
     { id: 'i4', name: 'תא 18650 Ampace JP30', cat: 'תא', qty: 20 },
     { id: 'i5', name: 'BMS 13S 60A', cat: 'BMS', qty: 4 },
+    { id: 'i6', name: 'תאי Samsung 21700 50S', cat: 'תא', qty: 300 },
+    { id: 'i7', name: 'תאי Tenpower 21700 50SG', cat: 'תא', qty: 1400 },
   ]);
   navigateTo('inventory');
   INV_OPEN.add('תא'); INV_OPEN.add('BMS'); renderInventory();
@@ -58,10 +60,10 @@ const r = await page.evaluate(() => {
     closeModal();
     return out;
   };
-  return { btns, pl: card('i1'), e: card('i2'), v26: card('i3'), jp: card('i4') };
+  return { btns, pl: card('i1'), e: card('i2'), v26: card('i3'), jp: card('i4'), s50: card('i6'), sg: card('i7') };
 });
 check('every cell with a known model gets a 📄 מפרט button, and the BMS none',
-  r.btns.length === 4 && r.btns.every((b) => /^openCellSheet\('i[1-4]'\)$/.test(b)), r.btns);
+  r.btns.length === 6 && r.btns.every((b) => /^openCellSheet\('i[1-467]'\)$/.test(b)), r.btns);
 check('the 50PL card: ≤7mΩ, 125A with its temperature cut-off, and the 2-second 180A pulse',
   /EVE INR21700\/50PL/.test(r.pl.title) && r.pl.rows['התנגדות פנימית'] === '≤7mΩ (AC 1kHz)'
   && /^125A \(25C\)/.test(r.pl.rows['פריקה מקסימלית'] || '') && /75°C/.test(r.pl.rows['פריקה מקסימלית'] || '')
@@ -73,6 +75,13 @@ check('the 50E card: ≤18mΩ, 15A (3C) "not for cycle life", 68.0±2.0 g, and w
 check('a cell with no sheet from its maker says so, and shows only the calculator\'s sizes, marked',
   r.v26.noSheet && /לא מדאטה-שיט/.test(r.v26.text) && r.v26.rows['קיבולת'] === '2.6Ah' && !('התנגדות פנימית' in r.v26.rows), r.v26);
 check('the JP30 card names its source, the maker\'s own page', /Ampace JP30/.test(r.jp.title) && /אתר היצרן Ampace/.test(r.jp.text) && r.jp.rows['זרם שיא (פולס)'] === '140A למשך 5 שניות', r.jp.rows);
+// The Samsung 50S (2026-10-29): the figures Daniel gave, from the maker through its distributors, and no cycle
+// life — the maker publishes none, and none is made up. "50S" is inside "50SG": each keeps its own card.
+check('the 50S card: 5,000/4,800mAh, 25A (5C) with no cut-off and 45A (9C) at 80°C, 72 g, no cycle figure, and its source',
+  /Samsung INR21700-50S/.test(r.s50.title) && r.s50.rows['קיבולת'] === '5,000mAh טיפוסי · מינימום 4,800mAh'
+  && /^25A \(5C\) רציף, בלי ניתוק/.test(r.s50.rows['פריקה מקסימלית'] || '') && /45A \(9C\).*80°C/.test(r.s50.rows['פריקה מקסימלית'] || '')
+  && r.s50.rows['משקל'] === 'כ-72 גרם' && r.s50.rows['מחזורים'] === 'היצרן לא מפרסם' && /מפיצים/.test(r.s50.text), r.s50.rows);
+check('and the 50SG keeps its own', /Tenpower INR21700-50SG/.test(r.sg.title), r.sg.title);
 check('no page errors', errs.length === 0, errs);
 check('no native dialogs', dialogs.length === 0, dialogs);
 

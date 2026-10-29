@@ -253,8 +253,14 @@ jobs:
       - name: A cell's datasheet card
         run: node test/test-cell-sheet.mjs
 
+      # The Samsung 50S (2026-10-29), everywhere a cell is chosen: the repair calculator at ₪9.39 a cell, the
+      # cost window, the dims, range and charging calculators, its card and its sticker; never the 50SG.
+      - name: The Samsung 50S cell
+        run: node test/test-cell-50s.mjs
+
       # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
-      # reminder only after a week without it; a restore that only adds what is missing.
+      # reminder only after a week without it; a restore that adds what is missing, and gives back a count
+      # only when ticked (2026-10-29).
       - name: The daily cloud backup
         run: node test/test-backup.mjs
 
