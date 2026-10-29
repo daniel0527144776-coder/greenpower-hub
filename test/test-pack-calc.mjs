@@ -88,7 +88,7 @@ const stack = await page.evaluate((SELF) => {
   return {
     field: !!document.getElementById('dimLayers'),
     moto40: r('אופנוע שליחויות 72V', 30),    // 20S6P: six across a 170mm tray, twenty rows along (seven took the
-                                              // last 0.4mm at Z 22.5 and no longer go in one layer at 22.6, 2026-10-22)
+                                              // last 0.4mm at Z 22.5 and no longer go in one layer at 22.6 or 22.7)
     moto50: r('אופנוע שליחויות 72V', 50),    // 200 cells: two layers, the box is 170mm deep
     fc1: r('Bomber FC-1', 50),                // a Bomber: built lying, never stacked standing
     scooter: r('Inokim OX', 50),              // 200 cells in a scooter tub: never stacked
@@ -146,10 +146,14 @@ check('the densest holder is tried first', rec.order[0] === 'diag-b', rec.order.
 check('a recommendation is shown', /מומלץ|אף מחזיק/.test(rec.html), rec.html.slice(0, 80).replace(/<[^>]*>/g, ''));
 // Densest FIRST is only right if it also has to fit: a recommendation that ignores whether the
 // pack goes in is just the first item of a list. Since 2026-10-04 each nickel is its own card.
-// One recommendation, on a card that fits: the densest of those that fit (since 2026-10-17 all three take
-// this tray, filled across its width, so it is ניקל Z).
-check('and it only recommends one that fits', rec.cards.length === 4 && rec.cards.filter((k) => /מומלץ/.test(k)).length === 1
-  && /^diag-b:✓ נכנס:.*מומלץ/.test(rec.cards.find((k) => k.startsWith('diag-b')) || '') && rec.cards.every((k) => !/✗/.test(k) || !/מומלץ/.test(k)), rec.cards);
+// One recommendation, on a card that fits: the first in the order that does. Since Z went to 22.7 (2026-10-24, the
+// same pitch as W) it takes six across this tray's 171mm laid straight, where W's zigzag takes more, so it is W.
+{
+  const firstFit = rec.order.find((h) => /^[^:]+:✓/.test(rec.cards.find((k) => k.startsWith(h + ':')) || ''));
+  check('and it only recommends one that fits: the first that fits, in the order', rec.cards.length === 4 && rec.cards.filter((k) => /מומלץ/.test(k)).length === 1
+    && !!firstFit && new RegExp('^' + firstFit + ':✓ נכנס:.*מומלץ').test(rec.cards.find((k) => k.startsWith(firstFit + ':')) || '')
+    && rec.cards.every((k) => !/✗/.test(k) || !/מומלץ/.test(k)), [rec.cards, firstFit]);
+}
 // The reason is not printed any more (2026-10-17, "פחות מלל"); it is the banner's title.
 check('a counted tray is still judged by the layout, not the count alone', /16S 8P · 128 תאים/.test(rec.ox) && /^⛔/.test(rec.ox.trim()) && /לאורך נכנסות/.test(rec.oxWhy), [rec.oxWhy, rec.ox.slice(0, 120)]);
 // Rows the whole width in every tray, the OX too (2026-10-17, night: "נחש בכל הכלים, גם OX"): 20S6P on the

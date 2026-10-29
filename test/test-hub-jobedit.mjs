@@ -416,6 +416,34 @@ console.log('\n12. the sticker opens FILLED from the repair or the sale it was o
   check('and the cell the TIER says, not the default',
     r3.cells === (SELFTEST ? 'EVE 21700 50E' : 'EVE 21700 50PL'), r3.cells);
   check('dated the day of the sale', r3.prodDate === '21/08/2026', r3.prodDate);
+
+  // The same from the catalogue, saved as the sale editor saves it: { name: '72V 35Ah', cat: 'סוללות אופניים - 72V
+  // PRO' }, the tier in the category only. Read from the names alone, 980 of the 989 battery lines named no cell
+  // and the label kept the last one it had (2026-10-24): after the 50PL above, a CLASSIC sale printed 50PL and
+  // 375A/540A. A power-tool line is the 25P, and a line that names no cell says so instead of keeping one.
+  const sale = (id, cat, name) => page.evaluate(({ id, cat, name }) => {
+    const row = name ? { cat, name } : PRICING.find((x) => x.cat === cat && /Ah/.test(x.name));
+    const orders = JSON.parse(localStorage.getItem('gp_orders') || '[]');
+    orders.push({ id, date: '2026-08-22T09:00:00.000Z', customer: 'לקוח דוגמה', phone: '050-0001234', status: 'שולם', total: 1000,
+                  items: [{ name: row.name, cat: row.cat, qty: 1, unit: 1000 }] });
+    localStorage.setItem('gp_orders', JSON.stringify(orders));
+    window.openStickerFor('order', id);
+  }, { id, cat, name });
+  const note = () => page.evaluate(() => document.getElementById('stickerFrame').contentWindow.document.getElementById('notification').innerText);
+  await sale('o-cat1', 'סוללות אופניים - 48V CLASSIC');
+  const c1 = await read();
+  check('a CLASSIC line from the catalogue, after a 50PL label: the 50E, not the last label\'s cell',
+    c1.cells === (SELFTEST ? 'EVE 21700 50PL' : 'EVE 21700 50E'), c1.cells);
+  await sale('o-cat2', 'סוללות אופניים - 72V PRO');
+  const c2 = await read();
+  check('a PRO line from the catalogue: the 50PL', c2.cells === 'EVE 21700 50PL', c2.cells);
+  await sale('o-cat3', 'סוללות כלי עבודה - 18V');
+  const c3 = await read();
+  check('a power-tool line: the EVE 25P it is built on', c3.cells === 'EVE 18650 25P', c3.cells);
+  await sale('o-cat4', 'מותאם אישית', 'סוללה מותאמת 48V 20Ah');
+  await read();
+  const n4 = await note();
+  check('a line that names no cell: the label says the cell is missing', /חסר:.*סוג תא/.test(n4), n4);
 }
 
 console.log('\n13. work that another job drags in is priced once, and only when it is not asked for');
