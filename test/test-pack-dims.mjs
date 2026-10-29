@@ -2,7 +2,7 @@
 //
 // It answers "will this pack go in that scooter", which is a question with a wrong answer
 // available: the previous version spaced cells at diameter + 1mm, i.e. 22mm for a 21700,
-// when every bracket in the Wellgo catalogue is 21.5-23mm. A 20-cell row therefore came out
+// when every bracket in the supplier's catalogue is 21.5-23mm. A 20-cell row therefore came out
 // up to 12mm short — small enough to look right and big enough to not fit.
 //
 //   node test/test-pack-dims.mjs
@@ -55,16 +55,17 @@ const read = async (opts) => page.evaluate((o) => {
 const TRAY = [{ id: 1, model: 'מבחן-גדול', l: 400, w: 200, h: 120 }, { id: 2, model: 'מבחן-קטן', l: 150, w: 90, h: 80 }];
 const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 
-// 16S4P = 64 cells, HIS way (2026-09-25): each 4P group across, sixteen rows along, on ניקל ב׳ —
-// the 22.6 diagonal since 2026-10-22 (19.57 between rows; 22.5 / 19.49 from 2026-10-04, 21.5 / 18.62 before).
-//   L = 15*19.57 + 21.15 + 3 + 22 (BMS at 60V) = 340     W = 3*22.6 + 21.15 + 3 + 11.3 = 103     H = 70.15 + 4 = 74
+// 16S4P = 64 cells, HIS way (2026-09-25): each 4P group across, sixteen rows along, on ניקל ב׳ (Z) —
+// the 22.7 diagonal since 2026-10-24, the same as W (19.66 between rows; 22.6 / 19.57 from 2026-10-22,
+// 22.5 / 19.49 from 2026-10-04, 21.5 / 18.62 before).
+//   L = 15*19.66 + 21.15 + 3 + 22 (BMS at 60V) = 341     W = 3*22.7 + 21.15 + 3 + 11.35 = 104     H = 70.15 + 4 = 74
 // The 11.25 is the HALF CELL (Daniel, 2026-10-04: "לתקן — להוסיף חצי תא"): rows 19.49 apart nest
 // only by sitting half a pitch over, so every other row sticks out by half a cell. It said 92.
 // The BMS allowance goes on the LENGTH since 2026-09-25; the height is the standing cells alone.
-// (The two Wellgo catalogue brackets this used — square and honeycomb 21.4 — left the list on
+// (The two catalogue brackets this used — square and honeycomb 21.4 — left the list on
 // 2026-09-25; he does not build on them.)
 const honey = await read({ ...base, holder: 'diag-b' });
-check('16S4P block, ניקל ב׳ 22.6: 340 x 103 x 74 (with the half cell)', honey.L === 340 && honey.W === 103 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
+check('16S4P block, ניקל ב׳ 22.7: 341 x 104 x 74 (with the half cell)', honey.L === 341 && honey.W === 104 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
 check('and it reports 64 cells', /64 תאים/.test(honey.text), honey.text.slice(0, 80));
 // Energy and weight were taken off the result on 2026-09-26 at his word; asserted absent.
 check('no energy or weight line', !/Wh|ק"ג|אנרגיה/.test(honey.text), honey.text.slice(0, 120));
@@ -75,7 +76,9 @@ const diagA = await read({ ...base, holder: 'diag-a' });
 const square = await read({ ...base, holder: 'square-23' });
 check('square is longer along the rows than the diagonal', square.L > diagA.L, `${square.L} vs ${diagA.L}`);
 check('the diagonal row spacing is the sin60 one', Math.abs((diagA.L - 22 - 24.15) - 15 * 22.7 * 0.866) <= 1.5, String(diagA.L));
-check('ניקל א׳ (W 22.7) is a little longer than ניקל ב׳ (22.6)', diagA.L - honey.L === 1, `${diagA.L} vs ${honey.L}`);
+// W and Z are one pitch since 2026-10-24 (Daniel: "כל המרחק בין חורים ב Z וגם ב W זה 22.7"): with no tray to
+// decide their ways, the same block. W was 1mm longer while Z was 22.6.
+check('ניקל א׳ (W) and ניקל ב׳ (Z), both 22.7, give the same block with no tray', diagA.L === honey.L && diagA.W === honey.W, `${diagA.L}x${diagA.W} vs ${honey.L}x${honey.W}`);
 check('the 23mm square bracket is longer than ניקל ב׳', square.L > honey.L, `${square.L} vs ${honey.L}`);
 const cell18 = await read({ ...base, cell: '18650-25p', holder: 'diag-b' });
 check('18650 is a shorter cell', cell18.H < honey.H, `${cell18.H} vs ${honey.H}`);
@@ -508,7 +511,8 @@ const nickels = await page.evaluate(() => {
     const m = document.querySelector('#dimResult .dim-nk.sel .dim-size').textContent.match(/(\d+) × (\d+) × (\d+)/); return [+m[1], +m[2]]; };
   return { a: run('diag-a'), b: run('diag-b'), sq: run('square-23') };
 });
-check('the two diagonal nickels give different blocks', nickels.a[0] !== nickels.b[0] || nickels.a[1] !== nickels.b[1], JSON.stringify(nickels));
+// The same block since 2026-10-24: one pitch, and no tray to lay them their two ways (FILL_WAY).
+check('the two diagonal nickels, both 22.7, give the same block with no tray', nickels.a[0] === nickels.b[0] && nickels.a[1] === nickels.b[1], JSON.stringify(nickels));
 check('and the 23mm square block is larger in area than either diagonal', nickels.sq[0]*nickels.sq[1] > nickels.a[0]*nickels.a[1] && nickels.sq[0]*nickels.sq[1] > nickels.b[0]*nickels.b[1], JSON.stringify(nickels));
 
 // The table checks itself: 16S and 20S in one tray should want roughly the same number of
@@ -825,7 +829,7 @@ const mx = await page.evaluate((SELF) => {
 }, SELFTEST);
 // Talaria 385 x 171, no BMS allowance: since 2026-10-17, filled across its width, it has a maximum at both.
 check('the result says the most the tray takes with this nickel, per voltage', /מקסימום\s*60V: 16S\d+P · \d+Ah\s*72V: 20S\d+P · \d+Ah/.test(mx.res), mx.res.slice(0, 400));
-check('and each nickel\'s card says how much it takes', mx.cards.length === 4 && /^ניקל W — 22\.7/.test(mx.cards[0]) && /^ניקל Z — 22\.6/.test(mx.cards[1]) && /^ניקל H — 22\.5/.test(mx.cards[2]) && /^ניקל H — 23/.test(mx.cards[3])
+check('and each nickel\'s card says how much it takes', mx.cards.length === 4 && /^ניקל W — 22\.7/.test(mx.cards[0]) && /^ניקל Z — 22\.7/.test(mx.cards[1]) && /^ניקל H — 22\.5/.test(mx.cards[2]) && /^ניקל H — 23/.test(mx.cards[3])
   && mx.cards.every((k) => /מקסימום\s*60V: (16S\d+P · \d+Ah|—)\s*72V: (20S\d+P · \d+Ah|—)/.test(k) || /מקס׳ 20S\d+P · \d+Ah/.test(k)), mx.cards.map((k) => k.slice(0, 120)));
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
 check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /385×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
@@ -1027,7 +1031,7 @@ check('on its own nickel the Plus card is his 165 a side, row for row', lying.pl
 check('the Plus has a card per nickel, the chosen one drawn inside the frame\'s outline', lying.plusCards === 'diag-a:0:0 diag-b:0:0 square-225:0:0 square-23:165:1', lying.plusCards);
 check('the regular Bomber in 18650 on the 19 square is his blue 20S17P: 170 a side, 340', lying.regShape.cells === 170 && /170 תאים × 2 ערימות = 340/.test(lying.reg18) && /20S17P/.test(lying.reg18), [lying.regShape, lying.reg18.slice(0, 160)]);
 check('a Bomber frame too narrow for a lying cell says so', /צר מדי לתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
-// 20S7P since Z went to 22.6 (2026-10-22); at 22.5 the 410mm took an eighth group by 0.3mm.
+// 20S7P since Z went to 22.6 (2026-10-22), and at 22.7 (2026-10-24); at 22.5 the 410mm took an eighth group by 0.3mm.
 check('the FC-1 (90 across, his tape) fits a 72V build lying on ניקל ב׳', /נכנס עד: 72V 20S7P · 35Ah|נכנסת — 20S7P · 35Ah, 140 תאים · המקסימום/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
 // 2026-10-04: "זה לא מעניין שתכתוב מה בניתי" — his builds are the frame's shape, not a list.
 check('no Bomber page lists his builds', !/הסוללות שבנית|הסוללה הכחולה|הסוללה הזהובה|הסוללה הירוקה|bomber-build/.test(lying.plusHtml + lying.regular + lying.fc1), lying.regular.slice(0, 120));
@@ -1059,7 +1063,8 @@ check('the Plus is not judged against its frame standing (no "does not fit" on h
 // 26Ah at the cell's rated 2.6Ah. 16S12P still does not go in. The 21700 is left on his method.
 // Since 2026-10-18 ("כמה תאים נכנסים יותר בox ב18650 בצורת z או h") the OX in 18650 is filled as the 21700 is:
 // straight rows across the whole width (A), on into the narrow part, the BMS after the cells. With this
-// check's 22mm allowance that is 16S11P on H 19 and 16S13P on Z 18.5 (16S12P and 16S14P on his own 14mm).
+// check's 22mm allowance that is 16S11P on H 19 and 16S13P on Z 18.5 (16S11P and 16S14P on his own 14mm since the
+// holder's rim was counted before the bare cells, 2026-10-24; 16S12P on H before).
 // --selftest lays the 18650 without the narrow part.
 const ox18 = await page.evaluate((SELF) => {
   const realFit = hisFit;
@@ -1309,7 +1314,8 @@ const oxw = await page.evaluate((SELF) => {
     const tub = cellTub(tb, dimExtraFor(V, v)), S = seriesForV(V);
     for (const h of ['diag-a', 'diag-b', 'square-23']) {
       const mp = maxPFor(v, tub, 21700, h, V, c), [p, rp] = DIM_PITCH[21700][h];
-      const lay = hisFit(tub, S, mp, 1, p, rp, c.dia);
+      // the holder's key: W and Z share a pitch since 2026-10-24, so the pair no longer names the way
+      const lay = hisFit(tub, S, mp, 1, p, rp, c.dia, null, h);
       out.orient.push(V + h + ':' + lay.orient); out.max.push(V + h + ':' + mp);
       if (V === 60) out.across.push(h + ':' + (lay.tail ? lay.tail.across + '/' + lay.tail.acrossNarrow : '-'));
       if (!mp || !lay.tail) { out.outside.push(V + h + ':none'); continue; }
@@ -1437,7 +1443,9 @@ check('…the length line from the first cell to the end of the BMS, and the bot
 check('the OX 16S8P on H 22.5: the narrow part has cells, and the room left is at B−', o.n === 128 && o.inNarrow > 0 && o.roomAtStart > 10, o);
 // flush, no gap (the same day: "שה-BMS יהיה ממש אחרי התאים. לא שיהיה מרחק")
 check('…and the BMS sits flush against the last cells', o.bmsGap != null && Math.abs(o.bmsGap) < 0.01, o);
-check('the OX in 18650 at 60V: 16S14P on Z and 16S12P on H, the narrow part filled', drawn.m18.z === 14 && drawn.m18.h === 12 && drawn.m18.cells === 224 && drawn.m18.inNarrow > 0, drawn.m18);
+// H 16S11P since 2026-10-24: the first bare cell sits past the holder's rim (DIM_WALL), not 0.3mm off its last cell
+// (Daniel: "כן, לחשב את השפה"). It was 16S12P.
+check('the OX in 18650 at 60V: 16S14P on Z and 16S11P on H, the narrow part filled', drawn.m18.z === 14 && drawn.m18.h === 11 && drawn.m18.cells === 224 && drawn.m18.inNarrow > 0, drawn.m18);
 check('…its nickels named Z, W and H', drawn.m18.names === 'ניקל Z — 18.5,ניקל W — 18.5,ניקל H — 19,מותאם אישית ↓', drawn.m18.names);
 
 // ---- 2026-10-18, later: W for the 18650, and the 18650 filled in every tray ----
@@ -1458,10 +1466,10 @@ const w18 = await page.evaluate((SELF) => {
   FILL_WAY['diag-185w'] = realWay; trayFill = realFill;
   return { ox, zero, ways };
 }, SELFTEST);
-check('the OX in 18650 at 60V: Z 16S14P, W 16S13P, H 16S12P', w18.ox.z === 14 && w18.ox.w === 13 && w18.ox.h === 12, w18.ox);
+check('the OX in 18650 at 60V: Z 16S14P, W 16S13P, H 16S11P (the holder\'s rim, 2026-10-24)', w18.ox.z === 14 && w18.ox.w === 13 && w18.ox.h === 11, w18.ox);
 check('W is the 18.5 nickel the other way round: a zigzag across (B), Z straight across (A)', w18.ways.w === 'B' && w18.ways.z === 'A', w18.ways);
 
-// ---- his nickel is a ladder of two rows (WELLGO's 2S strips): a group is one straight row ----
+// ---- his nickel is a ladder of two rows (the supplier's 2S strips): a group is one straight row ----
 // "הציורים של הניקל שלך זה לא הניקל שלי ... זה כאילו מקושקש" and, shown a row per group, "כן, ככה"; a group
 // wider than the tray runs on ("הקבוצה ממשיכה לשורה הבאה"). --selftest fills every tray the whole width again.
 const ladder = await page.evaluate((SELF) => {
@@ -1487,7 +1495,7 @@ const ladder = await page.evaluate((SELF) => {
   return out;
 }, SELFTEST);
 check('the OX 16S7P on H 22.5: every group one straight row, every row one group', ladder.h7.oneEach && ladder.h7.inOne, ladder.h7);
-check('…20S6P on Z 22.6 and 16S8P of 18650 on Z 18.5 the same', ladder.z6.oneEach && ladder.z6.inOne && ladder.z18.oneEach && ladder.z18.inOne, [ladder.z6, ladder.z18]);
+check('…20S6P on Z 22.7 and 16S8P of 18650 on Z 18.5 the same', ladder.z6.oneEach && ladder.z6.inOne && ladder.z18.oneEach && ladder.z18.inOne, [ladder.z6, ladder.z18]);
 check('the Zero 11X at 60V takes 16S13P on W (16S12P on Z), the whole width filled; the Zero 10X at 72V 20S9P on W',
   w18.zero.z11w === 13 && w18.zero.z11z === 12 && w18.zero.z10w72 === 9, w18.zero);
 
@@ -1536,7 +1544,208 @@ const names = await page.evaluate((SELF) => {
 }, SELFTEST);
 check(`every holder's name, list label and option carry the pitch it is worked out at (${names.shown} options)`,
   names.off.length === 0 && names.shown >= 7, names.off);
-check('…so the worker\'s label for a block on Z says 22.6', /ניקל Z \(22\.6\)/.test(names.line) && !/22\.5/.test(names.line), names.line);
+check('…so the worker\'s label for a block on Z says 22.7', /ניקל Z \(22\.7\)/.test(names.line) && !/22\.[56]/.test(names.line), names.line);
+
+// ==== 2026-10-24, the review of the dimensions calculator: seven fixes, each with what it was ====
+// On a fresh page: the checks above leave their --selftest breakage behind them, and each of these is to fail on its own.
+await page.goto('http://127.0.0.1:4196/index.html', { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(400);
+
+// A snake's label says its rows. The OX at 72V on W, 20S7P, is laid in rows of 8 the whole width, the groups running
+// on from row to row, and the worker's label said "רוחב 7P" over it. --selftest reads the plan as no snake.
+const snk = await page.evaluate((SELF) => {
+  const realFit = hisFit;
+  if (SELF) hisFit = (...a) => { const l = realFit(...a); return l && l.tail && l.tail.snake ? { ...l, tail: { ...l.tail, snake: false } } : l; };
+  document.getElementById('dimCell').value = '21700-50e';
+  useVehiclePack('Inokim OX', 72); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 35; calcPackDims();
+  const s = document.querySelector('#dimResult .dim-nk.sel');
+  const out = { snake: s && s.dataset.snake, across: s && s.dataset.across, line: (dimLast && dimLast.line) || '' };
+  // and a build whose groups each fill a row keeps its line
+  useVehiclePack('Inokim OX', 60); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 40; calcPackDims();
+  out.plain = (dimLast && dimLast.line) || '';
+  hisFit = realFit; clearDimVehicle();
+  return out;
+}, SELFTEST);
+check('the label of a snake says its rows: the OX 20S7P on W, "שורות של 8 · קבוצות 7P ממשיכות משורה לשורה"',
+  /^שורות של 8 · קבוצות 7P ממשיכות משורה לשורה · אורך 20S/.test(snk.line) && !/רוחב 7P/.test(snk.line), snk);
+check('…and a build a row per group keeps "רוחב 8P · אורך 16S" (the OX 16S8P on W)', /^רוחב 8P · אורך 16S/.test(snk.plain), snk.plain);
+
+// "מקסימום" for another voltage is that voltage's own. The OXO at 60V on Z said "72V: 20S6P", worked with 60V's
+// 22mm of BMS, where its 72V page, with 26mm, says 20S5P. A number he typed holds for every voltage, as it does for
+// the build. --selftest gives every voltage the allowance of the voltage on the page.
+const mxv = await page.evaluate((SELF) => {
+  const realAllow = bmsAllowance;
+  if (SELF) bmsAllowance = (V, v) => realAllow(+document.getElementById('dimV').value, v);
+  const read = (m, V, h, typed) => {
+    document.getElementById('dimCell').value = '21700-50e';
+    useVehiclePack(m, V); document.getElementById('dimHolder').value = h;
+    if (typed != null) { document.getElementById('dimExtra').value = String(typed); dimExtraTouched = true; }
+    calcPackDims();
+    const t = (document.querySelector('#dimResult .dim-nk.sel') || {}).textContent || '';
+    const g = (vv) => (t.match(new RegExp(vv + 'V: (\\d+S\\d+P|—)')) || [])[1] || null;
+    const r = { 60: g(60), 72: g(72) };
+    dimExtraTouched = false; dimExtraAuto = null;
+    return r;
+  };
+  const out = {};
+  for (const [m, h] of [['Inokim OXO', 'diag-b'], ['Inokim OXO', 'diag-a'], ['Zero 11X', 'square-23'], ['Nami Klima', 'diag-a']]) {
+    out[m + ' ' + h] = { on60: read(m, 60, h), on72: read(m, 72, h) };
+  }
+  out.typed = read('Inokim OXO', 60, 'diag-b', 22);
+  bmsAllowance = realAllow; clearDimVehicle();
+  return out;
+}, SELFTEST);
+{
+  const off = Object.entries(mxv).filter(([k]) => k !== 'typed').filter(([, r]) => r.on60[72] !== r.on72[72] || r.on72[60] !== r.on60[60]);
+  check('"מקסימום" for 60V and 72V says the same on both pages (OXO Z and W, Zero 11X H, Nami Klima W)', off.length === 0, off);
+  check('…the OXO on Z: 72V 20S5P on its 60V page too', mxv['Inokim OXO diag-b'].on60[72] === '20S5P', mxv['Inokim OXO diag-b']);
+  check('…and with his own 22mm typed on the 60V page, 72V is worked with it: 20S6P', mxv.typed[72] === '20S6P', mxv.typed);
+}
+
+// "הכי גדול" takes the BMS where the verdict takes it. The Ultra Bee carries it on top; with 25mm typed it came off
+// the length for "הכי גדול" and off the height for the verdict, so it offered 20S12P in two layers, and tapping it
+// gave "⛔ לא נכנס". Wherever it is offered — every tray, both cells, 60V and 72V, with 25mm typed — tapping it
+// is a build that goes in. --selftest takes the allowance off the length for "הכי גדול" alone.
+const bestOk = await page.evaluate((SELF) => {
+  const realBest = tubBest;
+  if (SELF) tubBest = (v, V, c, fmt, extra) => realBest(v && v.bmsTop ? { ...v, bmsTop: false } : v, V, c, fmt, extra);
+  const bad = [];
+  let offered = 0, ub = null;
+  for (const v of VEHICLE_PACKS.filter((x) => tubOf(x) && !isBomber(x) && !x.case)) {
+    for (const cell of ['21700-50e', '18650-35v']) for (const V of [60, 72]) {
+      document.getElementById('dimCell').value = cell;
+      useVehiclePack(v.m, V);
+      document.getElementById('dimExtra').value = '25'; dimExtraTouched = true;
+      dimAhPending = 400; calcPackDims();
+      const b = dimBest ? { ...dimBest } : null;
+      if (b) {
+        offered++;
+        applyDimBest();
+        const green = !!document.querySelector('#dimResult .dim-ok');
+        if (v.bmsTop && cell === '21700-50e' && V === 72) ub = b.S + 'S' + b.P + 'P ×' + b.layers + (green ? ' ✅' : ' ⛔');
+        if (!green) bad.push(`${v.m} ${cell} ${V}V: ${b.S}S${b.P}P ${b.h} ×${b.layers}`);
+      }
+      dimExtraTouched = false; dimExtraAuto = null;
+    }
+  }
+  tubBest = realBest; document.getElementById('dimCell').value = '21700-50e'; clearDimVehicle();
+  return { bad, offered, ub };
+}, SELFTEST);
+check(`wherever "הכי גדול" is offered with 25mm typed, tapping it is a build that goes in (${bestOk.offered} offers)`,
+  bestOk.offered >= 20 && bestOk.bad.length === 0, bestOk.bad);
+check('…the Ultra Bee at 72V: 20S6P in one layer, the BMS on top', bestOk.ub === '20S6P ×1 ✅', bestOk.ub);
+
+// A group may run on into the next stack (Daniel: "כן, מותר"). 13S25P takes 325 of the Plus's 330 places on H, but
+// a stack holds 165 and seven whole groups of 25 are 175, so the card drew no groups and the label none, only "צד
+// אחד". The series now runs on: 163 cells in the first stack, 162 in the second, group 7 split 13 and 12. A build
+// whose stacks take whole groups is as it was. --selftest takes the running on out.
+const span = await page.evaluate((SELF) => {
+  const realSpan = SELF ? bomberSpan : null;
+  if (SELF) bomberSpan = () => null;
+  const one = (V, ah) => {
+    document.getElementById('dimCell').value = '21700-50e';
+    useVehiclePack('Bomber Plus 15kW', V); dimAhPending = ah; calcPackDims();
+    const pl = dimLast && dimLast.plan, cells = (pl && pl.cells) || [];
+    const byG = {};
+    for (const c of cells) if (c.g >= 0) byG[c.g + 1] = (byG[c.g + 1] || 0) + 1;
+    return { holder: document.getElementById('dimHolder').value, rows: !!(pl && pl.rowsLab), byG, empty: cells.filter((c) => c.empty).length,
+      foot: (dimLast && dimLast.foot) || '', card: !!document.querySelector('#dimResult .dim-nk.sel svg .pack-nickel') };
+  };
+  const out = { s13: one(48, 125), s23: one(84, 70), whole: one(72, 80) };
+  if (SELF) bomberSpan = realSpan;
+  clearDimVehicle();
+  return out;
+}, SELFTEST);
+{
+  const s = span.s13, full = [1, 2, 3, 4, 5, 6].every((g) => s.byG[g] === 25);
+  check('the Plus 13S25P on H: the first stack drawn in its groups, 1–6 whole and 13 of group 7, 2 places empty',
+    s.holder === 'square-23' && s.rows && s.card && full && s.byG[7] === 13 && !s.byG[8] && s.empty === 2, s);
+  check('…and the label says where each stack runs and how group 7 is split',
+    /ערימה 1: 1–7 · ערימה 2: 7–13 · קבוצה 7: 13 בערימה 1 ו-12 בערימה 2/.test(s.foot), s.foot);
+  check('the Plus 23S14P at 84V: group 12 split 7 and 7', span.s23.rows && /ערימה 1: 1–12 · ערימה 2: 12–23 · קבוצה 12: 7 בערימה 1 ו-7 בערימה 2/.test(span.s23.foot), span.s23);
+  check('…and 20S16P, ten whole groups a stack, as it was: no group split',
+    span.whole.rows && /ערימה 1: 1–10 · ערימה 2: 11–20/.test(span.whole.foot) && !/קבוצה \d+: \d+ בערימה/.test(span.whole.foot), span.whole.foot);
+}
+
+// The first bare cell sits past the holder's rim (Daniel: "כן, לחשב את השפה"): DIM_WALL off the last cell in the
+// holder, as a cell sits off a tray's wall. It was BARE_GAP, 0.3mm, as if the holder ended at that cell's edge — and
+// six maxima came out a P too high, the OX's 18650 on H at 60V among them (16S12P; 16S11P). --selftest moves the
+// bare cells back by the difference.
+const rim = await page.evaluate((SELF) => {
+  const realFill = trayFill;
+  if (SELF) trayFill = (...a) => {
+    const t = realFill(...a);
+    return t ? { ...t, pts: t.pts.map((q) => (q.bare ? { ...q, x: q.x - (DIM_WALL - BARE_GAP) } : q)) } : t;
+  };
+  document.getElementById('dimCell').value = '21700-50e';
+  useVehiclePack('Inokim OX', 72); document.getElementById('dimHolder').value = 'diag-a'; dimAhPending = 35; calcPackDims();
+  const pl = dimLast.plan, r = pl.dia / 2;
+  const bare = pl.cells.filter((c) => c.bare), held = pl.cells.filter((c) => !c.bare);
+  const gap = bare.length ? Math.min(...bare.map((c) => c.x - r)) - Math.max(...held.map((c) => c.x + r)) : null;
+  trayFill = realFill; clearDimVehicle();
+  return { bare: bare.length, gap: gap == null ? null : +gap.toFixed(2), wall: DIM_WALL };
+}, SELFTEST);
+check('the OX 20S7P on W: the first bare cell is the holder\'s rim (1.5mm) past the last cell in it', rim.bare > 0 && rim.gap != null && rim.gap >= rim.wall - 0.01, rim);
+
+// The OX's tray is his own measure: "✓ נמדד" in the hub, and its sizes stay off the site (Daniel: "רק בלוח
+// הבקרה"; audit-vehicle-data checks the site's side). The Plus's frame, from the maker's drawing, is shown on its page —
+// the comment on `frame` said so, and since v385 it was shown nowhere. --selftest takes both marks off.
+const marks = await page.evaluate((SELF) => {
+  const ox = VEHICLE_PACKS.find((v) => v.m === 'Inokim OX'), plus = VEHICLE_PACKS.find((v) => v.frame);
+  const saved = { tub: ox.tub, src: ox.src, frame: plus && plus.frame };
+  if (SELF) { ox.tub = '425×165×65 מ"מ + צר 60×140'; ox.src = 'AI'; if (plus) plus.frame = ''; }
+  document.getElementById('dimCell').value = '21700-50e';
+  useVehiclePack('Inokim OX', 72);
+  const chip = ((document.getElementById('dimVehChip') || {}).textContent || '').replace(/\s+/g, ' ');
+  let frame = '';
+  if (plus) { useVehiclePack(plus.m, 72); frame = ((document.querySelector('#dimResult .dim-frame') || {}).textContent || ''); }
+  Object.assign(ox, { tub: saved.tub, src: saved.src }); if (plus) plus.frame = saved.frame;
+  clearDimVehicle();
+  return { chip, hubOnly: ox.hubOnly === true, src: ox.src, frame, plus: plus && plus.m };
+}, SELFTEST);
+check('the OX: "✓ נמדד" on its chip, src נמדד, and kept in the hub (hubOnly)', /✓ נמדד/.test(marks.chip) && marks.src === 'נמדד' && marks.hubOnly, marks);
+check('the Bomber Plus page shows its frame from the maker\'s drawing', marks.plus === 'Bomber Plus 15kW' && /^שרטוט היצרן: מלבן פנימי 370×200/.test(marks.frame), marks);
+
+// A smaller Bomber build is a uniform rectangle in each stack (Daniel, 2026-10-25: "אם זה סוללות קטנות יותר ... אני
+// מעדיף ששתי הערימות יהיו אחידות, שיהיו מרובע ... אם זה לא אפשרי, תעשה את הצורה המיוחדת"). The Plus at 72V 20S10P
+// on H 23 is 10 rows of 10, a group to a row, nothing left empty; the regular Bomber in 18650, 20S7P on H 19, 10 of
+// 7; on W the rows are the nickel's own, half a pitch over every other one. His 20S16P takes no rectangle and keeps
+// the frame's shape. --selftest takes the rectangle away.
+const rect = await page.evaluate((SELF) => {
+  const realRect = SELF ? bomberRect : null;
+  if (SELF) bomberRect = () => null;
+  const one = (m, V, P, h, cell) => {
+    document.getElementById('dimCell').value = cell;
+    useVehiclePack(m, V); document.getElementById('dimHolder').value = h;
+    dimAhPending = P * DIM_CELLS[cell].ah; calcPackDims();
+    const pl = (dimLast && dimLast.plan) || {}, cells = pl.cells || [];
+    const rows = [...new Set(cells.map((c) => Math.round(c.y)))].sort((a, b) => b - a).map((y) => cells.filter((c) => Math.round(c.y) === y).sort((a, b) => a.x - b.x));
+    return { n: cells.length, empty: cells.filter((c) => c.empty).length,
+      rows: rows.map((r) => r.length).join(','),
+      groupRows: rows.every((r, i) => r.every((c) => c.g === i)),
+      x0: rows.map((r) => +r[0].x.toFixed(1)), lab: (pl.rowsLab || []).map((r) => r.n).join(','), foot: (dimLast && dimLast.foot) || '' };
+  };
+  const out = { plus10: one('Bomber Plus 15kW', 72, 10, 'square-23', '21700-50e'),
+    reg7: one('Bomber רגיל 3-12kW', 72, 7, 'sq-19', '18650-25p'),
+    w8: one('Bomber Plus 15kW', 72, 8, 'diag-a', '21700-50e'),
+    plus16: one('Bomber Plus 15kW', 72, 16, 'square-23', '21700-50e') };
+  if (SELF) bomberRect = realRect;
+  document.getElementById('dimCell').value = '21700-50e'; clearDimVehicle();
+  return out;
+}, SELFTEST);
+{
+  const ten = '10,10,10,10,10,10,10,10,10,10';
+  const p = rect.plus10;
+  check('the Plus 20S10P on H 23: a rectangle of 10 rows of 10 in each stack, a group to a row, none empty, one column window',
+    p.n === 100 && p.rows === ten && p.lab === ten && p.groupRows && p.empty === 0 && new Set(p.x0).size === 1, p);
+  check('…and the label says so: "מלבן 10 שורות של 10 בכל ערימה", stacks 1–10 and 11–20', /מלבן 10 שורות של 10 בכל ערימה/.test(p.foot) && /ערימה 1: 1–10 · ערימה 2: 11–20/.test(p.foot), p.foot);
+  const r = rect.reg7;
+  check('the regular Bomber in 18650, 20S7P on H 19: 10 rows of 7, a group to a row', r.n === 70 && r.rows === '7,7,7,7,7,7,7,7,7,7' && r.groupRows && r.empty === 0 && /מלבן 10 שורות של 7/.test(r.foot), r);
+  const w = rect.w8, half = 22.7 / 2;
+  check('on W the rectangle is the nickel\'s rows: 10 of 8, every other one half a pitch over',
+    w.n === 80 && w.rows === '8,8,8,8,8,8,8,8,8,8' && w.groupRows && w.x0.every((x, i) => Math.abs(x - w.x0[0] - (i % 2 ? half : 0)) < 0.2), w);
+  check('his 20S16P takes no rectangle and keeps the frame\'s shape, row for row', rect.plus16.rows === '16,16,17,17,17,17,17,16,13,11,8' && !/מלבן/.test(rect.plus16.foot), rect.plus16);
+}
 
 await browser.close();
 srv.close();
