@@ -25,9 +25,10 @@
 // And it is paid after the check, not in advance (2026-10-23, Daniel: "האבחון ב-₪100 משולם רק אחרי
 // הבדיקה, לא מראש"): its quote asked for a ₪50 deposit "לתחילת עבודה" and a build's lead time from it.
 // A quote of the diagnosis alone asks for nothing up front and gives its answer time; a battery's quote
-// still asks for its deposit, and so does a capacity test's, which is not set off against the repair. A
-// paid diagnosis offers no deposit to the same-money check (payCandidates). --selftest also counts every
-// sale as not a diagnosis.
+// still asks for its deposit. The capacity test is paid after the check too (2026-10-24, Daniel: "כמו האבחון:
+// אחרי הבדיקה"); its quote asked for half up front. It promises no set-off against the repair, which is the
+// diagnosis's alone. A paid inspection offers no deposit to the same-money check (payCandidates). --selftest
+// also counts every sale as not an inspection.
 import { chromium } from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -50,9 +51,9 @@ if (SELFTEST) {
   const INSP = "  if (isService && INSPECTION_ITEM.test(item.name || '')) return 0;\n";
   check('[selftest] the inspection rule could be taken out', html.split(INSP).length === 2);
   html = html.replace(INSP, () => '');
-  // …and a diagnosis asking for a deposit again
-  const ONLY = "  return items.length > 0 && items.every((it) => DIAGNOSIS_ITEM.test(String(it.name || '')));\n";
-  check('[selftest] the diagnosis-only rule could be taken out', html.split(ONLY).length === 2);
+  // …and an inspection asking for a deposit again
+  const ONLY = "  return items.length > 0 && items.every((it) => INSPECTION_ITEM.test(String(it.name || '')));\n";
+  check('[selftest] the inspection-only rule could be taken out', html.split(ONLY).length === 2);
   html = html.replace(ONLY, () => '  return false;\n');
 }
 
@@ -263,6 +264,8 @@ const I = await page.evaluate(() => {
   const quotedBat = sell('050-0001011', [battery], 'הצעה');
   const paidDiag = sell('050-0001012', [diag], 'שולם');
   const quotedCap = sell('050-0001013', [cap], 'הצעה');
+  const paidCap = sell('050-0001014', [cap], 'שולם');
+  const quotedBoth = sell('050-0001015', [diag, cap], 'הצעה');
   const card = (o) => customerLedger({ name: o.customer, phone: o.phone }).rows.find((r) => r.id === o.id);
   const entry = (o) => warrantyEntries().find((e) => e.id === o.id);
   const bot = (o) => (botIndex().orders.find((x) => x.p === o.phone) || {}).we;
@@ -271,8 +274,9 @@ const I = await page.evaluate(() => {
     alone: { entry: !!entry(alone), card: card(alone) && card(alone).warrantyEnd, bot: bot(alone), quote: buildQuoteText(alone) },
     mixed: { entry: entry(mixed) && new Date(entry(mixed).end).toLocaleDateString('he-IL'), twelve: twelve.toLocaleDateString('he-IL'),
       quote: buildQuoteText(mixed) },
-    quoted: buildQuoteText(quoted), quotedBat: buildQuoteText(quotedBat), quotedCap: buildQuoteText(quotedCap),
-    paidParts: payCandidates().filter((c) => c.date === paidDiag.date && c.total === Math.round(paidDiag.total)).map((c) => c.what) };
+    quoted: buildQuoteText(quoted), quotedBat: buildQuoteText(quotedBat), quotedCap: buildQuoteText(quotedCap), quotedBoth: buildQuoteText(quotedBoth),
+    paidParts: payCandidates().filter((c) => c.date === paidDiag.date && c.total === Math.round(paidDiag.total)).map((c) => c.what),
+    paidCapParts: payCandidates().filter((c) => c.date === paidCap.date && c.total === Math.round(paidCap.total)).map((c) => c.what) };
 });
 check('the catalogue has the two inspections, and the rule names exactly them',
   !I.missing && I.none.length === 2 && I.none.some((n) => /^אבחון/.test(n)) && I.none.some((n) => /^בדיקת קיבולת/.test(n)), [I.none, I.missing]);
@@ -283,17 +287,22 @@ if (!I.missing) {
   check('…nor under warranty on the customer\'s card, nor in the bot', !I.alone.card && !I.alone.bot, [I.alone.card, I.alone.bot]);
   const lines = I.alone.quote.split('\n').filter((l) => /אחריות/.test(l));
   check('…and its message promises no warranty, nor calls itself one', lines.length === 0, lines);
-  check('a diagnosis quoted alone asks for nothing up front: no deposit, paid after the check',
-    !/מקדמה/.test(I.quoted) && /\*התשלום:\* אחרי הבדיקה/.test(I.quoted) && /התשלום אחרי הבדיקה\./.test(I.quoted), I.quoted.split('\n').filter((l) => /תשלום|מקדמה|יתרה/.test(l)));
+  check('a diagnosis quoted alone asks for nothing up front: no deposit, paid after the check, set off against the repair',
+    !/מקדמה/.test(I.quoted) && /\*התשלום:\* אחרי הבדיקה, ומתקזז בתיקון/.test(I.quoted) && /התשלום אחרי הבדיקה\./.test(I.quoted), I.quoted.split('\n').filter((l) => /תשלום|מקדמה|יתרה/.test(l)));
   check('…and gives the diagnosis\'s answer time, not a build\'s lead time from a deposit',
     /עד 2 ימי עסקים מרגע שהסוללה אצלנו/.test(I.quoted) && !/מרגע קבלת המקדמה/.test(I.quoted), I.quoted.split('\n').filter((l) => /ימי עסקים/.test(l)));
   check('a battery quoted still asks for its deposit', /מקדמה לתחילת עבודה/.test(I.quotedBat) && /מרגע קבלת המקדמה/.test(I.quotedBat),
     I.quotedBat.split('\n').filter((l) => /מקדמה/.test(l)));
-  check('a capacity test quoted alone is as before: its deposit, and no promise that it is set off',
-    /מקדמה לתחילת עבודה/.test(I.quotedCap) && !/מתקזז/.test(I.quotedCap) && !/התשלום:\* אחרי הבדיקה/.test(I.quotedCap),
+  check('a capacity test quoted alone is paid after the check too: no deposit, and no promise that it is set off',
+    !/מקדמה/.test(I.quotedCap) && /\*התשלום:\* אחרי הבדיקה\.$/m.test(I.quotedCap) && /התשלום אחרי הבדיקה\./.test(I.quotedCap) && !/מתקזז/.test(I.quotedCap),
     I.quotedCap.split('\n').filter((l) => /תשלום|מקדמה|מתקזז/.test(l)));
+  check('…and promises no answer time it has none of: no build\'s lead time, no diagnosis\'s two days',
+    /תוצאות הבדיקה:\* נשלחות אליך בסיום הבדיקה/.test(I.quotedCap) && !/ימי עסקים/.test(I.quotedCap), I.quotedCap.split('\n').filter((l) => /ימי|תוצאות|סטטוס/.test(l)));
+  check('a diagnosis and a capacity test quoted together: after the check, the diagnosis alone set off',
+    !/מקדמה/.test(I.quotedBoth) && /\*התשלום:\* אחרי הבדיקה\. האבחון מתקזז בתיקון/.test(I.quotedBoth), I.quotedBoth.split('\n').filter((l) => /תשלום|מקדמה|מתקזז/.test(l)));
   check('a paid diagnosis offers the same-money check its price only, no deposit',
     I.paidParts.length >= 1 && I.paidParts.every((w) => w === 'מכירה'), I.paidParts);
+  check('…and a paid capacity test the same', I.paidCapParts.length >= 1 && I.paidCapParts.every((w) => w === 'מכירה'), I.paidCapParts);
   check('a capacity test sold with a battery: the battery\'s 12 months', I.mixed.entry === I.mixed.twelve
     && /✅ \*אחריות:\* 12 חודשים/.test(I.mixed.quote), [I.mixed.entry, I.mixed.twelve, I.mixed.quote.split('\n').filter((l) => /אחריות/.test(l))]);
 }
@@ -301,5 +310,5 @@ check('no page errors', errs.length === 0, errs.join(' | '));
 
 await browser.close();
 srv.close();
-if (SELFTEST) console.log('\n[selftest] a month counted as 30 days again, an inspection sold with 6 months, and a diagnosis asking\n[selftest] for a deposit; the checks above must be red.');
+if (SELFTEST) console.log('\n[selftest] a month counted as 30 days again, an inspection sold with 6 months, and an inspection asking\n[selftest] for a deposit; the checks above must be red.');
 process.exit(finish());

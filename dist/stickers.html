@@ -2083,7 +2083,9 @@
                     const missedRepair = [];
                     if (data.voltage && !setNum('voltage-select', data.voltage)) missed.push('מתח');
                     if (data.capacity && !setNum('capacity-select', data.capacity)) missed.push('קיבולת');
-                    if (data.cells && !setSel('cells-select', data.cells)) missed.push('סוג תא');
+                    // A new-battery label the hub sends no cell for keeps the one the last label had, and prints it
+                    // as a fact: "EVE 21700 50PL · 375A/540A" on a CLASSIC pack (2026-10-24). It is said instead.
+                    if (data.cells ? !setSel('cells-select', data.cells) : !wantRepair) missed.push('סוג תא');
                     if (data.bmsLabel && !setSel('bms-select', data.bmsLabel)) missed.push('BMS');
                     setVal('client-name-input', data.client);
                     setVal('client-ref-input', data.ref);
