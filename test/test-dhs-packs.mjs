@@ -43,6 +43,13 @@ const r = await page.evaluate(() => {
   const rows = PRICING.filter((x) => /^DHS \S+ \d+V \d+Ah$/.test(x.name));
   const light = rows.find((x) => /^DHS 7250-9C /.test(x.name)), ultra = rows.find((x) => /^DHS GR80 /.test(x.name));
   const out = { n: rows.length, cats: [...new Set(rows.map((x) => x.cat))] };
+  // the price list: the Light Bee and then the Ultra Bee, each by voltage and then capacity, lowest first
+  const va = (n) => { const m = String(n).match(/(\d+)V (\d+)Ah/); return m ? +m[1] * 1000 + +m[2] : 0; };
+  out.order = rows.map((x) => x.name);
+  out.ascending = out.cats.every((c) => { const v = rows.filter((x) => x.cat === c).map((x) => va(x.name)); return v.every((x, i) => !i || x > v[i - 1]); });
+  navigateTo('catalog');
+  const topic = [...document.querySelectorAll('#catalogList details')].find((d) => /סוללות Sur-Ron/.test(d.querySelector('summary')?.textContent || ''));
+  out.titles = topic ? [...topic.querySelectorAll('details summary, [onclick*=toggleCatCat]')].map((e) => e.textContent.trim()).filter((s) => /Bee/.test(s)) : [];
   // the cost: no build of ours, and the supplier row under its own name when the list has one
   out.est = rows.map((x) => estimateBatteryCost(x));
   out.parts = batteryCostParts(light);
@@ -64,7 +71,12 @@ const r = await page.evaluate(() => {
   out.cellUltra = stickerCellFromText(ultra.cat + ' ' + ultra.name);
   return out;
 });
-check('the catalogue holds the eight DHS packs, in DHS categories', r.n === 8 && r.cats.every((c) => /^סוללות Sur-Ron (Light|Ultra) Bee - \d+V DHS$/.test(c)), r);
+// one category per bike since 2026-10-29 ("הבדל בין הלייט בי לאולטרה בי"), each by voltage and then capacity
+check('the catalogue holds the eight DHS packs, one category per bike', r.n === 8 && r.cats.every((c) => /^סוללות Sur-Ron (Light|Ultra) Bee - DHS$/.test(c))
+  && new Set(r.cats).size === 2, r);
+check('…each from the lowest voltage up, then by capacity', r.ascending, r.order);
+check('…and the price list shows the Light Bee and then the Ultra Bee, not one voltage heading over both',
+  r.titles.length === 2 && /^\W*Light Bee/.test(r.titles[0]) && /^\W*Ultra Bee/.test(r.titles[1]), r.titles);
 check('no DHS pack is costed as a build of ours', r.est.every((x) => x == null) && r.parts == null, [r.est, r.parts]);
 check('its cost is its supplier row, by the pack\'s own name', r.withRow === 1234, r.withRow);
 check('with no row yet, the cost-% estimate like any resold item, not a build', r.ultraNoRow === r.ultraPct, [r.ultraNoRow, r.ultraPct]);

@@ -58,7 +58,7 @@ await page.waitForFunction(() => typeof window.navigateTo === 'function', null, 
 await page.evaluate(() => {
   hideLogin(); closeModal(); closeNotice();
   Store.set('supplier_prices', [
-    { who: 'ספק תאים', cat: 'ספק תאים · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 6.43 },
+    { who: 'ספק תאים', cat: 'ספק תאים · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 5.83 },
     { who: 'ספק תאים', cat: 'ספק תאים · 21700 · ✈️ אווירי', name: 'EVE 50E — CLASSIC · 21700', ils: 9.2 },
     { who: 'ספק תאים', cat: 'ספק תאים · 21700 · ✈️ אווירי', name: 'EVE 50PL — PRO · 21700 Tabless', ils: 12.4 },
     { who: 'חנות מקומית', cat: 'חנות מקומית · 21700', name: 'EVE 21700 50E', ils: 13.9 },
@@ -122,7 +122,7 @@ const pro = await page.evaluate((i) => {
   closeModal();
   return r;
 }, PRO);
-check('PRO on the local route: no local 50PL, so the sea price, said in words', pro.route === 'sea' && /אין מחיר/.test(pro.text) && /× ₪10\.66/.test(pro.text), pro);
+check('PRO on the local route: no local 50PL, so the sea price, said in words', pro.route === 'sea' && /אין מחיר/.test(pro.text) && /× ₪9\.66/.test(pro.text), pro);
 
 // ---- 3. the spec line: fields in reading order, none broken across lines
 const spec = await page.evaluate((i) => {

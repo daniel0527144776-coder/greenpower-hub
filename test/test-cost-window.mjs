@@ -59,7 +59,7 @@ const R = await page.evaluate((SELF) => {
   const iBike = at((x) => x.cat === 'סוללות אופניים - 48V CLASSIC' && x.name === '48V 20Ah');
   const bike = open(iBike);
 
-  // 3. a quoted charger: goods + freight + VAT = its cost, and the quote's date
+  // 3. a quoted charger: goods + freight = its cost (no import VAT since 2026-10-29), and the quote's date
   const iCh = at((x) => x.name === 'מטען 72V 5A');
   const ch = open(iCh);
   const chCost = productCost(PRICING[iCh]);
@@ -81,8 +81,9 @@ const R = await page.evaluate((SELF) => {
 check('an 18650 26V pack lists its cells at the 26V\'s price, not the 50E\'s', !!R.b26 && R.b26.cellPrice === R.own26 && /130 תאים/.test(R.b26.first), R.b26);
 check('and its breakdown adds up to the cost the row shows', !!R.b26 && Math.abs(R.b26.total - R.b26.est) <= 1, R.b26);
 check('a battery says when its figures are from', R.bike.dates && /יבוא ימי, יוני 2026/.test(R.bike.text) && /זמן עבודה/.test(R.bike.text), R.bike.text.slice(-260));
-check('and what the shipping in its cells comes to', /משלוח/.test(R.bike.text) && /הובלה ועמלות/.test(R.bike.text) && /מע"מ יבוא/.test(R.bike.text), R.bike.text.slice(-200));
-check('a charger shows its quote: goods, shipping, VAT', /סחורה/.test(R.ch.text) && /משלוח/.test(R.ch.text) && /מע"מ יבוא/.test(R.ch.text), R.ch.text);
+// Daniel, 2026-10-29: "אני לא משלם מע"מ ... העלות שלי כולל מע"מ, זה לא טוב, לא רלוונטי" — no VAT line anywhere
+check('and what the shipping in its cells comes to, with no VAT in it', /משלוח/.test(R.bike.text) && /הובלה ועמלות/.test(R.bike.text) && !/מע"מ/.test(R.bike.text), R.bike.text.slice(-200));
+check('a charger shows its quote: goods and shipping, no VAT', /סחורה/.test(R.ch.text) && /משלוח/.test(R.ch.text) && !/מע"מ/.test(R.ch.text), R.ch.text);
 check('which add up to its cost', !!R.parts && Math.round(R.parts.total) === R.chCost, { parts: R.parts, cost: R.chCost });
 check('and the date of the quote', /2026-09-30/.test(R.ch.text), R.ch.text);
 check('a charger with no quote says it is a share of the price', /אין הצעת מחיר/.test(R.none.text), R.none.text);
