@@ -38,6 +38,9 @@ const REPAIR = process.argv.includes('--repair');
 // A customer name is what the label is FOR, and it used to reach the file name and not the
 // sticker — so the renderer has to be able to fill it, or that bug is invisible here too.
 const CLIENT = arg('client', ''), REF = arg('ref', '');
+// --cell <option value>: a cell's name has to fit its row at the size every value prints at ("Samsung
+// 21700 50S", 2026-10-29) — the type table below says whether it did.
+const CELL = arg('cell', '');
 
 // --pdf <path> skips generation and just pulls the raster out of a PDF that already exists,
 // which is how a sticker Daniel actually printed gets looked at rather than guessed about.
@@ -77,11 +80,12 @@ if (FROM_PDF) {
   await p.goto('http://127.0.0.1:4193/stickers.html', { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(2000);
   if (REPAIR) { await p.locator('.mode-button.repair-mode').click(); await p.waitForTimeout(600); }
-  await p.evaluate(([v, c]) => {
+  await p.evaluate(([v, c, cell]) => {
     const set = (id, val) => { const el = document.getElementById(id); if (el) { el.value = val; el.dispatchEvent(new Event('change', { bubbles: true })); el.dispatchEvent(new Event('input', { bubbles: true })); } };
     set('voltage-select', v); set('capacity-select', c);
+    if (cell) set('cells-select', cell);
     if (typeof updateAllSpecs === 'function') updateAllSpecs();
-  }, [VOLT, CAP]);
+  }, [VOLT, CAP, CELL]);
   if (CLIENT || REF) {
     await p.evaluate(([n, r]) => {
       const set = (id, val) => { const el = document.getElementById(id); if (el && val) {

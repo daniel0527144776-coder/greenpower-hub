@@ -38,34 +38,66 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(200);
 
-// ---- 1. the cell shelf, seeded from the 2026-07-22 invoice ----
-const seeded = await page.evaluate(() => {
+// ---- 1. a new device does not set the cell counts back (2026-10-29) ----
+// The cell seed of 2026-09-01 held its "done" flag in the device's localStorage, so the first start on
+// a new phone — after the cloud pull, which had brought the real counts — set the seven cell rows back
+// to the September figures, stamped them newest, and the sync took them to every device. The day he
+// changed phones. Here: the account's synced flags are all there, the device's own storage is empty,
+// and the shelf holds counts that are not September's. The boot steps must leave every one of them.
+const fresh = await page.evaluate((st) => {
   localStorage.removeItem('gp_inv_seed_20260901');
-  // A row he tracked by hand, which the seed must not touch.
-  localStorage.setItem('gp_inventory', JSON.stringify([{ id: 'x', name: 'ניקל 0.15', qty: 42, low: 5 }]));
-  seedCellStockOnce();
-  const inv = JSON.parse(localStorage.getItem('gp_inventory'));
-  const q = (n) => (inv.find((i) => i.name.includes(n)) || {}).qty;
-  return { n: inv.length, e50: q('50E'), pl: q('50PL'), v26: q('26V'), sg: q('50SG'), nickel: q('ניקל') };
-});
-check('the seven cell rows arrive', seeded.n === 8, `${seeded.n} rows`);
-check('50E carries the 500 he added', seeded.e50 === 2500, String(seeded.e50));
-check('50PL carries the 140 he added', seeded.pl === 400, String(seeded.pl));
-check('26V carries the 150 he added', seeded.v26 === 350, String(seeded.v26));
-check('and 50SG is the invoice figure', seeded.sg === 2000, String(seeded.sg));
-// Replacing the shelf would throw away stock counted by hand.
-check('a row he keeps himself is untouched', seeded.nickel === 42, String(seeded.nickel));
+  Store.set('settings', { invSeedBMS2026: true, cellModelsRestored20260925: true, nickelSeed20261011: true, qsTidy20260925: true });
+  const shelf = [
+    { id: 'k1', name: 'תאי EVE 21700 50E', qty: 1830, low: 300, cat: 'תאים' },
+    { id: 'k2', name: 'תאי Tenpower 21700 50SG', qty: 1412, low: 300, cat: 'תאים' },
+    { id: 'k3', name: 'תאי EVE 21700 50PL', qty: 96, low: 120, cat: 'תאים' },
+    { id: 'k4', name: 'תאי EVE 21700 40P', qty: 18, low: 20, cat: 'תאים' },
+    { id: 'k5', name: 'תאי EVE 18650 35V', qty: 140, low: 50, cat: 'תאים' },
+    { id: 'k6', name: 'תאי EVE 18650 26V', qty: 212, low: 50, cat: 'תאים' },
+    { id: 'k7', name: 'תאי EVE 18650 25P', qty: 64, low: 30, cat: 'תאים' },
+    { id: 'x', name: 'ניקל 0.15', qty: 42, low: 5 },
+  ];
+  Store.set('inventory', shelf);
+  if (typeof bootSeeds === 'function') bootSeeds();
+  else { seedInventoryOnce(); seedCellStockOnce(); restoreMissingCellModels(); seedNickelStockOnce(); refileCellsFromBms(); tidyQsSupplierOnce(); }
+  // --selftest: the September seed back in the boot steps
+  if (st) for (const s of INV_SEED) { const inv = getInventory(); const r = invFindRow(inv, s.name); if (r) { r.qty = s.qty; Store.set('inventory', inv); } }
+  if (typeof closeNotice === 'function') closeNotice();
+  const inv = getInventory();
+  const moved = shelf.filter((s) => (inv.find((r) => r.id === s.id) || {}).qty !== s.qty).map((s) => s.name + ' ' + s.qty + '→' + (inv.find((r) => r.id === s.id) || {}).qty);
+  return { moved, boot: String(startApp).includes('bootSeeds()'), seed: typeof seedCellStockOnce };
+}, SELFTEST);
+check('a new device keeps every count the cloud brought (no row set back to 2026-09-01)', fresh.moved.length === 0, fresh.moved);
+check('and the app starts through those same boot steps, with no per-device seed left', fresh.boot && fresh.seed === 'undefined', fresh);
 
-// ---- 2. it seeds ONCE ----
-// A seed that re-ran would silently undo every deduction since and restore the day it was typed.
-const reseed = await page.evaluate(() => {
-  const inv = JSON.parse(localStorage.getItem('gp_inventory'));
-  inv.find((i) => i.name.includes('50E')).qty = 900;      // a day's building
-  localStorage.setItem('gp_inventory', JSON.stringify(inv));
-  seedCellStockOnce();
-  return (JSON.parse(localStorage.getItem('gp_inventory')).find((i) => i.name.includes('50E')) || {}).qty;
+// ---- 2. the Samsung 50S goes onto the shelf: 300, once per account (Daniel, 2026-10-29) ----
+const s50 = await page.evaluate(() => {
+  const flag = () => { const s = Store.get('settings') || {}; delete s.cell50sSeed20261029; Store.set('settings', s); };
+  const rows50 = () => getInventory().filter((r) => /50S(?![A-Za-z0-9])/i.test(r.name));
+  flag();
+  Store.set('inventory', [{ id: 'k2', name: 'תאי Tenpower 21700 50SG', qty: 1412, cat: 'תאים' }]);
+  Store.set('tomb_inventory', {});                      // the row section 1's boot added was just removed
+  seedCell50sOnce();
+  const first = rows50().map((r) => ({ id: r.id, name: r.name, qty: r.qty, cat: invCatOf(r) }));
+  const inv = getInventory(); inv.find((r) => r.id === 'cell50s_20261029').qty = 260; Store.set('inventory', inv);
+  seedCell50sOnce();                                    // the account's flag is set: nothing moves
+  const again = rows50().map((r) => r.qty);
+  flag(); seedCell50sOnce();                            // a device without the flag: the row is there by id
+  const twice = rows50().length;
+  flag(); Store.set('inventory', [{ id: 'm', name: 'Samsung 50S', qty: 40, cat: 'תא' }]); seedCell50sOnce();
+  const named = rows50().map((r) => r.id + ':' + r.qty);
+  flag(); Store.set('inventory', []); Store.set('tomb_inventory', { cell50s_20261029: Date.now() }); seedCell50sOnce();
+  const deleted = rows50().length;
+  Store.set('tomb_inventory', {});
+  return { first, again, twice, named, deleted };
 });
-check('a second boot does not reset the count', reseed === 900, String(reseed));
+check('one row, "תאי Samsung 21700 50S", 300 cells, under the cells', s50.first.length === 1 && s50.first[0].qty === 300 && s50.first[0].cat === 'תא'
+  && s50.first[0].name === 'תאי Samsung 21700 50S', s50.first);
+check('the 50SG is not taken for it', s50.first.length === 1, s50.first);
+check('a count he changed is his: a second start does not set it back to 300', s50.again.length === 1 && s50.again[0] === 260, s50.again);
+check('and a device without the flag adds no second row', s50.twice === 1, s50.twice);
+check('a row that already names the 50S is left as it is', s50.named.length === 1 && s50.named[0] === 'm:40', s50.named);
+check('a row he deleted does not come back', s50.deleted === 0, s50.deleted);
 
 // ---- 3. a BMS comes off the shelf, matched by SERIES ----
 const bms = await page.evaluate(() => {
@@ -122,14 +154,15 @@ check('a paid sale takes its goods', sale.paid === sale.asQuote - 2, `${sale.asQ
 check('cycling the status again does not deduct twice', sale.twice === sale.paid, `${sale.paid} -> ${sale.twice}`);
 check('and the order records that stock moved', sale.flag === true, String(sale.flag));
 
-// ---- 6. the two seeds are different functions ----
-// They collided on one name while this was being written, and the later definition silently
-// won, so the cells never seeded at all.
+// ---- 6. the seeds are different functions ----
+// Two of them collided on one name once, and the later definition silently won, so the cells never
+// seeded at all.
 const both = await page.evaluate(() => ({
-  cells: typeof seedCellStockOnce === 'function',
+  cells: typeof seedCell50sOnce === 'function',
   parts: typeof seedInventoryOnce === 'function',
+  nickel: typeof seedNickelStockOnce === 'function',
 }));
-check('the cell seed and the BMS seed both exist', both.cells && both.parts, JSON.stringify(both));
+check('the 50S seed, the BMS seed and the nickel seed all exist', both.cells && both.parts && both.nickel, JSON.stringify(both));
 
 // ---- 7. "תאים" and "תא" are one category ----
 // (Until 2026-10-18 this section restored rows from a backup file; that button went at his request.)
@@ -271,6 +304,29 @@ const by = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('an 18650 build saved before v442 takes 13S4P = 52 cells, not 26', by.old === 52, JSON.stringify(by));
 check('a build saved with its layout takes exactly that', by.saved === 52 && by.big === 120, JSON.stringify(by));
+
+// ---- 10d. the Samsung 50S comes off its own row, never the 50SG's (2026-10-29) ----
+// "50s" is inside "50sg": matched as a substring, a 50S build took its cells off the Tenpower 50SG
+// row whenever that row came first on the shelf. A pack sold under the 50S's name is built of it.
+const s50use = await page.evaluate((SELF) => {
+  const realFind = window.invFindCellRow;
+  if (SELF) window.invFindCellRow = (inv, m) => inv.find((i) => String(i.name).toLowerCase().includes(String(m).toLowerCase().split(/[\s\-_]+/).pop())) || null;
+  Store.set('inventory', [{ id: 'q1', name: 'תאי Tenpower 21700 50SG', qty: 1412, cat: 'תאים' },
+    { id: 'q2', name: 'תאי Samsung 21700 50S', qty: 300, cat: 'תאים' }]);
+  const job = jobStockParts({ jobs: ['full'], voltage: '72', capacity: '30', cellType: '21700-50s' });
+  const took = inventoryDeduct(job.cellModel, job.cells, 'בדיקה');
+  const sale = batteryStockParts({ name: '72V 30Ah Samsung 50S', cat: 'סוללות · סדרת CLASSIC' });
+  const sold = inventoryDeduct(sale.cellModel, sale.cells, 'בדיקה');
+  const sg = inventoryDeduct('Tenpower 50SG', 10, 'בדיקה');
+  const inv = getInventory();
+  window.invFindCellRow = realFind;
+  return { job, took: took && took.name, sale, sold: sold && sold.name, sg: sg && sg.name, q: inv.map((r) => r.qty) };
+}, SELFTEST);
+check('a repair build of "21700-50s" takes 20S6P = 120 cells off the 50S row', s50use.job.cells === 120 && s50use.took === 'תאי Samsung 21700 50S', s50use);
+check('and leaves the 50SG row alone', s50use.q[0] === 1412 - 10, s50use.q);
+check('a sold pack named for the 50S is built of it, at 5Ah a cell', s50use.sale.cellModel === 'Samsung 50S' && s50use.sale.cells === 120 && s50use.sold === 'תאי Samsung 21700 50S', s50use.sale);
+check('the 50S row is down by both, 300 − 240', s50use.q[1] === 60, s50use.q);
+check('and the 50SG still finds its own row', s50use.sg === 'תאי Tenpower 21700 50SG', s50use.sg);
 
 // ---- 11. ordering by pace (2026-10-04, "הזמנת מלאי לפי קצב") ----
 // Every automatic deduction leaves a dated line; before the log, sales and repairs are read back
