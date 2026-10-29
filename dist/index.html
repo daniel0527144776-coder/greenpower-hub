@@ -2781,7 +2781,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v502';
+const HUB_BUILD = 'v503';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -12496,12 +12496,32 @@ function waStatusHtml() {
   return '<div class="card"><div class="wb-state">' + now + '</div>'
     + '<div class="stats-grid">' + box('ענה השבוע', b.stats && b.stats.sent) + box('העביר אליך', b.stats && b.stats.asked) + box('שתק', b.stats && b.stats.quiet) + '</div>'
     + '<div class="wb-sub">' + wa + ' · ' + learn + '</div>'
+    // unlinked — after moving WhatsApp to a new phone (2026-10-29) — a code to link it again from this phone
+    + (b.wa !== 'authorized' ? '<button class="btn btn-primary btn-block" data-wa-link style="margin-top:8px" onclick="waLink()">🔗 לחבר את הבוט לוואטסאפ מחדש</button>' : '')
     // the photo inbox (2026-10-06): every photo in his WhatsApp is kept for the photo library; counted
     // here, never shown (nothing in the hub fetches an image)
     + (b.photos ? '<div class="wb-sub" data-wa-photos>📷 ' + (n(b.photos.waiting) ? n(b.photos.waiting) + ' תמונות מהוואטסאפ ממתינות למאגר (' + (n(b.photos.bytes) / 1048576).toFixed(1) + 'MB)' : 'כל התמונות מהוואטסאפ כבר במאגר') + '</div>' : '')
     + '<div class="wb-inline" style="margin-top:10px"><button class="btn ' + (st.enabled ? 'btn-danger' : 'btn-primary') + '" onclick="waToggle()">'
     + (st.enabled ? '⏻ כבה' : '▶ הפעל') + '</button>'
     + '<button class="btn btn-secondary" onclick="renderWaBot()">🔄 רענן</button></div></div>';
+}
+// Linking WhatsApp again (2026-10-29, Daniel: "החלפתי טלפון והבוט כבר לא עובד"). Moving WhatsApp to a new phone logs
+// out every linked device, the bot's with them. This phone has no browser for the gateway's console and nothing to
+// scan a QR from, so the bot asks for a code (POST {op:'link'}) that he types in WhatsApp itself. It lives about two
+// and a half minutes; another tap gives another.
+async function waLink() {
+  const btn = document.querySelector('[data-wa-link]');
+  if (btn) btn.disabled = true;
+  let r = null, err = '';
+  try { r = await waAdmin({ op: 'link' }); } catch (e) { err = e.message; }
+  if (btn) btn.disabled = false;
+  if (r && !r.code && r.state === 'authorized') { showNotice('✅ הבוט כבר מחובר לוואטסאפ.'); renderWaBot(); return; }
+  if (!r || !r.code) { showNotice('⚠ לא התקבל קוד חיבור (' + (err || 'אין קוד') + '). נסה שוב בעוד דקה.'); return; }
+  const code = String(r.code).replace(/[^A-Za-z0-9]/g, '');
+  showNotice('קוד החיבור: ' + (code.length === 8 ? code.slice(0, 4) + '-' + code.slice(4) : code) + '\n\n'
+    + 'בוואטסאפ ביזנס בטלפון:\n1. הגדרות ← מכשירים מקושרים\n2. קישור מכשיר\n3. "קישור באמצעות מספר טלפון"\n4. להקליד את הקוד\n\n'
+    + 'הקוד בתוקף כשתיים וחצי דקות. אם פג — ללחוץ שוב על הכפתור.',
+    '<button class="btn btn-primary" onclick="closeNotice(); renderWaBot()">סיימתי — לרענן</button>');
 }
 function waQuestionsHtml() {
   const all = waBot.questions || [], open = all.filter((q) => !q.done);
