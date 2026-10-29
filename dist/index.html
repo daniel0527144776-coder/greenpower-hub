@@ -430,6 +430,18 @@ body { min-height: 100vh; }
   .sup-rt.on { font-size: 14px; font-weight: 700; color: var(--primary); }
   .inv-sub { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--primary); margin: 10px 2px 6px; padding-bottom: 3px; border-bottom: 1px dashed var(--border-strong); }
   .inv-sub span:last-child { font-weight: 400; font-size: 11px; color: var(--text-muted); }
+  /* the stock page's groups and its one-line rows (2026-10-29) */
+  .inv-search { margin: 0 0 8px; }
+  .inv-grp { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; padding: 10px 8px; margin: 4px 0; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .inv-grp > span:last-child { font-weight: 400; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .inv-grp-fold { cursor: pointer; }
+  .inv-grp-fold .inv-grp-name::before { content: '◂ '; }
+  .inv-grp-fold[data-open="1"] .inv-grp-name::before { content: '▾ '; }
+  .inv-grp-body { margin: 0 0 8px; padding-inline-start: 8px; border-inline-start: 2px solid var(--border); }
+  .inv-row { padding: 6px 10px; margin-bottom: 4px; }
+  .inv-row-line { display: flex; align-items: center; gap: 8px; }
+  .inv-row-name { flex: 1 1 auto; min-width: 0; cursor: pointer; overflow-wrap: anywhere; }
+  .inv-ico { flex: none; background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 6px; font-size: 14px; cursor: pointer; }
   .wt-name-link { color: inherit; text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 3px; }
   .wt-month-head { font-size: 12px; font-weight: 700; color: var(--primary); padding: 10px 2px 2px; }
   .wt-acct { padding: 8px 0; border-bottom: 1px solid var(--border); }
@@ -1643,6 +1655,8 @@ body { min-height: 100vh; }
     <div id="needList" style="margin-top:8px;"></div>
     </div>
   </details>
+  <!-- The search (Daniel, 2026-10-29): every word typed must be in the row; only the matching rows show. -->
+  <div class="inv-search"><input type="search" id="invSearch" class="form-input-wide" style="width:100%;box-sizing:border-box;" placeholder="🔍 חיפוש במלאי: XT90, 13S, 50E…" oninput="invSearchChanged(this.value)" autocomplete="off"></div>
   <div id="inventoryLowAlert"></div>
   <div class="card">
     <div id="inventoryList"></div>
@@ -2798,7 +2812,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v507';
+const HUB_BUILD = 'v508';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -13518,14 +13532,22 @@ function invTokens(s) {
     .split(/\s+/)
     .filter((w) => w.length >= 2 && !INV_STOP.has(w));
 }
+// A second-hand row says so in its name ("(יד 2)", "יד שנייה", "משומש"); there is no field for it.
+const invIsUsedName = (s) => /יד\s*2|יד\s*שני(?:י)?ה|משומש/i.test(String(s || ''));
 function invFindRow(inv, name) {
   const want = invTokens(name);
   if (!want.length) return null;
+  // A build or a sale takes a new board (2026-10-29): "BMS 13S 60A" matched "BMS 13S 60A (יד 2)" too, and
+  // took the second-hand one whenever it stood first on the shelf. A second-hand row is taken only when no
+  // new one matches, or when the name asked for says second-hand itself.
+  let second = null;
   for (const row of inv) {
     const have = new Set(invTokens(row.name));
-    if (want.every((w) => have.has(w))) return row;
+    if (!want.every((w) => have.has(w))) continue;
+    if (invIsUsedName(row.name) && !invIsUsedName(name)) { second = second || row; continue; }
+    return row;
   }
-  return null;
+  return second;
 }
 
 // Take `qty` of a named part. Returns what happened rather than throwing or guessing, so the
@@ -14685,13 +14707,40 @@ function renderSorder() {
 }
 const INV_OPEN = new Set();
 function toggleInvCat(c) { c = decodeURIComponent(c); if (INV_OPEN.has(c)) INV_OPEN.delete(c); else INV_OPEN.add(c); renderInventory(); }
+// Two levels that fold (Daniel, 2026-10-29, after "תסדר לי את כל המלאי בצורה הרבה יותר מסודרת אם קטגוריות
+// ותת קטגוריות"; he chose this over tiles and over keeping the page as it was). A category opens on its
+// groups only, each with its total, and a tap on a group opens its rows. The groups he opened stay open
+// while the page re-draws (a ± tap re-draws it), as the categories always have. Key: "cat|cond|group".
+const INV_GRP_OPEN = new Set();
+function toggleInvGrp(k) { k = decodeURIComponent(k); if (INV_GRP_OPEN.has(k)) INV_GRP_OPEN.delete(k); else INV_GRP_OPEN.add(k); renderInventory(); }
+// The search at the top of the page (same day, his choice): every word typed must be in the row's name,
+// note, category, group or maker. While it holds text, only the matching rows show, every fold open.
+let INV_QUERY = '';
+function invSearchChanged(v) { INV_QUERY = String(v || ''); renderInventory(); }
+function invMatches(it, words) {
+  const c = invCatOf(it);
+  const hay = [it.name, it.note, c, it.sub || invSubFromName(c, it.name), c === 'BMS' ? invBmsMaker(it.name) : '']
+    .filter(Boolean).join(' ').toLowerCase();
+  return words.every((w) => hay.includes(w));
+}
+// BMS by maker first, then by series (his choice, the same day): the makers the boards are sold under
+// (DALY, JK, JBD, ANT), read off the name. A row whose name names none — the shelf rows typed before the
+// boards were sold by name, "BMS 13S 60A" — waits under its own heading until a board is picked for it
+// in the editor (invBoardPicked), which also lets a sale of that board take it off the shelf.
+const INV_BMS_MAKERS = [['DALY', /\bDALY\b/i], ['JK חכם', /\bJK\b/i], ['JBD', /\bJBD\b/i], ['ANT', /\bANT\b/i]];
+const INV_NO_MAKER = 'ללא מותג בשם';
+function invBmsMaker(name) {
+  const hit = INV_BMS_MAKERS.find(([, re]) => re.test(String(name || '')));
+  return hit ? hit[0] : INV_NO_MAKER;
+}
+const INV_MAKER_ORDER = [...INV_BMS_MAKERS.map(([m]) => m), INV_NO_MAKER];
 function renderInventory() {
   renderNeedList();
   _invUsageCache = null;    // the pace lines read usage fresh on every render
   // The cell-cost reference used to render here. It is a SUPPLIER cost, not stock on a
   // shelf, so it belongs on עלויות ספקים — where it now lives alongside every other
   // supplier — and not on a page about what is in the drawer.
-  const inv = getInventory();
+  const all = getInventory();
   const sh = invShortages();
   document.getElementById('inventoryLowAlert').innerHTML =
     (sh.out.length ? `<div class="alert alert-danger">🔴 <b>אזל מהמלאי:</b> ${sh.out.map(i => i.name).join(' · ')}</div>` : '') +
@@ -14699,7 +14748,14 @@ function renderInventory() {
     // still drives 'מה להזמין'.
     '';
   const list = document.getElementById('inventoryList');
-  if (inv.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים.</div></div>'; return; }
+  if (all.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים.</div></div>'; return; }
+  const words = INV_QUERY.toLowerCase().split(/\s+/).filter(Boolean);
+  const searching = words.length > 0;
+  const inv = searching ? all.filter((x) => invMatches(x, words)) : all;
+  if (!inv.length) {
+    list.innerHTML = `<div class="empty-state" data-inv-none><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא פריט שמתאים ל"${esc2(INV_QUERY.trim())}".</div></div>`;
+    return;
+  }
   const CAT_ORDER = INV_CAT_LIST;
   const CAT_ICON = INV_CAT_ICON;
   const groups = {};
@@ -14708,62 +14764,81 @@ function renderInventory() {
     const ia = CAT_ORDER.indexOf(a), ib = CAT_ORDER.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
   });
+  // A number followed by a unit, e.g. "13S", "60A", "72V". The lookahead stops "60A" from
+  // being read out of a longer token and keeps 0.15 (nickel) intact.
+  const unit = (x, u) => {
+    const m = String(x.name || '').match(new RegExp('(\\d+(?:\\.\\d+)?)\\s*' + u + '(?![A-Za-z\\u0590-\\u05FF])', 'i'));
+    return m ? parseFloat(m[1]) : Infinity;
+  };
+  const byStock = (a, b) => (Number(a.qty) || 0) - (Number(b.qty) || 0)
+    || (a.name || '').localeCompare(b.name || '', 'he', { numeric: true });
+  // Second-hand stock stands on its own. Matched on the name because that is where the
+  // fact lives today — there is no "used" field on an inventory row, and inventing one
+  // would orphan every item already typed in with "יד 2" in its name.
+  const isUsed = (x) => invIsUsedName(x.name);
+  const isOut = (x) => (Number(x.qty) || 0) <= 0;
+  const warnMark = ' <span style="color:var(--danger);">⚠️</span>';
   list.innerHTML = cats.map(c => {
-    // A number followed by a unit, e.g. "13S", "60A", "72V". The lookahead stops "60A" from
-    // being read out of a longer token and keeps 0.15 (nickel) intact.
-    const unit = (x, u) => {
-      const m = String(x.name || '').match(new RegExp('(\\d+(?:\\.\\d+)?)\\s*' + u + '(?![A-Za-z\\u0590-\\u05FF])', 'i'));
-      return m ? parseFloat(m[1]) : Infinity;
-    };
-    const byStock = (a, b) => (Number(a.qty) || 0) - (Number(b.qty) || 0)
-      || (a.name || '').localeCompare(b.name || '', 'he', { numeric: true });
     // A BMS carries no voltage — its identity is the S count and the current rating, so it
     // sorts by those. Everywhere else voltage is the axis, as on the price list. An item
     // missing the relevant number sorts last rather than pretending to have one.
     const items = groups[c].slice().sort((a, b) => (c === 'BMS'
       ? unit(a, 'S') - unit(b, 'S') || unit(a, 'A') - unit(b, 'A')
       : unit(a, 'V') - unit(b, 'V')) || byStock(a, b));
-    const totalQty = invQtyFmt(items.reduce((s, x) => s + (Number(x.qty) || 0), 0));
-    // Second-hand stock stands on its own. Matched on the name because that is where the
-    // fact lives today — there is no "used" field on an inventory row, and inventing one
-    // would orphan every item already typed in with "יד 2" in its name.
-    const isUsed = (x) => /יד\s*2|יד\s*שני(?:י)?ה|משומש/i.test(x.name || '');
+    const u = invUnit(c);
+    const sum = (l) => invQtyFmt(l.reduce((s, x) => s + (Number(x.qty) || 0), 0));
     const fresh = items.filter((x) => !isUsed(x));
     const used = items.filter(isUsed);
     // Folded by default (Daniel, 2026-09-24): the page opens as a short list of categories and
     // a tap opens one. A category holding something low or out shows ⚠️ while folded, so
-    // folding never hides a shortage.
-    const open = INV_OPEN.has(c);
-    const warn = items.some((x) => (Number(x.qty) || 0) <= 0);
-    // One more level inside the categories that have a natural axis (Daniel, 2026-09-25):
-    // chargers by voltage, cells by format, BMS by series count. Read off the name, the same
-    // way the sort above reads it; an item whose name carries no such number goes under אחר.
-    const axis = INV_SUB[c] ? (x) => x.sub || invSubFromName(c, x.name) || null : null;
-    const listBody = (list) => {
-      if (!axis) return list.map((i) => renderInvItem(i, c)).join('');
-      const byKey = new Map();
-      for (const x of list) { const k = axis(x) || 'אחר'; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(x); }
-      const order = INV_SUB[c] || [];
-      const rank = (k) => { const i = order.indexOf(k); return i < 0 ? 999 : i; };
-      const keys = [...byKey.keys()].sort((a, b) => (a === 'אחר') - (b === 'אחר') || (parseFloat(a) - parseFloat(b)) || rank(a) - rank(b) || a.localeCompare(b, 'he'));
-      return keys.map((k) => {
-        const l = byKey.get(k);
-        const n = l.reduce((s, x) => s + (Number(x.qty) || 0), 0);
-        return `<div class="inv-sub"><span>${k}</span><span>${n} יח'</span></div>` + l.map((i) => renderInvItem(i, c)).join('');
+    // folding never hides a shortage. A search opens everything it found.
+    const open = searching || INV_OPEN.has(c);
+    const warn = items.some(isOut);
+    // The groups of a category (Daniel, 2026-09-25, and their folding 2026-10-29): BMS by maker, then
+    // by series inside it; chargers by voltage, cells by format, the rest by the words in INV_SUB_WORDS.
+    // Read off the name the same way the sort above reads it; a name with no such word goes under אחר.
+    const series = (x) => x.sub || invSubFromName('BMS', x.name) || 'אחר';
+    const axis = c === 'BMS' ? (x) => invBmsMaker(x.name)
+      : INV_SUB[c] ? (x) => x.sub || invSubFromName(c, x.name) || 'אחר' : null;
+    const order = c === 'BMS' ? INV_MAKER_ORDER : (INV_SUB[c] || []);
+    const rank = (k) => { const i = order.indexOf(k); return i < 0 ? 999 : i; };
+    const bucket = (l, fn) => {
+      const m = new Map();
+      for (const x of l) { const k = fn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
+      const keys = [...m.keys()].sort((a, b) => (a === 'אחר') - (b === 'אחר')
+        || (parseFloat(a) - parseFloat(b)) || rank(a) - rank(b) || a.localeCompare(b, 'he'));
+      return keys.map((k) => [k, m.get(k)]);
+    };
+    const rowsOf = (l) => l.map((i) => renderInvItem(i, c)).join('');
+    // Inside a BMS maker, a plain heading per series ("13S", "20S"), as the whole category had before.
+    const inner = (l) => (c !== 'BMS' ? rowsOf(l)
+      : bucket(l, series).map(([k, g]) => `<div class="inv-sub"><span>${esc2(k)}</span><span>${sum(g)} ${u}</span></div>` + rowsOf(g)).join(''));
+    const listBody = (l, cond) => {
+      if (!axis) return rowsOf(l);
+      const gs = bucket(l, axis);
+      return gs.map(([k, g]) => {
+        // One group alone needs no fold: it is shown open, under a heading that does not fold.
+        const key = c + '|' + cond + '|' + k;
+        const fold = gs.length > 1 && !searching;
+        const isOpen = !fold || INV_GRP_OPEN.has(key);
+        const tap = fold ? ` onclick="toggleInvGrp('${encodeURIComponent(key).replace(/'/g, '%27')}')"` : '';
+        return `<div class="inv-grp${fold ? ' inv-grp-fold' : ''}" data-inv-grp="${esc2(k)}" data-open="${isOpen ? 1 : 0}"${tap}>`
+          + `<span><span class="inv-grp-name">${esc2(k)}</span>${g.some(isOut) ? warnMark : ''}</span><span>${sum(g)} ${u}</span></div>`
+          + (isOpen ? `<div class="inv-grp-body">${inner(g)}</div>` : '');
       }).join('');
     };
     // New and second-hand never share a list (Daniel, 2026-10-09: "תעשה שיד 2 וחדש ב מלאי Bms לא
     // יהיה מעורבב"). In BMS, chargers and cells the second-hand rows used to sit inside the same
     // series/voltage group as the new ones, one line below them; now each condition is its own
     // section with its own groups, new first — as the categories without an axis already were.
-    const section = (cond, title, list) => list.length
-      ? `<div data-inv-cond="${cond}" style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin:8px 2px 4px;">${title}</div>` + listBody(list)
+    const section = (cond, title, l) => l.length
+      ? `<div data-inv-cond="${cond}" style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin:8px 2px 4px;">${title}</div>` + listBody(l, cond)
       : '';
-    const body = used.length ? section('new', 'חדש', fresh) + section('used', '♻️ יד 2', used) : listBody(fresh);
-    return `<div style="margin-bottom:10px;">
+    const body = used.length ? section('new', 'חדש', fresh) + section('used', '♻️ יד 2', used) : listBody(fresh, 'new');
+    return `<div style="margin-bottom:10px;" data-inv-cat="${esc2(c)}">
       <div onclick="toggleInvCat('${encodeURIComponent(c)}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;cursor:pointer;border-bottom:2px solid var(--primary);">
-        <span style="font-weight:700;font-size:15px;">${open ? '▾' : '◂'} ${CAT_ICON[c] || '📦'} ${c}${warn ? ' <span style="color:var(--danger);">⚠️</span>' : ''}</span>
-        <span data-inv-cat-total="${c}" style="font-size:11px;color:var(--text-muted);">${totalQty} ${invUnit(c)}</span>
+        <span style="font-weight:700;font-size:15px;">${open ? '▾' : '◂'} ${CAT_ICON[c] || '📦'} ${c}${warn ? warnMark : ''}</span>
+        <span data-inv-cat-total="${c}" style="font-size:11px;color:var(--text-muted);">${sum(items)} ${u}</span>
       </div>
       ${!open ? '' : `<div style="margin-top:6px;">${body}</div>`}
     </div>`;
@@ -14789,13 +14864,23 @@ function invCatOf(it) {
 // connectors, drive parts), read off the name for rows saved without one. First match wins, so a
 // "מחבר XT90 לכבל" is a connector and not a cable.
 const INV_CAT_WORDS = [
+  // 2026-10-29, the rows his supplier's own names filed wrongly or under אחר:
+  // a board by its maker or model ("DALY 16S 60V 60A" would read as a charger below);
+  ['BMS', /\bBMS\b|\bDALY\b|\bJBD\b|\bJK[-\s]?B[D12]/i],
+  // a charger named by its output alone ("72V 5A", "48V 3A XLR", "15-92.5V 0-15A"), before the connectors
+  // (XLR) and the displays ("72V 10A (ללא צג)"), but not a controller or a motor that states its volts and amps;
+  ['מטען', /^(?!.*(?:בקר|מנוע|controller|motor))(?:.*(?:מטע[ןנ]|charger)|(?:.*[\s-])?\d{2,3}(?:\.\d)?V\s+\d+(?:\.\d+)?(?:-\d+)?A\b)/i],
+  // a controller or a motor by its maker or model, before the cables ("Votol EM260 + כבל תכנות");
+  ['הנעה', /Sabvoton|Far\s?Driver|Fardriver|Votol|Kelly|QS\s?\d{3}/i],
   ['מחזיקי תאים', /מחזיק|תושבת|holder|bracket|ספייסר|spacer/i],
+  // and a switch, before the cases ("מתג Silver Fish").
+  ['כבלים ומחברים', /מתג|מפסק|switch/i],
   // Before insulation: a סילבר פיש is a case, and פיש alone is fish paper.
   ['מארזים', /מארז|קופס|case|סילבר\s?פיש|silver\s?fish/i],
-  ['בידוד וכיווץ', /כיווץ|שרוול|נייר|בידוד|קפטון|kapton|טייפ|tape|סרט|PVC|פיש|fish|דבק|ספוג|foam|EVA/i],
-  ['כבלים ומחברים', /כבל|חוט|AWG|מחבר|XT\s?\d|XLR|QS8|AS1[25]0|אנדרסון|anderson|טרמינל|terminal|נעל|lug|שקע|תקע|פיוז|fuse|מפסק|switch/i],
+  ['בידוד וכיווץ', /כיווץ|שרוול|נייר|בידוד|קפטון|kapton|טייפ|tape|סרט|PVC|PET|פיש|fish|דבק|ספוג|foam|EVA|פיברגלס|fiberglass|Isolirband|איזולירבנד/i],
+  ['כבלים ומחברים', /כבל|חוט|AWG|מחבר|XT\s?\d|XLR|QS\s?(?:8|10)\b|AS1[25]0|אנדרסון|anderson|טרמינל|terminal|נעל|lug|שקע|תקע|פיוז|fuse|מפסק|switch/i],
   ['הנעה', /מנוע|motor|בקר|controller|צג|display|מצערת|throttle|QS\d|Sabvoton|Far\s?Driver|Votol|Fardriver/i],
-  ['כלים וציוד', /מלחם|רתכת|ריתוך|welder|מאזן|balancer|מולטימטר|מודד|tester|בודק|כלי|מברג|מסור|מחרטה|מספרי/i],
+  ['כלים וציוד', /מלחם|רתכת|ריתוך|welder|מאזן|balancer|מולטימטר|מודד|tester|בודק|כלי|מברג|מסור|מחרטה|מספרי|בדיל|solder|הלחמה/i],
 ];
 // The datasheet of each cell on the shelf (2026-10-08, Daniel: "תן מפרט טכני מלא של כל תא שנמצא במלאי
 // של התאים"; he chose a card on each cell in stock). Every figure is the MAKER's, read off the sheet:
@@ -14933,6 +15018,11 @@ function openCellSheet(id) {
     + (d ? '<div class="wt-muted" style="margin:8px 0 4px;">מה שידוע מטבלת מחשבון המידות (לא מדאטה-שיט):</div>'
       + table([['קיבולת', d.ah + 'Ah'], ['מידות', 'קוטר ' + d.dia + ' · גובה ' + d.len + ' מ״מ'], ['משקל', d.g + ' גרם']]) : ''));
 }
+// One short line per row (Daniel, 2026-10-29, his choice): the name, and the count with its − and +.
+// A tap on the name opens the row (openInvItem): its group, threshold, note, pace and supplier, and
+// edit and delete, which used to take a second line under every row. What stays on the line: "אזל", a
+// cell's datasheet, a nickel roll's own spec, length and date (its name alone does not tell two rolls
+// apart, and he asked for the date), and the pace when it says to order now.
 function renderInvItem(i, cat) {
   const isLow = (Number(i.qty) || 0) <= 0;   // out of stock only — no 'low' marking
   const kg = invByWeight(cat), step = kg ? 0.1 : 1;
@@ -14940,24 +15030,48 @@ function renderInvItem(i, cat) {
   const when = kg && i._u ? new Date(Number(i._u)).toLocaleDateString('he-IL') : '';
   let title = i.name || '';
   if (cat && cat !== 'אחר' && title.startsWith(cat + ' ')) title = title.slice(cat.length + 1);
-  return `<div class="list-item" style="${isLow ? 'border-color:var(--danger);' : ''}">
-      <div class="list-item-header">
-        <div><div class="list-item-title">${title} ${isLow ? '<span style="font-size:10px;color:var(--danger);">🔴 אזל</span>' : ''}</div>
-          <div class="list-item-subtitle">${i.note || ''}${i.low != null ? ` · סף: ${kg ? invQtyFmt(i.low) + ' ק"ג' : i.low}` : ''}${invPaceLine(i)}</div>
-          ${cat === 'ניקל' && i.spec ? `<div data-nickel-spec style="font-size:11.5px;margin-top:2px;">${nickelSpecLine(i.spec)}${m ? ` · <span data-nickel-metres>≈ <bdi dir="ltr">${Math.round(m)}</bdi> מטר</span>` : ''}</div>` : ''}
-          ${when ? `<div data-inv-updated style="font-size:11px;color:var(--text-muted);margin-top:2px;">עודכן <bdi dir="ltr">${when}</bdi></div>` : ''}</div>
+  const fc = invForecast(i, _invUsageCache || (_invUsageCache = invUsage()));
+  const sheet = cat === 'תא' && cellSheetFor(i.name);
+  return `<div class="list-item inv-row" data-inv-row="${esc2(i.id)}" style="${isLow ? 'border-color:var(--danger);' : ''}">
+      <div class="inv-row-line">
+        <div class="inv-row-name" onclick="openInvItem('${i.id}')"><span class="list-item-title">${esc2(title)}</span>${isLow ? ' <span style="font-size:10px;color:var(--danger);">🔴 אזל</span>' : ''}</div>
+        ${sheet ? `<button class="inv-ico" data-cell-sheet onclick="openCellSheet('${i.id}')" aria-label="מפרט">📄</button>` : ''}
         <div class="num-input">
           <button class="num-btn" onclick="adjustInventory('${i.id}',-${step})">−</button>
           <span class="num-val" data-inv-qty style="${isLow ? 'color:var(--danger);' : ''}${kg ? 'min-width:64px;' : ''}">${kg ? invQtyFmt(i.qty) + ' ק"ג' : i.qty}</span>
           <button class="num-btn" onclick="adjustInventory('${i.id}',${step})">+</button>
         </div>
       </div>
-      <div class="btn-group" style="margin-top:6px;">
-        ${cat === 'תא' && cellSheetFor(i.name) ? `<button class="btn btn-sm btn-secondary" data-cell-sheet onclick="openCellSheet('${i.id}')">📄 מפרט</button>` : ''}
-        <button class="btn btn-sm btn-secondary" onclick="openInventoryEditor('${i.id}')">✏️ ערוך</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteInventory('${i.id}')">🗑️</button>
-      </div>
+      ${cat === 'ניקל' && i.spec ? `<div data-nickel-spec style="font-size:11.5px;margin-top:2px;">${nickelSpecLine(i.spec)}${m ? ` · <span data-nickel-metres>≈ <bdi dir="ltr">${Math.round(m)}</bdi> מטר</span>` : ''}</div>` : ''}
+      ${when ? `<div data-inv-updated style="font-size:11px;color:var(--text-muted);margin-top:2px;">עודכן <bdi dir="ltr">${when}</bdi></div>` : ''}
+      ${fc && fc.orderNow ? invPaceLine(i) : ''}
     </div>`;
+}
+// A row opened from its name: everything the short line leaves out, and what can be done with it.
+function openInvItem(id) {
+  const it = getInventory().find((x) => x.id === id);
+  if (!it) return;
+  const cat = invCatOf(it), kg = invByWeight(cat);
+  const where = [cat, cat === 'BMS' ? invBmsMaker(it.name) : '', INV_SUB[cat] ? (it.sub || invSubFromName(cat, it.name)) : '']
+    .filter(Boolean).map(esc2).join(' › ');
+  _invUsageCache = null;
+  const pace = invPaceLine(it);
+  const qty = (q) => (kg ? invQtyFmt(q) + ' ק"ג' : esc2(q));
+  const row = (k, v) => (v ? `<div class="form-row" data-inv-item="${k}"><label>${k}</label><div style="text-align:start;">${v}</div></div>` : '');
+  const sup = invSupplierOf(it);
+  openModal(it.name || '', `
+    ${row('קטגוריה', where)}
+    ${row('במלאי', qty(Number(it.qty) || 0))}
+    ${row('מתי להזמין', it.low != null ? qty(it.low) : '')}
+    ${row('קצב', pace)}
+    ${row('מפרט', cat === 'ניקל' && it.spec ? nickelSpecLine(it.spec) : '')}
+    ${row('הערה', esc2(it.note || ''))}
+    ${row('ספק', esc2(sup || ''))}
+    ${row('עודכן', it._u ? `<bdi dir="ltr">${new Date(Number(it._u)).toLocaleDateString('he-IL')}</bdi>` : '')}`,
+    `<button class="btn btn-primary" onclick="openInventoryEditor('${id}')">✏️ ערוך</button>`
+    + (cat === 'תא' && cellSheetFor(it.name) ? `<button class="btn btn-secondary" onclick="openCellSheet('${id}')">📄 מפרט</button>` : '')
+    + `<button class="btn btn-danger" data-inv-delete onclick="closeModal();deleteInventory('${id}')">🗑️ מחק</button>`
+    + '<button class="btn btn-secondary" onclick="closeModal()">סגור</button>');
 }
 // "~400 בחודש · מספיק לכ-6 שבועות", and when it will not outlast a delivery, says to order now.
 // The usage is computed once per render of the page, not once per row.
@@ -14979,7 +15093,7 @@ function adjustInventory(id, d) {
 // number off the name.
 const INV_SUB = {
   'BMS': ['3S', '4S', '5S', '7S', '8S', '10S', '13S', '14S', '15S', '16S', '17S', '20S', '23S', '24S'],
-  'מטען': ['12V', '24V', '36V', '48V', '52V', '60V', '72V', '84V', '88V'],
+  'מטען': ['12V', '24V', '36V', '48V', '52V', '60V', '72V', '84V', '88V', 'מתח מתכוונן'],
   'תא': ['18650', '21700', '26650', '32700'],
   'ניקל': ['18650', '21700', 'נחושת', 'פס'],
   'מחזיקי תאים': ['18650', '21700'],
@@ -14991,8 +15105,8 @@ const INV_SUB = {
 const INV_SUB_WORDS = {
   'ניקל': [['נחושת', /נחושת|copper/i], ['21700', /21700|22\.[5-7]|23\b/], ['18650', /18650|18\.5|19\b|20\.25/], ['פס', /פס|גליל|roll/i]],
   'מחזיקי תאים': [['21700', /21700/], ['18650', /18650/]],
-  'בידוד וכיווץ': [['שרוולי כיווץ', /כיווץ|שרוול|PVC/i], ['נייר בידוד', /נייר|פיש|fish/i], ['ספוג', /ספוג|foam|EVA/i], ['סרטים ודבק', /קפטון|kapton|טייפ|tape|סרט|דבק/i]],
-  'כבלים ומחברים': [['מחברים', /מחבר|XT\s?\d|XLR|QS8|AS1[25]0|אנדרסון|anderson|שקע|תקע/i], ['נעלים וטרמינלים', /טרמינל|terminal|נעל|lug/i], ['פיוזים ומפסקים', /פיוז|fuse|מפסק|switch/i], ['כבלים', /כבל|חוט|AWG/i]],
+  'בידוד וכיווץ': [['שרוולי כיווץ', /כיווץ|שרוול|PVC/i], ['נייר בידוד', /נייר|פיש|fish|PET/i], ['ספוג', /ספוג|foam|EVA/i], ['סרטים ודבק', /קפטון|kapton|טייפ|tape|סרט|דבק|פיברגלס|fiberglass|Isolirband|איזולירבנד/i]],
+  'כבלים ומחברים': [['מחברים', /מחבר|XT\s?\d|XLR|QS\s?(?:8|10)\b|AS1[25]0|אנדרסון|anderson|שקע|תקע/i], ['נעלים וטרמינלים', /טרמינל|terminal|נעל|lug/i], ['פיוזים ומפסקים', /פיוז|fuse|מפסק|מתג|switch/i], ['כבלים', /כבל|חוט|AWG/i]],
   'הנעה': [['מצערות', /מצערת|throttle/i], ['צגים', /צג|display/i], ['בקרים', /בקר|controller|Sabvoton|Far\s?Driver|Votol|Fardriver/i], ['מנועים', /מנוע|motor|QS\d/i]],
 };
 // A nickel's own spec (Daniel, 2026-10-11: "יש לכל ניקל מפרט ייחודי משלו לכן תעשה לי אפשריות שאני יוכל
@@ -15065,6 +15179,8 @@ function readNickelSpec() {
 function invSubFromName(cat, name) {
   const n = String(name || '');
   if (cat === 'BMS') { const m = n.match(/(\d+)\s*S(?![A-Za-z\u0590-\u05FF])/i); return m ? m[1] + 'S' : ''; }
+  // a charger whose voltage is a range ("15-92.5V", "54.6-88.2V") is its own group, not the top of its range
+  if (cat === 'מטען' && /\d\s*-\s*\d+(?:\.\d+)?\s*V(?![A-Za-z\u0590-\u05FF])/i.test(n)) return 'מתח מתכוונן';
   if (cat === 'מטען') { const m = n.match(/(\d+(?:\.\d+)?)\s*V(?![A-Za-z\u0590-\u05FF])/i); return m ? m[1] + 'V' : ''; }
   if (cat === 'תא') { const m = n.match(/\b(18650|21700|26650|32700|4680)\b/); return m ? m[1] : ''; }
   const words = INV_SUB_WORDS[cat];
@@ -15086,11 +15202,38 @@ function invCatChanged() {
   row.style.display = INV_SUB[cat] ? '' : 'none';
   const nk = document.getElementById('invNickelSpec');
   if (nk) nk.style.display = cat === 'ניקל' ? '' : 'none';
+  const br = document.getElementById('invBoardRow');
+  if (br) br.style.display = cat === 'BMS' ? '' : 'none';
   const kg = invByWeight(cat);
   const ql = document.getElementById('invQtyLabel'), ll = document.getElementById('invLowLabel');
   if (ql) ql.textContent = kg ? 'כמות במלאי (ק"ג)' : 'כמות במלאי';
   if (ll) ll.textContent = kg ? 'מתי להזמין (ק"ג)' : 'מתי להזמין (כמות)';
   ['invQty', 'invLow'].forEach((x) => { const el = document.getElementById(x); if (el) el.step = kg ? '0.001' : '1'; });
+}
+// A shelf BMS filed under a board the catalogue sells (2026-10-29). Since the boards are sold by their
+// supplier-list name ("DALY 13S 48V 60A"), a sale takes one off the shelf only from a row whose name holds
+// every word of it (invFindRow), and the stock page files a board under its maker by the name too. Picking
+// the board writes "BMS " + its name: the BMS word keeps a build's or a repair's "BMS 13S 60A" finding the
+// row as before, and a "(יד 2)" already in the name stays on it.
+function invBoardRowHtml(cur) {
+  const rows = (typeof PRICING !== 'undefined' ? PRICING : []).filter((x) => /^BMS - /.test(x.cat || ''));
+  if (!rows.length) return '';
+  const now = String(cur || '').replace(/^BMS\s+/i, '').replace(/\s*\((?:יד\s*2|יד\s*שני(?:י)?ה|משומש)\)\s*$/, '');
+  const byCat = new Map();
+  rows.forEach((x) => { if (!byCat.has(x.cat)) byCat.set(x.cat, []); byCat.get(x.cat).push(x.name); });
+  return '<label>לוח מהרשימה</label><select class="form-select" id="invBoard" onchange="invBoardPicked()"><option value="">—</option>'
+    + [...byCat].map(([cat, names]) => `<optgroup label="${esc2(cat.replace(/^BMS - /, ''))}">`
+      + names.map((n) => `<option value="${esc2(n)}"${n === now ? ' selected' : ''}>${esc2(n)}</option>`).join('') + '</optgroup>').join('')
+    + '</select>';
+}
+function invBoardPicked() {
+  const v = document.getElementById('invBoard').value;
+  if (!v) return;
+  const nameEl = document.getElementById('invName');
+  const used = (nameEl.value.match(/\s*\((?:יד\s*2|יד\s*שני(?:י)?ה|משומש)\)\s*$/) || [''])[0];
+  nameEl.value = (/\bBMS\b/i.test(v) ? v : 'BMS ' + v) + used;
+  const sub = document.getElementById('invSub'), s = invSubFromName('BMS', v);
+  if (sub && s && [...sub.options].some((o) => o.value === s)) sub.value = s;
 }
 function openInventoryEditor(id) {
   const inv = getInventory();
@@ -15103,6 +15246,7 @@ function openInventoryEditor(id) {
   openModal(id ? 'עריכת פריט' : 'פריט מלאי חדש', `
     <div class="form-row"><label>קטגוריה</label><select class="form-select" id="invCat" onchange="invCatChanged()">${catOpts}</select></div>
     <div class="form-row" id="invSubRow" style="${INV_SUB[curCat] ? '' : 'display:none;'}">${invSubRowHtml(curCat, curSub)}</div>
+    <div class="form-row" id="invBoardRow" style="${curCat === 'BMS' ? '' : 'display:none;'}">${invBoardRowHtml(it.name)}</div>
     <div id="invNickelSpec" data-nickel-spec-form style="${curCat === 'ניקל' ? '' : 'display:none;'}border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin:6px 0;">
       <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;">⚡ מפרט הניקל</div>${nickelSpecRowsHtml(it)}</div>
     <div class="form-row"><label>שם הפריט</label><input class="form-input-wide" id="invName" value="${it.name || ''}" placeholder="20S 100A / DALY 60A / 72V 5A" style="width:170px;"></div>

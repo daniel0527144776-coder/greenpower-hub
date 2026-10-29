@@ -121,6 +121,11 @@ jobs:
       - name: Stock that moves by itself
         run: node test/test-inventory.mjs
 
+      # The stock page as he asked for it (2026-10-29): two levels that fold, one line per row, BMS by maker,
+      # a search, a board picked from the catalogue, and a new board taken before a second-hand one.
+      - name: The stock page, arranged
+        run: node test/test-inventory-layout.mjs
+
       # The supplier corrects by line number, so a number once sent must never move.
       - name: The order to a supplier
         run: node test/test-supplier-order.mjs

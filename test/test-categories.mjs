@@ -101,8 +101,9 @@ const P = await page.evaluate(() => {
   ]);
   INV_OPEN.add('בידוד וכיווץ'); INV_OPEN.add('כבלים ומחברים');
   navigateTo('inventory'); renderInventory();
+  for (let k = 0; k < 400; k++) { const g = document.querySelector('#inventoryList .inv-grp-fold[data-open="0"]'); if (!g) break; g.click(); }
   const t = document.getElementById('inventoryList').innerText;
-  return { t, subs: [...document.querySelectorAll('#inventoryList .inv-sub')].map((e) => e.innerText.replace(/\s+/g, ' ')) };
+  return { t, subs: [...document.querySelectorAll('#inventoryList .inv-grp, #inventoryList .inv-sub')].map((e) => e.innerText.replace(/\s+/g, ' ')) };
 });
 check('the stock page has the new categories as headings', /בידוד וכיווץ/.test(P.t) && /כבלים ומחברים/.test(P.t) && !/📦 אחר/.test(P.t), P.t.slice(0, 300));
 check('and sub-headings inside them', ['שרוולי כיווץ', 'נייר בידוד', 'מחברים', 'כבלים'].every((s) => P.subs.some((x) => x.startsWith(s))), P.subs);

@@ -51,6 +51,7 @@ const r = await page.evaluate(() => {
   ]);
   navigateTo('inventory');
   INV_OPEN.add('תא'); INV_OPEN.add('BMS'); renderInventory();
+  for (let k = 0; k < 400; k++) { const g = document.querySelector('#inventoryList .inv-grp-fold[data-open="0"]'); if (!g) break; g.click(); }
   const btns = [...document.querySelectorAll('#inventoryList [data-cell-sheet]')].map((b) => b.getAttribute('onclick'));
   const card = (id) => {
     openCellSheet(id);
