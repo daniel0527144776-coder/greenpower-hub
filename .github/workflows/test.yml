@@ -258,6 +258,11 @@ jobs:
       - name: The Samsung 50S cell
         run: node test/test-cell-50s.mjs
 
+      # DHS's ready Sur-Ron packs (2026-10-29), bought, not built: costed from the supplier row under the
+      # pack's own name, no cells or board off the shelf, 24 months, and no 50PL on the sticker.
+      - name: DHS's ready Sur-Ron packs
+        run: node test/test-dhs-packs.mjs
+
       # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
       # reminder only after a week without it; a restore that adds what is missing, and gives back a count
       # only when ticked (2026-10-29).
