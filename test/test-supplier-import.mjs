@@ -98,10 +98,10 @@ console.log('2. the weight actually reaches the landed cost');
   });
   check('supplierRows still carries the weight through to the view', r.row && r.row.kg === 16, r.row && r.row.kg);
 
-  // goods 195 + freight 16kg x rate, all x USD x VAT
+  // goods 195 + freight 16kg x rate, all x USD (no import VAT in the cost since 2026-10-29)
   const rate = await p.evaluate(() => FREIGHT_USD_PER_KG);
   const usd = await p.evaluate(() => SUPPLIER_USD);
-  const expect = Math.round((195 + 16 * rate) * usd * 1.18);
+  const expect = Math.round((195 + 16 * rate) * usd);
   check(`freight is charged by the kilo (rate $${rate}/kg)`, Math.abs(r.withFreight - expect) <= 2, `${r.withFreight} vs ${expect}`);
   check('and the freight is a real share of it, not a rounding error', r.withFreight - r.noFreight > 100, r.withFreight - r.noFreight);
 }
@@ -130,8 +130,8 @@ console.log('4. two rows with the same name — the newest is the cost');
   const got = await p.evaluate(() => supplierCostFor('DKD (LIN-BUS)'));
   const rate = await p.evaluate(() => FREIGHT_USD_PER_KG);
   const usd = await p.evaluate(() => SUPPLIER_USD);
-  const newest = Math.round((34 + 0.5 * rate) * usd * 1.18);
-  const oldest = Math.round((55 + 0.5 * rate) * usd * 1.18);
+  const newest = Math.round((34 + 0.5 * rate) * usd);
+  const oldest = Math.round((55 + 0.5 * rate) * usd);
   check('the 2025 price is used, not the 2022 one', got === (SELFTEST ? oldest : newest), `${got} (new ${newest}, old ${oldest})`);
   check('which is materially cheaper, not a rounding difference', got < oldest * 0.85, `${got} vs ${oldest}`);
 
@@ -224,7 +224,7 @@ console.log('5. every mapped catalogue name still exists');
   await p.evaluate((s) => { window.__SELF = s; }, SELFTEST);
   const rt = await p.evaluate(() => {
     Store.set('supplier_prices', [
-      { who: 'ספק תאים', cat: 'ספק תאים · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 6.43 },
+      { who: 'ספק תאים', cat: 'ספק תאים · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 5.83 },
       { who: 'ספק תאים', cat: 'ספק תאים · 21700 · ✈️ אווירי', name: 'EVE 50E — CLASSIC · 21700', ils: 9.2 },
       { who: 'חנות מקומית', cat: 'חנות מקומית · 21700', name: 'EVE 21700 50E', ils: 13.9 },
     ]);
@@ -253,10 +253,10 @@ console.log('5. every mapped catalogue name still exists');
     const hiddenOff = !!(document.getElementById('catRoute') || {}).hidden;
     return { out, lines, both, supChips, setChips, chips, seaLine, airLine, onChip, onSetting, hiddenOff, calcRows: supplierRows().filter((r) => r.who === 'מחשבון תיקונים').length };
   });
-  check('each route gives its own cell cost', rt.out.sea.cell === 6.43 && rt.out.air.cell === 9.2 && rt.out.local.cell === 13.9, rt.out);
+  check('each route gives its own cell cost', rt.out.sea.cell === 5.83 && rt.out.air.cell === 9.2 && rt.out.local.cell === 13.9, rt.out);
   check('a cell the route does not carry falls back to the sea cost', rt.out.local.pl === rt.out.sea.pl, rt.out);
   check('and a pack cost moves with the route', rt.out.sea.cost < rt.out.air.cost && rt.out.air.cost < rt.out.local.cost, rt.out);
-  check('a cell with a sea and an air price is ONE row showing both', rt.lines === 1 && /6\.43/.test(rt.both) && /9\.2/.test(rt.both), rt);
+  check('a cell with a sea and an air price is ONE row showing both', rt.lines === 1 && /5\.83/.test(rt.both) && /9\.2/.test(rt.both), rt);
   check('the supplier page no longer carries the route choice', rt.supChips === 0, rt.supChips);
   check('the settings carry the three routes, the chosen one lit', rt.setChips === 3 && /אווירי/.test(rt.onSetting), rt);
   check('the price list names the route it costs on, with no chips of its own', rt.chips === 0 && /אווירי/.test(rt.onChip), rt);
