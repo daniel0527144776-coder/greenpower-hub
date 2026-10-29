@@ -97,11 +97,11 @@ check('the scooter and the enduro pack cost the SAME — both are shrink, neithe
 // Two OEM cases since 2026-10-18: the Ultra Bee's ₪1,500 and the Light Bee's DHS case at ₪1,150
 // (SURRON_CASE_LIGHT, from its PI). Each is checked on a row of its own family, so the list's
 // order cannot decide which one is tested.
+// Since 2026-10-29 the catalogue's Sur-Ron rows are DHS's ready packs, bought, not built (test-dhs-packs.mjs).
+// The build's cost stays for an old sale or quote of one, so it is checked on a row in that old form.
 const surronRow = (light) => page.evaluate((light) => {
-  const i = PRICING.findIndex((x) => /^סוללות Sur-Ron/.test(x.cat) && /^סוללות Sur-Ron Light Bee/.test(x.cat) === light
-    && /(\d+)V\s*(\d+)Ah/.test(x.name));
-  if (i < 0) return { missing: true };
-  const it = PRICING[i];
+  const it = light ? { cat: 'סוללות Sur-Ron Light Bee - 72V PRO', name: 'Light Bee 72V 45Ah' }
+    : { cat: 'סוללות Sur-Ron Ultra Bee - 72V PRO', name: 'Ultra Bee 72V 55Ah' };
   const m = it.name.match(/(\d+)V\s*(\d+)Ah/);
   // A Sur-Ron row is named 'Light Bee 72V 45Ah', not '72V 45Ah' — match on the V/Ah part or
   // the comparison row is never found and the check passes vacuously on a null.
