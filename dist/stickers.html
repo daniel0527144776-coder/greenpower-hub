@@ -490,6 +490,7 @@
                         <option value="EVE 21700 50E" selected>EVE 21700 50E — CLASSIC (2C/3C)</option>
                         <option value="Tenpower 21700 50SG">Tenpower 21700 50SG — ADVANCED (4C/10C)</option>
                         <option value="EVE 21700 50PL">EVE 21700 50PL — PRO (25C/36C)</option>
+                        <option value="Samsung 21700 50S">Samsung 21700 50S — 5.0Ah (5C/9C)</option>
                         </optgroup>
                         <optgroup label="18650">
                         <option value="EVE 18650 26V">EVE 18650 26V — 2.6Ah (3C/4C)</option>
@@ -1393,6 +1394,12 @@
                 // EVE 50PL — PRO extreme cell (25C cont / 36C peak, per datasheet 125A/180A).
                 if (cellsText.includes("50PL")) {
                     return { cont: 25, peak: 36, cellCode: "50PL" };
+                }
+                // Samsung 50S (2026-10-29) — 25A (5C) continuous with no temperature cut-off, 45A (9C) with one at
+                // 80°C: the maker's figures as the distributors give them. The test reads what follows "50S", so
+                // "50SG" does not hit it; it has to come before the 50E fallback, which takes everything else.
+                if (/50S(?![A-Za-z0-9])/.test(cellsText)) {
+                    return { cont: 5, peak: 9, cellCode: "50S" };
                 }
                 // Tenpower 50SG — ADVANCED (4C cont / 20A per datasheet; 10C peak / 50A per owner).
                 if (cellsText.includes("50SG")) {

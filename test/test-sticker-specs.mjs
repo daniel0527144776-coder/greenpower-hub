@@ -182,6 +182,7 @@ console.log('\n4b. the 18650s, each computed from its own sheet');
     srAdv: stickerCellFromText('Sur-Ron Light Bee - 72V ADVANCED · Light Bee 72V 40Ah'),
     srPro: stickerCellFromText('Sur-Ron Ultra Bee - 72V PRO · Ultra Bee 72V 55Ah'),
     srBare: stickerCellFromText('Sur-Ron Light Bee 72V 40Ah'),
+    s50: stickerCellFromText('72V 30Ah CLASSIC · Samsung 50S'),
     all: [...Object.values(STICKER_CELLS), ...Object.values(STICKER_TIER_CELL), ...Object.values(STICKER_TIER_CELL_18650)],
   }));
   await hub.close();
@@ -189,7 +190,27 @@ console.log('\n4b. the 18650s, each computed from its own sheet');
     sent.line === 'EVE 18650 26V' && sent.adv === 'EVE 18650 25P' && sent.cls === 'EVE 18650 26V' && sent.v21 === 'EVE 21700 50PL', sent);
   check('a Sur-Ron ADVANCED line sends Tenpower 50SG; PRO and a bare Sur-Ron line, the 50PL',
     sent.srAdv === 'Tenpower 21700 50SG' && sent.srPro === 'EVE 21700 50PL' && sent.srBare === 'EVE 21700 50PL', sent);
+  check('a line that names the Samsung 50S sends it, whatever tier word it carries', sent.s50 === 'Samsung 21700 50S', sent.s50);
   check('and every cell the hub sends is on the editor\'s list', sent.all.every((c) => opts.cells.includes(c)), sent.all.filter((c) => !opts.cells.includes(c)));
+}
+
+console.log('\n4b2. the Samsung 50S (2026-10-29): 5C continuous, 9C with the 80°C cut-off');
+{
+  // 25A and 45A on its 5Ah, the maker\'s figures as the distributors give them. "50S" is inside "50SG", so the
+  // 50SG must still print its own 4C/10C, and the 50S must not fall through to the 50E\'s 2C/3C.
+  const s = await build(volt, cap, 'Samsung 21700 50S', 'DALY 60A');
+  check('50S 60Ah: 5C/9C, 300A/540A', s.cRate === (SELFTEST ? 'never' : '5C/9C') && s.discharge === '300A/540A', s);
+  const sku = await p.evaluate(() => document.getElementById('sku-value').innerText.trim());
+  check('its SKU names it', /-50S-\d+$/.test(sku), sku);
+  const sg = await build(volt, cap, opts.cells.find((c) => c.includes('50SG')), 'DALY 60A');
+  check('and the 50SG keeps its 4C/10C', sg.cRate === '4C/10C', sg);
+  await build(volt, cap, 'Samsung 21700 50S', 'DALY 60A');
+  const back = await p.evaluate(() => {
+    const el = (id) => document.getElementById(id);
+    window.refreshComputedSpecDisplay(['capacity-value', 'cells-value', 'bms-value'].map((id) => ({ id, innerHTML: el(id).innerHTML })));
+    return el('discharge-value').innerText.trim();
+  });
+  check('a restored 50S record recomputes the same', back === '300A/540A', back);
 }
 
 console.log('\n4c. the client details are not printed, and the form says so');

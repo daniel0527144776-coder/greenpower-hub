@@ -65,6 +65,7 @@ await page.evaluate(() => {
 if (SELFTEST) await page.evaluate(() => {
   window.cloudBackupRun = async () => false;
   window.missingRowsFrom = () => ({});
+  window.invCountsFrom = () => [];
 });
 
 const r = await page.evaluate(async () => {
@@ -119,6 +120,43 @@ check('nine days without it, it says so, and its button backs up to the cloud', 
 check('the restore lists the days in the cloud', r.listed >= 1, r.listed);
 check('it asks before adding what is missing, and names it', /להחזיר 1 שורות/.test(r.ask), r.ask.slice(0, 120));
 check('the deleted customer comes back, and the hour changed since keeps its new value', r.after.customers === 'c1,c2' && r.after.hours === 7, r.after);
+// A COUNT, which adding rows cannot give back (2026-10-29): a new phone set the cell rows back to
+// September's figures. The backup holds 1,830 50E; 20 were taken since; the shelf says 2,480. Offered,
+// unticked, as 1,830 − 20 = 1,810. A BMS row that moved only by its logged use is not offered.
+const c = await page.evaluate(async () => {
+  const out = {};
+  const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+  const key = 'bk_' + new Date().getDay();
+  Store.set('inventory', [{ id: 'k1', name: 'תאי EVE 21700 50E', qty: 1830, cat: 'תאים' }, { id: 'k2', name: 'BMS 20S 100A', qty: 9, cat: 'BMS' }]);
+  Store.set('inv_log', []);
+  await cloudBackup(true);
+  await wait(15);
+  const inv = getInventory(); inv.find((r) => r.id === 'k1').qty = 2500; Store.set('inventory', inv);   // the reset
+  inventoryDeduct('EVE 50E', 20, 'בנייה');
+  inventoryTake('BMS 20S 100A', 1, 'בנייה');
+  const q = () => Object.fromEntries(getInventory().map((r) => [r.id, r.qty]));
+  out.before = q();
+  await restoreFromCloud(key);
+  out.rows = [...document.querySelectorAll('#modalBody [data-qty-id]')].map((b) => b.dataset.qtyId + ':' + b.checked);
+  out.text = (document.getElementById('modalBody') || {}).textContent || '';
+  applyCloudRestore();                                 // nothing ticked
+  out.untouched = q();
+  out.noneNotice = (document.getElementById('noticeBody') || {}).textContent || '';
+  if (typeof closeNotice === 'function') closeNotice();
+  await restoreFromCloud(key);
+  const box = document.querySelector('#modalBody [data-qty-id="k1"]');
+  if (box) box.checked = true;
+  applyCloudRestore();
+  out.after = q();
+  out.notice = (document.getElementById('noticeBody') || {}).textContent || '';
+  if (typeof closeNotice === 'function') closeNotice();
+  return out;
+});
+check('a count lost since the backup is offered, unticked, with its three figures', c.rows.join() === 'k1:false'
+  && /עכשיו 2480 · בגיבוי 1830 · ירד מאז 20 ← יחזור ל-1810/.test(c.text), c);
+check('a row that moved only by its logged use is not offered', !c.rows.some((x) => x.startsWith('k2')), c.rows);
+check('with nothing ticked, nothing changes', c.untouched.k1 === 2480 && c.untouched.k2 === 8 && /לא שונה כלום/.test(c.noneNotice), c);
+check('ticked, the count comes back as the backup less what was used since, and nothing else moves', c.after.k1 === 1810 && c.after.k2 === 8 && /תוקנו 1 כמויות/.test(c.notice), c);
 check('no page errors', errs.length === 0, errs.join(' | '));
 check('no native dialogs', dialogs.length === 0, dialogs.join(' | '));
 
