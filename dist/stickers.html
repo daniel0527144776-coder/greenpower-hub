@@ -1367,8 +1367,10 @@
             }
             window.fitRepairPanels = fitRepairPanels;
 
-            function cellPrintName(v) { return String(v || '').replace(/^Tenpower\b/, 'TP'); }
-            function cellOptionValue(t) { return String(t || '').replace(/^TP\b/, 'Tenpower'); }
+            // The Samsung 50S prints without its format (Daniel, 2026-10-29: "תוריד 21700"): "Samsung 21700 50S" took
+            // its row down to 20px where the rest print at 27.
+            function cellPrintName(v) { return String(v || '').replace(/^Tenpower\b/, 'TP').replace(/^Samsung 21700 50S\b/, 'Samsung 50S'); }
+            function cellOptionValue(t) { return String(t || '').replace(/^TP\b/, 'Tenpower').replace(/^Samsung 50S\b/, 'Samsung 21700 50S'); }
             window.cellPrintName = cellPrintName;
             window.syncDropdownsFromElements = (els) => syncDropdownsFromElements(els);
             function getCellRates(cellsText) {
