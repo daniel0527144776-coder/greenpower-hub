@@ -49,6 +49,7 @@ await page.evaluate((SELF) => {
     window.invBmsMaker = () => INV_NO_MAKER;
     window.invMatches = () => true;
     window.invBoardPicked = () => {};
+    window.invDriveLine = () => '';
     INV_CAT_WORDS.length = 0;
     // the old rule: the first row holding every word, second-hand or not
     window.invFindRow = (inv, name) => { const want = invTokens(name); if (!want.length) return null;
@@ -230,6 +231,25 @@ const W = await page.evaluate(() => [
   ['JK Active Balancer 2S-24S 4A', 'כלים וציוד', ''],
 ].map(([name, want, wantSub]) => { const got = invCatOf({ name, cat: 'אחר' }); return { name, got, sub: invSubFromName(got, name), want, wantSub }; }));
 for (const r of W) check(`"${r.name}" files under ${r.want}${r.wantSub ? ' / ' + r.wantSub : ''}`, r.got === r.want && r.sub === r.wantSub, r);
+
+// ---------------------------------------------------------------- 7. drive parts: motors by QS model, controllers by maker
+// Daniel, the same day: "במנועי QS ... זה מתחלק ל-212, 205, 260, 273 ... דרג את זה לפי מספרי דגם של ה-QS".
+const D = await page.evaluate((OPEN_ALL) => {
+  Store.set('inventory', [
+    { id: 'm1', name: 'QS273 8000W', qty: 1 }, { id: 'm2', name: 'QS205 3000W', qty: 2 }, { id: 'm3', name: 'QS138 3000W (70H)', qty: 1 },
+    { id: 'm4', name: 'QS260 12" 1500W', qty: 1 }, { id: 'k1', name: 'Far Driver ND72450', qty: 3 }, { id: 'k2', name: 'Sabvoton SVMC72150', qty: 1 },
+    { id: 'k3', name: 'בקר KT 35A', qty: 2 }, { id: 'c1', name: 'QS8 זוג', qty: 4 },
+  ]);
+  INV_OPEN.clear(); if (typeof INV_GRP_OPEN !== 'undefined') INV_GRP_OPEN.clear(); renderInventory();
+  toggleInvCat(encodeURIComponent('הנעה'));
+  new Function(OPEN_ALL)();
+  const box = document.querySelector('#inventoryList [data-inv-cat="הנעה"]');
+  const seq = box ? [...box.querySelectorAll('.inv-grp-name, .inv-sub > span:first-child')].map((e) => (e.classList.contains('inv-grp-name') ? '@' : '§') + e.textContent.trim()) : [];
+  return { seq, qs8: invCatOf({ name: 'QS8 זוג' }) };
+}, OPEN_ALL);
+check('motors under their QS model, the smaller number first', D.seq.join().includes('@מנועים,§QS138,§QS205,§QS260,§QS273'), D.seq);
+check('controllers under their maker', D.seq.join().includes('@בקרים,§Far Driver,§Sabvoton,§KT'), D.seq);
+check('a QS8 connector is a connector, not a motor', D.qs8 === 'כבלים ומחברים', D.qs8);
 
 if (SELFTEST) console.log('\n[selftest] groups opened by themselves, makers and search and the board pick were broken, the name rules emptied; the checks above must have gone red.');
 check('no page errors', errs.length === 0, errs);

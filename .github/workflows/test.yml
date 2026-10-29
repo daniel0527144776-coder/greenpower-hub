@@ -126,6 +126,10 @@ jobs:
       - name: The stock page, arranged
         run: node test/test-inventory-layout.mjs
 
+      # QS motors costed from their quote, a category per QS model (2026-10-29).
+      - name: QS motors by model, costed from their quote
+        run: node test/test-qs-motors.mjs
+
       # The supplier corrects by line number, so a number once sent must never move.
       - name: The order to a supplier
         run: node test/test-supplier-order.mjs
