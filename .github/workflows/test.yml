@@ -225,6 +225,11 @@ jobs:
       - name: The price-list PDFs
         run: node test/test-price-pdf.mjs
 
+      # The supplier list arrives by itself after login (2026-10-30): a new stamp is applied once, through the
+      # import's row check; hand-added rows untouched; a refusing or empty server changes nothing.
+      - name: The supplier list from the server
+        run: node test/test-supplier-pull.mjs
+
       # The 💬 on a repair or a sale (2026-10-06): the message for where the job stands, sent through
       # the bot only when he presses send; the repair's own warranty; copyable when the bot is down.
       - name: The customer message through the bot
