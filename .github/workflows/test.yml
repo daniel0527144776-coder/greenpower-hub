@@ -220,6 +220,11 @@ jobs:
       - name: The Google review request
         run: node test/test-review-ask.mjs
 
+      # The two price lists as PDF from the price-list page (2026-10-30): on the phone the bot sends
+      # the file to his WhatsApp and says so; on a computer the PDF opens.
+      - name: The price-list PDFs
+        run: node test/test-price-pdf.mjs
+
       # The 💬 on a repair or a sale (2026-10-06): the message for where the job stands, sent through
       # the bot only when he presses send; the repair's own warranty; copyable when the bot is down.
       - name: The customer message through the bot

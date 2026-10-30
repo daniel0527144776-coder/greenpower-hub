@@ -1381,6 +1381,11 @@ body { min-height: 100vh; }
       <div class="sub-tab" data-tier="PRO" onclick="setCatalogTier('PRO')">PRO</div>
       <div class="sub-tab" data-tier="OTHER" onclick="setCatalogTier('OTHER')">ללא סדרה</div>
     </div>
+    <!-- The two price lists as PDF (2026-10-30). On his phone the bot sends the file to his WhatsApp. -->
+    <div class="btn-group" style="margin-bottom:10px;">
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="sendPricePdf('retail')">📄 מחירון פרטי PDF</button>
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="sendPricePdf('b2b')">📄 מחירון עסקי PDF</button>
+    </div>
     <div class="btn-group" style="margin-bottom:10px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(true)">⊕ פתח הכל</button>
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(false)">⊖ סגור הכל</button>
@@ -6651,6 +6656,24 @@ let priceMode = 'retail';
 let showCost = false;
 function setPriceMode(m) { priceMode = m; document.querySelectorAll('[data-pmode]').forEach(e => e.classList.toggle('active', e.dataset.pmode === m)); renderCatalog(); }
 function toggleCostView() { showCost = !showCost; document.getElementById('costToggle').classList.toggle('checked', showCost); renderCatalog(); }
+
+// The two price lists as PDF (2026-10-30, Daniel: "תן לי אפשרות להוריד את PDF גם מלוח הבקרה"). sync-prices
+// writes both and the two sites publish them. The Askan phone's WebView has no PDF viewer and no
+// download, so there the bot sends the file to his own WhatsApp chat (op 'sendfile', which takes
+// exactly these two addresses), one forward from a customer; anywhere else the browser opens it.
+const PRICE_PDFS = {
+  retail: { url: 'https://energylabgreen.com/greenpower-retail-pricelist.pdf', name: 'המחירון הפרטי' },
+  b2b: { url: 'https://b2b.energylabgreen.com/greenpower-b2b-pricelist.pdf', name: 'המחירון העסקי' },
+};
+async function sendPricePdf(kind) {
+  const p = PRICE_PDFS[kind];
+  if (!p) return;
+  if (!IS_ANDROID_WEBVIEW) return openExternal(p.url);
+  try {
+    await waAdmin({ op: 'sendfile', url: p.url, caption: p.name + ' של Green Power' });
+    showNotice('✅ ' + p.name + ' נשלח לוואטסאפ שלך. משם אפשר להעביר אותו ללקוח.');
+  } catch (e) { showNotice('⚠ לא נשלח: ' + e.message); }
+}
 
 // Which series a row belongs to. Word-boundary matching, because a substring test would put
 // every "CLASSIC" charger series ("מטענים - סדרת CLASSIC") into the CLASSIC battery tier —
