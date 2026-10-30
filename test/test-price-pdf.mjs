@@ -1,4 +1,4 @@
-// The two price lists as PDF from the price-list page (2026-10-30).
+// The two price lists and the Sur-Ron booklet as PDF from the price-list page (2026-10-30).
 //
 //   node test/test-price-pdf.mjs
 //   node test/test-price-pdf.mjs --selftest     (the phone handled like a computer: it opens the address)
@@ -21,6 +21,7 @@ const SELFTEST = process.argv.includes('--selftest');
 const { check, finish } = checker();
 const RETAIL = 'https://energylabgreen.com/greenpower-retail-pricelist.pdf';
 const B2B = 'https://b2b.energylabgreen.com/greenpower-b2b-pricelist.pdf';
+const SURRON = 'https://energylabgreen.com/surron-dhs.pdf';
 
 const srv = http.createServer((q, r) => {
   const rel = decodeURIComponent(q.url.split('?')[0]).replace(/^\/+/, '') || 'index.html';
@@ -73,7 +74,7 @@ const press = async (page, kind) => {
 // ---- the buttons are on the price-list page ----
 const bot = { posts: [], up: true };
 const phone = await open(true, bot);
-check('the price-list page has a button for each PDF', await phone.evaluate(() => ['retail', 'b2b'].every((k) =>
+check('the price-list page has a button for each PDF', await phone.evaluate(() => ['retail', 'b2b', 'surron'].every((k) =>
   !!document.querySelector(`#page-catalog button[onclick="sendPricePdf('${k}')"]`))), '');
 
 // ---- on the phone: the bot sends it to his WhatsApp ----
@@ -83,6 +84,9 @@ check('on the phone, the private price list goes to his WhatsApp through the bot
 check('and the page says it was sent to his WhatsApp', /נשלח לוואטסאפ שלך/.test(await notice(phone)), await notice(phone));
 await press(phone, 'b2b');
 check('the business price list goes the same way, at its own address', bot.posts.length === 2 && bot.posts[1].url === B2B, bot.posts.slice(1));
+// the Sur-Ron booklet (2026-10-30), to forward to a customer who asks
+await press(phone, 'surron');
+check('the Sur-Ron booklet goes the same way, at the address the bot allows', bot.posts.length === 3 && bot.posts[2].url === SURRON && /סורון/.test(bot.posts[2].caption || ''), bot.posts.slice(2));
 check('and nothing is opened in place on the phone (it would show an empty page)', (await phone.evaluate(() => window.__opened.length)) === 0
   && !/\.pdf$/.test(phone.url()), phone.url());
 // two taps in a row, the bot slow to answer: one file
