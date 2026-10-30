@@ -2818,7 +2818,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v513';
+const HUB_BUILD = 'v514';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -15193,13 +15193,17 @@ const CELL_SHEET_KEYS = [[/50PL/i, '21700-50pl'], [/50SG/i, '21700-50sg'], [/50S
   [/25P(?![A-Za-z])/i, '18650-25p'], [/35V(?![A-Za-z])/i, '18650-35v'], [/26V(?![A-Za-z])/i, '18650-26v'], [/JP30/i, '18650-jp30']];
 function cellSheetKey(name) { const hit = CELL_SHEET_KEYS.find(([re]) => re.test(String(name || ''))); return hit ? hit[1] : null; }
 function cellSheetFor(name) { const k = cellSheetKey(name); return k ? { key: k, sheet: CELL_SHEETS[k] || null } : null; }
+// One table for a maker's sheet: a cell's datasheet, a motor's or a controller's spec.
+function sheetTable(rows, attr) {
+  return '<table style="width:100%;border-collapse:collapse;font-size:13px;">' + rows.map(([k, v]) =>
+    `<tr><th style="text-align:right;vertical-align:top;padding:6px 4px;color:var(--text-muted);font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border);">${custPickEsc(k)}</th><td style="padding:6px 4px;border-bottom:1px solid var(--border);" ${attr}="${custPickEsc(k)}">${custPickEsc(v)}</td></tr>`).join('') + '</table>';
+}
 function openCellSheet(id) {
   const it = getInventory().find((x) => String(x.id) === String(id));
   const hit = it && cellSheetFor(it.name);
   if (!hit) return;
   const esc = custPickEsc;
-  const table = (rows) => '<table style="width:100%;border-collapse:collapse;font-size:13px;">' + rows.map(([k, v]) =>
-    `<tr><th style="text-align:right;vertical-align:top;padding:6px 4px;color:var(--text-muted);font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border);">${esc(k)}</th><td style="padding:6px 4px;border-bottom:1px solid var(--border);" data-cell-row="${esc(k)}">${esc(v)}</td></tr>`).join('') + '</table>';
+  const table = (rows) => sheetTable(rows, 'data-cell-row');
   if (hit.sheet) {
     openModal('📄 ' + esc(hit.sheet.model), table(hit.sheet.rows)
       + `<div class="wt-muted" style="margin-top:10px;">מקור: ${esc(hit.sheet.src)}. כל מספר כפי שהיצרן כתב; מה שלא כתוב בדאטה-שיט מסומן כך.</div>`);
@@ -15209,6 +15213,383 @@ function openCellSheet(id) {
   openModal('📄 ' + esc(d ? d.label : it.name), '<div class="alert alert-warning" data-no-sheet>אין דאטה-שיט של היצרן: EVE לא מפרסמת אותו באתר שלה, ועותקים יש רק אצל משווקים — לכן הם לא כאן.</div>'
     + (d ? '<div class="wt-muted" style="margin:8px 0 4px;">מה שידוע מטבלת מחשבון המידות (לא מדאטה-שיט):</div>'
       + table([['קיבולת', d.ah + 'Ah'], ['מידות', 'קוטר ' + d.dia + ' · גובה ' + d.len + ' מ״מ'], ['משקל', d.g + ' גרם']]) : ''));
+}
+// The maker's spec of each motor and controller (2026-10-30, Daniel: "לוחצים במלאי, על כל מוצר, מפרט
+// טכני מלא מדויק של כל מוצר"). Every figure is read off the model's own product page at QS's site,
+// which sells the QS motors and the Far Driver and Sabvoton controllers: its spec table, spec card,
+// drawing or test report. Where the page contradicts itself the card says so and keeps both, rather
+// than picking one. A model with no maker page in hand (the Fat-Bike and magnesium motors, the GT
+// controllers, SVMC7245 and SVMC72100, the displays) gets no card: an empty card is honest, a guessed
+// one is not. Public data, safe in this public page: model names and specs, no supplier or price.
+const QS_SRC = 'דף המוצר באתר של QS: טבלת המפרט';
+const FD_DRAWING = '189×121×59.7 מ״מ · 4 חורי Ø7.5 במרווח 174×106 מ״מ';
+const FD_COMMON = ['בקר', 'סינוס, ללא מברשות, למידה עצמית של המנוע, החלשת שדה · גרסת Hall בברירת מחדל'];
+const PART_SHEETS = {
+  'qs120': { model: 'QS120 2000W (QSJ120C-60)', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'PMSM רוטור פנימי · מנוע מרכזי עם תמסורת פנימית · ציר יחיד'],
+    ['מגנט', 'גובה 60 מ״מ · 5 זוגות קטבים'],
+    ['הספק', '2,000W נומינלי'],
+    ['מתח', '72V נומינלי'],
+    ['סל״ד', '2,800 נומינלי (3,300 / 3,900 / 4,900 לבחירה)'],
+    ['תמסורת', '1:2.35'],
+    ['מומנט מקסימלי', '105.7–119.8 N·m'],
+    ['נצילות מקסימלית', '93%'],
+    ['זרם סוללה שיא', '80A (ב-72V)'],
+    ['קירור', 'אוויר'],
+    ['חיישנים', 'Hall יחיד, מחברים אטומים · טמפ׳ KTY83/122'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['חוט פאזה', '8 מ״מ² (בלי הבידוד)'],
+    ['אטימות', 'IP66'],
+    ['משקל', 'כ-8.5 ק״ג'],
+    ['אריזה', '32×32×34 ס״מ'],
+  ] },
+  'qs138-70': { model: 'QS138 3000W 70H (QSD138A-70)', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'PMSM רוטור פנימי · מנוע מרכזי · ציר יחיד · לגלגל 12" בברירת מחדל'],
+    ['מגנט', 'גובה 70 מ״מ · 5 זוגות קטבים'],
+    ['מידות', 'Ø162×210 מ״מ'],
+    ['הספק', 'בטבלת המפרט: 6,000W נומינלי, 10,000W שיא · בשם הדגם בדף: 3000W'],
+    ['מתח', '72V נומינלי'],
+    ['סל״ד', '3,800 בסיס · 6,000 עם החלשת שדה'],
+    ['מומנט מקסימלי', '45–55 N·m'],
+    ['נצילות מקסימלית', '94%'],
+    ['זרם סוללה', '67A רציף · 140A שיא (ב-72V)'],
+    ['קירור', 'אוויר'],
+    ['חיישנים', 'Hall יחיד, מחברים אטומים · טמפ׳ KTY83/122'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['חוט פאזה', '16 מ״מ² (בלי הבידוד)'],
+    ['אטימות', 'IP66'],
+    ['משקל', 'כ-11 ק״ג נטו · 12.79 ק״ג ברוטו'],
+    ['אריזה', '34×34×33 ס״מ'],
+    ['הנעה', 'גרסת ה-3kW מגיעה בברירת מחדל להנעה ברצועה'],
+  ] },
+  'qs138-90': { model: 'QS138 4000W 90H (QSD138A-90 V1)', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'PMSM רוטור פנימי · מנוע מרכזי · ציר יחיד · לגלגל 17"'],
+    ['מגנט', 'גובה 90 מ״מ · 5 זוגות קטבים'],
+    ['הספק', '4,000W נומינלי · עד 7,500W רציף · 13.5kW שיא'],
+    ['מתח', '72V נומינלי'],
+    ['סל״ד', '4,000 · 6,500 עם החלשת שדה'],
+    ['מומנט', '14.3 N·m נומינלי · 72 N·m מקסימלי'],
+    ['נצילות מקסימלית', '94%'],
+    ['זרם', '89A נומינלי · 200A מקסימלי (DC)'],
+    ['קירור', 'אוויר'],
+    ['חיישנים', 'Hall יחיד, מחברים אטומים · טמפ׳ KTY83/122'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['חוט פאזה', '20 מ״מ² (בלי הבידוד)'],
+    ['אטימות', 'IP67'],
+    ['משקל', 'כ-13 ק״ג נטו · 14 ק״ג ברוטו'],
+    ['אריזה', '34×34×33 ס״מ'],
+    ['הנעה', 'ציר לרצועה בברירת מחדל · גלגל שיניים 428 14T עם מתאם זמין'],
+  ] },
+  'qs165': { model: 'QS165 5000W V2 (QSD165B-35)', src: QS_SRC + ' ודוח הבדיקה, נקרא 2026-10-30', rows: [
+    ['סוג', 'PMSM · מנוע מרכזי · גרסת אנקודר'],
+    ['מגנט', '35H · 5 זוגות קטבים'],
+    ['הספק', '5,000W נומינלי · 10,000W מקסימלי'],
+    ['מתח', '72V'],
+    ['סל״ד בלי עומס', '5,000–6,500'],
+    ['מומנט מקסימלי', '48 N·m (ב-450A שיא)'],
+    ['נצילות', '≥93%'],
+    ['זרם', 'הגבלה מקסימלית 180A · פאזה שיא 500A'],
+    ['היסט כיוון', '-60'],
+    ['קירור', 'אוויר'],
+    ['חיישן טמפ׳', 'KTY83/122'],
+    ['טמפ׳', 'עבודה עד 60°C · סליל עד 180°C'],
+    ['חוט פאזה', '16 מ״מ²'],
+    ['אטימות', 'IP67'],
+    ['משקל', '8.4 ק״ג (המנוע)'],
+    ['בדיקה', 'עם בקר ND72680: DC עד 200A, פאזה עד 660A'],
+    ['שימוש', 'לפי הדף: להמרת Sur-Ron Light Bee'],
+  ] },
+  'qs180': { model: 'QS180 8000W (QSD180A-90)', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'PMSM רוטור פנימי · מנוע מרכזי · ציר יחיד · לגלגל 17"'],
+    ['מגנט', 'גובה 90 מ״מ · 4 זוגות קטבים'],
+    ['הספק', '8,000W נומינלי · 18kW רציף · 20kW שיא'],
+    ['מתח', '72V נומינלי'],
+    ['סל״ד בלי עומס', '4,300–6,000'],
+    ['מומנט', '14.3 N·m נומינלי · 100 N·m שיא'],
+    ['נצילות מקסימלית', '94%'],
+    ['זרם', 'DC עד 300A · פאזה עד 850A'],
+    ['קירור', 'אוויר'],
+    ['חיישנים', 'אנקודר יחיד, מחברים אטומים · טמפ׳ PT1000'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['חוט פאזה', '30 מ״מ² (בלי הבידוד)'],
+    ['אטימות', 'IP67'],
+    ['משקל', '21.6 ק״ג נטו · 22.86 ק״ג ברוטו'],
+    ['אריזה', '32×32×37 ס״מ'],
+  ] },
+  'qs205-3000': { model: 'QS205 3000W V3 (חישורים)', src: QS_SRC + ', השרטוט ודוח הבדיקה, נקרא 2026-10-30', rows: [
+    ['סוג', 'BLDC רוטור חיצוני · מנוע גלגל · חיישני Hall'],
+    ['מבנה', 'ציר כפול, בלי חישוק · 36 חורי חישורים (4.2 מ״מ)'],
+    ['חישוק מתאים', '24" / 26" אופניים · 17" / 18" / 19" אופנוע'],
+    ['מגנט', 'גובה 50 מ״מ · ליבת אלומיניום'],
+    ['הספק', '3,000W נומינלי (עד 14,000W לשניות ספורות)'],
+    ['מתח', '72V בברירת מחדל (48–96V לבחירה)'],
+    ['מהירות', '80 קמ״ש בברירת מחדל (24–100 לבחירה) · kV 9.31 / 11.80 / 15.13 / 16.67'],
+    ['מומנט מקסימלי', 'כ-182 N·m'],
+    ['נצילות מקסימלית', '86–91%'],
+    ['זרם סוללה', '52A רציף · 104A שיא (ב-72V) · פאזה שיא מומלץ 196–245A (לפי ה-kV)'],
+    ['חיישנים', 'Hall כפול 120°, מחברים אטומים · טמפ׳ KTY83/122'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['בלם והתקנה', 'דיסק קטנוע PCD 3×80 מ״מ · רוחב מזלג 200 מ״מ · הברגה 14 מ״מ לגלגל חופשי · ציר 10 מ״מ'],
+    ['חוט פאזה', '10 מ״מ² (בלי הבידוד)'],
+    ['אטימות', 'IP65'],
+    ['משקל', '12.5 ק״ג נטו · 14.0 ק״ג ברוטו'],
+    ['מידות', 'אורך ציר 275 מ״מ · קוטר 244 מ״מ (מהשרטוט)'],
+    ['אריזה', '34×34×33 ס״מ'],
+    ['בדיקה ב-72V', 'בלי עומס 605 סל״ד · נצילות 93.9% ב-69.6 N·m · הספק מרבי 6,676W ב-127.1 N·m ו-103A · מומנט מרבי 199.8 N·m'],
+  ] },
+  'qs212-1500': { model: 'QS212 10" 1500W', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'BLDC מנוע גלגל · ציר כפול · ליבת אלומיניום'],
+    ['הספק', '1,500W נומינלי'],
+    ['מתח', '48–96V (72V בברירת מחדל)'],
+    ['מהירות', '21–55 קמ״ש'],
+    ['בלם', 'דיסק (בדף יש גם גרסת תוף)'],
+    ['חיישנים', 'Hall כפול, מחברים אטומים · טמפ׳ KTY83-122'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['חוט פאזה', '6 מ״מ²'],
+    ['אטימות', 'IP65'],
+    ['משקל', 'בטבלת המפרט: 13.58 ק״ג נטו, 15.08 ברוטו · בשדה המשקל של הדף: 10.0 ק״ג'],
+    ['אריזה', '31.5×31.5×32 ס״מ'],
+  ] },
+  'qs212-2000': { model: 'QS212 10" 2000W', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'BLDC מנוע גלגל · ציר כפול עם חישוק · ליבת אלומיניום'],
+    ['צמיג', '225/55-10'],
+    ['הספק', '2,000W נומינלי'],
+    ['מתח', '72V נומינלי'],
+    ['סל״ד', '470'],
+    ['מומנט מקסימלי', 'כ-161.8 N·m'],
+    ['נצילות מקסימלית', 'כ-93.2%'],
+    ['בלם והתקנה', 'דיסק · PCD 3×80 מ״מ M8 · CB 58 מ״מ · רוחב מזלג 256 מ״מ'],
+    ['חיישנים', 'Hall כפול 120°, מחברים אטומים · טמפ׳ KTY83/122'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['חוט פאזה', '6 מ״מ² (בלי הבידוד)'],
+    ['אטימות', 'IP65'],
+    ['משקל', 'כ-12.3 ק״ג נטו · 14 ק״ג ברוטו'],
+    ['אריזה', '31×31×40 ס״מ'],
+  ] },
+  'qs260-12-1500': { model: 'QS260 12" 1500W', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'BLDC מנוע גלגל · ציר כפול · ליבת פלדה'],
+    ['הספק', '1,500W נומינלי'],
+    ['מתח', 'בטבלת המפרט: 48–96V, 48V בברירת מחדל · בשם הדגם בדף: 72V'],
+    ['מהירות', '30–55 קמ״ש'],
+    ['בלם', 'דיסק'],
+    ['חיישנים', 'Hall כפול, מחברים אטומים · טמפ׳ KTY83-122'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['חוט פאזה', '6 מ״מ²'],
+    ['אטימות', 'IP65'],
+    ['משקל', 'כ-13 ק״ג'],
+    ['אריזה', '43×43×34 ס״מ'],
+  ] },
+  'qs260-12-3000': { model: 'QS260 12" 3000W V1', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'BLDC מנוע גלגל · ציר כפול · ליבת פלדה'],
+    ['הספק', '3,000W נומינלי'],
+    ['מתח', '48–96V (72V בברירת מחדל)'],
+    ['מהירות', '30–75 קמ״ש'],
+    ['בלם', 'דיסק'],
+    ['חיישנים', 'Hall כפול, מחברים אטומים · טמפ׳ KTY83-122'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['חוט פאזה', '10 מ״מ²'],
+    ['אטימות', 'IP65'],
+    ['משקל', 'כ-16.9 ק״ג נטו · 18.4 ק״ג ברוטו'],
+    ['אריזה', '38.5×38.5×41 ס״מ'],
+  ] },
+  'qs260-13-2000': { model: 'QS260 13" 2000W V1', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'BLDC מנוע גלגל · ציר כפול · ליבת פלדה'],
+    ['חישוק וצמיג', '13×3.5" (צמיג צר בברירת מחדל) · 130/90-13'],
+    ['מגנט', 'גובה 35 מ״מ · 24 זוגות קטבים'],
+    ['הספק', '2,000W נומינלי'],
+    ['מתח', '48–96V'],
+    ['מהירות', '30–70 קמ״ש'],
+    ['נצילות מקסימלית', 'כ-88%'],
+    ['בלם והתקנה', 'דיסק · PCD 3×80 מ״מ M8 · CB 58 מ״מ · רוחב מזלג 200 מ״מ'],
+    ['חיישנים', 'Hall כפול, מחברים אטומים'],
+    ['חוט פאזה', '8 מ״מ²'],
+    ['אטימות', 'IP65'],
+    ['משקל', '16.5 ק״ג (שדה המשקל בדף)'],
+  ] },
+  'qs260-13-5000': { model: 'QS260 13" 5000W V4', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'BLDC מנוע גלגל · ציר כפול · ליבת אלומיניום'],
+    ['חישוק וצמיג', '13×3.5" (צמיג צר בברירת מחדל) · 130/90-13'],
+    ['מגנט', 'גובה 45 מ״מ · 16 זוגות קטבים'],
+    ['הספק', '5,000W נומינלי'],
+    ['מתח', '48–96V'],
+    ['מהירות', '30–100 קמ״ש'],
+    ['נצילות מקסימלית', 'כ-88%'],
+    ['בלם והתקנה', 'דיסק · PCD 3×80 מ״מ M8 · CB 58 מ״מ · רוחב מזלג 200 מ״מ'],
+    ['חיישנים', 'Hall כפול, מחברים אטומים'],
+    ['חוט פאזה', '16 מ״מ²'],
+    ['אטימות', 'IP65'],
+    ['משקל', '22 ק״ג (שדה המשקל בדף)'],
+  ] },
+  'qs273-8000': { model: 'QS273 8000W V3 (חישורים)', src: QS_SRC + ', נקרא 2026-10-30', rows: [
+    ['סוג', 'BLDC רוטור חיצוני · מנוע גלגל · חיישני Hall'],
+    ['מבנה', 'ציר כפול, בלי חישוק · 40 חורי חישורים'],
+    ['חישוק מתאים', '17×4.25" אופנוע (הדף מוכר אותו שזור בחישוק הזה)'],
+    ['מגנט', 'גובה 50 מ״מ · 16 זוגות קטבים · ליבת אלומיניום'],
+    ['הספק', '8,000W נומינלי'],
+    ['מתח', '72V נומינלי'],
+    ['סל״ד', '1,210 ב-72V'],
+    ['מומנט מקסימלי', '≥203 N·m'],
+    ['נצילות מקסימלית', '86%'],
+    ['זרם שיא', '250A כניסה · 600A פאזה'],
+    ['חיישנים', 'Hall כפול, מחברים אטומים · טמפ׳ KTY83/122'],
+    ['טמפ׳ עבודה', '70–120°C, שיא 150°C'],
+    ['בלם והתקנה', 'דיסק אופניים PCD 3×80 מ״מ · רוחב מזלג 200 מ״מ'],
+    ['חוט פאזה', '16 מ״מ² (בלי הבידוד)'],
+    ['אטימות', 'IP65'],
+    ['משקל', '25.5 ק״ג נטו · 28 ק״ג ברוטו'],
+    ['אריזה', '52×52×42 ס״מ'],
+  ] },
+  'nd72240': { model: 'Far Driver ND72240', src: 'דף המוצר באתר של QS: כרטיס המפרט והטקסט, נקרא 2026-10-30', rows: [
+    FD_COMMON,
+    ['מתח', '72V נומינלי · 88V שיא'],
+    ['זרם', 'DC עד 70A · הגנת פאזה 240A'],
+    ['מנוע מתאים', '2–3kW'],
+    ['אטימות', 'IP67'],
+    ['משקל', '1 ק״ג נטו'],
+    ['תכנות', 'אפליקציה לאנדרואיד ול-iOS דרך מתאם בלוטות׳'],
+  ] },
+  'nd72260': { model: 'Far Driver ND72260', src: 'דף המוצר באתר של QS: כרטיס המפרט, נקרא 2026-10-30', rows: [
+    FD_COMMON,
+    ['מתח', '72V נומינלי'],
+    ['זרם', 'DC עד 80A · הגנת פאזה 260A'],
+    ['מנוע מתאים', '1.5–3kW'],
+    ['אטימות', 'IP67'],
+    ['משקל', '1 ק״ג נטו'],
+    ['תכנות', 'אפליקציה לאנדרואיד ול-iOS (בלוטות׳) · כבל USB'],
+  ] },
+  'nd72340': { model: 'Far Driver ND72340', src: 'דף המוצר באתר של QS: כרטיס המפרט, הטקסט והשרטוט, נקרא 2026-10-30', rows: [
+    FD_COMMON,
+    ['מתח', '72V נומינלי · 88V שיא'],
+    ['זרם', 'DC עד 100A · הגנת פאזה 340A'],
+    ['מנוע מתאים', '2–3kW'],
+    ['אטימות', 'IP67'],
+    ['משקל', '1.92 ק״ג נטו'],
+    ['מידות', FD_DRAWING],
+  ] },
+  'nd72450': { model: 'Far Driver ND72450', src: 'דף המוצר באתר של QS: כרטיס המפרט, הטקסט והשרטוט, נקרא 2026-10-30', rows: [
+    FD_COMMON,
+    ['מתח', '72V נומינלי · 88V שיא'],
+    ['זרם', 'DC עד 200A · הגנת פאזה 450A'],
+    ['מנוע מתאים', 'בכרטיס המפרט: 3–4kW · בטקסט הדף: 2–4kW'],
+    ['אטימות', 'IP67'],
+    ['משקל', '1.94 ק״ג נטו'],
+    ['מידות', FD_DRAWING],
+    ['תכנות', 'אפליקציה לאנדרואיד ול-iOS דרך מתאם בלוטות׳'],
+  ] },
+  'nd72680': { model: 'Far Driver ND72680', src: 'דף המוצר באתר של QS: כרטיס המפרט, הטקסט והשרטוט, נקרא 2026-10-30', rows: [
+    FD_COMMON,
+    ['מתח', '72V נומינלי · 88V שיא'],
+    ['זרם', 'DC עד 350A · הגנת פאזה 680A'],
+    ['מנוע מתאים', 'בכרטיס המפרט: 4–6kW · בטקסט הדף: 6–8kW'],
+    ['אטימות', 'IP67'],
+    ['משקל', '2.05 ק״ג נטו'],
+    ['מידות', FD_DRAWING],
+    ['תכנות', 'אפליקציה לאנדרואיד ול-iOS דרך מתאם בלוטות׳ · אנקודר לפי בקשה'],
+  ] },
+  'nd72890': { model: 'Far Driver ND72890', src: 'דף המוצר באתר של QS: כרטיס המפרט והשרטוט, נקרא 2026-10-30', rows: [
+    FD_COMMON,
+    ['מתח', '72V נומינלי'],
+    ['זרם', 'DC עד 450A · הגנת פאזה 890A'],
+    ['מנוע מתאים', '6–8kW'],
+    ['אטימות', 'IP67'],
+    ['משקל', '2.4 ק״ג נטו'],
+    ['מידות', '189×136×54.7 מ״מ · 4 חורי Ø7.5 במרווח 174×122 מ״מ'],
+    ['תכנות', 'כבל USB בברירת מחדל (לא בלוטות׳)'],
+  ] },
+  'nd96450': { model: 'Far Driver ND96450', src: 'דף המוצר באתר של QS: כרטיס המפרט, הטקסט והשרטוט, נקרא 2026-10-30', rows: [
+    FD_COMMON,
+    ['מתח', '96V נומינלי · 115V שיא'],
+    ['זרם', 'DC עד 170A · הגנת פאזה 450A'],
+    ['מנוע מתאים', '2–4kW'],
+    ['אטימות', 'IP67'],
+    ['משקל', '2.5 ק״ג נטו'],
+    ['מידות', FD_DRAWING],
+    ['תכנות', 'אפליקציה לאנדרואיד ול-iOS דרך מתאם בלוטות׳'],
+  ] },
+  'nd96680': { model: 'Far Driver ND96680', src: 'דף המוצר באתר של QS: כרטיס המפרט, הטקסט והשרטוט, נקרא 2026-10-30', rows: [
+    FD_COMMON,
+    ['מתח', '96V נומינלי · 115V שיא'],
+    ['זרם', 'DC עד 250A · הגנת פאזה 680A'],
+    ['מנוע מתאים', 'בכרטיס המפרט: 4–6kW · בטקסט הדף: 6–8kW'],
+    ['אטימות', 'IP67'],
+    ['משקל', '1.88 ק״ג נטו'],
+    ['מידות', FD_DRAWING],
+    ['תכנות', 'אפליקציה לאנדרואיד ול-iOS דרך מתאם בלוטות׳'],
+  ] },
+  'svmc72150': { model: 'Sabvoton SVMC72150', src: 'דפי המוצר באתר של QS: כרטיס הפרטים והטקסט, נקרא 2026-10-30', rows: [
+    ['בקר', 'סינוס, ניתן לתכנות, עם בלימה רגנרטיבית'],
+    ['מתח', '24–72V'],
+    ['זרם', 'DC עד 150A · הגנת פאזה 350A · פאזה מקסימלי 450A'],
+    ['חיישן טמפ׳', 'KTY83-122'],
+    ['אטימות', 'IP54'],
+    ['מידות', 'V1: 247×146×62.5 מ״מ · V2: 275×122×64 מ״מ'],
+    ['תכנות', 'תוכנה במחשב · אפליקציה ל-iOS ולאנדרואיד דרך בלוטות׳'],
+    ['התאמה', 'לא מתאים למנועים המרכזיים של QS ולמנועי גלגל עם זווית Hall של 60° (במנועי הגלגל של QS: 120°)'],
+  ] },
+  'svmc72200': { model: 'Sabvoton SVMC72200', src: 'דף המוצר באתר של QS: הטקסט, נקרא 2026-10-30', rows: [
+    ['בקר', 'סינוס, ניתן לתכנות, עם בלימה רגנרטיבית'],
+    ['מתח', '48–72V נומינלי · עד 90V'],
+    ['זרם', 'DC עד 200A · פאזה מקסימלי 450A'],
+    ['חיישן טמפ׳', 'KTY83-122'],
+    ['מידות', '283×147×62 מ״מ'],
+    ['משקל', '3.0 ק״ג נטו'],
+    ['תכנות', 'כבל USB · מתאם בלוטות׳ בברירת מחדל'],
+    ['פונקציות', 'Hall, מצערת, מנעול חשמלי, בלם במתח גבוה, חיישן טמפ׳, בלם חשמלי 0–5V, מתג 3 מהירויות, מד מהירות Hall'],
+    ['מיוחדות', 'רוורס, קרוז, כפתור 3 מהירויות, אטימות, נגד גניבה'],
+  ] },
+};
+// The shelf names a part freely ("QS273 8000W", "מנוע QS 205", "Far Driver ND72450 + BT"), so the model
+// is read off the name. A family sold in more than one size needs the name to say which: its watts (or
+// QS138's 70H/90H), and where both sizes share a wheel, its inch. A name that leaves it open gets no card
+// rather than the wrong one; so does a size QS makes but the sheets do not hold (QS205 1500W).
+const PART_SHEET_KEYS = [
+  { re: /QS\s?-?120/i, w: 2000, key: 'qs120' },
+  { re: /QS\s?-?138/i, w: 3000, alt: /70\s?H/i, key: 'qs138-70' },
+  { re: /QS\s?-?138/i, w: 4000, alt: /90\s?H/i, key: 'qs138-90' },
+  { re: /QS\s?-?165/i, w: 5000, key: 'qs165' },
+  { re: /QS\s?-?180/i, w: 8000, key: 'qs180' },
+  { re: /QS\s?-?205/i, w: 3000, key: 'qs205-3000' },
+  { re: /QS\s?-?212/i, w: 1500, key: 'qs212-1500' },
+  { re: /QS\s?-?212/i, w: 2000, key: 'qs212-2000' },
+  { re: /QS\s?-?260/i, w: 1500, inch: 12, key: 'qs260-12-1500' },
+  { re: /QS\s?-?260/i, w: 3000, inch: 12, key: 'qs260-12-3000' },
+  { re: /QS\s?-?260/i, w: 2000, inch: 13, key: 'qs260-13-2000' },
+  { re: /QS\s?-?260/i, w: 5000, inch: 13, key: 'qs260-13-5000' },
+  { re: /QS\s?-?273/i, w: 8000, key: 'qs273-8000' },
+  { re: /ND\s?-?72240(?!\d)/i, key: 'nd72240' },
+  { re: /ND\s?-?72260(?!\d)/i, key: 'nd72260' },
+  { re: /ND\s?-?72340(?!\d)/i, key: 'nd72340' },
+  { re: /ND\s?-?72450(?!\d)/i, key: 'nd72450' },
+  { re: /ND\s?-?72680(?!\d)/i, key: 'nd72680' },
+  { re: /ND\s?-?72890(?!\d)/i, key: 'nd72890' },
+  { re: /ND\s?-?96450(?!\d)/i, key: 'nd96450' },
+  { re: /ND\s?-?96680(?!\d)/i, key: 'nd96680' },
+  { re: /SVMC\s?-?72150(?!\d)/i, key: 'svmc72150' },
+  { re: /SVMC\s?-?72200(?!\d)/i, key: 'svmc72200' },
+];
+function partSheetKey(name) {
+  const t = String(name || '');
+  const kw = t.match(/(\d+(?:\.\d+)?)\s*kW\b/i), w = t.match(/(\d[\d,]*)\s*W\b/i);
+  const watts = kw ? Math.round(+kw[1] * 1000) : w ? +w[1].replace(/,/g, '') : null;
+  const inch = +((t.match(/(\d{2})\s*(?:"|״|''|אינץ|inch)/i) || [])[1] || 0) || null;
+  const family = PART_SHEET_KEYS.filter((k) => k.re.test(t));
+  const fits = family.filter((k) => (watts ? k.w === watts : k.alt ? k.alt.test(t) : true) && !(inch && k.inch && k.inch !== inch));
+  return fits.length === 1 && (fits.length === family.length || watts || fits[0].alt) ? fits[0].key : null;
+}
+function partSheetFor(name) { const k = partSheetKey(name); return k ? PART_SHEETS[k] : null; }
+// A value mixes Hebrew with runs of figures ("70–120°C", "kV 9.31 / 11.80", "182 N·m"); inside a right-to-left
+// cell such a run comes out backwards ("120°C–70"), so each run is isolated left-to-right, its trailing comma
+// or dot left outside.
+const LTR_RUN = /(?:(?<![\u0590-\u05FF])-(?=\d)|[0-9A-Za-zØ≥≤±~"])[0-9A-Za-z°%±≥≤²·×Ω"\/.,:+\-–~Ø]*(?:\s+[0-9A-Za-z°%±≥≤²·×Ω"\/.,:+\-–~Ø]+)*/g;
+function ltrRuns(v) {
+  return String(v).replace(LTR_RUN, (m) => { const tail = m.match(/[\s,.:·\/\-–]*$/)[0], core = m.slice(0, m.length - tail.length); return core ? '\u2066' + core + '\u2069' + tail : m; });
+}
+function openPartSheet(id) {
+  const it = getInventory().find((x) => String(x.id) === String(id));
+  const sheet = it && partSheetFor(it.name);
+  if (!sheet) return;
+  openModal('📄 ' + custPickEsc(sheet.model), sheetTable(sheet.rows.map(([k, v]) => [k, ltrRuns(v)]), 'data-part-row')
+    + `<div class="wt-muted" style="margin-top:10px;">מקור: ${custPickEsc(sheet.src)}. כל מספר כפי שהיצרן כתב; היכן שהדף סותר את עצמו, שני המספרים מופיעים.</div>`);
 }
 // One short line per row (Daniel, 2026-10-29, his choice): the name, and the count with its − and +.
 // A tap on the name opens the row (openInvItem): its group, threshold, note, pace and supplier, and
@@ -15224,10 +15605,12 @@ function renderInvItem(i, cat) {
   if (cat && cat !== 'אחר' && title.startsWith(cat + ' ')) title = title.slice(cat.length + 1);
   const fc = invForecast(i, _invUsageCache || (_invUsageCache = invUsage()));
   const sheet = cat === 'תא' && cellSheetFor(i.name);
+  const part = cat !== 'תא' && partSheetFor(i.name);
   return `<div class="list-item inv-row" data-inv-row="${esc2(i.id)}" style="${isLow ? 'border-color:var(--danger);' : ''}">
       <div class="inv-row-line">
         <div class="inv-row-name" onclick="openInvItem('${i.id}')"><span class="list-item-title">${esc2(title)}</span>${isLow ? ' <span style="font-size:10px;color:var(--danger);">🔴 אזל</span>' : ''}</div>
         ${sheet ? `<button class="inv-ico" data-cell-sheet onclick="openCellSheet('${i.id}')" aria-label="מפרט">📄</button>` : ''}
+        ${part ? `<button class="inv-ico" data-part-sheet onclick="openPartSheet('${i.id}')" aria-label="מפרט">📄</button>` : ''}
         <div class="num-input">
           <button class="num-btn" onclick="adjustInventory('${i.id}',-${step})">−</button>
           <span class="num-val" data-inv-qty style="${isLow ? 'color:var(--danger);' : ''}${kg ? 'min-width:64px;' : ''}">${kg ? invQtyFmt(i.qty) + ' ק"ג' : i.qty}</span>
@@ -15262,6 +15645,7 @@ function openInvItem(id) {
     ${row('עודכן', it._u ? `<bdi dir="ltr">${new Date(Number(it._u)).toLocaleDateString('he-IL')}</bdi>` : '')}`,
     `<button class="btn btn-primary" onclick="openInventoryEditor('${id}')">✏️ ערוך</button>`
     + (cat === 'תא' && cellSheetFor(it.name) ? `<button class="btn btn-secondary" onclick="openCellSheet('${id}')">📄 מפרט</button>` : '')
+    + (cat !== 'תא' && partSheetFor(it.name) ? `<button class="btn btn-secondary" data-part-sheet onclick="openPartSheet('${id}')">📄 מפרט</button>` : '')
     + `<button class="btn btn-danger" data-inv-delete onclick="closeModal();deleteInventory('${id}')">🗑️ מחק</button>`
     + '<button class="btn btn-secondary" onclick="closeModal()">סגור</button>');
 }

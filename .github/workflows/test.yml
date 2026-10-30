@@ -277,6 +277,11 @@ jobs:
       - name: A cell's datasheet card
         run: node test/test-cell-sheet.mjs
 
+      # The maker's spec card of each motor and controller in stock (2026-10-30): every QS motor and Far Driver
+      # controller on the price list has its own, a name that does not say which size gets none, no price.
+      - name: A motor's or a controller's spec card
+        run: node test/test-part-sheet.mjs
+
       # The Samsung 50S (2026-10-29), everywhere a cell is chosen: the repair calculator at ₪9.39 a cell, the
       # cost window, the dims, range and charging calculators, its card and its sticker; never the 50SG.
       - name: The Samsung 50S cell
