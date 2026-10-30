@@ -1387,6 +1387,9 @@ body { min-height: 100vh; }
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="sendPricePdf('b2b')">📄 מחירון עסקי PDF</button>
     </div>
     <div class="btn-group" style="margin-bottom:10px;">
+      <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="sendPricePdf('surron')">🏍️ חוברת סורון DHS ללקוח (PDF)</button>
+    </div>
+    <div class="btn-group" style="margin-bottom:10px;">
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(true)">⊕ פתח הכל</button>
       <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="catExpandAll(false)">⊖ סגור הכל</button>
     </div>
@@ -2818,7 +2821,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v514';
+const HUB_BUILD = 'v515';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6694,6 +6697,9 @@ function toggleCostView() { showCost = !showCost; document.getElementById('costT
 const PRICE_PDFS = {
   retail: { url: 'https://energylabgreen.com/greenpower-retail-pricelist.pdf', name: 'המחירון הפרטי' },
   b2b: { url: 'https://b2b.energylabgreen.com/greenpower-b2b-pricelist.pdf', name: 'המחירון העסקי' },
+  // The Sur-Ron booklet (2026-10-30): DHS's packs, prices, which controller, the answers; to forward to a
+  // customer who asks about Sur-Ron.
+  surron: { url: 'https://energylabgreen.com/surron-dhs.pdf', name: 'החוברת על סוללות DHS לסורון' },
 };
 // A second tap while the first is still on its way would put the file in his chat twice.
 let pricePdfBusy = false;
