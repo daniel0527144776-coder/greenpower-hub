@@ -76,8 +76,9 @@ const fam = await page.evaluate(() => {
   }
   const scoot = [...document.querySelectorAll('#catalogList details.fold')].find((d) => /קורקינטים/.test(d.querySelector(':scope > summary').textContent));
   const secs = scoot ? [...scoot.querySelectorAll(':scope > .fold-body > details.fold > summary .price-series')].map((e) => e.textContent) : [];
-  // the row says what the topic does not: "72V PRO" under אופניים, not the family again
-  const rows = [...document.querySelectorAll('#catalogList .price-cat')].filter((e) => /^סוללות (אופניים|קורקינטים|אינדורו)/.test(e.dataset.cat)).map((e) => e.innerText.replace(/[▾▸]/g, '').trim());
+  // the row says what the topic does not: "72V PRO" under אופניים, not the family again. Its label, that is:
+  // the 💬 beside it (2026-10-30, the price message for a customer) is a button, not part of what the row reads.
+  const rows = [...document.querySelectorAll('#catalogList .price-cat')].filter((e) => /^סוללות (אופניים|קורקינטים|אינדורו)/.test(e.dataset.cat)).map((e) => (e.querySelector(':scope > span') || e).innerText.replace(/[▾▸]/g, '').trim());
   return { wrong: wrong.slice(0, 6), n: wrong.length, seen, secs, long: rows.filter((r) => !/^\d+V (CLASSIC|ADVANCED|PRO)$/.test(r)).slice(0, 4) };
 });
 check('every battery family is a topic of its own, each category under its own family', fam.n === 0 && Object.keys(fam.seen).length === 4, fam);

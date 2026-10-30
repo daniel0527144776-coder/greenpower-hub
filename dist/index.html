@@ -2818,7 +2818,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v512';
+const HUB_BUILD = 'v513';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6710,6 +6710,106 @@ async function sendPricePdf(kind) {
   finally { pricePdfBusy = false; }
 }
 
+// A category's prices for a customer who asked (2026-10-30, Daniel: "אם לקוח שואל שאלה על מחירים של
+// סוללות ... אני אוכל לשלוח לו בהודעה את המחירים ... של כל הקטגוריה, נגיד סוללת לאינדורו 60 וולט").
+// 💬 on a category's row opens one WhatsApp message with every price of that family at that voltage,
+// every series it comes in (CLASSIC, ADVANCED, PRO; each can be left out), at the page's price mode,
+// with the series' cells, its page on the site, the warranty and the lab's address. It is editable,
+// goes through the bot to the number he types only when he presses send (op 'send', the repair
+// message's route), and is there to copy or to open in his own WhatsApp. A message rather than a PDF:
+// on a phone it is read at once. Every line opens right to left, so "20Ah" does not turn it around.
+const PM_TIERS = ['CLASSIC', 'ADVANCED', 'PRO'];
+const pmTier = (c) => { const m = String(c).match(TIER_RX); return m ? m[1] : ''; };
+const pmBase = (c) => (TIER_RX.test(c) ? String(c).replace(/\s(PRO|ADVANCED|CLASSIC)$/, '') : String(c));
+// the categories one message covers: the clicked one and its other series, cheapest series first
+function priceMsgCats(c) {
+  const base = pmBase(c);
+  const cats = [...new Set(PRICING.map((it) => it.cat))].filter((x) => pmBase(x) === base);
+  return cats.sort((a, b) => PM_TIERS.indexOf(pmTier(a)) - PM_TIERS.indexOf(pmTier(b)));
+}
+const pmAh = (it) => { const m = String(it.name).match(/(\d+(?:\.\d+)?)Ah\b/); return m ? +m[1] : null; };
+// `range` (optional): only the capacities from..to; a row with no capacity (a charger) always stays
+function priceMessage(cats, mode, name, range) {
+  const B = bizDetails || {};
+  const rl = (s) => '\u200F' + s;
+  const base = pmBase(cats[0] || '');
+  const volt = (base.match(/(\d+V)$/) || [])[1] || '';
+  const title = base.replace(/\s-\s/, ' ');
+  const out = [rl((name ? 'שלום ' + name : 'שלום') + ' 👋'), rl((mode === 'b2b' ? 'מחירון עסקי · ' : 'מחירון · ') + title + ' · ' + (B.name || 'Green Power'))];
+  let warranty = null;
+  for (const c of cats) {
+    const inRange = (it) => { const a = pmAh(it); return !range || a == null || (a >= range.from && a <= range.to); };
+    const items = PRICING.filter((it) => it.cat === c && inRange(it));
+    if (!items.length) continue;
+    if (warranty == null) warranty = warrantyForItem(items[0]);
+    const tier = pmTier(c);
+    const sp = String(specOf(items[0]) || '').split(/\s*·\s*/);
+    const cell = tier ? sp.find((x) => /^[A-Za-z][\w.-]*\s+[\w.-]+$/.test(x) && !/^\d/.test(x)) : '';
+    out.push('');
+    if (tier) out.push(rl('🔋 *' + tier + '*' + (cell ? ' · תאי ' + cell : '')));
+    for (const it of items) {
+      const p = priceWithBms(it, mode);
+      const label = volt && String(it.name).startsWith(volt + ' ') ? String(it.name).slice(volt.length + 1) : it.name;
+      out.push(rl('• ' + label + ' — ' + (typeof p === 'number' ? shek(p) : p)));
+    }
+    const page = typeof THUMB_CAT !== 'undefined' && THUMB_CAT[c];
+    if (page) out.push(rl('פרטים: https://energylabgreen.com/product/' + page));
+  }
+  out.push('');
+  if (warranty) out.push(rl('✅ אחריות ' + warranty + ' חודשים'));
+  out.push(rl('💰 המחירים סופיים (עוסק פטור)'));
+  out.push(rl('📍 ' + (B.address || LAB_ADDRESS)));
+  if (B.phone) out.push(rl('📞 ' + B.phone));
+  return out.join('\n');
+}
+let pmCats = [];
+function openPriceMessage(i) {
+  const c = catCatKeys[i];
+  if (!c) return;
+  pmCats = priceMsgCats(c);
+  const tiers = pmCats.map(pmTier).filter(Boolean);
+  const ahs = [...new Set(PRICING.filter((it) => pmCats.includes(it.cat)).map(pmAh).filter((a) => a != null))].sort((a, b) => a - b);
+  const ahSel = (id, sel) => '<select id="' + id + '" class="form-input" style="width:auto;flex:1;min-width:0;" onchange="pmRebuild()">' + ahs.map((a) => '<option value="' + a + '"' + (a === sel ? ' selected' : '') + '>' + a + 'Ah</option>').join('') + '</select>';
+  const custs = (Store.get('customers') || []).filter((x) => x && x.phone).slice(-300);
+  openModal('💬 מחירון ללקוח',
+    '<div class="form-row"><label>טלפון</label><input id="pmPhone" type="tel" class="form-input-wide" list="pmCust" placeholder="050-0000000" oninput="pmFillName()"></div>'
+    + '<datalist id="pmCust">' + custs.map((x) => '<option value="' + escPunch(x.phone) + '">' + escPunch(x.name || '') + '</option>').join('') + '</datalist>'
+    + '<div class="form-row"><label>שם</label><input id="pmName" class="form-input-wide" placeholder="לא חובה" oninput="pmRebuild()"></div>'
+    + (ahs.length > 6 ? '<div style="display:flex;gap:8px;align-items:center;margin:8px 0;"><span>קיבולת מ־</span>' + ahSel('pmFrom', ahs[0]) + '<span>עד</span>' + ahSel('pmTo', ahs[ahs.length - 1]) + '</div>' : '')
+    + (tiers.length > 1 ? '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:8px 0;">' + tiers.map((t) => '<label style="display:flex;gap:4px;align-items:center;"><input type="checkbox" data-pm-tier="' + t + '" checked onchange="pmRebuild()">' + t + '</label>').join('') + '</div>' : '')
+    + '<textarea id="waComposeMsg" class="form-input-wide wb-area" style="min-height:260px"></textarea>'
+    + '<div class="wt-muted" style="margin-top:6px">יישלח מהוואטסאפ העסקי שלך, דרך הבוט. אפשר לערוך לפני השליחה.</div>',
+    '<button class="btn btn-primary" data-wa-send onclick="sendPriceMessage()">📤 שלח דרך הבוט</button>'
+    + '<button class="btn btn-secondary" onclick="copyMessageBox(\'waComposeMsg\')">📋 העתק</button>'
+    + '<button class="btn btn-secondary" onclick="pmOpenChat()">💬 פתח בוואטסאפ</button>');
+  pmRebuild();
+}
+function pmRebuild() {
+  const box = document.getElementById('waComposeMsg');
+  if (!box) return;
+  const off = new Set([...document.querySelectorAll('[data-pm-tier]')].filter((x) => !x.checked).map((x) => x.dataset.pmTier));
+  const nameEl = document.getElementById('pmName');
+  const fr = document.getElementById('pmFrom'), to = document.getElementById('pmTo');
+  const range = fr && to ? { from: Math.min(+fr.value, +to.value), to: Math.max(+fr.value, +to.value) } : null;
+  box.value = priceMessage(pmCats.filter((c) => !off.has(pmTier(c))), priceMode, nameEl ? nameEl.value.trim() : '', range);
+}
+// a saved customer's number fills the name, once, while the name is empty
+function pmFillName() {
+  const ph = document.getElementById('pmPhone'), nm = document.getElementById('pmName');
+  if (!ph || !nm || nm.value.trim()) return;
+  const f = customerForPhone(ph.value);
+  if (f && f.c.name) { nm.value = f.c.name; pmRebuild(); }
+}
+function pmTarget() {
+  const ph = document.getElementById('pmPhone'), nm = document.getElementById('pmName');
+  const phone = ph ? ph.value.trim() : '';
+  if (!waNumber(phone)) { showNotice('הזן מספר טלפון תקין של הלקוח'); return null; }
+  waComposeTarget = { phone, name: nm ? nm.value.trim() : '' };
+  return waComposeTarget;
+}
+function sendPriceMessage() { if (pmTarget()) sendWaCompose(); }
+function pmOpenChat() { if (pmTarget()) waComposeOpenChat(); }
+
 // Which series a row belongs to. Word-boundary matching, because a substring test would put
 // every "CLASSIC" charger series ("מטענים - סדרת CLASSIC") into the CLASSIC battery tier —
 // those are chargers, not packs. The tier lives at the END of a battery category name, after
@@ -6884,7 +6984,8 @@ function renderCatalog() {
     const th = typeof thumbFor === 'function' ? thumbFor(c) : null;
     const thumb = th ? `<img src="${th}" alt="" loading="lazy" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex:none;background:var(--border);">` : '';
     html += `<div class="price-cat" data-cat="${c.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" onclick="toggleCatCat(${ci})" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:8px;">
-      <span style="display:flex;align-items:center;gap:8px;">${thumb}<span>${open ? '▾' : '▸'} ${shown}</span></span></div>`;
+      <span style="display:flex;align-items:center;gap:8px;">${thumb}<span>${open ? '▾' : '▸'} ${shown}</span></span>
+      <button class="btn btn-secondary btn-sm" data-price-msg onclick="event.stopPropagation();openPriceMessage(${ci})" title="מחירון ללקוח">💬</button></div>`;
     if (!open) return;
     groups[c].forEach(it => {
       const price = priceWithBms(it, priceMode);
