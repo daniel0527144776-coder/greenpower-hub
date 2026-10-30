@@ -84,8 +84,9 @@ const w = await page.evaluate((i) => {
   return r;
 }, CLASSIC);
 check('the cells line names the price per cell on this route', /96 תאים × ₪13\.90/.test(w.breakdown), w.breakdown.slice(0, 160));
-check('…and the route it came from', w.route === 'local' && /מקומי/.test(w.breakdown), w.route);
-check('the window says the number is an estimate, and on which route', /אומדן/.test(w.source) && /מקומי/.test(w.source), w.source);
+check('…costed on the route he chose', w.route === 'local', w.route);
+// 2026-10-30, Daniel: "רק שורה תחתונה ... לא ... על פי איזה ... זה נחשב": an estimate says nothing about itself.
+check('the window does not explain an estimate', w.source.trim() === '', w.source);
 check('the box opens on that estimate', w.field === w.est && w.est > 1500, w);
 
 // ---- 2. Save on the untouched window does not freeze the estimate
@@ -112,7 +113,7 @@ const s3 = await page.evaluate((i) => {
   return { saved, source, after: getCosts()[catKey(PRICING[i])] };
 }, CLASSIC);
 check('a typed cost is saved', s3.saved === 1500, s3);
-check('…and the window says it is his, with today\'s estimate beside it', /עלות שהזנת/.test(s3.source) && /לפי האומדן היום/.test(s3.source), s3.source);
+check('…and the window says it is his, with today\'s estimate beside it, in one short line', /עלות שהזנת/.test(s3.source) && /אומדן היום/.test(s3.source) && !/איפוס/.test(s3.source), s3.source);
 check('"איפוס" removes it', s3.after == null, s3);
 
 // A cell the local supplier does not carry falls back to sea, and the window says so.
