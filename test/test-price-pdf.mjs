@@ -7,7 +7,7 @@
 // viewer and no download, so opening the address there shows nothing. What must hold: on the phone each
 // button asks the bot to send that one PDF to his own WhatsApp (op 'sendfile', the exact address the
 // bot's allowlist takes) and says so; when the bot cannot be reached it says that instead of "sent"; on
-// a computer the button opens the PDF and calls no bot.
+// a computer the button opens the PDF and calls no bot; a second tap while the first is on its way sends nothing more.
 import { chromium } from 'playwright';
 import http from 'http';
 import fs from 'fs';
@@ -47,6 +47,7 @@ async function open(phone, bot) {
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
     if (/\/admin/.test(req.url()) && req.method() === 'POST') {
       bot.posts.push(JSON.parse(req.postData() || '{}'));
+      if (bot.delay) await new Promise((r) => setTimeout(r, bot.delay));
       return bot.up ? route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}', headers: CORS })
         : route.fulfill({ status: 502, contentType: 'application/json', body: '{"error":"green api unreachable"}', headers: CORS });
     }
@@ -84,6 +85,15 @@ await press(phone, 'b2b');
 check('the business price list goes the same way, at its own address', bot.posts.length === 2 && bot.posts[1].url === B2B, bot.posts.slice(1));
 check('and nothing is opened in place on the phone (it would show an empty page)', (await phone.evaluate(() => window.__opened.length)) === 0
   && !/\.pdf$/.test(phone.url()), phone.url());
+// two taps in a row, the bot slow to answer: one file
+bot.delay = 600;
+const before = bot.posts.length;
+await phone.evaluate(() => { closeNotice(); const b = document.querySelector("#page-catalog button[onclick=\"sendPricePdf('b2b')\"]"); b.click(); b.click(); });
+await phone.waitForTimeout(1000);
+check('two quick taps send the file once', bot.posts.length === before + 1, bot.posts.length - before);
+await press(phone, 'b2b');
+check('and once it is sent, the button works again', bot.posts.length === before + 2, bot.posts.length - before);
+bot.delay = 0;
 bot.up = false;
 await press(phone, 'retail');
 check('when the bot cannot be reached, the page says it was not sent', /לא נשלח/.test(await notice(phone)) && !/נשלח לוואטסאפ/.test(await notice(phone)), await notice(phone));

@@ -6665,14 +6665,19 @@ const PRICE_PDFS = {
   retail: { url: 'https://energylabgreen.com/greenpower-retail-pricelist.pdf', name: 'המחירון הפרטי' },
   b2b: { url: 'https://b2b.energylabgreen.com/greenpower-b2b-pricelist.pdf', name: 'המחירון העסקי' },
 };
+// A second tap while the first is still on its way would put the file in his chat twice.
+let pricePdfBusy = false;
 async function sendPricePdf(kind) {
   const p = PRICE_PDFS[kind];
   if (!p) return;
   if (!IS_ANDROID_WEBVIEW) return openExternal(p.url);
+  if (pricePdfBusy) return;
+  pricePdfBusy = true;
   try {
     await waAdmin({ op: 'sendfile', url: p.url, caption: p.name + ' של Green Power' });
     showNotice('✅ ' + p.name + ' נשלח לוואטסאפ שלך. משם אפשר להעביר אותו ללקוח.');
   } catch (e) { showNotice('⚠ לא נשלח: ' + e.message); }
+  finally { pricePdfBusy = false; }
 }
 
 // Which series a row belongs to. Word-boundary matching, because a substring test would put
