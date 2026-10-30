@@ -2818,7 +2818,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v511';
+const HUB_BUILD = 'v512';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5003,7 +5003,7 @@ function openSupplierImport() {
   const cur = (Store.get('supplier_prices') || []).length;
   openModal('📥 ייבוא מחירון ספק', `
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-      כרגע מיובאים <b>${cur}</b> פריטים.<br>
+      כרגע מיובאים <b>${cur}</b> פריטים.${(Store.get('settings') || {}).supplierPricesAt ? ` הרשימה מתעדכנת לבד מהמחירון (עדכון אחרון ${new Date(Store.get('settings').supplierPricesAt).toLocaleDateString('he-IL')}).` : ''}<br>
       בחר את הקובץ <b>supplier-costs-import.json</b> (או הדבק את תוכנו) — הרשימה תישמר בחשבון שלך ותסתנכרן לכל מכשיר.
     </div>
     <input type="file" id="supFile" accept=".json,application/json" class="form-input-wide" style="width:100%;margin-bottom:8px;" onchange="supFilePicked()">
@@ -5020,14 +5020,10 @@ function supFilePicked() {
   rd.onload = () => { document.getElementById('supJson').value = rd.result; };
   rd.readAsText(fEl.files[0], 'utf-8');
 }
-function importSupplierPrices(append) {
-  const raw = document.getElementById('supJson').value.trim();
-  if (!raw) { alert('בחר קובץ או הדבק JSON'); return; }
-  let data;
-  try { data = JSON.parse(raw); } catch (e) { alert('JSON לא תקין: ' + e.message); return; }
-  if (!Array.isArray(data)) { alert('הקובץ צריך להיות מערך של פריטים'); return; }
-  // Validate before storing — a half-parsed list that silently drops rows is worse than
-  // a refusal, and this is the only copy once it syncs.
+// Validate before storing — a half-parsed list that silently drops rows is worse than
+// a refusal, and this is the only copy once it syncs. The import and the pull below both
+// go through it.
+function cleanSupplierRows(data) {
   const clean = [];
   for (const r of data) {
     if (!r || !r.name) continue;
@@ -5050,6 +5046,15 @@ function importSupplierPrices(append) {
     for (const k of ['on', 'img', 'src']) if (r[k]) row[k] = String(r[k]);
     clean.push(row);
   }
+  return clean;
+}
+function importSupplierPrices(append) {
+  const raw = document.getElementById('supJson').value.trim();
+  if (!raw) { alert('בחר קובץ או הדבק JSON'); return; }
+  let data;
+  try { data = JSON.parse(raw); } catch (e) { alert('JSON לא תקין: ' + e.message); return; }
+  if (!Array.isArray(data)) { alert('הקובץ צריך להיות מערך של פריטים'); return; }
+  const clean = cleanSupplierRows(data);
   if (!clean.length) { alert('לא נמצאו שורות תקינות (צריך name + usd או ils)'); return; }
   const dropped = data.length - clean.length;
   const withKg = clean.filter((r) => r.kg != null).length;
@@ -5058,6 +5063,31 @@ function importSupplierPrices(append) {
   closeModal();
   renderSupplier();
   alert(`✅ יובאו ${clean.length} פריטים${dropped ? ` (${dropped} שורות דולגו — חסר מחיר או שם)` : ''}.\nמתוכם ${withKg} עם משקל (שילוח מחושב לק"ג).\nסה"כ ברשימה: ${list.length}`);
+}
+// The supplier list arrives by itself (2026-10-30, Daniel: "עלויות הספקים נכנסות ללוח הבקרה לבד").
+// sync-prices sends supplier-costs-import.json to the lab's server; after his login the hub reads
+// it there (owner-only, the same door as the bot's page) and makes it 'supplier_prices' when its
+// stamp is one not yet applied. The stamp applied lives in the synced settings, so one device
+// applying a list is every device's, and a list he imported by hand after it stays until the next
+// one. Rows he adds by hand are 'supplier_costs' and are never touched.
+const SUPPLIER_URL = 'https://energylabgreen.com/api/supplier-prices';
+async function pullSupplierPrices() {
+  const t = await Sync.token();
+  if (!t) return false;
+  const r = await fetch(SUPPLIER_URL, { headers: { authorization: 'Bearer ' + t } });
+  if (!r.ok) return false;
+  const d = await r.json().catch(() => null);
+  const settings = Store.get('settings') || {};
+  if (!d || !d.at || !Array.isArray(d.rows) || settings.supplierPricesAt === d.at) return false;
+  const clean = cleanSupplierRows(d.rows);
+  if (!clean.length || !Store.set('supplier_prices', clean)) return false;
+  settings.supplierPricesAt = d.at;
+  Store.set('settings', settings);
+  for (const [p, draw] of [['supplier', renderSupplier], ['catalog', renderCatalog]]) {
+    const sec = document.getElementById('page-' + p);
+    if (sec && sec.classList.contains('active')) draw();
+  }
+  return true;
 }
 function openSupplierAdd() {
   const whos = [...new Set(supplierRows().map((r) => r.who))];
@@ -15976,6 +16006,7 @@ async function startApp() {
   bootSeeds();
   init();
   Sync.flush().catch(() => {});
+  pullSupplierPrices().catch(() => {});
   renderBackupStatus();
   setTimeout(() => { cloudBackup().catch(() => {}); }, 15000);
 }
