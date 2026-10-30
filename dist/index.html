@@ -2821,7 +2821,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v515';
+const HUB_BUILD = 'v516';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6611,13 +6611,13 @@ function priceWithBms(it, mode) {
 }
 function bmsUpNote(it) {
   const up = bmsUpgradeFor(it, pickedBms(it));
-  return up ? 'כולל ' + up.label + ' +' + shek(up.add) + ', כמו באתר' : '';
+  return up ? 'כולל ' + up.label + ' +' + shek(up.add) : '';
 }
+// The prices are in the profit lines (updateCostProfit); this line says only that they carry a BMS upgrade
+// (2026-10-30, Daniel: "יש גם דברים כפולים ... רק שורה תחתונה").
 function costPricesHtml(it) {
-  const fmt = (v) => (typeof v === 'number' ? shek(v) : v);
   const note = bmsUpNote(it);
-  return 'פרטי: ' + fmt(priceWithBms(it, 'retail')) + ' · עסקי: ' + fmt(priceWithBms(it, 'b2b'))
-    + (note ? ' <span data-bms-up style="color:var(--primary);">(' + note + ')</span>' : '');
+  return note ? '<span data-bms-up style="color:var(--primary);">' + note + '</span>' : '';
 }
 function setBmsPick(i, name) {
   const it = PRICING[i], picks = getBmsPicks();
@@ -7019,7 +7019,7 @@ function renderCatalog() {
       const specLine = sp ? `<div style="font-size:10.5px;color:var(--text-muted);line-height:1.45;">${specHtml(sp)}</div>` : '';
       html += `<div class="price-item" style="cursor:pointer;" onclick="openCostEditor(${PRICING.indexOf(it)})">
         <div class="price-item-name">${it.name}${specLine}${upNote ? `<div data-bms-up style="font-size:10.5px;color:var(--primary);">${upNote}</div>` : ''}${extra}</div>
-        <div class="price-item-cost">${priceMode === 'retail' ? 'פרטי' : 'עסקי'}</div>
+        <div></div>
         <div class="price-item-final">${priceStr}</div>
       </div>`;
     });
@@ -7042,91 +7042,57 @@ function catExpandAll(open) {
   renderCatalog();
 }
 
-// What the estimate is made of, itemised, with his own hours kept OUT of the materials
-// subtotal and shown on their own line — that separation is the second thing he asked about.
-// What the cost is made of, WHEN its figures are from, and what the shipping in it comes to
-// (2026-10-22, Daniel: "הסבר שאני לוחץ על המוצר ממה מורכב ... ומאיזה תאריך ... אומדן משלוח"). Every
-// row gets one: a battery its parts, a resold item its supplier quote, and an item with neither
-// says that its cost is a share of the price and nothing more.
-// The import the landed cell costs are measured on, and its factor: cost-model's IMPORT_AS_OF and
-// IMPORT_FACTOR, which audit-cross-artifacts holds these two to. Both move at the next import.
-const CELL_IMPORT_AS_OF = 'יבוא ימי, יוני 2026';
-const CELL_LANDED_FACTOR = 1.092;
+// What the cost is made of, folded shut under "פירוט" (2026-10-30, Daniel: "רק שורה תחתונה ... לא פירוט לדעת
+// כמו איזה תאריך ... למה עשית"). Every row has one: a battery its parts and its hours, a resold item its
+// supplier quote, an item with neither the share of the price it is costed at. No dates, no shipping line, no
+// explanations; a warning (a cell with no price on his route) stays, outside the fold.
 function costNoteRow(k, v) {
   return '<div data-cost-note style="display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--text-muted);padding:1px 0;"><span>' + k + '</span><span>' + v + '</span></div>';
+}
+function costFold(summary, inner) {
+  return '<details data-cost-fold style="margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:6px 10px;">'
+    + '<summary style="font-size:11.5px;color:var(--text-muted);cursor:pointer;">' + summary + '</summary>' + inner + '</details>';
+}
+function costTotalRow(v) {
+  return '<div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;"><span>סה"כ</span><span>' + shek(Math.round(v)) + '</span></div>';
 }
 function costBreakdownHtml(it) {
   const b = typeof batteryCostParts === 'function' ? batteryCostParts(it, priceMode === 'b2b') : null;
   if (!b) return resaleBreakdownHtml(it);
-  const row = (k, v, muted) =>
-    '<div style="display:flex;justify-content:space-between;font-size:11.5px;' + (muted ? 'color:var(--text-muted);' : '') + 'padding:1px 0;">'
+  const row = (k, v) =>
+    '<div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-muted);padding:1px 0;">'
     + '<span>' + k + '</span><span>' + shek(Math.round(v)) + '</span></div>';
-  return '<div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;">'
-    + '<div style="font-size:10.5px;color:var(--text-muted);margin-bottom:4px;">ממה מורכב האומדן (' + b.S + 'S' + b.P + 'P)</div>'
-    + '<div data-cell-route="' + b.route + '" style="font-size:10.5px;color:var(--text-muted);margin-bottom:4px;">תאים לפי מסלול: ' + routeLabel(b.route)
-    + (b.fellBack ? ' — ל-' + b.code + ' אין מחיר ב' + routeLabel(b.chosen) : '') + '</div>'
-    + b.parts.map((p) => row(p.k, p.v, true)).join('')
-    + '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;">'
-    + '<span>סה\"כ חומרים</span><span>' + shek(Math.round(b.materialsTotal)) + '</span></div>'
-    + row('עבודה — ' + b.hours.toFixed(1) + " שע' × ₪45 (הזמן שלך)", b.labour, true)
-    + '<div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;">'
-    + '<span>סה"כ</span><span>' + shek(Math.round(b.total)) + '</span></div>'
-    + batteryDatesHtml(it, b)
-    + '</div>';
-}
-// The cells land at USD × 3 × CELL_LANDED_FACTOR, freight and fees and no VAT (2026-10-29), so of the
-// landed price 1 − 1/CELL_LANDED_FACTOR is the freight and fees.
-function batteryDatesHtml(it, b) {
-  const cellsIls = b.cells * b.cellPrice;
-  const sea = b.route === 'sea';
-  const picked = typeof pickedBms === 'function' ? pickedBms(it) : null;
-  const lines = [
-    ['תאים', sea ? CELL_IMPORT_AS_OF : 'מסלול ' + routeLabel(b.route)],
-    ['BMS', picked ? 'מרשימת הספק' + (picked.on ? ' · ' + String(picked.on).slice(0, 10) : ' · ללא תאריך') : 'אומדן לפי המתח'],
-    ['זמן עבודה', 'נמדד 07/2026 · ₪45 לשעה'],
-  ];
-  const ship = sea ? cellsIls * (1 - 1 / CELL_LANDED_FACTOR) : null;
-  return '<div data-cost-dates style="border-top:1px dashed var(--border);margin-top:6px;padding-top:4px;">'
-    + '<div style="font-size:10.5px;font-weight:700;color:var(--text-muted);">📅 מאיזה תאריך</div>'
-    + lines.map(([k, v]) => costNoteRow(k, v)).join('')
-    + (sea ? '<div style="font-size:10.5px;font-weight:700;color:var(--text-muted);margin-top:4px;">🚚 משלוח (כלול במחיר התאים)</div>'
-      + costNoteRow('הובלה ועמלות', '≈ ' + shek(Math.round(ship))) : '')
+  // data-cell-route: the route the cells were costed on, for the tests; words only when it fell back.
+  return '<div data-cell-route="' + b.route + '">'
+    + (b.fellBack ? '<div style="font-size:11px;color:var(--warning);margin-top:6px;">⚠ ל-' + b.code + ' אין מחיר ב' + routeLabel(b.chosen) + ', לפי ' + routeLabel(b.route) + '</div>' : '')
+    + costFold('פירוט (' + b.S + 'S' + b.P + 'P)',
+      b.parts.map((p) => row(p.k, p.v)).join('')
+      + row('עבודה ' + b.hours.toFixed(1) + " שע'", b.labour)
+      + costTotalRow(b.total))
     + '</div>';
 }
 // A resold item: the supplier's quote it is costed on, item by item, and when it was given.
 function resaleBreakdownHtml(it) {
   const q = typeof supplierQuoteFor === 'function' ? supplierQuoteFor(it.name) : null;
-  const box = (inner) => '<div data-cost-resale style="margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;">' + inner + '</div>';
+  const box = (inner) => '<div data-cost-resale>' + inner + '</div>';
   // A single cell is known to the agora: its landed price off the June import, not a share of anything.
   const unit = /^תאי ליתיום/.test(it.cat) ? CELL_UNIT_COST[String(it.name).split(/\s+—\s+/)[0]] : null;
-  if (!q && unit != null) {
-    return box('<div style="font-size:10.5px;color:var(--text-muted);">ממה מורכבת העלות</div>'
-      + costNoteRow('מחיר נחיתה של תא (כולל הובלה)', fmtIls(unit))
-      + costNoteRow('📅 מאיזה תאריך', CELL_IMPORT_AS_OF)
-      + costNoteRow('🚚 מזה הובלה ועמלות', '≈ ' + fmtIls(unit * (1 - 1 / CELL_LANDED_FACTOR))));
-  }
+  if (!q && unit != null) return box(costFold('פירוט', costNoteRow('מחיר נחיתה של תא', fmtIls(unit))));
   if (!q) {
     // retailMid: the hand-kept RC / drill packs carry a price range, and productEstimate costs them at its midpoint.
     const mid = typeof retailMid === 'function' ? retailMid(it.retail) : (typeof it.retail === 'number' ? it.retail : null);
     const est = mid != null && COST_PCT > 0 ? Math.round(mid * COST_PCT / 100) : null;
     if (est == null) return '';
-    return box('<div style="font-size:10.5px;color:var(--text-muted);">ממה מורכב האומדן</div>'
-      + costNoteRow('אין הצעת מחיר מספק לפריט הזה', '')
-      + costNoteRow(COST_PCT + '% מ' + (typeof it.retail === 'number' ? 'המחיר' : 'אמצע טווח המחיר') + ' (ההגדרה)', shek(est)));
+    return box(costFold('פירוט', costNoteRow('אין הצעת מחיר · ' + COST_PCT + '% מ' + (typeof it.retail === 'number' ? 'המחיר' : 'אמצע טווח המחיר'), shek(est))));
   }
   const p = supplierIlsParts(q);
-  const BASIS = { quoted: 'משלוח שהספק ציטט', kg: 'לפי משקל', typical: 'לפי משקל טיפוסי', share: Math.round(freightRateFor(q.cat) * 100) + '% מערך הסחורה (ממוצע משלוחים)' };
   const row = (k, v) => '<div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-muted);padding:1px 0;"><span>' + k + '</span><span>' + shek(Math.round(v)) + '</span></div>';
-  return box('<div style="font-size:10.5px;color:var(--text-muted);margin-bottom:4px;">ממה מורכבת העלות</div>'
-    + (p.basis === 'ils' ? row('מחיר נחיתה מהספק', p.total)
+  return box(costFold('פירוט',
+    (p.basis === 'ils' ? row('מחיר נחיתה מהספק', p.total)
       : row('סחורה · $' + (Math.round(Number(q.usd) * 100) / 100) + ' × ' + SUPPLIER_USD, p.goods)
-        + row('🚚 משלוח · ' + BASIS[p.basis], p.freight)
+        + row('משלוח', p.freight)
         + (p.vat ? row('מע"מ יבוא ' + Math.round(SUPPLIER_VAT * 100) + '%', p.vat) : ''))
-    + '<div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;padding-top:4px;"><span>סה"כ</span><span>' + shek(Math.round(p.total)) + '</span></div>'
-    + '<div data-cost-dates style="border-top:1px dashed var(--border);margin-top:6px;padding-top:4px;">'
-    + costNoteRow('📅 הצעת המחיר', q.on ? String(q.on).slice(0, 10) : 'ללא תאריך ברשימה')
-    + costNoteRow('ספק', String(q.who || '—'))
-    + '</div>');
+    + costTotalRow(p.total)));
 }
 
 // A select rather than a search box: 34 rows is a list you scan, and the price is the thing
@@ -7179,10 +7145,10 @@ function bmsPickerHtml(i) {
   const picked = rows.find((r) => r.name === cur);
   return '<div class="form-row" style="margin-top:8px;"><label>BMS</label>'
     + '<select class="form-select" onchange="setBmsPick(' + i + ', this.value)" style="width:190px;">'
-    + '<option value="">לפי מתח (ברירת מחדל)</option>' + opts + '</select></div>'
+    + '<option value="">לפי מתח</option>' + opts + '</select></div>'
     + (noneFit
       ? '<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ אף לוח ברשימת הספקים אינו ' + packS + 'S. כל הלוחות מוצגים — ודא התאמה לפני בחירה.</div>'
-      : '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + show.length + ' לוחות מתאימים ל-' + packS + 'S, לפי יצרן.</div>')
+      : '')
     + (picked && picked.freightBasis === 'category'
       ? '<div style="font-size:11px;color:var(--warning);margin-top:4px;">⚠ משלוח משוער — אין לשורה משקל</div>'
       : picked && picked.freightBasis === 'typical'
@@ -7233,12 +7199,12 @@ function updateCostProfit(i) {
     // Build the sign explicitly and pin the run with <bdi dir="ltr">.
     const money = (profit < 0 ? '-' : '') + shek(Math.abs(profit));
     return `<div style="font-size:12px;display:flex;justify-content:space-between;gap:10px;">
-      <span style="color:var(--text-muted);">${label}</span>
+      <span style="color:var(--text-muted);">${label} ${shek(price)}</span>
       <span style="color:${col};font-weight:700;"><bdi dir="ltr">${money} · ${marg}%</bdi>${warn}</span></div>`;
   };
   box.innerHTML =
     '<div style="border-top:1px solid var(--border);padding-top:8px;">' +
-    '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">הרווח שלי</div>' +
+    '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">מחיר · רווח</div>' +
     line('פרטי', priceWithBms(it, 'retail')) + line('עסקי', priceWithBms(it, 'b2b')) + '</div>';
 }
 // Saving the number the window opened with used to store the ESTIMATE as his own cost — so the
@@ -7251,10 +7217,8 @@ function saveCost(i) {
 }
 function costSourceHtml(it) {
   const saved = getCosts()[catKey(it)], est = productEstimate(it);
-  const b = typeof batteryCostParts === 'function' && /סוללות/.test(it.cat) ? batteryCostParts(it) : null;
-  const via = b ? ' · תאים ' + routeLabel(b.route) : '';
-  if (saved != null) return 'עלות שהזנת' + (est != null && Math.round(est) !== Math.round(saved) ? ' · לפי האומדן היום: ' + shek(Math.round(est)) + via : '') + '. "איפוס" חוזר לאומדן.';
-  return est != null ? 'אומדן' + via + ' — נשמר כעלות קבועה רק אם משנים אותו.' : '';
+  if (saved != null) return 'עלות שהזנת' + (est != null && Math.round(est) !== Math.round(saved) ? ' · אומדן היום ' + shek(Math.round(est)) : '');
+  return '';
 }
 function clearCost(i) { const it = PRICING[i], costs = getCosts(); delete costs[catKey(it)]; Store.set('costs', costs); closeModal(); renderCatalog(); }
 

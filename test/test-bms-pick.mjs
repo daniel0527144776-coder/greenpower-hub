@@ -191,7 +191,8 @@ const priced = await page.evaluate(() => {
     openCostEditor(i);
     setBmsPick(i, board);
     const it = PRICING[i];
-    const out = { retail: it.retail, b2b: it.b2b, shown: document.getElementById('costPrices').textContent,
+    // the prices are in the profit lines since 2026-10-30; costPrices keeps only the upgrade it carries
+    const out = { retail: it.retail, b2b: it.b2b, shown: document.getElementById('costPrices').textContent + ' ' + document.getElementById('costProfit').textContent,
       profit: document.getElementById('costProfit').textContent, cost: +document.getElementById('costInput').value,
       r: priceWithBms(it, 'retail'), b: priceWithBms(it, 'b2b') };
     try { closeModal(); } catch (e) { /* none */ }
@@ -214,7 +215,7 @@ const j = priced.jk;
 check('a JK on a 72V PRO pack adds the site\'s ₪350 to the retail and the trade price',
   j.r === j.retail + 350 && j.b === j.b2b + 350, j);
 check('and the window shows those prices, saying why',
-  j.shown.includes(sh(j.retail + 350)) && j.shown.includes(sh(j.b2b + 350)) && /כולל JK Smart.*כמו באתר/.test(j.shown), j.shown);
+  j.shown.includes(sh(j.retail + 350)) && j.shown.includes(sh(j.b2b + 350)) && /כולל JK Smart/.test(j.shown), j.shown);
 check('and the profit is worked out on the price with the upgrade',
   j.profit.includes(sh(j.retail + 350 - j.cost)), { profit: j.profit, cost: j.cost });
 check('another DALY is not an upgrade: the prices stay the list\'s',
