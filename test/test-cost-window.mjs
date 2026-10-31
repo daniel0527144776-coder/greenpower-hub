@@ -141,6 +141,17 @@ check('open quotes, the income window and the import windows: the figure or the 
   /900/.test(terse.a) && /900/.test(terse.b) && /נספרים לבד/.test(terse.c) && /accounting-import\.json/.test(terse.imp) && !WHY.test(terse.a + terse.b + terse.c + terse.imp),
   (terse.a + terse.b + terse.c + terse.imp).match(WHY) || terse);
 
+// And the rest of the hub (2026-10-31, "תמשיך לנקות טקסט מיותר"): the lines that explained a rule under the
+// thing itself are gone, wherever they were drawn (the send windows, the worker's report, the bot page, the
+// datasheets, the two restores, the supplier list, the finances). A customer's quote and statement no longer
+// say "ללא מע"מ" (an exempt dealer's price is final; Daniel had it deleted from the site on 2026-10-18), and the
+// statement's footer no longer promises a warranty its own column states per row.
+let served = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
+if (SELFTEST) served += '<div>התעריף נלקח מהעובד, לא מהדיווח.</div>';
+const RULE = /יישלח מהוואטסאפ העסקי שלך|התעריף נלקח מהעובד|הבוט לא עונה לו \(כשההגדרה|ערוך אם צריך|יכתוב מזה הודעה|כל מספר כפי שהיצרן כתב|EVE לא מפרסמת אותו|שום דבר קיים לא יוחלף|פחות מה שירד מאז|ומכאן ממשיכים לשנות|✓ רושם, ✕ מוותר|או שזה כלי שלא בונים לו כאן|ולכן לא נכנסים לרווח|ללא מע"מ|אחריות מלאה על העבודה והחלקים/g;
+const ruleHits = [...new Set(served.match(RULE) || [])];
+check('the hub draws no rule under a line any more, and a customer\'s document says no "ללא מע"מ"', ruleHits.length === 0, ruleHits);
+
 if (SELFTEST) console.log('\n[selftest] the 18650 row lost its cell and the resale breakdown was dropped; the checks above must have gone red.');
 check('no page errors', errs.length === 0, errs);
 check('no native dialogs (invisible in the WebView)', dialogs.length === 0, dialogs);

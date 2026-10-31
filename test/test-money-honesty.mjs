@@ -253,7 +253,8 @@ const fin = await page.evaluate(() => {
   return {
     income: m ? Number(m[1].replace(/,/g, '')) : null,
     profit: m ? Number(m[3].replace(/,/g, '')) : null,
-    note: (t.match(/\d+ חודשים עם הכנסות בלבד[^\n]*/) || [''])[0],
+    // worded "N חודשים בלי הוצאות (₪X) — לא ברווח המצטבר." since 2026-10-31 ("עם הכנסות בלבד ... ולכן" before)
+    note: (t.match(/\d+ חודשים בלי הוצאות[^\n]*לא ברווח המצטבר/) || [''])[0],
     // one row per income-only month, marked, its profit shown as — rather than a number
     incomeOnly: document.querySelectorAll('#finOverview .fin-mrow.income-only').length,
   };

@@ -74,7 +74,7 @@ check('the 50E card: ≤18mΩ, 15A (3C) "not for cycle life", 68.0±2.0 g, and w
   r.e.rows['התנגדות פנימית'] === '≤18mΩ (AC 1kHz)' && /^15A \(3C\).*לא לאורך חיים/.test(r.e.rows['פריקה מקסימלית'] || '')
   && r.e.rows['משקל'] === '68.0±2.0 גרם' && /מקור: דאטה-שיט של EVE/.test(r.e.text), r.e);
 check('a cell with no sheet from its maker says so, and shows only the calculator\'s sizes, marked',
-  r.v26.noSheet && /לא מדאטה-שיט/.test(r.v26.text) && r.v26.rows['קיבולת'] === '2.6Ah' && !('התנגדות פנימית' in r.v26.rows), r.v26);
+  r.v26.noSheet && /אין דאטה-שיט של היצרן/.test(r.v26.text) && /ממחשבון המידות/.test(r.v26.text) && r.v26.rows['קיבולת'] === '2.6Ah' && !('התנגדות פנימית' in r.v26.rows), r.v26);
 check('the JP30 card names its source, the maker\'s own page', /Ampace JP30/.test(r.jp.title) && /אתר היצרן Ampace/.test(r.jp.text) && r.jp.rows['זרם שיא (פולס)'] === '140A למשך 5 שניות', r.jp.rows);
 // The Samsung 50S (2026-10-29): the figures Daniel gave, from the maker through its distributors, and no cycle
 // life — the maker publishes none, and none is made up. "50S" is inside "50SG": each keeps its own card.
