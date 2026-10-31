@@ -2821,7 +2821,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v517';
+const HUB_BUILD = 'v518';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3783,7 +3783,7 @@ function generateInvoice() {
     <div style="background: linear-gradient(135deg, #1F4E79 0%, #0D2C4A 100%); color: white; padding: 18px; border-radius: 10px; text-align: center; margin-bottom: 16px;">
       <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">סה"כ לתשלום</div>
       <div style="font-size: 36px; font-weight: 700;">${price}</div>
-      <div style="font-size: 11px; opacity: 0.85; margin-top: 6px;">עוסק פטור · מחיר סופי לתשלום (ללא מע"מ)</div>
+      <div style="font-size: 11px; opacity: 0.85; margin-top: 6px;">עוסק פטור · מחיר סופי לתשלום</div>
     </div>
 
     <div style="font-size: 11px; color: #555; line-height: 1.7; border-top: 2px solid #E5E7EB; padding-top: 14px;">
@@ -4273,8 +4273,7 @@ function openReviewAsk(phone, name) {
   if (!waNumber(phone)) { showNotice('אין מספר טלפון תקין ללקוח הזה'); return; }
   reviewTarget = { phone, name };
   openModal('⭐ בקשת ביקורת בגוגל',
-    '<textarea id="reviewMsg" class="form-input-wide wb-area" style="min-height:150px">' + escPunch(reviewMessage(name)) + '</textarea>'
-    + '<div class="wt-muted" style="margin-top:6px">יישלח מהוואטסאפ העסקי שלך, דרך הבוט. אפשר לערוך לפני השליחה.</div>',
+    '<textarea id="reviewMsg" class="form-input-wide wb-area" style="min-height:150px">' + escPunch(reviewMessage(name)) + '</textarea>',
     '<button class="btn btn-primary" onclick="sendReviewAsk()">📤 שלח</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>');
 }
 function markReviewAsked(phone) {
@@ -4332,8 +4331,7 @@ function openWaCompose(phone, name, text, title, then) {
   if (!waNumber(phone)) { showMessageToCopy(text, title); return; }
   waComposeTarget = { phone: String(phone), name: name || '' };
   openModal(title || ('💬 הודעה ל' + (name || 'לקוח')),
-    '<textarea id="waComposeMsg" class="form-input-wide wb-area" style="min-height:220px">' + escPunch(text) + '</textarea>'
-    + '<div class="wt-muted" style="margin-top:6px">יישלח מהוואטסאפ העסקי שלך, דרך הבוט. אפשר לערוך לפני השליחה.</div>',
+    '<textarea id="waComposeMsg" class="form-input-wide wb-area" style="min-height:220px">' + escPunch(text) + '</textarea>',
     '<button class="btn btn-primary" data-wa-send onclick="sendWaCompose()">📤 שלח דרך הבוט</button>'
     + '<button class="btn btn-secondary" onclick="copyMessageBox(\'waComposeMsg\')">📋 העתק</button>'
     + '<button class="btn btn-secondary" onclick="waComposeOpenChat()">💬 פתח בוואטסאפ</button>'
@@ -6302,7 +6300,7 @@ function shallowCellOptions(TL, TW, TH, V, S) {
     return "<div class=\"dim-rec\" style=\"margin-top:6px;\"><b style=\"color:var(--danger);\">18650 עומד כאן, אבל <bdi dir=\"ltr\">" + S + "S</bdi> לא נכנס לאורך המגש</b> — נסה מתח נמוך יותר.</div>";
   }
   if (!rows.length) {
-    return "<div class=\"dim-rec\" style=\"margin-top:6px;\"><b style=\"color:var(--danger);\">גם תא 18650 לא עומד באמבטיה הזו</b> — צריך לפחות 69 מ\"מ גובה פנוי. מדוד שוב, או שזה כלי שלא בונים לו כאן.</div>";
+    return "<div class=\"dim-rec\" style=\"margin-top:6px;\"><b style=\"color:var(--danger);\">גם תא 18650 לא עומד באמבטיה הזו</b> — צריך לפחות 69 מ\"מ גובה פנוי.</div>";
   }
   return "<div class=\"dim-rec\" style=\"margin-top:6px;\"><b>אפשרויות 18650 לאמבטיה הזו</b>" + rows.join("") + "</div>";
 }
@@ -6782,8 +6780,7 @@ function openPriceMessage(i) {
     + '<div class="form-row"><label>שם</label><input id="pmName" class="form-input-wide" placeholder="לא חובה" oninput="pmRebuild()"></div>'
     + (ahs.length > 6 ? '<div style="display:flex;gap:8px;align-items:center;margin:8px 0;"><span>קיבולת מ־</span>' + ahSel('pmFrom', ahs[0]) + '<span>עד</span>' + ahSel('pmTo', ahs[ahs.length - 1]) + '</div>' : '')
     + (tiers.length > 1 ? '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:8px 0;">' + tiers.map((t) => '<label style="display:flex;gap:4px;align-items:center;"><input type="checkbox" data-pm-tier="' + t + '" checked onchange="pmRebuild()">' + t + '</label>').join('') + '</div>' : '')
-    + '<textarea id="waComposeMsg" class="form-input-wide wb-area" style="min-height:260px"></textarea>'
-    + '<div class="wt-muted" style="margin-top:6px">יישלח מהוואטסאפ העסקי שלך, דרך הבוט. אפשר לערוך לפני השליחה.</div>',
+    + '<textarea id="waComposeMsg" class="form-input-wide wb-area" style="min-height:260px"></textarea>',
     '<button class="btn btn-primary" data-wa-send onclick="sendPriceMessage()">📤 שלח דרך הבוט</button>'
     + '<button class="btn btn-secondary" onclick="copyMessageBox(\'waComposeMsg\')">📋 העתק</button>'
     + '<button class="btn btn-secondary" onclick="pmOpenChat()">💬 פתח בוואטסאפ</button>');
@@ -8259,7 +8256,7 @@ function renderWaLedger() {
       + `<button class="btn btn-sm btn-secondary" onclick="waLedgerDrop('${id}')" title="לא לרשום">✕</button></div></div>`;
   };
   el.innerHTML = '<div class="card">' + fold('waledger', '📲 מהוואטסאפ — לאישור',
-    '<div class="fin-sub" style="margin-bottom:6px">כסף שמופיע בשיחות ולא ברשום. ✓ רושם, ✕ מוותר.</div>' + items.map(row).join(''), { count: items.length }) + '</div>';
+    '<div class="fin-sub" style="margin-bottom:6px">כסף שמופיע בשיחות ולא ברשום.</div>' + items.map(row).join(''), { count: items.length }) + '</div>';
 }
 function waLedgerSettle(id) {
   waLedger = (waLedger || []).filter((x) => waLedgerId(x.id) !== id);
@@ -8456,7 +8453,7 @@ function renderFinanceOverview() {
        <div class="stat-box"><div class="stat-label">סה"כ הוצאות</div><div class="stat-value" style="color:var(--danger);font-size:17px;">${shek(te)}</div></div>
        <div class="stat-box"><div class="stat-label">רווח מצטבר</div><div class="stat-value" style="color:${net < 0 ? 'var(--danger)' : 'var(--accent)'};font-size:17px;">${shek(net)}</div></div>
      </div>`
-    + (noCost.length ? `<div class="fin-note">${noCost.length} חודשים עם הכנסות בלבד (${shek(noCostIls)}) — בלי הוצאות רשומות, ולכן לא נכנסים לרווח המצטבר.</div>` : '')
+    + (noCost.length ? `<div class="fin-note">${noCost.length} חודשים בלי הוצאות (${shek(noCostIls)}) — לא ברווח המצטבר.</div>` : '')
     + years.map((y) => {
       const ks = keys.filter((k) => k.startsWith(y));
       const yi = ks.reduce((s, k) => s + m[k].inc, 0), ye = ks.reduce((s, k) => s + m[k].exp, 0);
@@ -9423,7 +9420,7 @@ function editPunch(id) {
      <div class="form-row"><label>שעות</label><input type="text" inputmode="decimal" autocomplete="off" class="form-input-wide" id="peHours" value="${fmtHM(p.hours)}" placeholder="3.40" oninput="hmHint(this)"></div>
      <div class="wt-muted" id="peHoursSay" style="margin:-4px 0 8px;">= ${hmSay(Number(p.hours) || 0)}</div>
      <div class="form-row"><label>הערה</label><input class="form-input-wide" id="peNote" value="${escPunch(p.note || '')}"></div>
-     <div class="wt-muted">דווח: ${fmtHM(p.hours)} שעות. התעריף נלקח מהעובד, לא מהדיווח.</div>`,
+     <div class="wt-muted">דווח: ${fmtHM(p.hours)} שעות.</div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">ביטול</button><button class="btn btn-primary" onclick="approveEditedPunch('${escPunch(String(p.id))}')">✓ שמור ואשר</button>`);
 }
 function approveEditedPunch(id) {
@@ -12730,7 +12727,7 @@ function waQuestionsHtml() {
         + '<span class="wb-when">' + waWhen(q.at) + '</span></div>'
         + (q.msg ? '<div class="wb-text">💬 ' + escPunch(q.msg) + '</div>' : '')
         + '<div class="wb-text"><b>הבוט שאל אותך:</b> ' + escPunch(q.q) + '</div>'
-        + '<div class="wb-sub">' + (q.draft ? 'הטיוטה של הבוט — ערוך אם צריך:' : 'כתוב בקצרה מה לענות, ו"נסח" יכתוב מזה הודעה:') + '</div>'
+        + '<div class="wb-sub">' + (q.draft ? 'הטיוטה של הבוט:' : 'מה לענות:') + '</div>'
         + '<textarea class="form-input-wide wb-area" id="wbAns' + i + '" placeholder="מה לענות (אפשר להכתיב במיקרופון של המקלדת)">' + escPunch(q.draft || '') + '</textarea>'
         + '<label class="wb-check"><input type="checkbox" id="wbKeep' + i + '" checked> שהבוט ילמד</label>'
         + '<div class="btn-group"><button class="btn btn-primary btn-sm" onclick="waAnswer(' + i + ')">📤 שלח ללקוח</button>'
@@ -12786,7 +12783,7 @@ function waLabHtml() {
   const row = (x, on) => '<div class="wb-row wb-head"><span><span class="wb-who">' + escPunch(x.n || 'ללא שם') + '</span> · ' + escPunch(waNum(x.p))
     + (x.why ? '<div class="wb-sub">' + escPunch(x.why) + '</div>' : '') + '</span>'
     + '<button class="btn btn-secondary btn-sm" onclick="waLabSet(\'' + escPunch(x.p) + '\',' + (on ? 'false' : 'true') + ',this)" data-n="' + escPunch(x.n || '') + '">' + (on ? '✕' : '➕') + '</button></div>';
-  return fold('lab', '📇 שמורים שהבוט עונה להם', '<div class="wb-sub">לקוחות המעבדה מבין אנשי הקשר השמורים. שמור שלא ברשימה — הבוט לא עונה לו (כשההגדרה למעלה מסומנת). מי שיש לו תיקון או הזמנה בלוח הבקרה — תמיד.</div>'
+  return fold('lab', '📇 שמורים שהבוט עונה להם', '<div class="wb-sub">לקוחות המעבדה מבין אנשי הקשר השמורים.</div>'
     + '<div style="height:6px"></div>'
     + (list.length ? list.map((x) => row(x, true)).join('') : '<div class="wb-sub">אין</div>')
     + (lab.no.length ? fold('labno', 'לא סומנו כלקוחות', lab.no.map((x) => row(x, false)).join(''), { count: lab.no.length, sub: true }) : ''),
@@ -13457,7 +13454,7 @@ function openBizReport(phone) {
       <div style="font-weight:700;">סה"כ ${jobs.length} תיקונים</div>
       <div style="font-weight:700;color:#1F4E79;font-size:18px;">₪${total.toLocaleString('he-IL')}</div>
     </div>
-    <div style="font-size:11px;color:#555;margin-top:14px;">עוסק פטור · המחירים סופיים (ללא מע"מ) · אחריות מלאה על העבודה והחלקים.</div>`;
+    <div style="font-size:11px;color:#555;margin-top:14px;">עוסק פטור · המחירים סופיים.</div>`;
   const acc = bizAccount(phone);
   const pays = paymentsForPhone(phone);
   document.getElementById('bizAccountStrip').innerHTML = `
@@ -14513,7 +14510,7 @@ function soReorder(hid) {
 }
 // A list already sent from WhatsApp, pasted back: its numbers become this order's, as sent.
 function soPasteSent() {
-  openModal('📥 רשימה שכבר נשלחה', `<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">הדבק את הרשימה האחרונה ששלחת לספק. המספרים נשמרים, ומכאן ממשיכים לשנות לפיהם.</div>
+  openModal('📥 רשימה שכבר נשלחה', `<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">הדבק את הרשימה האחרונה ששלחת לספק.</div>
     <textarea id="soPasteTa" class="form-input" dir="ltr" rows="10" style="width:100%;font-family:monospace;font-size:12px;"></textarea>`,
     `<button class="btn btn-primary" onclick="soPasteApply()">שמור</button><button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
 }
@@ -15172,12 +15169,12 @@ function openCellSheet(id) {
   const table = (rows) => sheetTable(rows, 'data-cell-row');
   if (hit.sheet) {
     openModal('📄 ' + esc(hit.sheet.model), table(hit.sheet.rows)
-      + `<div class="wt-muted" style="margin-top:10px;">מקור: ${esc(hit.sheet.src)}. כל מספר כפי שהיצרן כתב; מה שלא כתוב בדאטה-שיט מסומן כך.</div>`);
+      + `<div class="wt-muted" style="margin-top:10px;">מקור: ${esc(hit.sheet.src)}.</div>`);
     return;
   }
   const d = DIM_CELLS[hit.key];
-  openModal('📄 ' + esc(d ? d.label : it.name), '<div class="alert alert-warning" data-no-sheet>אין דאטה-שיט של היצרן: EVE לא מפרסמת אותו באתר שלה, ועותקים יש רק אצל משווקים — לכן הם לא כאן.</div>'
-    + (d ? '<div class="wt-muted" style="margin:8px 0 4px;">מה שידוע מטבלת מחשבון המידות (לא מדאטה-שיט):</div>'
+  openModal('📄 ' + esc(d ? d.label : it.name), '<div class="alert alert-warning" data-no-sheet>אין דאטה-שיט של היצרן.</div>'
+    + (d ? '<div class="wt-muted" style="margin:8px 0 4px;">ממחשבון המידות:</div>'
       + table([['קיבולת', d.ah + 'Ah'], ['מידות', 'קוטר ' + d.dia + ' · גובה ' + d.len + ' מ״מ'], ['משקל', d.g + ' גרם']]) : ''));
 }
 // The maker's spec of each motor and controller (2026-10-30, Daniel: "לוחצים במלאי, על כל מוצר, מפרט
@@ -15555,7 +15552,7 @@ function openPartSheet(id) {
   const sheet = it && partSheetFor(it.name);
   if (!sheet) return;
   openModal('📄 ' + custPickEsc(sheet.model), sheetTable(sheet.rows.map(([k, v]) => [k, ltrRuns(v)]), 'data-part-row')
-    + `<div class="wt-muted" style="margin-top:10px;">מקור: ${custPickEsc(sheet.src)}. כל מספר כפי שהיצרן כתב; היכן שהדף סותר את עצמו, שני המספרים מופיעים.</div>`);
+    + `<div class="wt-muted" style="margin-top:10px;">מקור: ${custPickEsc(sheet.src)}.</div>`);
 }
 // One short line per row (Daniel, 2026-10-29, his choice): the name, and the count with its − and +.
 // A tap on the name opens the row (openInvItem): its group, threshold, note, pace and supplier, and
@@ -16140,7 +16137,7 @@ async function openCloudRestore() {
   } catch (e) { /* offline */ }
   if (!rows.length) { showNotice('אין עדיין גיבויים בענן. הגיבוי רץ מעצמו פעם ביום.'); return; }
   openModal('♻️ שחזור מגיבוי בענן',
-    '<div class="wt-muted" style="margin-bottom:10px;">בחר יום. יחזרו רק שורות שחסרות עכשיו (שעות, לקוחות, מכירות, מלאי…). שום דבר קיים לא יוחלף.</div>'
+    '<div class="wt-muted" style="margin-bottom:10px;">בחר יום. יחזרו רק שורות שחסרות.</div>'
     + rows.map((x) => `<button class="btn btn-secondary btn-block" style="margin-bottom:6px;" data-bk="${escPunch(x.key)}" onclick="restoreFromCloud('${escPunch(x.key)}')">${new Date(x.updated_at).toLocaleString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}${/^bk_m/.test(x.key) ? ' · חודשי' : ''}</button>`).join(''),
     '<button class="btn btn-secondary" onclick="closeModal()">סגור</button>');
 }
@@ -16206,7 +16203,7 @@ async function restoreFromCloud(key) {
   const q = (x) => invQtyFmt(x);
   openModal('♻️ שחזור מגיבוי · ' + day,
     (n ? `<div style="margin-bottom:10px;">יחזרו ${n} שורות שחסרות: ${escPunch(words)}</div>` : '')
-    + '<div class="wt-muted" style="margin-bottom:8px;">כמויות במלאי שלא מתאימות לגיבוי פחות מה שירד מאז. סמן רק מה שצריך לחזור — ספירה או משלוח שהוזנו אחרי הגיבוי נראים כאן גם הם.</div>'
+    + '<div class="wt-muted" style="margin-bottom:8px;">כמויות שלא מתאימות לגיבוי. סמן מה להחזיר.</div>'
     + counts.map((c) => `<label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;"><input type="checkbox" data-qty-id="${escPunch(c.id)}">`
       + `<span><b>${escPunch(c.name)}</b><br>עכשיו ${q(c.now)} · בגיבוי ${q(c.was)} · ירד מאז ${q(c.used)} ← יחזור ל-${q(c.back)}</span></label>`).join(''),
     '<button class="btn btn-primary" onclick="applyCloudRestore()">להחזיר</button><button class="btn btn-secondary" onclick="closeModal()">סגור</button>');
