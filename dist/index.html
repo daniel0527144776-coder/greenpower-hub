@@ -2821,7 +2821,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v518';
+const HUB_BUILD = 'v519';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -14944,9 +14944,12 @@ function renderInventory() {
     // by series inside it; chargers by voltage, cells by format, the rest by the words in INV_SUB_WORDS.
     // Read off the name the same way the sort above reads it; a name with no such word goes under אחר.
     const series = (x) => x.sub || invSubFromName('BMS', x.name) || 'אחר';
+    // Nickel by material first, pure and plated apart (Daniel, 2026-10-31: "צריך להבין בין המצופה לטהור ... כל הטהור
+    // בנפרד וכל המצופה בנפרד"), and the cell inside each, as BMS goes by maker and then series.
     const axis = c === 'BMS' ? (x) => invBmsMaker(x.name)
+      : c === 'ניקל' ? invNickelMaterial
       : INV_SUB[c] ? (x) => x.sub || invSubFromName(c, x.name) || 'אחר' : null;
-    const order = c === 'BMS' ? INV_MAKER_ORDER : (INV_SUB[c] || []);
+    const order = c === 'BMS' ? INV_MAKER_ORDER : c === 'ניקל' ? INV_NICKEL_ORDER : (INV_SUB[c] || []);
     const rank = (k) => { const i = order.indexOf(k); return i < 0 ? 999 : i; };
     const bucket = (l, fn) => {
       const m = new Map();
@@ -14961,6 +14964,7 @@ function renderInventory() {
     const heads = (gs) => gs.map(([k, g]) => `<div class="inv-sub"><span>${esc2(k)}</span><span>${sum(g)} ${u}</span></div>` + rowsOf(g)).join('');
     const inner = (l, grp) => {
       if (c === 'BMS') return heads(bucket(l, series));
+      if (c === 'ניקל') return heads(bucket(l, (x) => x.sub || invSubFromName('ניקל', x.name) || 'אחר'));
       if (c === 'הנעה' && (grp === 'מנועים' || grp === 'בקרים')) {
         const m = new Map();
         for (const x of l) { const k = invDriveLine(x.name) || 'אחר'; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
@@ -15566,6 +15570,8 @@ function renderInvItem(i, cat) {
   const when = kg && i._u ? new Date(Number(i._u)).toLocaleDateString('he-IL') : '';
   let title = i.name || '';
   if (cat && cat !== 'אחר' && title.startsWith(cat + ' ')) title = title.slice(cat.length + 1);
+  // under its material's heading a nickel row does not say the material again (2026-10-31)
+  if (cat === 'ניקל') title = title.replace(/^(?:טהור|מצופה)\s+/, '');
   const fc = invForecast(i, _invUsageCache || (_invUsageCache = invUsage()));
   const sheet = cat === 'תא' && cellSheetFor(i.name);
   const part = cat !== 'תא' && partSheetFor(i.name);
@@ -15640,6 +15646,19 @@ const INV_SUB = {
   'כבלים ומחברים': ['כבלים', 'מחברים', 'נעלים וטרמינלים', 'פיוזים ומפסקים'],
   'הנעה': ['מנועים', 'בקרים', 'צגים', 'מצערות'],
 };
+// A nickel row's material (2026-10-31): its spec says it, or else its name; a row that says neither is its own group.
+const INV_NICKEL_ORDER = ['ניקל טהור', 'ניקל מצופה', 'נחושת', 'חומר לא ידוע'];
+function invNickelMaterial(x) {
+  const m = String((x && x.spec && x.spec.material) || '');
+  if (m === 'ניקל טהור') return 'ניקל טהור';
+  if (m === 'פלדה מצופה ניקל') return 'ניקל מצופה';
+  if (/נחושת/.test(m)) return 'נחושת';
+  const n = String((x && x.name) || '');
+  if (/טהור|pure/i.test(n)) return 'ניקל טהור';
+  if (/מצופה|plat/i.test(n)) return 'ניקל מצופה';
+  if (/נחושת|copper/i.test(n)) return 'נחושת';
+  return 'חומר לא ידוע';
+}
 // The sub-category a row's name says, for the categories whose axis is a word rather than a number.
 const INV_SUB_WORDS = {
   'ניקל': [['נחושת', /נחושת|copper/i], ['21700', /21700|22\.[5-7]|23\b/], ['18650', /18650|18\.5|19\b|20\.25/], ['פס', /פס|גליל|roll/i]],
