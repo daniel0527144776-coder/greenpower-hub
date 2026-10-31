@@ -2821,7 +2821,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v519';
+const HUB_BUILD = 'v520';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -16523,6 +16523,80 @@ setInterval(() => {
 // The alerts: a look once a minute, the bot asked every fifth.
 setInterval(() => { if (!document.hidden) alertHeartbeat(++_alertTick % 5 === 0); }, 60000);
 setTimeout(() => alertHeartbeat(true), 4000);
+
+// ==== Hebrew, English and numbers in one line (2026-10-31) ====
+// Daniel: "האנגלית והמספרים מתערבבים והעברית ונהיה סלט אחד שלם ... בכל מקום בכל הפרויקט". In a right-to-left
+// line the browser lays out each Latin word and number by itself and moves the signs between them, so a phrase
+// of several ("DALY 13S 60A", "(125A) / 36C", "154×138×385", "~2.6", "40+") comes out shuffled. Each such phrase
+// is wrapped in a Unicode isolate (U+2066 … U+2069) once it is drawn, and is laid out as one unit. The same rule
+// as the site's src/utils/bidi.ts; test/test-bidi.mjs holds both to the same cases. Not under automation
+// (navigator.webdriver): the suites read the text as written, and test-bidi turns it on to test it.
+const BIDI = (() => {
+  const LRI = '⁦', PDI = '⁩';
+  const HEB = /[֐-׿יִ-ﭏ]/;
+  const LATIN = /[A-Za-zÀ-ÖØ-öø-ɏ]/;
+  const STRONG = /[A-Za-z0-9À-ÖØ-öø-ɏ₪$€%°]/;
+  const JOIN = /[  .,:;/·×\-–—+()~≈±|'"_#&*=<>]/;
+  function trimRun(s, start, end) {
+    let e = end;
+    while (e > start && !STRONG.test(s[e - 1])) e--;
+    const open = (str) => (str.match(/\(/g) || []).length - (str.match(/\)/g) || []).length;
+    if (open(s.slice(start, e)) > 0 && s[e] === ')') e++;
+    let st = start;
+    while (st < e && s[st] === '(' && open(s.slice(st, e)) > 0) st++;
+    while (e > st && s[e - 1] === ')' && open(s.slice(st, e)) < 0) e--;
+    const stack = [];
+    for (let k = st; k < e; k++) { if (s[k] === '(') stack.push(k); else if (s[k] === ')') stack.pop(); }
+    if (stack.length) { e = stack[0]; while (e > st && !STRONG.test(s[e - 1])) e--; }
+    if (e > st && s[e] === '+' && STRONG.test(s[e - 1])) e++;
+    return [st, e];
+  }
+  function isolateText(s) {
+    if (!s || /[⁦-⁩]/.test(s) || !/[A-Za-z×~+±≈]/.test(s)) return s;
+    let out = '', i = 0;
+    while (i < s.length) {
+      const ch = s[i], prev = i > 0 ? s[i - 1] : ' ';
+      const startsHere = STRONG.test(ch) || (/[+~(≈±]/.test(ch) && !HEB.test(prev) && i + 1 < s.length && STRONG.test(s[i + 1]));
+      if (!startsHere) { out += ch; i++; continue; }
+      let j = i + 1;
+      while (j < s.length && (STRONG.test(s[j]) || JOIN.test(s[j]))) j++;
+      const [st, e] = trimRun(s, i, j);
+      if (e <= st) { out += ch; i++; continue; }
+      const run = s.slice(st, e);
+      out += s.slice(i, st);
+      const signed = /^[~+±≈]/.test(run) || /\+$/.test(run);
+      const mixed = signed || ((LATIN.test(run) || run.includes('×')) && /[^A-Za-z0-9À-ÖØ-öø-ɏ₪$€%°.,:]/.test(run));
+      out += mixed ? LRI + run + PDI : run;
+      i = e;
+    }
+    return out;
+  }
+  const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'CODE', 'PRE', 'NOSCRIPT', 'SVG', 'BDI', 'OPTION']);
+  const fixNode = (n) => {
+    const el = n.parentElement;
+    if (!el || SKIP.has(el.tagName.toUpperCase()) || el.closest('[dir="ltr"], bdi, [contenteditable="true"], [data-bidi-skip], #sticker-to-capture')) return;
+    const v = n.nodeValue || '', nv = isolateText(v);
+    if (nv !== v) n.nodeValue = nv;
+  };
+  const fixTree = (root) => {
+    if (root.nodeType === 3) { fixNode(root); return; }
+    if (root.nodeType !== 1) return;
+    const w = document.createTreeWalker(root, 4);
+    let n; while ((n = w.nextNode())) fixNode(n);
+  };
+  let on = false;
+  function install() {
+    if (on || (navigator.webdriver && !window.__BIDI_ON__)) return;
+    on = true;
+    fixTree(document.body);
+    new MutationObserver((list) => {
+      for (const m of list) { if (m.type === 'characterData') fixNode(m.target); else m.addedNodes.forEach(fixTree); }
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  }
+  return { isolateText, install };
+})();
+window.addEventListener('DOMContentLoaded', () => BIDI.install());
+if (document.readyState !== 'loading') BIDI.install();
 
 // Run on load
 window.addEventListener('DOMContentLoaded', boot);
