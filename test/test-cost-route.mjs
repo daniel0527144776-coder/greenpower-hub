@@ -138,10 +138,12 @@ const spec = await page.evaluate((i) => {
   const firstLineTop = xs.length ? xs[0].top : 0;
   const sameLine = xs.filter((r) => Math.abs(r.top - firstLineTop) < 2);
   const ordered = sameLine.every((r, k) => k === 0 || r.right <= sameLine[k - 1].left + 1);
-  return { n: f.length, first: f[0]?.textContent, eveLines: eve ? eve.getClientRects().length : -1, nowrap: eve ? getComputedStyle(eve).whiteSpace : '', ordered, lines: new Set(xs.map((r) => Math.round(r.top))).size };
+  return { n: f.length, first: f[0]?.textContent, all: f.map((b) => b.textContent.trim()), eveLines: eve ? eve.getClientRects().length : -1, nowrap: eve ? getComputedStyle(eve).whiteSpace : '', ordered, lines: new Set(xs.map((r) => Math.round(r.top))).size };
 }, CLASSIC);
 check('the 88V 20Ah row is on the page', !spec.missing, spec);
-check('each spec field is its own isolated piece, in order: 88V first', spec.n >= 6 && spec.first === '88V', spec);
+// 2026-10-30, "דברים כפולים": the row is named "88V 20Ah", so its line does not say 88V and 20Ah again; it starts at the Wh.
+check('each spec field is its own isolated piece, in order: the Wh first, the name\'s 88V and 20Ah not repeated',
+  spec.n >= 5 && /Wh$/.test(spec.first || '') && !spec.all.includes('88V') && !spec.all.includes('20Ah'), spec);
 check('"EVE 50E" stays on one line', spec.eveLines === 1 && spec.nowrap === 'nowrap', spec);
 check('the fields of a line run right to left in the order they are written', spec.ordered, spec);
 

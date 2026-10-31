@@ -56,16 +56,16 @@ const TRAY = [{ id: 1, model: 'מבחן-גדול', l: 400, w: 200, h: 120 }, { i
 const base = { cell: '21700-50e', v: 60, ah: 20, perRow: 10, models: TRAY };
 
 // 16S4P = 64 cells, HIS way (2026-09-25): each 4P group across, sixteen rows along, on ניקל ב׳ (Z) —
-// the 22.7 diagonal since 2026-10-24, the same as W (19.66 between rows; 22.6 / 19.57 from 2026-10-22,
-// 22.5 / 19.49 from 2026-10-04, 21.5 / 18.62 before).
-//   L = 15*19.66 + 21.15 + 3 + 22 (BMS at 60V) = 341     W = 3*22.7 + 21.15 + 3 + 11.35 = 104     H = 70.15 + 4 = 74
+// the 22.5 diagonal again since 2026-10-31 (Daniel: "הניקל Z זה 22.5 לא 22.7"), 19.485 between rows (22.5 x 0.866);
+// it was 22.7 from 2026-10-24, 22.6 from 2026-10-22, 22.5 from 2026-10-04 and 21.5 before.
+//   L = 15*19.485 + 21.15 + 3 + 22 (BMS at 60V) = 338     W = 3*22.5 + 21.15 + 3 + 11.25 = 103     H = 70.15 + 4 = 74
 // The 11.25 is the HALF CELL (Daniel, 2026-10-04: "לתקן — להוסיף חצי תא"): rows 19.49 apart nest
 // only by sitting half a pitch over, so every other row sticks out by half a cell. It said 92.
 // The BMS allowance goes on the LENGTH since 2026-09-25; the height is the standing cells alone.
 // (The two catalogue brackets this used — square and honeycomb 21.4 — left the list on
 // 2026-09-25; he does not build on them.)
 const honey = await read({ ...base, holder: 'diag-b' });
-check('16S4P block, ניקל ב׳ 22.7: 341 x 104 x 74 (with the half cell)', honey.L === 341 && honey.W === 104 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
+check('16S4P block, ניקל ב׳ 22.5: 338 x 103 x 74 (with the half cell)', honey.L === 338 && honey.W === 103 && honey.H === 74, `${honey.L} x ${honey.W} x ${honey.H}`);
 check('and it reports 64 cells', /64 תאים/.test(honey.text), honey.text.slice(0, 80));
 // Energy and weight were taken off the result on 2026-09-26 at his word; asserted absent.
 check('no energy or weight line', !/Wh|ק"ג|אנרגיה/.test(honey.text), honey.text.slice(0, 120));
@@ -76,9 +76,9 @@ const diagA = await read({ ...base, holder: 'diag-a' });
 const square = await read({ ...base, holder: 'square-23' });
 check('square is longer along the rows than the diagonal', square.L > diagA.L, `${square.L} vs ${diagA.L}`);
 check('the diagonal row spacing is the sin60 one', Math.abs((diagA.L - 22 - 24.15) - 15 * 22.7 * 0.866) <= 1.5, String(diagA.L));
-// W and Z are one pitch since 2026-10-24 (Daniel: "כל המרחק בין חורים ב Z וגם ב W זה 22.7"): with no tray to
-// decide their ways, the same block. W was 1mm longer while Z was 22.6.
-check('ניקל א׳ (W) and ניקל ב׳ (Z), both 22.7, give the same block with no tray', diagA.L === honey.L && diagA.W === honey.W, `${diagA.L}x${diagA.W} vs ${honey.L}x${honey.W}`);
+// Z is 22.5 and W 22.7 since 2026-10-31: with no tray to decide their ways, Z gives the smaller block on both sides
+// (they were the same block while both were 22.7).
+check('ניקל ב׳ (Z, 22.5) gives a smaller block than ניקל א׳ (W, 22.7) with no tray', honey.L < diagA.L && honey.W < diagA.W, `${diagA.L}x${diagA.W} vs ${honey.L}x${honey.W}`);
 check('the 23mm square bracket is longer than ניקל ב׳', square.L > honey.L, `${square.L} vs ${honey.L}`);
 const cell18 = await read({ ...base, cell: '18650-25p', holder: 'diag-b' });
 check('18650 is a shorter cell', cell18.H < honey.H, `${cell18.H} vs ${honey.H}`);
@@ -511,8 +511,8 @@ const nickels = await page.evaluate(() => {
     const m = document.querySelector('#dimResult .dim-nk.sel .dim-size').textContent.match(/(\d+) × (\d+) × (\d+)/); return [+m[1], +m[2]]; };
   return { a: run('diag-a'), b: run('diag-b'), sq: run('square-23') };
 });
-// The same block since 2026-10-24: one pitch, and no tray to lay them their two ways (FILL_WAY).
-check('the two diagonal nickels, both 22.7, give the same block with no tray', nickels.a[0] === nickels.b[0] && nickels.a[1] === nickels.b[1], JSON.stringify(nickels));
+// Z 22.5 and W 22.7 since 2026-10-31: with no tray to lay them their two ways (FILL_WAY), Z is the smaller block.
+check('the Z (22.5) block is smaller on both sides than the W (22.7) block with no tray', nickels.b[0] < nickels.a[0] && nickels.b[1] < nickels.a[1], JSON.stringify(nickels));
 check('and the 23mm square block is larger in area than either diagonal', nickels.sq[0]*nickels.sq[1] > nickels.a[0]*nickels.a[1] && nickels.sq[0]*nickels.sq[1] > nickels.b[0]*nickels.b[1], JSON.stringify(nickels));
 
 // The table checks itself: 16S and 20S in one tray should want roughly the same number of
@@ -829,7 +829,7 @@ const mx = await page.evaluate((SELF) => {
 }, SELFTEST);
 // Talaria 385 x 171, no BMS allowance: since 2026-10-17, filled across its width, it has a maximum at both.
 check('the result says the most the tray takes with this nickel, per voltage', /מקסימום\s*60V: 16S\d+P · \d+Ah\s*72V: 20S\d+P · \d+Ah/.test(mx.res), mx.res.slice(0, 400));
-check('and each nickel\'s card says how much it takes', mx.cards.length === 4 && /^ניקל W — 22\.7/.test(mx.cards[0]) && /^ניקל Z — 22\.7/.test(mx.cards[1]) && /^ניקל H — 22\.5/.test(mx.cards[2]) && /^ניקל H — 23/.test(mx.cards[3])
+check('and each nickel\'s card says how much it takes', mx.cards.length === 4 && /^ניקל W — 22\.7/.test(mx.cards[0]) && /^ניקל Z — 22\.5/.test(mx.cards[1]) && /^ניקל H — 22\.5/.test(mx.cards[2]) && /^ניקל H — 23/.test(mx.cards[3])
   && mx.cards.every((k) => /מקסימום\s*60V: (16S\d+P · \d+Ah|—)\s*72V: (20S\d+P · \d+Ah|—)/.test(k) || /מקס׳ 20S\d+P · \d+Ah/.test(k)), mx.cards.map((k) => k.slice(0, 120)));
 // The list is uncluttered (2026-09-27): the vehicle and its tray; cell and nickel come after the tap.
 check('a vehicle card is the vehicle and its tray, nothing more', /Talaria/.test(mx.cardTxt) && /385×171×140/.test(mx.cardTxt) && !/60V|72V|מקסימום|מקורי/.test(mx.cardTxt), mx.cardTxt);
@@ -1031,8 +1031,9 @@ check('on its own nickel the Plus card is his 165 a side, row for row', lying.pl
 check('the Plus has a card per nickel, the chosen one drawn inside the frame\'s outline', lying.plusCards === 'diag-a:0:0 diag-b:0:0 square-225:0:0 square-23:165:1', lying.plusCards);
 check('the regular Bomber in 18650 on the 19 square is his blue 20S17P: 170 a side, 340', lying.regShape.cells === 170 && /170 תאים × 2 ערימות = 340/.test(lying.reg18) && /20S17P/.test(lying.reg18), [lying.regShape, lying.reg18.slice(0, 160)]);
 check('a Bomber frame too narrow for a lying cell says so', /צר מדי לתא שוכב/.test(lying.narrow), lying.narrow.slice(-160));
-// 20S7P since Z went to 22.6 (2026-10-22), and at 22.7 (2026-10-24); at 22.5 the 410mm took an eighth group by 0.3mm.
-check('the FC-1 (90 across, his tape) fits a 72V build lying on ניקל ב׳', /נכנס עד: 72V 20S7P · 35Ah|נכנסת — 20S7P · 35Ah, 140 תאים · המקסימום/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
+// 20S8P with Z at 22.5 (again since 2026-10-31): the 410mm takes an eighth group, by 0.3mm. It was 20S7P while Z
+// was 22.6 (2026-10-22) and 22.7 (2026-10-24).
+check('the FC-1 (90 across, his tape) fits a 72V build lying on ניקל ב׳', /נכנס עד: 72V 20S8P · 40Ah|נכנסת — 20S8P · 40Ah, 160 תאים · המקסימום/.test(lying.fc1) && !/צר מדי/.test(lying.fc1), lying.fc1.slice(0, 200));
 // 2026-10-04: "זה לא מעניין שתכתוב מה בניתי" — his builds are the frame's shape, not a list.
 check('no Bomber page lists his builds', !/הסוללות שבנית|הסוללה הכחולה|הסוללה הזהובה|הסוללה הירוקה|bomber-build/.test(lying.plusHtml + lying.regular + lying.fc1), lying.regular.slice(0, 120));
 check('the lying answer is for Bombers only', /נכנס עד:|· המקסימום/.test(lying.plus) && !/נכנס עד:|· המקסימום/.test(lying.surron), lying.surron.slice(-80));
@@ -1544,7 +1545,7 @@ const names = await page.evaluate((SELF) => {
 }, SELFTEST);
 check(`every holder's name, list label and option carry the pitch it is worked out at (${names.shown} options)`,
   names.off.length === 0 && names.shown >= 7, names.off);
-check('…so the worker\'s label for a block on Z says 22.7', /ניקל Z \(22\.7\)/.test(names.line) && !/22\.[56]/.test(names.line), names.line);
+check('…so the worker\'s label for a block on Z says 22.5', /ניקל Z \(22\.5\)/.test(names.line) && !/22\.[67]/.test(names.line), names.line);
 
 // ==== 2026-10-24, the review of the dimensions calculator: seven fixes, each with what it was ====
 // On a fresh page: the checks above leave their --selftest breakage behind them, and each of these is to fail on its own.
@@ -1598,7 +1599,8 @@ const mxv = await page.evaluate((SELF) => {
 {
   const off = Object.entries(mxv).filter(([k]) => k !== 'typed').filter(([, r]) => r.on60[72] !== r.on72[72] || r.on72[60] !== r.on60[60]);
   check('"מקסימום" for 60V and 72V says the same on both pages (OXO Z and W, Zero 11X H, Nami Klima W)', off.length === 0, off);
-  check('…the OXO on Z: 72V 20S5P on its 60V page too', mxv['Inokim OXO diag-b'].on60[72] === '20S5P', mxv['Inokim OXO diag-b']);
+  // 20S6P with Z at 22.5 (since 2026-10-31; 20S5P while Z was 22.7), within his own count on Z, 6 across x 21 = 126.
+  check('…the OXO on Z: 72V 20S6P on its 60V page too', mxv['Inokim OXO diag-b'].on60[72] === '20S6P', mxv['Inokim OXO diag-b']);
   check('…and with his own 22mm typed on the 60V page, 72V is worked with it: 20S6P', mxv.typed[72] === '20S6P', mxv.typed);
 }
 
