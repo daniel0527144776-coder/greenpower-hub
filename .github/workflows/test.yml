@@ -359,6 +359,10 @@ jobs:
       - name: The cost window says what a cost is made of, from when, and the shipping in it
         run: node test/test-cost-window.mjs
 
+      # Hebrew, English and numbers in one line (2026-10-31): each mixed phrase is wrapped in an isolate.
+      - name: English and numbers read right inside Hebrew lines
+        run: node test/test-bidi.mjs
+
       # The sweep that runs on HIS records rather than seeded ones: work with no price,
       # money with no owner, stock gone negative, a month claiming no costs. It must NAME each
       # one — a report that counts sends him through a year of records.
