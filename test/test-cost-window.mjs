@@ -122,6 +122,25 @@ const rows = await page.evaluate((SELF) => {
 }, SELFTEST);
 check('a price-list row does not repeat "פרטי" / "עסקי" beside its price', rows.n > 100 && rows.said === 0, rows);
 
+// The rest of the hub (2026-10-30): the open quotes say their sum, the income window warns in one line, and
+// the import windows say what to pick; none of them explains the rule behind it any more.
+const terse = await page.evaluate((SELF) => {
+  Store.set('orders', [{ id: 'q1', customer: 'לקוח דוגמה', phone: '0500000000', date: new Date().toISOString(), status: 'הצעה', items: [], total: 900 }]);
+  navigateTo('orders');
+  if (SELF) document.getElementById('salesPending').innerHTML += ' לא נספר כהכנסה עד שיסומן "שולם".';
+  const a = (document.getElementById('salesPending') || {}).innerText || '';
+  navigateTo('finances');
+  const b = (document.getElementById('finPending') || {}).innerText || '';
+  const read = (fn) => { fn(); const m = document.querySelector('.modal'); const t = m ? m.innerText : ''; closeModal(); return t; };
+  const c = read(() => openMoneyModal('income'));
+  const imp = [openAccountingImport, openFinanceImport, openShipmentImport, openSupplierImport].map(read).join(' | ');
+  return { a, b, c, imp };
+}, SELFTEST);
+const WHY = /לא נספר כהכנסה עד|שעדיין לא סומנו|אין להזין אותם כאן שוב|יוחלפו \(לא יתווספו\)|שום דבר קיים לא יימחק|תישמר בחשבון שלך|כרגע מיובאים|כרגע רשומים|פרטים חסרים יושלמו/;
+check('open quotes, the income window and the import windows: the figure or the one action, no rule behind it',
+  /900/.test(terse.a) && /900/.test(terse.b) && /נספרים לבד/.test(terse.c) && /accounting-import\.json/.test(terse.imp) && !WHY.test(terse.a + terse.b + terse.c + terse.imp),
+  (terse.a + terse.b + terse.c + terse.imp).match(WHY) || terse);
+
 if (SELFTEST) console.log('\n[selftest] the 18650 row lost its cell and the resale breakdown was dropped; the checks above must have gone red.');
 check('no page errors', errs.length === 0, errs);
 check('no native dialogs (invisible in the WebView)', dialogs.length === 0, dialogs);

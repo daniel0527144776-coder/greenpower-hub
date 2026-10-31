@@ -1134,7 +1134,7 @@ body { min-height: 100vh; }
     <div class="form-row dim-wide"><label>מחזיק</label>
       <select class="form-select" id="dimHolder" onchange="calcPackDims(); calcFromOldPack()">
         <option value="diag-a" selected>ניקל W — 22.7</option>
-        <option value="diag-b">ניקל Z — 22.7</option>
+        <option value="diag-b">ניקל Z — 22.5</option>
         <option value="square-225">ניקל H — 22.5</option>
         <option value="square-23">ניקל H — 23</option>
         <option value="custom">מותאם אישית ↓</option>
@@ -2821,7 +2821,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v516';
+const HUB_BUILD = 'v517';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5006,8 +5006,7 @@ function openSupplierImport() {
   const cur = (Store.get('supplier_prices') || []).length;
   openModal('📥 ייבוא מחירון ספק', `
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-      כרגע מיובאים <b>${cur}</b> פריטים.${(Store.get('settings') || {}).supplierPricesAt ? ` הרשימה מתעדכנת לבד מהמחירון (עדכון אחרון ${new Date(Store.get('settings').supplierPricesAt).toLocaleDateString('he-IL')}).` : ''}<br>
-      בחר את הקובץ <b>supplier-costs-import.json</b> (או הדבק את תוכנו) — הרשימה תישמר בחשבון שלך ותסתנכרן לכל מכשיר.
+      ${(Store.get('settings') || {}).supplierPricesAt ? 'הרשימה מתעדכנת לבד. ' : ''}בחר את <b>supplier-costs-import.json</b> או הדבק את תוכנו.
     </div>
     <input type="file" id="supFile" accept=".json,application/json" class="form-input-wide" style="width:100%;margin-bottom:8px;" onchange="supFilePicked()">
     <textarea id="supJson" class="form-input-wide" style="width:100%;height:110px;font-size:11px;" placeholder='[{"who":"שם הספק","cat":"BMS","name":"JK 150A","usd":111}]'></textarea>
@@ -7016,7 +7015,10 @@ function renderCatalog() {
       // PRICING includes EXTRA_SERVICES, which are hand-written rows, and a stray < in one
       // would otherwise close this div and swallow the rest of the category.
       const sp = typeof specOf === 'function' ? specOf(it) : null;
-      const specLine = sp ? `<div style="font-size:10.5px;color:var(--text-muted);line-height:1.45;">${specHtml(sp)}</div>` : '';
+      // The name already says "72V 15Ah": the line under it starts from what it does not (2026-10-30, "דברים כפולים").
+      const nameBits = new Set(String(it.name).split(/\s+/));
+      const spRest = sp ? String(sp).split(/\s*·\s*/).filter((x) => !nameBits.has(x.trim())).join(' · ') : '';
+      const specLine = spRest ? `<div style="font-size:10.5px;color:var(--text-muted);line-height:1.45;">${specHtml(spRest)}</div>` : '';
       html += `<div class="price-item" style="cursor:pointer;" onclick="openCostEditor(${PRICING.indexOf(it)})">
         <div class="price-item-name">${it.name}${specLine}${upNote ? `<div data-bms-up style="font-size:10.5px;color:var(--primary);">${upNote}</div>` : ''}${extra}</div>
         <div></div>
@@ -7704,7 +7706,7 @@ function renderOrdersNow() {
     pend.style.display = quotes.length ? 'flex' : 'none';
     const sum = quotes.reduce((s, x) => s + (x.raw.total || 0), 0);
     pend.innerHTML = quotes.length
-      ? `<span>🧾</span><div style="flex:1;"><b>${shek(sum)}</b> בהצעות פתוחות — לא נספר כהכנסה עד שיסומן "שולם".</div><span style="font-weight:700;white-space:nowrap;">הצג ←</span>`
+      ? `<span>🧾</span><div style="flex:1;"><b>${shek(sum)}</b> בהצעות פתוחות</div><span style="font-weight:700;white-space:nowrap;">הצג ←</span>`
       : '';
   }
 
@@ -8528,7 +8530,7 @@ function renderFinances() {
     const sum = pending.reduce((s2, o) => s2 + (o.total || 0), 0);
     pendEl.style.display = pending.length ? 'flex' : 'none';
     pendEl.innerHTML = pending.length
-      ? `<span style="font-size:18px;">🧾</span><div style="flex:1;"><b>${shek(sum)}</b> בהצעות שעדיין לא סומנו "שולם" — לא נספרות כהכנסה.</div><button class="btn btn-sm btn-secondary" style="white-space:nowrap;" onclick="navigateTo('orders')">פתח</button>`
+      ? `<span style="font-size:18px;">🧾</span><div style="flex:1;"><b>${shek(sum)}</b> בהצעות פתוחות · לא בהכנסות</div><button class="btn btn-sm btn-secondary" style="white-space:nowrap;" onclick="navigateTo('orders')">פתח</button>`
       : '';
   }
   renderFinanceOverview();
@@ -8579,7 +8581,7 @@ function openMoneyModal(kind) {
     <div class="form-row"><label>קטגוריה</label><select class="form-select" id="mmCat">${cats.map((c) => `<option>${c}</option>`).join('')}</select></div>
     <div class="form-row"><label>פירוט</label><input type="text" class="form-input-wide" id="mmNote" placeholder="${isInc ? 'שם הלקוח / מה נמכר' : 'ספק / מה נקנה'}" style="width:190px;"></div>
     <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="mmDate" style="width:auto;direction:ltr;"></div>
-    ${isInc ? '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">תיקונים ומכירות שנרשמו בלוח נספרים כבר לבד — אין להזין אותם כאן שוב.</div>' : ''}`,
+    ${isInc ? '<div style="font-size:11px;color:var(--warning);margin-top:6px;">⚠ תיקונים ומכירות מהלוח נספרים לבד</div>' : ''}`,
     `<button class="btn" style="background:${colour};color:#fff;border:none;" onclick="saveMoney('${kind}')">💾 שמור</button>
      <button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
   ensureDateInput('mmDate');
@@ -8636,8 +8638,7 @@ function openFinanceTools() {
 function openShipmentImport() {
   openModal('📦 הוצאות משלוח מקובץ', `
     <div style="font-size:12px;color:var(--text-muted);line-height:1.8;margin-bottom:8px;">
-      בחר קובץ משלוח (למשל <b>shipment-2026-06.json</b> מתיקיית כלים-קלוד).<br>
-      ההוצאות <b>יתווספו</b> — שום דבר קיים לא יימחק, וטעינה חוזרת של אותו קובץ לא תכפיל.
+      בחר קובץ משלוח. ההוצאות יתווספו, בלי כפילויות.
     </div>
     <input type="file" id="shipFile" accept=".json,application/json" class="form-input-wide" style="width:100%;margin-bottom:8px;" onchange="shipFilePicked()">
     <textarea id="shipJson" class="form-input-wide" style="width:100%;height:90px;font-size:11px;" placeholder='{"id":"...","expenses":[{"amount":0,"cat":"רכש תאים","note":"","date":"2026-09-24"}]}'></textarea>`,
@@ -8688,9 +8689,7 @@ function importShipment() {
 function openAccountingImport() {
   openModal('🧾 ייבוא מהנהלת חשבונות', `
     <div style="font-size:12px;color:var(--text-muted);line-height:1.8;margin-bottom:8px;">
-      בחר את <b>accounting-import.json</b>.<br>
-      לקוחות: פרטים חסרים יושלמו, מה שכבר רשום לא יידרס.<br>
-      הכנסות: רשומות הנהלת החשבונות יוחלפו (לא יתווספו) — ייבוא חוזר לא יכפיל.
+      בחר את <b>accounting-import.json</b>. ייבוא חוזר לא יכפיל.
     </div>
     <input type="file" id="acctFile" accept=".json,application/json" class="form-input-wide" style="width:100%;margin-bottom:8px;" onchange="acctFilePicked()">
     <textarea id="acctJson" class="form-input-wide" style="width:100%;height:90px;font-size:11px;" placeholder='{"customers":[...],"incomes":[...]}'></textarea>`,
@@ -8987,8 +8986,7 @@ function openFinanceImport() {
   const ci = (Store.get('incomes') || []).length, ce = (Store.get('expenses') || []).length;
   openModal('📥 ייבוא היסטוריית כספים', `
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-      כרגע רשומים <b>${ci}</b> רישומי הכנסה ו-<b>${ce}</b> הוצאות.<br>
-      בחר את <b>finance-import.json</b> — הרשימות יוחלפו (לא יתווספו), כדי שייבוא כפול לא יכפיל את הסכומים.
+      בחר את <b>finance-import.json</b>. הרשימות הקיימות יוחלפו.
     </div>
     <input type="file" id="finFile" accept=".json,application/json" class="form-input-wide" style="width:100%;margin-bottom:8px;" onchange="finFilePicked()">
     <textarea id="finJson" class="form-input-wide" style="width:100%;height:100px;font-size:11px;" placeholder='{"incomes":[...],"expenses":[...]}'></textarea>`,
@@ -10125,12 +10123,11 @@ const DIM_PITCH = {
   // Re-measured 2026-10-04 (Daniel): ניקל א׳ is the W-shaped strip at 22.7, ניקל ב׳ the diagonal at
   // 22.5 — both on nesting rows (he chose that for the W too), so each is d x 0.866 between rows.
   // The keys stay with the NICKELS, not the numbers: the OX's counted 136/126 were counted on them.
-  // Z is 22.7 since 2026-10-24, the same as W (Daniel: "כל המרחק בין חורים ב Z וגם ב W זה 22.7"); it was 22.6 from
-  // 2026-10-22 (the supplier's 14×10 holder, 328mm across) and 22.5 before. Rows nest at 22.7 x 0.866 = 19.66.
-  // W and Z share the pitch now and differ only in the way they are laid (FILL_WAY): nickelOfPair cannot tell
-  // them apart, so every caller passes the holder's key.
+  // Z is 22.5 again since 2026-10-31 (Daniel: "הניקל Z זה 22.5 לא 22.7"): rows nest at 22.5 x 0.866 = 19.49. It was
+  // 22.7 from 2026-10-24 (the same as W), 22.6 from 2026-10-22 (the supplier's 14×10 holder, 328mm across) and 22.5
+  // before. W stays 22.7 / 19.66. The two also differ in the way they are laid (FILL_WAY); callers pass the holder's key.
   // And an H at 22.5 beside the 23 (Daniel, 2026-10-17: "וגם יש H אם 22.5M"), square like it.
-  21700: { 'diag-a': [22.7, 19.66], 'diag-b': [22.7, 19.66], 'square-225': [22.5, 22.5], 'square-23': [23, 23] },
+  21700: { 'diag-a': [22.7, 19.66], 'diag-b': [22.5, 19.49], 'square-225': [22.5, 22.5], 'square-23': [23, 23] },
 };
 const DIM_WALL = 1.5;        // bracket edge either side
 const DIM_CAP = 4;           // holder caps above and below the cell
@@ -10439,8 +10436,8 @@ function staggerAdd(orient, pitch, rowPitch) {
 // on the bracket's one grid; the groups follow each other in the order the series runs, column after
 // column and snaking, so a group may turn the corner into the next column. Each nickel goes its own way
 // round (same day: "ה-W זה בזיגזג, זה יותר צר ברוחב ויותר ארוך באורך. ב-Z ... משתלב אחד בתוך השני, אבל
-// זה יותר רחב"): W is B, a zigzag across at 19.66 and columns 22.7 apart; Z is A, straight across at 22.7
-// and the columns nesting 19.66 apart (22.5 / 19.49 when this was written). His count: Z 6 across x 21 = 126, W 8 x 17 = 136.
+// זה יותר רחב"): W is B, a zigzag across at 19.66 and columns 22.7 apart; Z is A, straight across at 22.5
+// and the columns nesting 19.49 apart. His count: Z 6 across x 21 = 126, W 8 x 17 = 136.
 const FILL_WAY = { 'diag-a': 'B', 'diag-b': 'A', 'diag-185': 'A', 'diag-185w': 'B' };
 function nickelOfPair(pitch, rowPitch) {
   for (const [k, [p, rp]] of Object.entries(DIM_PITCH[21700])) if (Math.abs(p - pitch) < 0.01 && Math.abs(rp - rowPitch) < 0.01) return k;
@@ -10684,12 +10681,11 @@ const HOLDERS_SHOWN = { 21700: ['diag-a', 'diag-b', 'square-225', 'square-23'], 
 const HOLDER_ORDER = HOLDERS_BY_FMT[21700];
 function holdersFor(fmt) { return HOLDERS_BY_FMT[fmt] || HOLDER_ORDER; }
 // His names for the 21700 nickels, by their shape (Daniel, 2026-10-15): W 22.7, Z 22.5, H 23; and H 22.5
-// (2026-10-17). Z is 22.7 since 2026-10-24 (DIM_PITCH; 22.6 from 2026-10-22, when the name here kept 22.5 for a
-// day over results worked out at 22.6). Each number in these two tables and in #dimHolder is its DIM_PITCH figure, which
+// (2026-10-17). Z was 22.6 from 2026-10-22 and 22.7 from 2026-10-24, and is 22.5 again since 2026-10-31. Each number in these two tables and in #dimHolder is its DIM_PITCH figure, which
 // test-pack-dims holds.
-const HOLDER_NAME = { 'diag-b': 'ניקל Z (22.7)', 'diag-a': 'ניקל W (22.7)', 'square-225': 'ניקל H (22.5)', 'square-23': 'ניקל H (23)',
+const HOLDER_NAME = { 'diag-b': 'ניקל Z (22.5)', 'diag-a': 'ניקל W (22.7)', 'square-225': 'ניקל H (22.5)', 'square-23': 'ניקל H (23)',
   'sq-19': 'ניקל H (19)', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z (18.5)', 'diag-185w': 'ניקל W (18.5)' };
-const HOLDER_LABEL = { 'diag-a': 'ניקל W — 22.7', 'diag-b': 'ניקל Z — 22.7', 'square-225': 'ניקל H — 22.5', 'square-23': 'ניקל H — 23',
+const HOLDER_LABEL = { 'diag-a': 'ניקל W — 22.7', 'diag-b': 'ניקל Z — 22.5', 'square-225': 'ניקל H — 22.5', 'square-23': 'ניקל H — 23',
   'sq-19': 'ניקל H — 19', 'sq-2025': 'ריבועי 20.25', 'diag-185': 'ניקל Z — 18.5', 'diag-185w': 'ניקל W — 18.5' };
 // Rebuilds the holder list for the cell size, keeping the choice when it is still valid.
 function refreshHolderOptions(fmt) {
