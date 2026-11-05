@@ -5,7 +5,7 @@
 //     a customer and a job, and warranties, stickers and business accounts are views at the top.
 //     The repair calculator is a "🔧 תיקון חדש" button.
 //   - the home page: 7 cards (8 until the films tab went, 2026-10-18). כלים טכניים (sizes, calculators, diagnosis), מחירון (sale prices,
-//     supplier costs), בוטים (WhatsApp, trading) each one card with tabs; חסר להזמנה inside מלאי.
+//     supplier costs), בוטים (WhatsApp, trading) each one card with tabs; חסר להזמנה inside מלאי (taken off in v525).
 //
 //   node test/test-nav-merge.mjs
 //   node test/test-nav-merge.mjs --selftest   (old links to the customers page land nowhere, a row's name opens nothing,
@@ -131,7 +131,7 @@ check('"🔧 תיקון חדש" on עבודות opens the repair calculator', aw
 check('כלים טכניים: מידות · מחשבונים · אבחון', JSON.stringify(await strip('dims')) === JSON.stringify(['*📐 מידות', '🧰 מחשבונים', '🩺 אבחון']), await strip('dims'));
 check('מחירון: מחירי מכירה · עלויות ספקים', JSON.stringify(await strip('catalog')) === JSON.stringify(['*🏷️ מחירי מכירה', '🔒 עלויות ספקים']), await strip('catalog'));
 check('בוטים: וואטסאפ · מסחר', JSON.stringify(await strip('wabot')) === JSON.stringify(['*🤖 וואטסאפ', '📈 מסחר']), await strip('wabot'));
-check('מלאי carries חסר להזמנה at its top', await page.evaluate(() => { navigateTo('inventory'); return !!document.querySelector('#page-inventory #needCard'); }), '');
+check('מלאי no longer carries חסר להזמנה (v525, Daniel: "תוריד חסר במלאי")', await page.evaluate(() => { navigateTo('inventory'); return !document.querySelector('#page-inventory #needCard'); }), '');
 
 // ---- nothing orphaned: every page reachable from home by tapping
 const reach = await page.evaluate(() => {

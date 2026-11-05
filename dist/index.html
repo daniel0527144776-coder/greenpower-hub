@@ -431,13 +431,13 @@ body { min-height: 100vh; }
   .inv-sub { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--primary); margin: 10px 2px 6px; padding-bottom: 3px; border-bottom: 1px dashed var(--border-strong); }
   .inv-sub span:last-child { font-weight: 400; font-size: 11px; color: var(--text-muted); }
   /* the stock page's groups and its one-line rows (2026-10-29) */
-  .inv-search { margin: 0 0 8px; }
   .inv-grp { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; padding: 10px 8px; margin: 4px 0; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
   .inv-grp > span:last-child { font-weight: 400; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
   .inv-grp-fold { cursor: pointer; }
   .inv-grp-fold .inv-grp-name::before { content: '◂ '; }
   .inv-grp-fold[data-open="1"] .inv-grp-name::before { content: '▾ '; }
   .inv-grp-body { margin: 0 0 8px; padding-inline-start: 8px; border-inline-start: 2px solid var(--border); }
+  .inv-grp-2 { font-size: 13px; padding: 8px; }
   .inv-row { padding: 6px 10px; margin-bottom: 4px; }
   .inv-row-line { display: flex; align-items: center; gap: 8px; }
   .inv-row-name { flex: 1 1 auto; min-width: 0; cursor: pointer; overflow-wrap: anywhere; }
@@ -613,7 +613,7 @@ body { min-height: 100vh; }
       <div class="quick-card" onclick="navigateTo('inventory')">
         <span class="quick-card-icon">📦</span>
         <div class="quick-card-title">מלאי</div>
-        <div class="quick-card-desc">תאים · BMS · חסר להזמנה</div>
+        <div class="quick-card-desc">תאים · BMS · ניקל</div>
       </div>
       <div class="quick-card" onclick="navigateTo('dims')">
         <span class="quick-card-icon">🧰</span>
@@ -1647,25 +1647,9 @@ body { min-height: 100vh; }
       <button class="btn btn-primary btn-sm" onclick="openInventoryEditor(null)">➕ פריט</button>
     </div>
   </div>
-  <!-- What he writes down as missing (Daniel, 2026-10-05: "מקום שאני כותב איזה חלקי עבודה חסרים לי
-       בשביל להזמין"). Free text, not a stock row: half of what runs out is never counted. -->
-  <!-- A fold since 2026-10-05 (every tab folded). "📝 חסר להזמנה" on the home page opens it. -->
-  <details class="fold" id="needCard" data-fold="need" ontoggle="foldToggled(this)">
-    <summary><span class="fold-title">📝 חסר להזמנה</span></summary>
-    <div class="fold-body">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-      <input id="needText" class="form-input-wide" style="flex:1 1 200px;width:auto;" placeholder="מה חסר? למשל: ניקל 0.15, שרינק 300 מ&quot;מ" onkeydown="if(event.key==='Enter')addNeed()">
-      <input id="needQty" class="form-input-wide" style="flex:0 0 90px;width:90px;" placeholder="כמות" onkeydown="if(event.key==='Enter')addNeed()">
-      <input id="needSupplier" class="form-input-wide" style="flex:0 1 130px;width:130px;" placeholder="ספק (לא חובה)" list="needSuppliers" onkeydown="if(event.key==='Enter')addNeed()">
-      <datalist id="needSuppliers"></datalist>
-      <button class="btn btn-primary btn-sm" onclick="addNeed()">➕ הוסף</button>
-    </div>
-    <div id="needList" style="margin-top:8px;"></div>
-    </div>
-  </details>
-  <!-- The search (Daniel, 2026-10-29): every word typed must be in the row; only the matching rows show. -->
-  <div class="inv-search"><input type="search" id="invSearch" class="form-input-wide" style="width:100%;box-sizing:border-box;" placeholder="🔍 חיפוש במלאי: XT90, 13S, 50E…" oninput="invSearchChanged(this.value)" autocomplete="off"></div>
-  <div id="inventoryLowAlert"></div>
+  <!-- 2026-11-05 (Daniel: "תוריד חסר במלאי ... חיפוש במלאי גם תוריד"): the "📝 חסר להזמנה" fold, the search and the
+       red "אזל מהמלאי" line are gone from this page. What was written on the list still shows on הזמנה לספק and in
+       "🛒 מה להזמין"; a row that ran out still carries its ⚠️ in its group. -->
   <div class="card">
     <div id="inventoryList"></div>
   </div>
@@ -2821,7 +2805,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v524';
+const HUB_BUILD = 'v525';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -14855,16 +14839,6 @@ function toggleInvCat(c) { c = decodeURIComponent(c); if (INV_OPEN.has(c)) INV_O
 // while the page re-draws (a ± tap re-draws it), as the categories always have. Key: "cat|cond|group".
 const INV_GRP_OPEN = new Set();
 function toggleInvGrp(k) { k = decodeURIComponent(k); if (INV_GRP_OPEN.has(k)) INV_GRP_OPEN.delete(k); else INV_GRP_OPEN.add(k); renderInventory(); }
-// The search at the top of the page (same day, his choice): every word typed must be in the row's name,
-// note, category, group or maker. While it holds text, only the matching rows show, every fold open.
-let INV_QUERY = '';
-function invSearchChanged(v) { INV_QUERY = String(v || ''); renderInventory(); }
-function invMatches(it, words) {
-  const c = invCatOf(it);
-  const hay = [it.name, it.note, c, it.sub || invSubFromName(c, it.name), c === 'BMS' ? invBmsMaker(it.name) : '']
-    .filter(Boolean).join(' ').toLowerCase();
-  return words.every((w) => hay.includes(w));
-}
 // BMS by maker first, then by series (his choice, the same day): the makers the boards are sold under
 // (DALY, JK, JBD, ANT), read off the name. A row whose name names none — the shelf rows typed before the
 // boards were sold by name, "BMS 13S 60A" — waits under its own heading until a board is picked for it
@@ -14896,21 +14870,11 @@ function renderInventory() {
   // shelf, so it belongs on עלויות ספקים — where it now lives alongside every other
   // supplier — and not on a page about what is in the drawer.
   const all = getInventory();
-  const sh = invShortages();
-  document.getElementById('inventoryLowAlert').innerHTML =
-    (sh.out.length ? `<div class="alert alert-danger">🔴 <b>אזל מהמלאי:</b> ${sh.out.map(i => i.name).join(' · ')}</div>` : '') +
-    // No "מלאי נמוך" alert any more (Daniel, 2026-09-25: only out of stock). The threshold
-    // still drives 'מה להזמין'.
-    '';
+  // No alert line above the list (2026-11-05, Daniel: "תוריד"): a row that ran out shows its ⚠️ in its category and
+  // group, and the thresholds still drive "🛒 מה להזמין".
   const list = document.getElementById('inventoryList');
   if (all.length === 0) { list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-text">אין פריטים.</div></div>'; return; }
-  const words = INV_QUERY.toLowerCase().split(/\s+/).filter(Boolean);
-  const searching = words.length > 0;
-  const inv = searching ? all.filter((x) => invMatches(x, words)) : all;
-  if (!inv.length) {
-    list.innerHTML = `<div class="empty-state" data-inv-none><div class="empty-state-icon">🔍</div><div class="empty-state-text">לא נמצא פריט שמתאים ל"${esc2(INV_QUERY.trim())}".</div></div>`;
-    return;
-  }
+  const inv = all;
   const CAT_ORDER = INV_CAT_LIST;
   const CAT_ICON = INV_CAT_ICON;
   const groups = {};
@@ -14946,8 +14910,8 @@ function renderInventory() {
     const used = items.filter(isUsed);
     // Folded by default (Daniel, 2026-09-24): the page opens as a short list of categories and
     // a tap opens one. A category holding something low or out shows ⚠️ while folded, so
-    // folding never hides a shortage. A search opens everything it found.
-    const open = searching || INV_OPEN.has(c);
+    // folding never hides a shortage.
+    const open = INV_OPEN.has(c);
     const warn = items.some(isOut);
     // The groups of a category (Daniel, 2026-09-25, and their folding 2026-10-29): BMS by maker, then
     // by series inside it; chargers by voltage, cells by format, the rest by the words in INV_SUB_WORDS.
@@ -14973,7 +14937,21 @@ function renderInventory() {
     const heads = (gs) => gs.map(([k, g]) => `<div class="inv-sub"><span>${esc2(k)}</span><span>${sum(g)} ${u}</span></div>` + rowsOf(g)).join('');
     const inner = (l, grp) => {
       if (c === 'BMS') return heads(bucket(l, series));
-      if (c === 'ניקל') return heads(bucket(l, (x) => x.sub || invSubFromName('ניקל', x.name) || 'אחר'));
+      if (c === 'ניקל') {
+        // Inside a material, a fold per cell and inside it a heading per S (2026-11-05, Daniel: "שכל ה-S יהיו בנפרד"):
+        // 2S, 3S, 4S… then P, then the strip on a roll, then a row that says none of them.
+        const cells = bucket(l, invNickelCell).sort(([x], [y]) => invNickelCellRank(x) - invNickelCellRank(y));
+        return cells.map(([cell, cg]) => {
+          const key = c + '|' + grp + '|' + cell;
+          const fold = cells.length > 1;
+          const isOpen = !fold || INV_GRP_OPEN.has(key);
+          const tap = fold ? ` onclick="toggleInvGrp('${encodeURIComponent(key).replace(/'/g, '%27')}')"` : '';
+          const byS = [...bucket(cg, invNickelS)].sort(([x], [y]) => invNickelSRank(x) - invNickelSRank(y) || x.localeCompare(y, 'he'));
+          return `<div class="inv-grp inv-grp-2${fold ? ' inv-grp-fold' : ''}" data-inv-cell="${esc2(cell)}" data-open="${isOpen ? 1 : 0}"${tap}>`
+            + `<span><span class="inv-grp-name">${esc2(cell)}</span>${cg.some(isOut) ? warnMark : ''}</span><span>${sum(cg)} ${u}</span></div>`
+            + (isOpen ? `<div class="inv-grp-body">${heads(byS)}</div>` : '');
+        }).join('');
+      }
       if (c === 'הנעה' && (grp === 'מנועים' || grp === 'בקרים')) {
         const m = new Map();
         for (const x of l) { const k = invDriveLine(x.name) || 'אחר'; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
@@ -14987,7 +14965,7 @@ function renderInventory() {
       return gs.map(([k, g]) => {
         // One group alone needs no fold: it is shown open, under a heading that does not fold.
         const key = c + '|' + cond + '|' + k;
-        const fold = gs.length > 1 && !searching;
+        const fold = gs.length > 1;
         const isOpen = !fold || INV_GRP_OPEN.has(key);
         const tap = fold ? ` onclick="toggleInvGrp('${encodeURIComponent(key).replace(/'/g, '%27')}')"` : '';
         return `<div class="inv-grp${fold ? ' inv-grp-fold' : ''}" data-inv-grp="${esc2(k)}" data-open="${isOpen ? 1 : 0}"${tap}>`
@@ -15667,6 +15645,36 @@ function invNickelMaterial(x) {
   if (/מצופה|plat/i.test(n)) return 'ניקל מצופה';
   if (/נחושת|copper/i.test(n)) return 'נחושת';
   return 'חומר לא ידוע';
+}
+// A nickel row's cell and its S (2026-11-05): the spec says them, or else the name ("ניקל טהור 0.2 21700 2S"); a roll
+// is "פס בגליל". The S comes first, then the P, so a "2S" roll and a "3S" roll never share a heading.
+const INV_NICKEL_CELLS = ['21700', '18650', '26650', '32700'];
+function invNickelCell(x) {
+  const sp = (x && x.spec) || {};
+  if (INV_NICKEL_CELLS.includes(String(sp.cell || ''))) return String(sp.cell);
+  const n = String((x && x.name) || '');
+  const m = n.match(/\b(21700|18650|26650|32700)\b/);
+  if (m) return m[1];
+  if (INV_NICKEL_CELLS.includes(String((x && x.sub) || ''))) return String(x.sub);
+  return 'תא לא צוין';
+}
+const invNickelCellRank = (k) => { const i = INV_NICKEL_CELLS.indexOf(k); return i < 0 ? 99 : i; };
+function invNickelS(x) {
+  const sp = (x && x.spec) || {};
+  const n = String((x && x.name) || '');
+  if (Number(sp.s) > 0) return Number(sp.s) + 'S';
+  const s = n.match(/(?:^|[^\w.])(\d{1,2})\s*S(?![A-Za-z\u0590-\u05FF])/i);
+  if (s) return s[1] + 'S';
+  if (Number(sp.p) > 0) return Number(sp.p) + 'P';
+  const p = n.match(/(?:^|[^\w.])(\d{1,2})\s*P(?![A-Za-z\u0590-\u05FF])/i);
+  if (p) return p[1] + 'P';
+  if (sp.shape === 'פס בגליל' || /גליל|\bפס\b|roll/i.test(n)) return 'פס בגליל';
+  return 'בלי S';
+}
+function invNickelSRank(k) {
+  const m = /^(\d+)([SP])$/.exec(k);
+  if (m) return (m[2] === 'S' ? 0 : 100) + Number(m[1]);
+  return k === 'פס בגליל' ? 500 : 900;
 }
 // The sub-category a row's name says, for the categories whose axis is a word rather than a number.
 const INV_SUB_WORDS = {

@@ -175,7 +175,7 @@ await page.evaluate(() => {
 const cats = await page.evaluate(() => [...new Set((Store.get('inventory') || []).map(invCatOf))]);
 check('"תאים" and "תא" are one category, not two', cats.length === 1 && cats[0] === 'תא', JSON.stringify(cats));
 
-// ---- 8. the missing cell models come back on their own; only "out of stock" is an alert ----
+// ---- 8. the missing cell models come back on their own; no alert line above the list (2026-11-05) ----
 const auto = await page.evaluate(() => {
   const s = Store.get('settings') || {}; delete s.cellModelsRestored20260925; Store.set('settings', s);
   Store.set('inventory', [
@@ -189,14 +189,17 @@ const auto = await page.evaluate(() => {
   restoreMissingCellModels();
   const twice = getInventory().length;
   navigateTo('inventory');
-  const alert = document.getElementById('inventoryLowAlert').innerText;
-  return { once, twice, fifty: getInventory().filter((r) => /50e/i.test(r.name)).length, alert };
+  if (!INV_OPEN.has('תא')) toggleInvCat(encodeURIComponent('תא'));
+  const page = document.getElementById('page-inventory').innerText;
+  const catHead = (document.querySelector('[data-inv-cat="תא"]') || {}).innerText || '';
+  return { once, twice, fifty: getInventory().filter((r) => /50e/i.test(r.name)).length, page, catHead };
 });
 check('the four missing cell models are added back', auto.once === 7, auto);
 check('a model already there under another name is not duplicated', auto.fifty === 1, auto);
 check('and it happens once — a second run adds nothing', auto.twice === 7, auto);
-check('"out of stock" is still announced', /אזל/.test(auto.alert), auto.alert);
-check('"low stock" is not', !/מלאי נמוך/.test(auto.alert), auto.alert);
+// Daniel, 2026-11-05: "תוריד חסר במלאי" — the red "אזל מהמלאי" line went; the row that ran out keeps its ⚠️.
+check('no "אזל מהמלאי" or "מלאי נמוך" line on the stock page', !/אזל מהמלאי|מלאי נמוך/.test(auto.page) , auto.page.slice(0, 120));
+check('…and the category holding the row that ran out still shows ⚠️', /⚠️/.test(auto.catHead), auto.catHead.slice(0, 80));
 
 // ---- 9. inside a category: chargers by voltage, cells by format, BMS by maker and then series ----
 // Since 2026-10-29 the groups fold, as the categories do; the sections below open every one, as he would.
@@ -224,8 +227,12 @@ const nickel = await page.evaluate((SELF) => {
     { id: 'n3', name: 'ניקל טהור 0.15 18650', qty: 1, cat: 'ניקל' },
     { id: 'n4', name: 'ניקל 0.25 21700 (פלדה)', qty: 1, cat: 'ניקל', spec: { material: 'פלדה מצופה ניקל' } },
     { id: 'n5', name: 'ניקל 0.2 21700 גליל', qty: 1, cat: 'ניקל' },
+    { id: 'n6', name: 'ניקל טהור 0.2 21700 3S', qty: 1, cat: 'ניקל', spec: { material: 'ניקל טהור', cell: '21700', s: 3 } },
+    { id: 'n7', name: 'ניקל טהור 0.15 21700 גליל', qty: 1, cat: 'ניקל', spec: { material: 'ניקל טהור', shape: 'פס בגליל' } },
+    { id: 'n8', name: 'ניקל טהור 0.2 21700 4S', qty: 1, cat: 'ניקל' },
   ]);
-  if (SELF) { const real = window.invNickelMaterial; window.invNickelMaterial = (r) => (r.id === 'n2' ? 'ניקל טהור' : real(r)); }
+  // --selftest: every S together again, under its cell, as before 2026-11-05
+  if (SELF) { const real = window.invNickelMaterial; window.invNickelMaterial = (r) => (r.id === 'n2' ? 'ניקל טהור' : real(r)); window.invNickelS = () => 'הכול'; }
   navigateTo('inventory');
   if (!INV_OPEN.has('ניקל')) toggleInvCat(encodeURIComponent('ניקל'));
   for (let k = 0; k < 400; k++) { const g = document.querySelector('#inventoryList .inv-grp-fold[data-open="0"]'); if (!g) break; g.click(); }
@@ -239,10 +246,17 @@ const nickel = await page.evaluate((SELF) => {
   const at = (m) => (groups.find((x) => x.m === m) || { items: [] }).items;
   check('nickel: pure and plated in groups of their own, by spec or by name, and a row that says neither apart',
     groups.map((x) => x.m).join() === 'ניקל טהור,ניקל מצופה,חומר לא ידוע'
-    && at('ניקל טהור').length === 2 && at('ניקל טהור').every((n) => !/^0\.25/.test(n))
+    && at('ניקל טהור').length === 5 && at('ניקל טהור').every((n) => !/^0\.25/.test(n))
     && at('ניקל מצופה').length === 2, nickel);
 check('…and a row under its material does not say the material again', [...at('ניקל טהור'), ...at('ניקל מצופה')].every((n) => !/^(טהור|מצופה)/.test(n)) && at('ניקל טהור').includes('0.15 18650'), nickel);
   check('…and the cell is a heading inside each', nickel.indexOf('@21700') > nickel.indexOf('@ניקל טהור') && nickel.lastIndexOf('@21700') > nickel.indexOf('@ניקל מצופה'), nickel);
+  // Daniel, 2026-11-05: "שכל ה-S יהיו בנפרד, שלא כל ה-S יהיו מחוברים" — material, cell, then each S its own heading,
+  // in order (2S, 3S, 4S, the roll), by the spec's S or the name's.
+  const pure = nickel.slice(nickel.indexOf('@ניקל טהור'), nickel.indexOf('@ניקל מצופה'));
+  const heads = pure.filter((x) => /^@(\d+[SP]|פס בגליל|בלי S)$/.test(x));
+  const under = (h) => { const i = pure.indexOf(h); if (i < 0) return []; const out = []; for (let k = i + 1; k < pure.length && pure[k][0] !== '@'; k++) out.push(pure[k]); return out; };
+  check('nickel: each S its own heading under its cell, in order (2S, 3S, 4S, the roll)',
+    heads.slice(0, 4).join() === '@2S,@3S,@4S,@פס בגליל' && under('@2S').length === 1 && under('@3S').length === 1 && under('@4S').length === 1, pure);
 }
 
 // ---- 9b. new and second-hand never share a group (2026-10-09) ----
@@ -467,57 +481,28 @@ check('"nothing to order" is said in a notice', /אין מה להזמין/.test(
 check('saving an item with no name says so in a notice', /הזן שם פריט/.test(sup.nameNotice), sup.nameNotice);
 check('the item editor stores a row\'s own supplier', sup.saved === 'ספק-מיוחד', String(sup.saved));
 
-// ---- 13. חסר להזמנה (Daniel, 2026-10-05: "מקום שאני כותב איזה חלקי עבודה חסרים לי בשביל להזמין") ----
-// Free text he writes down, synced row by row like the stock, and in the order message beside it.
-// --selftest leaves the written lines out of the order, the way the page was before.
+// ---- 13. חסר להזמנה left the stock page (2026-11-05, Daniel: "תוריד חסר במלאי"; the list was his of 2026-10-05) ----
+// The fold he wrote in, the search and the red "אזל מהמלאי" line are gone from the page. What is already on the list
+// still joins "🛒 מה להזמין" in its supplier's message, and still syncs. --selftest puts the three back on the page and
+// leaves the written lines out of the order.
 const need = await page.evaluate(async (SELF) => {
-  if (SELF) window.needOrderLines = () => [];
-  Store.set('inventory', [{ id: 'z', name: 'תאי EVE 21700 50E', qty: 5000, low: 10, cat: 'תאים' }]);
-  Store.set('need_list', []);
-  openNeedList();
-  await new Promise((r) => setTimeout(r, 120));
-  const focused = document.activeElement && document.activeElement.id;
-  const put = (id, v) => { document.getElementById(id).value = v; };
-  put('needText', 'ניקל 0.15'); put('needQty', '2 ק"ג'); put('needSupplier', 'ספק-חלקים');
-  document.getElementById('needText').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  // The supplier stays for the next line (several parts from one supplier in a row); cleared, the line has none.
-  const sticky = document.getElementById('needSupplier').value;
-  put('needSupplier', ''); put('needText', 'שרינק <b>300</b>'); addNeed();
-  put('needText', '   '); addNeed();
-  const blankNotice = (document.getElementById('noticeBackdrop') || {}).innerText || '';
-  closeNotice();
-  const rows = getNeeds();
-  const listHtml = document.getElementById('needList').innerHTML;
-  const groups = orderGroups().map((g) => [g.supplier, g.lines.map((l) => l.name).join('+')]);
+  if (SELF) {
+    window.needOrderLines = () => [];
+    document.getElementById('page-inventory').insertAdjacentHTML('afterbegin', '<details id="needCard"><summary>📝 חסר להזמנה</summary></details><input id="invSearch"><div id="inventoryLowAlert">🔴 אזל מהמלאי: x</div>');
+  }
+  Store.set('inventory', [{ id: 'z', name: 'תאי EVE 21700 50E', qty: 0, low: 10, cat: 'תאים' }]);
+  Store.set('need_list', [{ id: 'n1', text: 'ניקל 0.15', qty: '2 ק"ג', supplier: 'ספק-חלקים', added: 1 }]);
+  navigateTo('inventory');
+  const pg = document.getElementById('page-inventory');
+  const gone = !pg.querySelector('#needCard, #needText, #invSearch, #inventoryLowAlert') && !/חסר להזמנה|אזל מהמלאי/.test(pg.innerText);
+  const home = [...document.querySelectorAll('.quick-card-desc')].map((d) => d.textContent).join(' | ');
   const text = orderListText();
-  copyOrderList();
-  const modal = { title: (document.getElementById('modalTitle') || {}).textContent || '', wa: document.querySelectorAll('[data-wa-order]').length };
-  let opened = '';
-  const keep = window.openExternal; window.openExternal = (u) => { opened = u; };
-  sendOrderGroup(0);
-  window.openExternal = keep;
-  closeModal();
-  toggleNeedOrdered(rows[0].id);
-  const afterOrdered = orderListText();
-  const orderedRow = getNeeds().find((r) => r.id === rows[0].id);
-  removeNeed(rows[1].id);
-  const tomb = Store.get('tomb_need_list') || {};
-  return { sticky, focused, n: rows.length, row0: rows[0], blankNotice, escaped: listHtml.includes('&lt;b&gt;300') && !listHtml.includes('<b>300'),
-    groups, text, modal, opened, afterOrdered, ordered: !!(orderedRow && orderedRow.ordered), tombed: tomb[rows[1].id] != null,
-    left: getNeeds().map((r) => r.text), sync: SYNC_KEYS.includes('need_list') && SYNC_KEYS.includes('tomb_need_list') && MERGE_KEYS.includes('need_list') };
+  return { gone, home, text, sync: SYNC_KEYS.includes('need_list') && SYNC_KEYS.includes('tomb_need_list') && MERGE_KEYS.includes('need_list') };
 }, SELFTEST);
-check('the home card opens the list with the cursor in it', need.focused === 'needText', String(need.focused));
-check('Enter or ➕ adds a line, with its quantity and supplier (which stays for the next); a blank one is refused in a notice',
-  need.n === 2 && need.sticky === 'ספק-חלקים' && need.row0.text === 'ניקל 0.15' && need.row0.qty === '2 ק"ג' && need.row0.supplier === 'ספק-חלקים' && /כתוב מה חסר/.test(need.blankNotice), JSON.stringify([need.n, need.row0, need.blankNotice]));
-check('what he types is shown as text, never as markup', need.escaped, 'escaped');
-check('the written lines join "מה להזמין", in their supplier\'s message',
-  /הזמנה מ-ספק-חלקים:\n• ניקל 0\.15 — 2 ק"ג/.test(need.text) && /• שרינק <b>300<\/b>/.test(need.text), need.text);
-check('with nothing low on the shelf, the order still opens for them, each message with a WhatsApp button',
-  /מה להזמין/.test(need.modal.title) && need.modal.wa === need.groups.length && need.groups.length === 2, JSON.stringify([need.modal, need.groups]));
-check('the WhatsApp button opens wa.me with that supplier\'s message', /^https:\/\/wa\.me\/\?text=/.test(need.opened) && decodeURIComponent(need.opened.split('text=')[1] || '').includes('ניקל 0.15'), need.opened.slice(0, 80));
-check('a line marked ✓ הוזמן stays on the list and leaves the order', need.ordered && !need.afterOrdered.includes('ניקל'), need.afterOrdered);
-check('🗑 removes a line and leaves a tombstone, so another device does not bring it back', need.tombed && need.left.join() === 'ניקל 0.15', JSON.stringify(need.left));
-check('the list syncs, row by row, with its tombstones', need.sync, 'SYNC_KEYS / MERGE_KEYS');
+check('the stock page has no "חסר להזמנה" fold, no search and no "אזל מהמלאי" line', need.gone, 'gone');
+check('the home card no longer offers "חסר להזמנה"', !/חסר להזמנה/.test(need.home), need.home);
+check('what is already on the list still joins "מה להזמין", in its supplier\'s message', /הזמנה מ-ספק-חלקים:\n• ניקל 0\.15 — 2 ק"ג/.test(need.text), need.text);
+check('the list still syncs, row by row, with its tombstones', need.sync, 'SYNC_KEYS / MERGE_KEYS');
 
 // ---- nickel: its own spec (2026-10-11) ----
 // Daniel: "יש לכל ניקל מפרט ייחודי משלו לכן תעשה לי אפשריות שאני יוכל להזין את המפרט המדויק". A nickel row

@@ -10,7 +10,7 @@
 //   * one short line per row, the name opening the rest (edit, delete, threshold, note, pace);
 //   * BMS by maker (DALY, JK, JBD, ANT) and then by series, a board picked from the catalogue's list in
 //     the editor, so that a sale of that board finds its shelf row;
-//   * a search at the top of the page.
+//   * a search at the top of the page (taken off again on 2026-11-05, Daniel: "חיפוש במלאי גם תוריד").
 // And the rows the old name rules left under אחר, or filed under the wrong category, go where they belong.
 //
 // Every name and count below is made up.
@@ -47,7 +47,7 @@ await page.evaluate((SELF) => {
   if (SELF) {
     INV_GRP_OPEN.has = () => true;
     window.invBmsMaker = () => INV_NO_MAKER;
-    window.invMatches = () => true;
+    document.getElementById('page-inventory').insertAdjacentHTML('afterbegin', '<input id="invSearch">');
     window.invBoardPicked = () => {};
     window.invDriveLine = () => '';
     INV_CAT_WORDS.length = 0;
@@ -76,7 +76,7 @@ const OPEN_ALL = `for (let k = 0; k < 400; k++) { const g = document.querySelect
 const F = await page.evaluate((STOCK) => {
   // no second-hand row here: a section with one group shows it open (checked at the end of this part)
   Store.set('inventory', STOCK.filter((x) => x.id !== 'b6'));
-  INV_OPEN.clear(); if (typeof INV_GRP_OPEN !== 'undefined') INV_GRP_OPEN.clear(); INV_QUERY = '';
+  INV_OPEN.clear(); if (typeof INV_GRP_OPEN !== 'undefined') INV_GRP_OPEN.clear();
   navigateTo('inventory');
   toggleInvCat(encodeURIComponent('BMS'));
   const grp = () => [...document.querySelectorAll('#inventoryList [data-inv-cat="BMS"] .inv-grp')].map((g) => ({
@@ -162,25 +162,10 @@ check('…with edit, the datasheet and delete', R.foot.some((b) => /ערוך/.te
 check('edit opens the editor on that row', R.editor === 'תאי EVE 21700 50E', R.editor);
 check('delete asks, then removes the row', R.asked === true && R.deleted === true, R);
 
-// ---------------------------------------------------------------- 4. the search
-const Q = await page.evaluate(() => {
-  INV_OPEN.clear(); if (typeof INV_GRP_OPEN !== 'undefined') INV_GRP_OPEN.clear(); renderInventory();
-  const box = document.getElementById('invSearch');
-  const type = (v) => { box.value = v; box.dispatchEvent(new Event('input', { bubbles: true })); };
-  const titles = () => [...document.querySelectorAll('#inventoryList .list-item-title')].map((t) => t.textContent.trim());
-  type('13s'); const s13 = titles();
-  type('daly 20s'); const daly20 = titles();
-  type('jk'); const jk = titles();
-  type('xt150 שאין'); const none = { rows: titles().length, said: !!document.querySelector('#inventoryList [data-inv-none]') };
-  type(''); const back = { rows: titles().length, cats: document.querySelectorAll('#inventoryList [data-inv-cat]').length };
-  return { field: !!box, s13, daly20, jk, none, back };
-});
-check('the stock page has a search field', Q.field, Q);
-check('"13s" finds the 13S boards, every fold open', Q.s13.length === 3 && Q.s13.every((t) => /13S/.test(t)), Q.s13);
-check('every word must match: "daly 20s" finds the one board', Q.daly20.join() === 'DALY 20S 72V 100A', Q.daly20);
-check('a maker finds its boards ("jk")', Q.jk.join() === 'JK-BD6A20S20P', Q.jk);
-check('nothing found says so', Q.none.rows === 0 && Q.none.said, Q.none);
-check('cleared, the page folds back to its categories', Q.back.rows === 0 && Q.back.cats >= 3, Q.back);
+// ---------------------------------------------------------------- 4. no search (2026-11-05)
+// Daniel: "חיפוש במלאי גם תוריד". --selftest puts the field back.
+const Q = await page.evaluate(() => ({ field: !!document.getElementById('invSearch'), fn: typeof window.invSearchChanged }));
+check('the stock page has no search field any more', !Q.field && Q.fn === 'undefined', Q);
 
 // ---------------------------------------------------------------- 5. a board picked from the catalogue's list
 const B = await page.evaluate(() => {
