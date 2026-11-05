@@ -2805,7 +2805,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v525';
+const HUB_BUILD = 'v526';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -14957,6 +14957,14 @@ function renderInventory() {
         for (const x of l) { const k = invDriveLine(x.name) || 'אחר'; if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
         return heads([...m].sort(([a], [b]) => invDriveRank(a) - invDriveRank(b) || a.localeCompare(b)));
       }
+      // A heading per model in every other group (2026-11-05, Daniel: "הפרד בין דגם לדגם"): read off the name, and only
+      // when the group holds more than one; a row that names none goes under אחר, last.
+      const mk = invModelKeyFn(c, grp);
+      if (mk) {
+        const gs = [...bucket(l, (x) => mk(String(x.name || '')) || 'אחר')]
+          .sort(([a], [b]) => (a === 'אחר') - (b === 'אחר') || a.localeCompare(b, 'en', { numeric: true }));
+        if (gs.length > 1) return heads(gs);
+      }
       return rowsOf(l);
     };
     const listBody = (l, cond) => {
@@ -15675,6 +15683,29 @@ function invNickelSRank(k) {
   const m = /^(\d+)([SP])$/.exec(k);
   if (m) return (m[2] === 'S' ? 0 : 100) + Number(m[1]);
   return k === 'פס בגליל' ? 500 : 900;
+}
+// A row's model inside its group (2026-11-05, Daniel: "הפרד בין דגם לדגם, נמצא דגמים וסדר אותם"), read off its name:
+// a connector by its type, a cable by its gauge, a lug by its stud, a charger by its current, a sleeve by its width,
+// a holder by its P, and a cell, a display or a throttle by its maker (the first Latin word of the name, so no maker
+// is written in this public file). null where a group has no such axis.
+const INV_CONNECTORS = [
+  [/\bXT\s?-?(\d{2,3})/i, (m) => 'XT' + m[1]], [/\bAS\s?-?(\d{3})/i, (m) => 'AS' + m[1]],
+  [/\bQS\s?-?(\d{1,2})(?!\d)/i, (m) => 'QS' + m[1]], [/\bEC\s?-?(\d)(?!\d)/i, (m) => 'EC' + m[1]],
+  [/\bMR\s?-?(\d{2})/i, (m) => 'MR' + m[1]], [/\bMT\s?-?(\d{2})/i, (m) => 'MT' + m[1]],
+  [/אנדרסון|anderson|\bSB\s?\d{2,3}/i, () => 'Anderson'], [/\bXLR\b/i, () => 'XLR'],
+  [/\bGX\s?-?(\d{2})/i, (m) => 'GX' + m[1]], [/\bJST\b/i, () => 'JST'], [/\bDC\b/i, () => 'DC'],
+];
+const invNum = (n, re, unit) => { const m = n.match(re); return m ? m[1] + unit : ''; };
+const invFirstLatin = (n) => { const m = n.match(/(?:^|[^A-Za-z0-9])([A-Za-z][A-Za-z]+)/); return m ? m[1] : ''; };
+function invModelKeyFn(cat, grp) {
+  if (cat === 'כבלים ומחברים' && grp === 'מחברים') return (n) => { for (const [re, f] of INV_CONNECTORS) { const m = n.match(re); if (m) return f(m); } return ''; };
+  if (cat === 'כבלים ומחברים' && grp === 'כבלים') return (n) => invNum(n, /(\d{1,2})\s*AWG/i, 'AWG') || invNum(n, /(\d+(?:\.\d+)?)\s*(?:ממ"ר|ממ״ר|mm²|mm2|קמ"ר)/i, ' ממ"ר');
+  if (cat === 'כבלים ומחברים' && grp === 'נעלים וטרמינלים') return (n) => { const m = n.match(/\bM\s?(\d{1,2})(?!\d)/i); return m ? 'M' + m[1] : invNum(n, /(\d+(?:\.\d+)?)\s*(?:ממ"ר|ממ״ר|mm²|mm2)/i, ' ממ"ר'); };
+  if (cat === 'מטען') return (n) => invNum(n, /(\d+(?:\.\d+)?)\s*A(?![A-Za-z\u0590-\u05FF])/i, 'A');
+  if (cat === 'בידוד וכיווץ' && grp === 'שרוולי כיווץ') return (n) => invNum(n, /(\d+(?:\.\d+)?)\s*(?:מ"מ|מ״מ|ממ|mm)(?![A-Za-z²2])/i, ' מ"מ');
+  if (cat === 'מחזיקי תאים') return (n) => invNum(n, /(?:^|[^\w.])(\d{1,2})\s*P(?![A-Za-z\u0590-\u05FF])/i, 'P');
+  if (cat === 'תא' || (cat === 'הנעה' && (grp === 'צגים' || grp === 'מצערות'))) return invFirstLatin;
+  return null;
 }
 // The sub-category a row's name says, for the categories whose axis is a word rather than a number.
 const INV_SUB_WORDS = {

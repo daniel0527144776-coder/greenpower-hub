@@ -167,6 +167,42 @@ check('delete asks, then removes the row', R.asked === true && R.deleted === tru
 const Q = await page.evaluate(() => ({ field: !!document.getElementById('invSearch'), fn: typeof window.invSearchChanged }));
 check('the stock page has no search field any more', !Q.field && Q.fn === 'undefined', Q);
 
+// ---------------------------------------------------------------- 4b. a heading per model (2026-11-05)
+// Daniel: "הפרד בין דגם לדגם, נמצא דגמים וסדר אותם". Inside a group, a heading per model read off the name: a
+// connector by its type, a charger by its current, a cell by its maker; a row that names none under אחר, last.
+// --selftest takes the model away (invModelKeyFn → null), so the rows sit together again. Every name is made up.
+const MODEL = await page.evaluate((SELF) => {
+  if (SELF) window.invModelKeyFn = () => null;
+  Store.set('inventory', [
+    { id: 'm1', name: 'מחבר XT90 זכר', qty: 5, cat: 'כבלים ומחברים' },
+    { id: 'm2', name: 'מחבר XT90 נקבה', qty: 4, cat: 'כבלים ומחברים' },
+    { id: 'm3', name: 'מחבר XT60 זכר', qty: 3, cat: 'כבלים ומחברים' },
+    { id: 'm4', name: 'מחבר אנדרסון 50A', qty: 2, cat: 'כבלים ומחברים' },
+    { id: 'm5', name: 'מחבר כלשהו', qty: 1, cat: 'כבלים ומחברים' },
+    { id: 'm6', name: 'כבל סיליקון 10AWG', qty: 1, cat: 'כבלים ומחברים' },
+    { id: 'c1', name: 'מטען 72V 5A', qty: 2, cat: 'מטען' },
+    { id: 'c2', name: 'מטען 72V 10A', qty: 1, cat: 'מטען' },
+    { id: 't1', name: 'תאי EVE 21700 50E', qty: 100, cat: 'תא' },
+    { id: 't2', name: 'תאי Tenpower 21700 50SG', qty: 100, cat: 'תא' },
+  ]);
+  INV_OPEN.clear(); INV_GRP_OPEN.clear();
+  navigateTo('inventory');
+  ['כבלים ומחברים', 'מטען', 'תא'].forEach((c) => toggleInvCat(encodeURIComponent(c)));
+  for (let k = 0; k < 50; k++) { const g = document.querySelector('#inventoryList .inv-grp-fold[data-open="0"]'); if (!g) break; g.click(); }
+  const seq = (cat) => [...document.querySelectorAll(`#inventoryList [data-inv-cat="${cat}"] .inv-grp-name, #inventoryList [data-inv-cat="${cat}"] .inv-sub span:first-child, #inventoryList [data-inv-cat="${cat}"] .list-item-title`)]
+    .map((el) => (el.classList.contains('list-item-title') ? el.textContent.trim() : '@' + el.textContent.trim()));
+  return { conn: seq('כבלים ומחברים'), chg: seq('מטען'), cell: seq('תא') };
+}, SELFTEST);
+{
+  const under = (seq, h) => { const i = seq.indexOf(h); if (i < 0) return []; const out = []; for (let k = i + 1; k < seq.length && seq[k][0] !== '@'; k++) out.push(seq[k]); return out; };
+  const heads = MODEL.conn.filter((x) => /^@(XT\d+|Anderson|אחר)$/.test(x));
+  check('connectors: a heading per type, in order, the unnamed one last (Anderson, XT60, XT90, אחר)',
+    heads.join() === '@Anderson,@XT60,@XT90,@אחר' && under(MODEL.conn, '@XT90').length === 2 && under(MODEL.conn, '@XT60').length === 1, MODEL.conn);
+  check('…and a group with one model (the cable) has no heading of its own', !MODEL.conn.includes('@10AWG'), MODEL.conn);
+  check('chargers: a heading per current inside the voltage (5A, 10A)', MODEL.chg.indexOf('@5A') >= 0 && MODEL.chg.indexOf('@10A') > MODEL.chg.indexOf('@5A'), MODEL.chg);
+  check('cells: a heading per maker inside the format (EVE, Tenpower)', MODEL.cell.includes('@EVE') && MODEL.cell.includes('@Tenpower'), MODEL.cell);
+}
+
 // ---------------------------------------------------------------- 5. a board picked from the catalogue's list
 const B = await page.evaluate(() => {
   Store.set('inventory', [{ id: 'p1', name: 'BMS 13S 60A (יד 2)', qty: 2, cat: 'BMS' }, { id: 'p2', name: 'BMS 13S 60A', qty: 3, cat: 'BMS' }]);
@@ -236,7 +272,7 @@ check('motors under their QS model, the smaller number first', D.seq.join().incl
 check('controllers under their maker', D.seq.join().includes('@בקרים,§Far Driver,§Sabvoton,§KT'), D.seq);
 check('a QS8 connector is a connector, not a motor', D.qs8 === 'כבלים ומחברים', D.qs8);
 
-if (SELFTEST) console.log('\n[selftest] groups opened by themselves, makers and search and the board pick were broken, the name rules emptied; the checks above must have gone red.');
+if (SELFTEST) console.log('\n[selftest] groups opened by themselves, makers and search and the board pick were broken, the name rules and the models emptied; the checks above must have gone red.');
 check('no page errors', errs.length === 0, errs);
 check('no native dialogs (invisible in the WebView)', dialogs.length === 0, dialogs);
 await browser.close(); srv.close();
