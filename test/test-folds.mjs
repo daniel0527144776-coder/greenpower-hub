@@ -104,14 +104,14 @@ const lists = await page.evaluate(() => {
   navigateTo('stickerlog'); out.stickers = st('#stickerlogList');
   navigateTo('dims'); out.dims = st('#vpList');
   navigateTo('catalog'); out.catalog = st('#catalogList');
-  navigateTo('inventory'); out.need = !document.getElementById('needCard').open && document.getElementById('needCard').tagName === 'DETAILS';
+  navigateTo('inventory'); out.need = !document.getElementById('needCard');   // taken off the stock page in v525 (Daniel: "תוריד חסר במלאי")
   return out;
 });
 for (const [k, label] of [['orders', 'jobs, by month'], ['warranties', 'warranties, by the month they end'], ['stickers', 'saved stickers, by month'], ['dims', 'vehicle sizes, by group'], ['catalog', 'the price list, by topic']]) {
   check(label + ': folded, with no row count on a title', lists[k] && lists[k].n >= 1 && lists[k].closed && lists[k].counts === 0, lists[k]);
 }
 check('a month\'s title carries its money', /₪/.test(lists.ordersSum), lists.ordersSum);
-check('"חסר להזמנה" folds, and the home card opens it', lists.need && await page.evaluate(() => { openNeedList(); return document.getElementById('needCard').open; }), lists.need);
+check('the stock page has no "חסר להזמנה" fold any more (v525)', lists.need, lists.need);
 const opened = await page.evaluate(async () => {
   const out = {};
   navigateTo('orders');

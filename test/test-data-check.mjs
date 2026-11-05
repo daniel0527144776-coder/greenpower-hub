@@ -88,7 +88,8 @@ named('a month with work and no expenses is named', '2026-09');
 check('a healthy job is not flagged', !report.includes('דוד לוי · 3.9.2026'), report.slice(0, 200));
 // A quote is not money, so a quote with no items is not a fault.
 check('an unpaid quote with no items is not flagged', !report.includes('מיכאל דוגמה'), report.slice(0, 200));
-check('stock that is simply in hand is not flagged', !report.includes('ניקל'), report.slice(0, 200));
+// The home page's stock card names ניקל as a category since v525 ("תאים · BMS · ניקל"); that is no flag.
+check('stock that is simply in hand is not flagged', !report.replace(/תאים · BMS · ניקל/g, '').includes('ניקל'), report.slice(0, 200));
 
 // ---------------------------------------------------------------- it says what it looked at
 // Three of each: the quote counts as a sale it looked at, even though it is not a fault.
