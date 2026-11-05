@@ -2,7 +2,24 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<script>
+// The phone's system bars (2026-11-05, Daniel: "הטקסט בכותרת העליונה ובתחתון זה נסתר"). On his new phone the
+// app draws the page to the screen's edges: the status bar sat on the header and the black navigation bar on
+// the last rows. The page cannot ask the app how tall the bars are, so where it fills the whole screen (the
+// WebView's height is the screen's) it takes the bars' usual height: 32px above, 48px below; a WebView that
+// reports the real insets (env(safe-area-inset-*)) gets those when they are larger. Below the bars, as on a
+// computer, nothing moves. Checked by test-system-bars.
+(function () {
+  try {
+    var nat = !!window.GPPrint || window.GP_NATIVE === true || navigator.userAgent.indexOf(' wv)') !== -1;
+    var edge = function () { if (nat && screen.height - window.innerHeight < 10) document.documentElement.classList.add('gp-edge'); };
+    edge();
+    addEventListener('load', edge);
+    addEventListener('orientationchange', function () { setTimeout(edge, 300); });
+  } catch (e) {}
+})();
+</script>
 <meta name="theme-color" content="#1F4E79">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -44,12 +61,17 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5; }
 body { min-height: 100vh; }
+/* The system bars' room (see the script at the top of <head>): zero on a computer and in an app that stops
+   at the bars; the bars' height where the page runs under them. */
+:root { --sys-top: env(safe-area-inset-top, 0px); --sys-bottom: env(safe-area-inset-bottom, 0px); }
+html.gp-edge { --sys-top: max(env(safe-area-inset-top, 0px), 32px); --sys-bottom: max(env(safe-area-inset-bottom, 0px), 48px); }
+#loginOverlay, #syncOverlay, #vehPhotoView { padding-top: calc(20px + var(--sys-top)) !important; padding-bottom: calc(20px + var(--sys-bottom)) !important; }
 
 /* Header */
 .app-header {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color: white;
-  padding: 14px 16px;
+  padding: calc(14px + var(--sys-top)) 16px 14px;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -65,7 +87,7 @@ body { min-height: 100vh; }
 .header-btn:hover { background: rgba(255,255,255,0.25); }
 
 /* Main content area */
-.main { max-width: 800px; margin: 0 auto; padding: 16px; }
+.main { max-width: 800px; margin: 0 auto; padding: 16px 16px calc(16px + var(--sys-bottom)); }
 
 /* Cards */
 .card { background: var(--card); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
@@ -252,7 +274,7 @@ body { min-height: 100vh; }
 .link-desc { font-size: 11px; color: var(--text-muted); margin: 0; }
 
 /* Modal */
-.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 200; display: none; align-items: center; justify-content: center; padding: 16px; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 200; display: none; align-items: center; justify-content: center; padding: calc(16px + var(--sys-top)) 16px calc(16px + var(--sys-bottom)); }
 .modal-backdrop.active { display: flex; }
 .modal { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.2); }
 .modal-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--card); z-index: 1; }
@@ -267,7 +289,7 @@ body { min-height: 100vh; }
 /* Above the login gate (z-index 10000) too: a notice raised while the gate is up would
    otherwise be drawn behind it, which is the same invisibility this whole mechanism exists
    to end. It is the last thing drawn and must always be the thing you can read. */
-.notice-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 10001; display: none; align-items: center; justify-content: center; padding: 16px; }
+.notice-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 10001; display: none; align-items: center; justify-content: center; padding: calc(16px + var(--sys-top)) 16px calc(16px + var(--sys-bottom)); }
 .notice-backdrop.active { display: flex; }
 .notice { background: var(--card); border-radius: var(--radius); width: 100%; max-width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
 .so-preview { margin: 6px 0; padding: 8px 10px; min-height: 18px; background: var(--bg); border: 1px dashed var(--border); border-radius: 6px; font-family: monospace; font-size: 12px; text-align: left; word-break: break-word; }
@@ -333,7 +355,7 @@ body { min-height: 100vh; }
 
 /* Responsive */
 @media (max-width: 480px) {
-  .main { padding: 12px; }
+  .main { padding: 12px 12px calc(12px + var(--sys-bottom)); }
   .card { padding: 14px; }
   .pills-grid-5 { grid-template-columns: repeat(5, 1fr); }
   .pills-grid-3 { grid-template-columns: repeat(3, 1fr); }
@@ -3022,6 +3044,13 @@ async function runSelfTest() {
     L.push('מכירות עם מלאי תאים שגוי: ' + (bad.length ? bad.map((o) => o.customer || o.id).join(', ') + ' — בכרטיס המכירה: "תקן מלאי"' : 'אין'));
   } catch (e) { L.push('מכירות עם מלאי תאים שגוי: לא ניתן לבדוק'); }
   L.push('גשר הדפסה: ' + (window.GPPrint ? 'יש' : 'אין'));
+  // The system bars (2026-11-05): whether the page runs under them, and the two heights that decided it.
+  try {
+    const cs = getComputedStyle(document.documentElement);
+    L.push('מסך: ' + screen.height + ' · דף ' + window.innerHeight + ' · מתחת לפסי המערכת: '
+      + (document.documentElement.classList.contains('gp-edge') ? 'כן' : 'לא')
+      + ' (למעלה ' + (cs.getPropertyValue('--sys-top').trim() || '0') + ', למטה ' + (cs.getPropertyValue('--sys-bottom').trim() || '0') + ')');
+  } catch (e) { L.push('מסך: לא ניתן לקרוא'); }
   // What the bridge SEES, not just that it exists. "ההדפסה נכשלה: חסרה הרשאת בלוטות" was
   // answered with "but it is granted", and both were defensible — two causes shared one
   // sentence. This line ends that argument with a fact.
@@ -12591,7 +12620,7 @@ async function waAdmin(body, query) {
   return j;
 }
 const WA_RESULT = { sent: '✅ ענה', menu: '📋 שלח תפריט', asked: '❓ העביר אליך', paused: '⏸ שתק — ענית בעצמך', rate: '⏸ יותר מדי הודעות בשעה', blocked: '🚫 מספר חסום',
-  off: '⏻ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל', manual: '📤 נשלח ממך',
+  off: '⏹ הבוט היה כבוי', holy: '🕯 שבת / חג', hours: '🕐 מחוץ לשעות', muted: '🔇 שיחה מושתקת', failed: '⚠ לא הצליח לענות', foreign: '🌍 מספר מחו״ל', manual: '📤 נשלח ממך',
   // the two the bot used to drop without a trace (2026-10-05): over ten minutes late, and a chat it cannot tell is a person
   stale: '⌛ הגיעה באיחור — לא נענתה', unknown: '❔ שיחה שהבוט לא זיהה',
   // his choice (2026-10-05): someone saved in his contacts, left to him
@@ -12669,7 +12698,7 @@ function waStatusHtml() {
   // the Claude key (2026-11-05): it ran out and both bots, here and on the site, said nothing for two days.
   // The bot keeps when it failed (key), tells him on WhatsApp, and this page puts it first, with where to fix it.
   const now = b.key ? '⚠ הבוט לא עונה ללקוחות: המפתח של Claude לא תקין'
-    : !st.enabled ? '⏻ הבוט כבוי — לא עונה לאף אחד'
+    : !st.enabled ? '⏹ הבוט כבוי — לא עונה לאף אחד'
     : st.shabbat && b.holy ? '🕯 ' + escPunch(b.holy) + ' — הבוט שותק עכשיו'
     : b.offHours ? '🕐 מחוץ לשעות שבחרת — הבוט שותק עכשיו'
     : '✅ הבוט עונה עכשיו ללקוחות';
@@ -12690,7 +12719,7 @@ function waStatusHtml() {
     // here, never shown (nothing in the hub fetches an image)
     + (b.photos ? '<div class="wb-sub" data-wa-photos>📷 ' + (n(b.photos.waiting) ? n(b.photos.waiting) + ' תמונות מהוואטסאפ ממתינות למאגר (' + (n(b.photos.bytes) / 1048576).toFixed(1) + 'MB)' : 'כל התמונות מהוואטסאפ כבר במאגר') + '</div>' : '')
     + '<div class="wb-inline" style="margin-top:10px"><button class="btn ' + (st.enabled ? 'btn-danger' : 'btn-primary') + '" onclick="waToggle()">'
-    + (st.enabled ? '⏻ כבה' : '▶ הפעל') + '</button>'
+    + (st.enabled ? '⏹ כבה' : '▶ הפעל') + '</button>'
     + '<button class="btn btn-secondary" onclick="renderWaBot()">🔄 רענן</button></div></div>';
 }
 // Linking WhatsApp again (2026-10-29, Daniel: "החלפתי טלפון והבוט כבר לא עובד"). Moving WhatsApp to a new phone logs
