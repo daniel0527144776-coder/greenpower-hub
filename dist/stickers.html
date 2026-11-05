@@ -479,7 +479,7 @@
                     <div>
                         <label for="capacity-select" class="block text-sm font-medium text-gray-700 mb-1">קיבולת (Ah)</label>
                         <select id="capacity-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
-                            <!-- Populated dynamically by JS (5Ah to 200Ah) -->
+                            <!-- Populated by JS from the cell's own Ah (fillCapacityOptions) -->
                         </select>
                     </div>
                 </div>
@@ -487,16 +487,16 @@
                     <label for="cells-select" class="block text-sm font-medium text-gray-700 mb-1">סוג תאים</label>
                     <select id="cells-select" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-green">
                         <optgroup label="21700">
-                        <option value="EVE 21700 50E" selected>EVE 21700 50E — CLASSIC (2C/3C)</option>
-                        <option value="Tenpower 21700 50SG">Tenpower 21700 50SG — ADVANCED (4C/10C)</option>
-                        <option value="EVE 21700 50PL">EVE 21700 50PL — PRO (25C/36C)</option>
-                        <option value="Samsung 21700 50S">Samsung 21700 50S — 5.0Ah (5C/9C)</option>
+                        <option value="EVE 21700 50E" data-ah="5" selected>EVE 21700 50E — CLASSIC (2C/3C)</option>
+                        <option value="Tenpower 21700 50SG" data-ah="5">Tenpower 21700 50SG — ADVANCED (4C/10C)</option>
+                        <option value="EVE 21700 50PL" data-ah="5">EVE 21700 50PL — PRO (25C/36C)</option>
+                        <option value="Samsung 21700 50S" data-ah="5">Samsung 21700 50S — 5.0Ah (5C/9C)</option>
                         </optgroup>
                         <optgroup label="18650">
-                        <option value="EVE 18650 26V">EVE 18650 26V — 2.6Ah (3C/4C)</option>
-                        <option value="EVE 18650 35V">EVE 18650 35V — 3.5Ah (3C/5C)</option>
-                        <option value="EVE 18650 25P">EVE 18650 25P — 2.5Ah (12C)</option>
-                        <option value="Ampace 18650 JP30">Ampace 18650 JP30 — 3.0Ah (12C/46C)</option>
+                        <option value="EVE 18650 26V" data-ah="2.6">EVE 18650 26V — 2.6Ah (3C/4C)</option>
+                        <option value="EVE 18650 35V" data-ah="3.5">EVE 18650 35V — 3.5Ah (3C/5C)</option>
+                        <option value="EVE 18650 25P" data-ah="2.5">EVE 18650 25P — 2.5Ah (12C)</option>
+                        <option value="Ampace 18650 JP30" data-ah="3">Ampace 18650 JP30 — 3.0Ah (12C/46C)</option>
                         </optgroup>
                     </select>
                 </div>
@@ -669,6 +669,47 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // The phone's text size (2026-11-05, Daniel: "במדבקות הרבה יותר גדולים ... כל הכיתובים חתוך"). Android's
+            // WebView takes the phone's own font-size setting as a text zoom (textZoom = 100 × the system font scale) and
+            // multiplies every font on the page by it, and nothing else: on a phone set to large text a 27px row lays out
+            // at 35 in a row built for 27, and the screen and the print both cut it, top and bottom as well as at the side.
+            // It began with the new phone of 2026-10-29. TEXT_ZOOM is that factor, measured: a 100px line at line-height 1
+            // is 100px tall at 100%. Every font size on the artboard is written through pxFont(), divided by it, so the
+            // label lays out and prints at the size it was designed at; designedPx() reads one back in designed pixels.
+            // TEXT_ZOOM_CS is how much of it getComputedStyle reports. At 100% both are 1 and nothing here changes.
+            // window.__STICKER_TEXT_ZOOM stands in for a phone in the tests (a desktop renderer has no text zoom).
+            const [TEXT_ZOOM, TEXT_ZOOM_CS] = (() => {
+                const forced = parseFloat(window.__STICKER_TEXT_ZOOM);
+                if (forced > 0) return [forced, 1];
+                const probe = document.createElement('div');
+                probe.style.cssText = 'position:absolute;visibility:hidden;left:-9999px;top:0;font-size:100px;line-height:1;white-space:nowrap;padding:0;border:0;margin:0';
+                probe.textContent = 'X';
+                document.body.appendChild(probe);
+                const geo = probe.offsetHeight / 100, cs = parseFloat(getComputedStyle(probe).fontSize) / 100;
+                probe.remove();
+                const r = (x) => (isFinite(x) && x > 0.5 && x < 3 ? Math.round(x * 100) / 100 : 1);
+                return [r(geo), r(cs)];
+            })();
+            window.stickerTextZoom = TEXT_ZOOM;
+            const pxFont = (n) => (Math.round(n / TEXT_ZOOM * 100) / 100) + 'px';
+            const designedPx = (el) => el.style.fontSize ? parseFloat(el.style.fontSize) * TEXT_ZOOM
+                : el.dataset.tzBase ? parseFloat(el.dataset.tzBase) : parseFloat(getComputedStyle(el).fontSize) / TEXT_ZOOM_CS;
+            // Every element of the artboard once, from its designed size (read before anything is written, so nothing
+            // inherits a corrected size twice), and again after a restore clears a size back to its class.
+            function zoomArtboardText() {
+                if (TEXT_ZOOM === 1) return;
+                const root = document.getElementById('sticker-to-capture');
+                if (!root) return;
+                const els = [root, ...root.querySelectorAll('*')];
+                const sizes = els.map((el) => (el.dataset.tzBase ? parseFloat(el.dataset.tzBase) : el.style.fontSize ? null : parseFloat(getComputedStyle(el).fontSize) / TEXT_ZOOM_CS));
+                els.forEach((el, i) => {
+                    if (!(sizes[i] > 0)) return;
+                    if (!el.dataset.tzBase) el.dataset.tzBase = String(Math.round(sizes[i] * 100) / 100);
+                    if (!el.style.fontSize) el.style.fontSize = pxFont(sizes[i]);
+                });
+            }
+            window.zoomArtboardText = zoomArtboardText;
+            zoomArtboardText();
             let currentIconTarget = null;
             let userIconLibrary = [];
             let skuCounter = 1;
@@ -805,7 +846,7 @@
                 currentSelectedElement.classList.add('selected-element');
                 designControls.classList.remove('hidden');
                 const cs = window.getComputedStyle(currentSelectedElement);
-                designFontSize.value = Math.round(parseFloat(cs.fontSize));
+                designFontSize.value = Math.round(designedPx(currentSelectedElement));
                 designWidth.value = Math.round(parseFloat(currentSelectedElement.style.width || cs.width));
                 const w = cs.fontWeight;
                 designFontWeight.value = (w === '900' || w === '800') ? '900' : 'bold';
@@ -818,7 +859,7 @@
 
             designFontSize.addEventListener('input', (e) => {
                 if (currentSelectedElement) {
-                    currentSelectedElement.style.fontSize = e.target.value + 'px';
+                    currentSelectedElement.style.fontSize = pxFont(parseFloat(e.target.value));
                     // A manual size on a spec value/label needs to survive the
                     // auto-fit system re-running (every updateAllSpecs() call,
                     // including on reload) -- otherwise it just gets silently
@@ -897,7 +938,7 @@
                         transform: el.style.transform || '',
                         width: el.style.width || '',
                         height: el.style.height || '',
-                        fontSize: el.style.fontSize || '',
+                        fontSize: el.style.fontSize ? (Math.round(parseFloat(el.style.fontSize) * TEXT_ZOOM * 100) / 100) + 'px' : '',
                         fontWeight: el.style.fontWeight || '',
                         textAlign: el.style.textAlign || '',
                         // Marks a spec value/label's fontSize above as a deliberate
@@ -926,7 +967,7 @@
                         el.style.transform = elState.transform;
                         el.style.width = elState.width;
                         el.style.height = elState.height;
-                        el.style.fontSize = elState.fontSize;
+                        el.style.fontSize = elState.fontSize ? pxFont(parseFloat(elState.fontSize)) : '';
                         el.style.fontWeight = elState.fontWeight;
                         el.style.textAlign = elState.textAlign;
                         if (elState.manualFontSize) el.dataset.manualFontSize = 'true';
@@ -949,6 +990,7 @@
                         }
                     }
                 });
+                zoomArtboardText();   // a size cleared back to its class is the phone's size again
             }
 
             // Restoring a saved sticker only puts back the *rendered text* of
@@ -969,18 +1011,15 @@
                     if ([...voltageSel.options].some((o) => o.value === v)) voltageSel.value = v;
                 }
 
-                const capacity = byText('capacity-value');
-                const capSel = document.getElementById('capacity-select');
-                if (capacity && capSel) {
-                    const c = capacity.replace('Ah', '');
-                    if ([...capSel.options].some((o) => o.value === c)) capSel.value = c;
-                }
-
+                // the cell before the capacity: the capacity list is the cell's (fillCapacityOptions)
                 const cells = cellOptionValue(byText('cells-value'));
                 const cellSel = document.getElementById('cells-select');
                 if (cells && cellSel && [...cellSel.options].some((o) => o.value === cells)) {
                     cellSel.value = cells;
                 }
+                const capacity = byText('capacity-value');
+                fillCapacityOptions(capacity ? parseFloat(capacity) : document.getElementById('capacity-select').value);
+                if (capacity) capacityExact(capacity.replace('Ah', ''));
 
                 const bmsText = byText('bms-value');
                 const bmsSel = document.getElementById('bms-select');
@@ -1008,7 +1047,7 @@
             // is not a hypothetical: the address, the type scale and the standards line
             // were each edited, deployed, verified live — and still did not appear on the
             // owner's phone, because his save kept restoring the old ones on top.
-            const STICKER_TEMPLATE_VERSION = '2026-10-22a';
+            const STICKER_TEMPLATE_VERSION = '2026-11-05a';
 
             // Record of every sticker produced. The hub's stickerlog page, its home card and
             // the "מדבקות שהונפקו" block on a customer card all read this key; between
@@ -1167,17 +1206,53 @@
                 return `GP-${voltage}V-${totalCapacity}A-${cellCode.replace('EVE 21700 ', '')}-${uniqueId}`;
             }
             
-            // Populate capacity options from 5 to 200 jumps of 5
-            const capacitySelectEl = document.getElementById('capacity-select');
-            if (capacitySelectEl) {
-                for (let i = 5; i <= 200; i += 5) {
-                    const opt = document.createElement('option');
-                    opt.value = i;
-                    opt.text = i + 'Ah';
-                    if (i === 20) opt.selected = true; // Default
-                    capacitySelectEl.appendChild(opt);
-                }
+            // The capacity list is the cell's own (Daniel, 2026-11-05: "הקיבולת של ה-18650 כתובה בצורה שגויה ... הקיבולות של
+            // ה-18650 שונות מ-21700"). A pack's capacity is its cell's times the cells in parallel: an EVE 26V pack is 2.6,
+            // 5.2, 7.8, 10.4Ah…, a 35V 3.5, 7, 10.5…, never "10Ah". Until then the list was 5, 10, 15… for every cell, right
+            // only for the 21700s (all 5.0Ah), and the capacity was read with parseInt, so the hub's 10.4Ah printed "10Ah"
+            // and its current was worked out on 10. The cell's Ah is on its option (data-ah). Changing the cell keeps the
+            // nearest capacity; a value the hub sends or a saved label holds is kept exactly (capacityExact).
+            const CAP_MAX_AH = 200;
+            const capFmt = (x) => String(Math.round(x * 100) / 100);
+            function selectedCellAh() {
+                const sel = document.getElementById('cells-select');
+                const o = sel && sel.options[sel.selectedIndex];
+                return parseFloat(o && o.dataset.ah) || 5;
             }
+            function fillCapacityOptions(keep) {
+                const sel = document.getElementById('capacity-select');
+                if (!sel) return;
+                const ah = selectedCellAh(), want = parseFloat(keep);
+                sel.innerHTML = '';
+                let best = null;
+                for (let p = 1; p * ah <= CAP_MAX_AH + 1e-9; p++) {
+                    const v = capFmt(p * ah);
+                    const opt = document.createElement('option');
+                    opt.value = v; opt.text = v + 'Ah';
+                    sel.appendChild(opt);
+                    if (isFinite(want) && (best === null || Math.abs(parseFloat(v) - want) < Math.abs(parseFloat(best) - want) - 1e-9)) best = v;
+                }
+                sel.value = best !== null ? best : capFmt(4 * ah);
+            }
+            // A capacity that is a real pack's, whatever the list holds (an odd one from the hub, an old label): selected,
+            // and put into the list in its place when it is not there.
+            function capacityExact(val) {
+                const sel = document.getElementById('capacity-select');
+                const n = parseFloat(val);
+                if (!sel || !isFinite(n) || n <= 0) return false;
+                const want = capFmt(n);
+                let opt = [...sel.options].find((o) => o.value === want);
+                if (!opt) {
+                    opt = document.createElement('option');
+                    opt.value = want; opt.text = want + 'Ah';
+                    sel.insertBefore(opt, [...sel.options].find((o) => parseFloat(o.value) > n) || null);
+                }
+                sel.value = want;
+                return true;
+            }
+            window.fillCapacityOptions = fillCapacityOptions;
+            window.capacityExact = capacityExact;
+            fillCapacityOptions(20);
 
             // Shared with the PDF-capture shrink logic further down — keep both
             // in sync if the markup's default value font-size ever changes.
@@ -1242,8 +1317,8 @@
                         const valueManual = span.dataset.manualFontSize === 'true';
                         const labelManual = label.dataset.manualFontSize === 'true';
                         let size = VALUE_SPAN_DEFAULT_SIZE;
-                        if (!valueManual) span.style.fontSize = size + 'px';
-                        if (!labelManual) label.style.fontSize = size + 'px';
+                        if (!valueManual) span.style.fontSize = pxFont(size);
+                        if (!labelManual) label.style.fontSize = pxFont(size);
                         // "available" is re-measured every step: the label is shrinking too,
                         // so the budget grows as the loop runs and a value captured once
                         // would shrink further than it needs to.
@@ -1251,8 +1326,8 @@
                             const available = cell.clientWidth - label.offsetWidth - 8;
                             if (available > 0 && span.scrollWidth <= available) break;
                             size -= 1;
-                            if (!valueManual) span.style.fontSize = size + 'px';
-                            if (!labelManual) label.style.fontSize = size + 'px';
+                            if (!valueManual) span.style.fontSize = pxFont(size);
+                            if (!labelManual) label.style.fontSize = pxFont(size);
                         }
                     });
                 }
@@ -1307,10 +1382,10 @@
                     return (rect.bottom - marks.getBoundingClientRect().bottom) / (scale || 1);
                 };
                 let size = TAGLINE_DEFAULT_SIZE;
-                tagline.style.fontSize = size + 'px';
+                tagline.style.fontSize = pxFont(size);
                 while (size > TAGLINE_MIN_SIZE && clearance() < SIDE_COLUMN_SLACK) {
                     size -= 1;
-                    tagline.style.fontSize = size + 'px';
+                    tagline.style.fontSize = pxFont(size);
                 }
             }
             window.fitSideColumn = fitSideColumn;
@@ -1346,7 +1421,7 @@
                 if (bodies.some((el) => el.dataset.manualFontSize === 'true')) return;
                 const boxes = bodies.map((el) => el.parentElement);
                 let size = REPAIR_TEXT_DEFAULT_SIZE;
-                const apply = () => bodies.forEach((el) => { el.style.fontSize = size + 'px'; });
+                const apply = () => bodies.forEach((el) => { el.style.fontSize = pxFont(size); });
                 // +1 for subpixel: a box measuring 0.4px over is not overflowing.
                 const overflows = () => boxes.some((b) => b.scrollHeight > b.clientHeight + 1);
                 apply();
@@ -1447,7 +1522,7 @@
             function refreshComputedSpecDisplay(elements) {
                 const strip = (h) => (h || '').replace(/<[^>]*>/g, '').trim();
                 const byText = (id) => { const e = elements.find((x) => x.id === id); return e ? strip(e.innerHTML) : ''; };
-                const totalCapacity = parseInt(byText('capacity-value'), 10);
+                const totalCapacity = parseFloat(byText('capacity-value'));
                 const cellsText = byText('cells-value');
                 const savedBms = byText('bms-value');
                 if (!isNaN(totalCapacity) && cellsText) {
@@ -1468,7 +1543,7 @@
 
             function updateAllSpecs() {
                 const voltage = document.getElementById('voltage-select').value;
-                const totalCapacity = parseInt(document.getElementById('capacity-select').value, 10);
+                const totalCapacity = parseFloat(document.getElementById('capacity-select').value);
                 const cell = document.getElementById('cells-select').value;
                 const bmsSelect = document.getElementById('bms-select');
                 const bmsOpt = bmsSelect.options[bmsSelect.selectedIndex];
@@ -1489,7 +1564,7 @@
                 document.getElementById('cells-value').innerText = cellPrintName(cell);
 
                 if (!isNaN(voltage) && !isNaN(totalCapacity)) {
-                    document.getElementById('power-value').innerText = `${parseFloat(voltage) * totalCapacity}Wh`;
+                    document.getElementById('power-value').innerText = `${Math.round(parseFloat(voltage) * totalCapacity)}Wh`;
                 }
 
                 // C-Rate Calculation — always show both continuous and peak
@@ -1620,12 +1695,12 @@
                 mf.querySelectorAll('p').forEach(p => {
                     if (getComputedStyle(p).whiteSpace !== 'nowrap') return;
                     if (!p.dataset.designSize) {
-                        p.dataset.designSize = String(parseFloat(getComputedStyle(p).fontSize));
+                        p.dataset.designSize = String(designedPx(p));
                     }
-                    let size = parseFloat(p.style.fontSize) || parseFloat(p.dataset.designSize);
+                    let size = (p.style.fontSize ? parseFloat(p.style.fontSize) * TEXT_ZOOM : 0) || parseFloat(p.dataset.designSize);
                     if (grew || force) {
                         size = parseFloat(p.dataset.designSize);
-                        p.style.fontSize = size + 'px';
+                        p.style.fontSize = pxFont(size);
                     }
                     // Measure the BLOCK, not the line: the block carries the padding that the
                     // overflow actually consists of — at 22px the line fitted in 295 and the
@@ -1639,7 +1714,7 @@
                     let guard = 0;
                     while (mf.offsetWidth > avail && size > 10 && guard++ < 40) {
                         size -= 1;
-                        p.style.fontSize = size + 'px';
+                        p.style.fontSize = pxFont(size);
                     }
                 });
             }
@@ -1822,6 +1897,7 @@
                 });
             });
 
+            document.getElementById('cells-select').addEventListener('change', () => fillCapacityOptions(document.getElementById('capacity-select').value));
             controlSelects.forEach(el => el.addEventListener('change', updateAllSpecs));
             productionDateValue.addEventListener('input', updateWarrantyExpiration);
             repairDateInput.addEventListener('input', updateRepairWarranty);
@@ -1931,8 +2007,8 @@
                     if (!span || !cell || !label) return;
                     shrunkSpans.push({
                         id, span, cell, label,
-                        origValueSize: parseFloat(getComputedStyle(span).fontSize),
-                        origLabelSize: parseFloat(getComputedStyle(label).fontSize),
+                        origValueSize: span.style.fontSize,
+                        origLabelSize: label.style.fontSize,
                     });
                 });
                 // The capture path used to carry its own copy of the shrink logic, with
@@ -1980,7 +2056,7 @@
                     sticker.style.height = origStickerH;
                     if (specsEl) { specsEl.style.height = origSpecH; specsEl.style.flex = origSpecFlex; }
                     specRows.forEach((r, i) => { r.style.height = origRowH[i].h; r.style.flex = origRowH[i].f; });
-                    shrunkSpans.forEach(({ span, label, origValueSize, origLabelSize }) => { span.style.fontSize = origValueSize + 'px'; label.style.fontSize = origLabelSize + 'px'; });
+                    shrunkSpans.forEach(({ span, label, origValueSize, origLabelSize }) => { span.style.fontSize = origValueSize; label.style.fontSize = origLabelSize; });
                 }
                 try {
                     const canvas = await html2canvas(sticker, {
@@ -2091,10 +2167,11 @@
                     const missed = [];
                     const missedRepair = [];
                     if (data.voltage && !setNum('voltage-select', data.voltage)) missed.push('מתח');
-                    if (data.capacity && !setNum('capacity-select', data.capacity)) missed.push('קיבולת');
                     // A new-battery label the hub sends no cell for keeps the one the last label had, and prints it
                     // as a fact: "EVE 21700 50PL · 375A/540A" on a CLASSIC pack (2026-10-24). It is said instead.
+                    // The cell goes first: choosing it lays out its capacity list, which would move a capacity set before it.
                     if (data.cells ? !setSel('cells-select', data.cells) : !wantRepair) missed.push('סוג תא');
+                    if (data.capacity) { if (capacityExact(data.capacity)) fire(document.getElementById('capacity-select')); else missed.push('קיבולת'); }
                     if (data.bmsLabel && !setSel('bms-select', data.bmsLabel)) missed.push('BMS');
                     setVal('client-name-input', data.client);
                     setVal('client-ref-input', data.ref);

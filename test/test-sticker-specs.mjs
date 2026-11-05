@@ -53,8 +53,9 @@ const build = (volt, cap, cell, bms) => p.evaluate(([volt, cap, cell, bms]) => {
     if (!o) throw new Error(`no option ${val} in #${id}`);
     s.value = o.value; s.selectedIndex = o.index;
   };
-  set('voltage-select', volt); set('capacity-select', cap);
-  set('cells-select', cell); set('bms-select', bms);
+  // the cell first: the capacity list is the cell's own (2026-11-05)
+  set('voltage-select', volt); set('cells-select', cell); window.fillCapacityOptions(cap);
+  set('capacity-select', cap); set('bms-select', bms);
   window.updateAllSpecs();
   return {
     discharge: document.getElementById('discharge-value').innerText.trim(),
@@ -154,10 +155,10 @@ console.log('\n4b. the 18650s, each computed from its own sheet');
     check('25P 20Ah: 12C, 240A', p25.cRate === (SELFTEST ? 'never' : '12C') && p25.discharge === '240A', p25);
     const jp = await build(volt, '30', 'Ampace 18650 JP30', 'DALY 60A');
     check('JP30 30Ah: 12C/46C, 360A/1380A', jp.cRate === '12C/46C' && jp.discharge === '360A/1380A', jp);
-    const v26 = await build(volt, '25', 'EVE 18650 26V', 'DALY 60A');
+    const v26 = await build(volt, '26', 'EVE 18650 26V', 'DALY 60A');
     const v35 = await build(volt, '35', 'EVE 18650 35V', 'DALY 60A');
-    check('26V 25Ah: 3C/4C, 75A/100A; 35V 35Ah: 3C/5C, 105A/175A',
-      v26.cRate === '3C/4C' && v26.discharge === '75A/100A' && v35.cRate === '3C/5C' && v35.discharge === '105A/175A', [v26, v35]);
+    check('26V 26Ah (10P): 3C/4C, 78A/104A; 35V 35Ah (10P): 3C/5C, 105A/175A',
+      v26.cRate === '3C/4C' && v26.discharge === '78A/104A' && v35.cRate === '3C/5C' && v35.discharge === '105A/175A', [v26, v35]);
     const sku = await p.evaluate(() => document.getElementById('sku-value').innerText.trim());
     check('and the SKU names the cell', /-35V-\d+$/.test(sku), sku);
     await build(volt, '30', 'Ampace 18650 JP30', 'DALY 60A');
@@ -192,6 +193,52 @@ console.log('\n4b. the 18650s, each computed from its own sheet');
     sent.srAdv === 'Tenpower 21700 50SG' && sent.srPro === 'EVE 21700 50PL' && sent.srBare === 'EVE 21700 50PL', sent);
   check('a line that names the Samsung 50S sends it, whatever tier word it carries', sent.s50 === 'Samsung 21700 50S', sent.s50);
   check('and every cell the hub sends is on the editor\'s list', sent.all.every((c) => opts.cells.includes(c)), sent.all.filter((c) => !opts.cells.includes(c)));
+}
+
+console.log('\n4b1. each cell its own capacities (2026-11-05, "הקיבולות של ה-18650 שונות מ-21700")');
+{
+  // The list was 5, 10, 15… for every cell, and the capacity was read with parseInt: an 18650 pack of 13S4P EVE 26V
+  // (10.4Ah) printed "10Ah" with its current worked out on 10. Now the list is the cell's Ah times the cells in
+  // parallel, the value is printed as it is, and the hub's figure goes through exactly.
+  const listFor = (cell) => p.evaluate((cell) => {
+    const c = document.getElementById('cells-select');
+    c.value = cell; c.dispatchEvent(new Event('change', { bubbles: true }));
+    return [...document.getElementById('capacity-select').options].map((o) => o.value).slice(0, 5);
+  }, cell);
+  const L = {};
+  for (const c of ['EVE 21700 50E', 'EVE 18650 26V', 'EVE 18650 35V', 'EVE 18650 25P', 'Ampace 18650 JP30']) L[c] = await listFor(c);
+  const want = SELFTEST ? { 'EVE 18650 26V': ['5', '10', '15', '20', '25'] } : {
+    'EVE 21700 50E': ['5', '10', '15', '20', '25'], 'EVE 18650 26V': ['2.6', '5.2', '7.8', '10.4', '13'],
+    'EVE 18650 35V': ['3.5', '7', '10.5', '14', '17.5'], 'EVE 18650 25P': ['2.5', '5', '7.5', '10', '12.5'], 'Ampace 18650 JP30': ['3', '6', '9', '12', '15'] };
+  check('each cell lists its own pack capacities: 21700 5, 10…; 26V 2.6, 5.2…; 35V 3.5, 7…; 25P 2.5, 5…; JP30 3, 6…',
+    Object.entries(want).every(([c, w]) => JSON.stringify(L[c]) === JSON.stringify(w)), L);
+  const v = await build(volt, '10.4', 'EVE 18650 26V', 'DALY 60A');
+  const lab = await p.evaluate(() => ({ cap: document.getElementById('capacity-value').innerText.trim(), wh: document.getElementById('power-value').innerText.trim() }));
+  check('13S4P EVE 26V prints 10.4Ah, its current from 10.4 (31A/42A), its energy whole', lab.cap === '10.4Ah' && v.discharge === '31A/42A' && lab.wh === Math.round(parseFloat(volt) * 10.4) + 'Wh', [lab, v]);
+  // a cell changed by hand keeps the nearest capacity of the new cell
+  await build(volt, '20', 'EVE 21700 50E', 'DALY 60A');
+  const near = await p.evaluate(() => { const c = document.getElementById('cells-select'); c.value = 'EVE 18650 26V'; c.dispatchEvent(new Event('change', { bubbles: true }));
+    return { cap: document.getElementById('capacity-select').value, label: document.getElementById('capacity-value').innerText.trim() }; });
+  check('20Ah of 50E changed to 26V becomes the nearest 26V pack, 20.8Ah, on the label too', near.cap === '20.8' && near.label === '20.8Ah', near);
+  // the hub's job: the cell first, then its capacity exactly (an odd one too)
+  const job = await p.evaluate(() => {
+    window.applyStickerJob({ type: 'new', voltage: '48', capacity: '10.4', cells: 'EVE 18650 26V' });
+    const a = { cap: document.getElementById('capacity-value').innerText.trim(), cell: document.getElementById('cells-select').value };
+    window.applyStickerJob({ type: 'new', voltage: '48', capacity: '21', cells: 'EVE 21700 50E' });
+    return [a, { cap: document.getElementById('capacity-value').innerText.trim(), cell: document.getElementById('cells-select').value }];
+  });
+  check('a job from the hub keeps its capacity exactly: 10.4Ah of 26V, and an odd 21Ah of 50E', job[0].cap === '10.4Ah' && job[0].cell === 'EVE 18650 26V' && job[1].cap === '21Ah' && job[1].cell === 'EVE 21700 50E', job);
+  // a saved label restores its cell and its capacity
+  const back = await p.evaluate(() => {
+    window.syncDropdownsFromElements([{ id: 'cells-value', innerHTML: 'EVE 18650 35V' }, { id: 'capacity-value', innerHTML: '10.5Ah' }]);
+    return [document.getElementById('cells-select').value, document.getElementById('capacity-select').value];
+  });
+  check('a saved 35V 10.5Ah label restores both', back[0] === 'EVE 18650 35V' && back[1] === '10.5', back);
+  const rest = await p.evaluate(() => {
+    window.refreshComputedSpecDisplay([{ id: 'capacity-value', innerHTML: '10.4Ah' }, { id: 'cells-value', innerHTML: 'EVE 18650 26V' }, { id: 'bms-value', innerHTML: 'DALY 60A' }]);
+    return document.getElementById('discharge-value').innerText.trim();
+  });
+  check('and a restored 10.4Ah record works its current out on 10.4', rest === '31A/42A', rest);
 }
 
 console.log('\n4b2. the Samsung 50S (2026-10-29): 5C continuous, 9C with the 80°C cut-off');
@@ -236,6 +283,51 @@ console.log('\n4c. the client details are not printed, and the form says so');
   }, SELFTEST);
   check('the heading says the client details are not printed', r.head === 'פרטי לקוח (לא מודפס)', r.head);
   check('and the name is indeed not on the label', !r.onLabel, r);
+}
+
+console.log('\n4d. a phone set to large text prints the label at its own size (2026-11-05, "כל הכיתובים חתוך")');
+{
+  // Android's WebView multiplies every font by the phone's own font-size setting (its textZoom). The label's rows are
+  // sized in px, so at 130% every line came out too big and was cut. A desktop renderer has no text zoom, so the phone's
+  // factor is stood in (window.__STICKER_TEXT_ZOOM) and the page's correction is read: each text element must be laid
+  // out at its 100% size divided by the factor, so that the phone, multiplying it back, prints what this page prints.
+  // --selftest expects no correction.
+  const Z = 1.3;
+  const sizesOf = (page) => page.evaluate(() => {
+    const root = document.getElementById('sticker-to-capture');
+    const out = {};
+    for (const el of root.querySelectorAll('[id]')) if (el.textContent.trim() && el.offsetParent !== null) out[el.id] = parseFloat(getComputedStyle(el).fontSize);
+    return out;
+  });
+  await build(volt, cap, classic, 'DALY 30A');
+  const base = await sizesOf(p);
+  const phone = await ctx.newPage();
+  await phone.addInitScript((z) => { window.__STICKER_TEXT_ZOOM = z; }, Z);
+  await phone.goto('http://127.0.0.1:4189/stickers.html', { waitUntil: 'domcontentloaded' });
+  await phone.waitForFunction(() => typeof window.updateAllSpecs === 'function', { timeout: 20000 });
+  await phone.evaluate(([volt, cap, cell]) => {
+    const set = (id, v) => { const s = document.getElementById(id); s.value = v; };
+    set('voltage-select', volt); set('cells-select', cell); window.fillCapacityOptions(cap); set('capacity-select', cap); set('bms-select', 'DALY 30A');
+    window.updateAllSpecs();
+  }, [volt, cap, classic]);
+  const got = await sizesOf(phone);
+  const want = SELFTEST ? 1 : Z;
+  // a row the fitter shrank here may keep more of its size there (the stand-in phone does not really enlarge the text,
+  // so the row has room): its size is then between this page's and the designed 27
+  const fitted = (id) => /^label-|-value$/.test(id);
+  const off = Object.keys(base).filter((id) => got[id] == null || (fitted(id) && !SELFTEST
+    ? !(got[id] * want >= base[id] - 0.6 && got[id] * want <= 27.6) : Math.abs(got[id] * want - base[id]) > 0.6)).map((id) => `${id}: ${base[id]} → ${got[id]}`);
+  check(`every text on the label lays out at its size ÷ ${Z} (${Object.keys(base).length} texts: title, rows, tagline, address, QR caption)`,
+    Object.keys(base).length >= 20 && off.length === 0, off.slice(0, 8));
+  check('the page knows the phone\'s factor', await phone.evaluate(() => window.stickerTextZoom) === Z, '');
+  // the design panel and a saved layout speak in the label's own pixels, not the phone's
+  const panel = await phone.evaluate(() => {
+    const el = document.getElementById('capacity-value');
+    el.click();
+    return document.getElementById('design-font-size').value;
+  });
+  check('the design panel shows the designed size (27), not the phone\'s', panel === '27' || panel === '', panel);
+  await phone.close();
 }
 
 console.log('\n5. the safety marks cannot be pushed off the label');
