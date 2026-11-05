@@ -257,6 +257,24 @@ check('linked, no relink button; unlinked, the page says so and offers one', !li
 DATA.wa = 'authorized';
 await page.evaluate(async () => { waBot = null; await renderWaBot(); });
 
+// the Claude key (2026-11-05): it ran out and both bots went quiet for two days with nothing on this page. When the
+// bot says the key failed, the page says so first, with when, why (as text) and where to fix it; with no failure,
+// nothing. --selftest takes the line away.
+if (SELFTEST) await page.evaluate(() => { const real = waStatusHtml; window.waStatusHtml = () => real().replace(/<div[^>]*data-wa-key[\s\S]*?<\/div>/, ''); });
+DATA.key = { since: NOW - 2 * 86400000, at: NOW - 60000, status: 401, reason: 'invalid x-api-key ' + EVIL, alertAt: NOW - 3600000 };
+await page.evaluate(async () => { waBot = null; window.__xss = 0; await renderWaBot(); });
+{
+  const t = await text();
+  const box = await page.evaluate(() => { const e = document.querySelector('[data-wa-key]'); return e ? e.textContent : ''; });
+  check('a key that failed: the page says first that the bot does not answer, since when, and where to fix it',
+    /הבוט לא עונה ללקוחות: המפתח של Claude לא תקין/.test(t) && /401 invalid x-api-key/.test(box) && /console\.anthropic\.com/.test(box)
+    && /ANTHROPIC_API_KEY/.test(box) && /greenpower-site/.test(box) && !/✅ הבוט עונה עכשיו/.test(t), [t.slice(0, 200), box]);
+  check('…and the reason is shown as text, not markup', await page.evaluate(() => !window.__xss && !document.querySelector('[data-wa-key] img')), '');
+}
+DATA.key = null;
+await page.evaluate(async () => { waBot = null; await renderWaBot(); });
+check('…with a key that works, no such line', await page.evaluate(() => !document.querySelector('[data-wa-key]')) && !/המפתח של Claude/.test(await text()), '');
+
 // the log's filter, and the way in from the home page
 await page.evaluate(() => waLogFilter('quiet'));
 const logText = await page.evaluate(() => document.getElementById('wbLog').innerText);
