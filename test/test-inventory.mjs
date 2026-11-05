@@ -213,6 +213,38 @@ const grouped = await page.evaluate(() => {
 });
 check('BMS by maker and then series, chargers by voltage, cells by format', grouped === 'DALY,13S,JK חכם,24S,60V,72V,18650,21700', grouped);
 
+// ---- 9a. nickel: pure and plated apart, the cell inside each (2026-10-31) ----
+// Daniel: "צריך להבין בין המצופה לטהור, שזה יהיה בנפרד, שכל הטהור בנפרד וכל המצופה בנפרד". The groups were the cell
+// (18650, 21700, strip), so a pure 0.2 and a plated 0.2 for 21700 sat in one group. The material comes from the
+// row's spec, or its name; --selftest files a plated row by its cell alone, as before.
+const nickel = await page.evaluate((SELF) => {
+  Store.set('inventory', [
+    { id: 'n1', name: 'ניקל טהור 0.2 21700 2S', qty: 1, cat: 'ניקל', spec: { material: 'ניקל טהור', cell: '21700' } },
+    { id: 'n2', name: 'ניקל מצופה 0.2 21700 2S', qty: 1, cat: 'ניקל', spec: { material: 'פלדה מצופה ניקל', cell: '21700' } },
+    { id: 'n3', name: 'ניקל טהור 0.15 18650', qty: 1, cat: 'ניקל' },
+    { id: 'n4', name: 'ניקל 0.25 21700 (פלדה)', qty: 1, cat: 'ניקל', spec: { material: 'פלדה מצופה ניקל' } },
+    { id: 'n5', name: 'ניקל 0.2 21700 גליל', qty: 1, cat: 'ניקל' },
+  ]);
+  if (SELF) { const real = window.invNickelMaterial; window.invNickelMaterial = (r) => (r.id === 'n2' ? 'ניקל טהור' : real(r)); }
+  navigateTo('inventory');
+  if (!INV_OPEN.has('ניקל')) toggleInvCat(encodeURIComponent('ניקל'));
+  for (let k = 0; k < 400; k++) { const g = document.querySelector('#inventoryList .inv-grp-fold[data-open="0"]'); if (!g) break; g.click(); }
+  const seq = [...document.querySelectorAll('#inventoryList .inv-grp-name, #inventoryList .inv-sub span:first-child, #inventoryList .list-item-title')]
+    .map((el) => (el.classList.contains('list-item-title') ? el.textContent.trim() : '@' + el.textContent.trim()));
+  return seq;
+}, SELFTEST);
+{
+  const groups = []; let g = null;
+  for (const t of nickel) { if (t[0] === '@' && /^@(ניקל טהור|ניקל מצופה|נחושת|חומר לא ידוע)$/.test(t)) { g = { m: t.slice(1), items: [] }; groups.push(g); } else if (g && t[0] !== '@') g.items.push(t); }
+  const at = (m) => (groups.find((x) => x.m === m) || { items: [] }).items;
+  check('nickel: pure and plated in groups of their own, by spec or by name, and a row that says neither apart',
+    groups.map((x) => x.m).join() === 'ניקל טהור,ניקל מצופה,חומר לא ידוע'
+    && at('ניקל טהור').length === 2 && at('ניקל טהור').every((n) => !/^0\.25/.test(n))
+    && at('ניקל מצופה').length === 2, nickel);
+check('…and a row under its material does not say the material again', [...at('ניקל טהור'), ...at('ניקל מצופה')].every((n) => !/^(טהור|מצופה)/.test(n)) && at('ניקל טהור').includes('0.15 18650'), nickel);
+  check('…and the cell is a heading inside each', nickel.indexOf('@21700') > nickel.indexOf('@ניקל טהור') && nickel.lastIndexOf('@21700') > nickel.indexOf('@ניקל מצופה'), nickel);
+}
+
 // ---- 9b. new and second-hand never share a group (2026-10-09) ----
 // Daniel: "תעשה שיד 2 וחדש ב מלאי Bms לא יהיה מעורבב". Inside BMS the second-hand board sat in the
 // same 13S group as the new one, a line below it. Now: a "חדש" section with its own series groups,
