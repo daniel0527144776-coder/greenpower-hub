@@ -41,12 +41,13 @@ if (SELFTEST) await page.evaluate(() => { window.dhsPack = () => false; });
 const r = await page.evaluate(() => {
   const g = document.getElementById('loginOverlay'); if (g) g.remove();
   const rows = PRICING.filter((x) => /^DHS \S+ \d+V \d+Ah$/.test(x.name));
-  const light = rows.find((x) => /^DHS 7250-9C /.test(x.name)), ultra = rows.find((x) => /^DHS GR80 /.test(x.name));
+  const light = rows.find((x) => /^DHS 7250-9C /.test(x.name)), ultra = rows.find((x) => /^DHS 8078-15C /.test(x.name));
   const out = { n: rows.length, cats: [...new Set(rows.map((x) => x.cat))] };
-  // the price list: the Light Bee and then the Ultra Bee, each by voltage and then capacity, lowest first
+  // the price list: the Light Bee and then the Ultra Bee, each by voltage and then capacity, lowest first (two cells
+  // at one voltage and capacity, 7245-9C and 7245-15C, sit side by side since 2026-11-05)
   const va = (n) => { const m = String(n).match(/(\d+)V (\d+)Ah/); return m ? +m[1] * 1000 + +m[2] : 0; };
   out.order = rows.map((x) => x.name);
-  out.ascending = out.cats.every((c) => { const v = rows.filter((x) => x.cat === c).map((x) => va(x.name)); return v.every((x, i) => !i || x > v[i - 1]); });
+  out.ascending = out.cats.every((c) => { const v = rows.filter((x) => x.cat === c).map((x) => va(x.name)); return v.every((x, i) => !i || x >= v[i - 1]); });
   navigateTo('catalog');
   const topic = [...document.querySelectorAll('#catalogList details')].find((d) => /סוללות Sur-Ron/.test(d.querySelector('summary')?.textContent || ''));
   out.titles = topic ? [...topic.querySelectorAll('details summary, [onclick*=toggleCatCat]')].map((e) => e.textContent.trim()).filter((s) => /Bee/.test(s)) : [];
@@ -72,7 +73,7 @@ const r = await page.evaluate(() => {
   return out;
 });
 // one category per bike since 2026-10-29 ("הבדל בין הלייט בי לאולטרה בי"), each by voltage and then capacity
-check('the catalogue holds the eight DHS packs, one category per bike', r.n === 8 && r.cats.every((c) => /^סוללות Sur-Ron (Light|Ultra) Bee - DHS$/.test(c))
+check('the catalogue holds the 24 DHS packs, one category per bike', r.n === 24 && r.cats.every((c) => /^סוללות Sur-Ron (Light|Ultra) Bee - DHS$/.test(c))
   && new Set(r.cats).size === 2, r);
 check('…each from the lowest voltage up, then by capacity', r.ascending, r.order);
 check('…and the price list shows the Light Bee and then the Ultra Bee, not one voltage heading over both',
