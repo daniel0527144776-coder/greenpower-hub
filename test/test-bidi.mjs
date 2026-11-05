@@ -35,7 +35,8 @@ await page.waitForFunction(() => typeof window.navigateTo === 'function', null, 
 await page.evaluate(() => { const o = document.getElementById('loginOverlay'); if (o) o.style.display = 'none'; init(); });
 
 const CASES = [
-  ['פריקה: 25C רציף (125A) / 36C פיק (180A) — פי 12.5 מתא סטנדרטי (2C · 10A לתא)', 'פריקה: 25C רציף ⟦(125A) / 36C⟧ פיק ⟦(180A)⟧ — פי 12.5 מתא סטנדרטי (⟦2C · 10A⟧ לתא)'],
+  ['פריקה: 25C רציף (125A) / 36C פיק (180A) — פי 12.5 מתא סטנדרטי (2C · 10A לתא)', 'פריקה: 25C רציף ⟦(125A) / 36C⟧ פיק ⟦(180A)⟧ — פי 12.5 מתא סטנדרטי (2C · 10A לתא)'],
+  ['ניסים גאון 8 (בחנייה), אלעד · 053-322-4879 · info@energylabgreen.com', 'ניסים גאון 8 (בחנייה), אלעד · 053-322-4879 · ⟦info@energylabgreen.com⟧'],
   ['DALY 60-100A רציף (180-300A שיא)', '⟦DALY 60-100A⟧ רציף (⟦180-300A⟧ שיא)'],
   ['154×138×385 מ"מ', '⟦154×138×385⟧ מ"מ'],
   ['~2.6 ק"ג', '⟦~2.6⟧ ק"ג'],
