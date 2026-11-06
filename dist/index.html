@@ -2827,7 +2827,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v527';
+const HUB_BUILD = 'v528';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -14801,6 +14801,16 @@ function soNeedGuess(text) {
   const hit = pick.find(([, re]) => re.test(t));
   return hit ? hit[0] : 'free';
 }
+// A line that is no longer needed (2026-11-06, Daniel chose it): the "חסר להזמנה" fold left the stock page on
+// 2026-11-05, and until then a line written there could leave only by being ordered. 🗑 removes it, on every device
+// (the removal is a tombstone in tomb_need_list), and "🛒 מה להזמין" stops listing it.
+function soDropNeed(id) {
+  const r = getNeeds().find((x) => String(x.id) === String(id));
+  if (!r) return;
+  askConfirm('למחוק מהרשימה את "' + r.text + '"?', () => {
+    if (Store.set('need_list', getNeeds().filter((x) => String(x.id) !== String(id)))) renderSorder();
+  });
+}
 function soFromNeed(id) {
   const r = getNeeds().find((x) => String(x.id) === String(id));
   if (!r) return;
@@ -14839,7 +14849,7 @@ function renderSorder() {
   const supName = (sups.find((s) => String(s.id) === sup) || {}).name || '';
   const needs = getNeeds().filter((r) => !r.ordered && r.text && !used.has(String(r.id)) && (!r.supplier || !supName || String(r.supplier).trim().toLowerCase() === supName.trim().toLowerCase()));
   document.getElementById('soNeeds').innerHTML = needs.length ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">📝 מהרשימה "חסר להזמנה" — לחץ כדי להוסיף:</div>
-    <div style="display:flex;flex-wrap:wrap;">${needs.map((r) => `<button class="btn btn-sm btn-secondary so-need" style="margin:2px;" onclick="soFromNeed(${arg(r.id)})">${soEsc(r.text)}${r.qty ? ' — ' + soEsc(r.qty) : ''}</button>`).join('')}</div>` : '';
+    <div style="display:flex;flex-wrap:wrap;">${needs.map((r) => `<span class="so-need-wrap" style="display:inline-flex;margin:2px;"><button class="btn btn-sm btn-secondary so-need" onclick="soFromNeed(${arg(r.id)})">${soEsc(r.text)}${r.qty ? ' — ' + soEsc(r.qty) : ''}</button><button class="btn btn-sm btn-secondary so-need-del" title="לא צריך — מחק" onclick="soDropNeed(${arg(r.id)})">🗑</button></span>`).join('')}</div>` : '';
   document.getElementById('soFooter').checked = !!c.footer;
   const ships = Array.isArray(d.ships) ? d.ships : [];
   const sh = document.getElementById('soShip');

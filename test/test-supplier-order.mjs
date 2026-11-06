@@ -174,6 +174,20 @@ check('done: the "חסר" line it covered is marked ordered', done.ordered, '');
 const again = await page.evaluate(() => { const d = soGet(); soReorder(d.hist[0].id); closeNotice(); const d2 = soGet(); return soCur(d2, soCurSup(d2)).lines.map((l) => l.n); });
 check('"הזמן שוב" brings its lines back, numbered from 1', again[0] === 1 && again.length >= 4, again);
 check('each supplier\'s order is its own synced field', done.fields.includes('sups') && done.fields.includes('hist'), done.fields);
+// ---- 7b. a "חסר" line no longer needed is removed from the order page (2026-11-06) ----
+// The fold that held the list left the stock page on 2026-11-05; until 🗑 came, a line could leave only by being ordered.
+const drop = await page.evaluate((selftest) => {
+  Store.set('need_list', getNeeds().concat([{ id: 'n2', text: 'שרינק 300 מ"מ', qty: '', supplier: '', added: Date.now() }]));
+  renderSorder();
+  const btn = document.querySelector('#soNeeds .so-need-del');
+  if (btn && !selftest) btn.click();
+  if (!selftest) noticeConfirm();
+  return { had: !!btn, left: getNeeds().map((r) => r.id), chips: document.querySelectorAll('#soNeeds .so-need').length,
+    tomb: Object.keys(Store.get('tomb_need_list') || {}), order: (orderList() || []).filter((l) => l.manual).map((l) => l.name) };
+}, SELFTEST);
+check('a "חסר" line has its 🗑 on the order page', drop.had, drop);
+check('…which removes it from the list and from the page', !drop.left.includes('n2') && drop.chips === 0, drop);
+check('…on every device (a tombstone) and from "🛒 מה להזמין"', drop.tomb.includes('n2') && !drop.order.includes('שרינק 300 מ"מ'), drop);
 // ---- 8. the suppliers and their lists, from his WhatsApp ----
 // Two Chinese suppliers with orders, one without, one Israeli chat and one unnamed Chinese number.
 // Made-up numbers and names: nothing of his is in this repo either.
