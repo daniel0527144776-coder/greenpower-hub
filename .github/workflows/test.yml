@@ -230,6 +230,11 @@ jobs:
       - name: The price-list PDFs
         run: node test/test-price-pdf.mjs
 
+      # The Sur-Ron page to a customer as a link (2026-11-06): a message with energylabgreen.com/surron, shown to copy;
+      # nothing opened, no bot called.
+      - name: The Sur-Ron link to a customer
+        run: node test/test-surron-link.mjs
+
       # The supplier list arrives by itself after login (2026-10-30): a new stamp is applied once, through the
       # import's row check; hand-added rows untouched; a refusing or empty server changes nothing.
       - name: The supplier list from the server
