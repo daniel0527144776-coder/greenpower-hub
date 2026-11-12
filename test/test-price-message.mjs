@@ -107,9 +107,9 @@ const b2b = (await want('b2b')).flat();
 check('in business mode it is the business list, at business prices', /מחירון עסקי/.test(m) && b2b.every((x) => m.includes(Number(x.p).toLocaleString('he-IL'))), m.slice(0, 120));
 await page.evaluate(() => { closeModal(); setPriceMode('retail'); });
 
-// ---- a ready pack's own warranty ----
-await open('סוללות Sur-Ron Ultra Bee - DHS');
-check('a DHS pack carries its own warranty (24 months)', /אחריות 24 חודשים/.test(await msg()), (await msg()).slice(-200));
+// ---- a Sur-Ron pack's own warranty (the lab's build in DHS's case since 2026-11-12, 24 months as DHS's ready packs had) ----
+await open('סוללות Sur-Ron Ultra Bee - 72V');
+check('a Sur-Ron pack carries its own warranty (24 months)', /אחריות 24 חודשים/.test(await msg()), (await msg()).slice(-200));
 
 // ---- sending ----
 await open(CAT);

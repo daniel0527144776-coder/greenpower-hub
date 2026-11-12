@@ -97,8 +97,9 @@ check('the scooter and the enduro pack cost the SAME — both are shrink, neithe
 // Two OEM cases since 2026-10-18: the Ultra Bee's ₪1,500 and the Light Bee's DHS case at ₪1,150
 // (SURRON_CASE_LIGHT, from its PI). Each is checked on a row of its own family, so the list's
 // order cannot decide which one is tested.
-// Since 2026-10-29 the catalogue's Sur-Ron rows are DHS's ready packs, bought, not built (test-dhs-packs.mjs).
-// The build's cost stays for an old sale or quote of one, so it is checked on a row in that old form.
+// Since 2026-11-12 the catalogue's Sur-Ron rows are the lab's own packs in DHS's cases, named "Ultra Bee PRO 72V 72Ah"
+// (test-surron-packs.mjs holds their cost). The old build's cost stays for an old sale or quote of one, so it is checked
+// on a row in that old form.
 const surronRow = (light) => page.evaluate((light) => {
   const it = light ? { cat: 'סוללות Sur-Ron Light Bee - 72V PRO', name: 'Light Bee 72V 45Ah' }
     : { cat: 'סוללות Sur-Ron Ultra Bee - 72V PRO', name: 'Ultra Bee 72V 55Ah' };

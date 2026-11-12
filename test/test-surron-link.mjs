@@ -55,7 +55,7 @@ for (const phone of [true, false]) {
     return { text: box ? box.value : '', shown: !!box && box.offsetParent !== null, opened: window.__opened.length, href: location.href };
   });
   check(`${who}: the message to copy carries the link to the page`, got.shown && got.text.split('\n').some((l) => l.trim() === PAGE) && !/\.pdf/.test(got.text), got.text);
-  check(`${who}: and says what is there, from Green Power`, /הדגמים והמחירים/.test(got.text) && /איזה בקר מתאים/.test(got.text) && /Green Power/.test(got.text), got.text);
+  check(`${who}: and says what is there, from Green Power`, /שנבנות אצלנו במעבדה: הדגמים/.test(got.text) && /איזה בקר מתאים/.test(got.text) && !/DHS/.test(got.text) && /Green Power/.test(got.text), got.text);
   check(`${who}: nothing is opened and no bot is called`, got.opened === 0 && !calls.slice(before).some((u) => /\/api\/wa\//.test(u)) && /localhost/.test(got.href), { opened: got.opened, calls: calls.slice(before) });
   check(`${who}: no page errors`, !errs.length, errs);
   await page.close();
