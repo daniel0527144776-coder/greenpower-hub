@@ -1749,6 +1749,52 @@ const rect = await page.evaluate((SELF) => {
   check('his 20S16P takes no rectangle and keeps the frame\'s shape, row for row', rect.plus16.rows === '16,16,17,17,17,17,17,16,13,11,8' && !/מלבן/.test(rect.plus16.foot), rect.plus16);
 }
 
+// ---- his fold, and every series in the Plus (2026-11-12) ----------------------------------------
+// Daniel's photos of a 72V 60Ah enduro pack: whole rows of one group each, one on the other, and what is left as a
+// compact block, "בלי שפיצים שיוצאים". The Plus's top rows are short and stepped, so 20S12P has no 10-row rectangle on
+// H 23; it is 9 rows of 12 under one window and the last group as a 2×6 block above them, inside that window. And the
+// 70.6mm cells (the 50SG, the 60Q) get two stacks there like the 50E: 0.5mm of tolerance (Daniel: they go in).
+// --selftest takes the fold and the tolerance away.
+const fold = await page.evaluate((SELF) => {
+  const realFold = bomberFold, realStacks = bomberStacks;
+  if (SELF) { bomberFold = () => null; bomberStacks = (fr, c) => Math.max(0, Math.floor(((fr && fr.across || 0) - 2 * DIM_WALL) / (c.len + DIM_CAP))); }
+  const one = (m, V, P, h, cell) => {
+    document.getElementById('dimCell').value = cell;
+    useVehiclePack(m, V); document.getElementById('dimHolder').value = h;
+    dimAhPending = P * DIM_CELLS[cell].ah; calcPackDims();
+    const pl = (dimLast && dimLast.plan) || {}, cells = (pl.cells || []).filter((c) => !c.empty);
+    const byG = {}; cells.forEach((c) => { (byG[c.g] = byG[c.g] || []).push(c); });
+    const pitch = DIM_PITCH[21700][h][0];
+    // every group a rectangle: its cells fill its bounding box of slots
+    const rectGroups = Object.values(byG).every((g) => {
+      const ys = [...new Set(g.map((c) => Math.round(c.y)))], xs = g.map((c) => c.x);
+      const w = Math.round((Math.max(...xs) - Math.min(...xs)) / pitch) + 1;
+      return ys.length * w === g.length;
+    });
+    const rows = [...new Set(cells.map((c) => Math.round(c.y)))].sort((a, b) => b - a).map((y) => cells.filter((c) => Math.round(c.y) === y).length);
+    const minX = Math.min(...cells.map((c) => c.x)), maxX = Math.max(...cells.map((c) => c.x));
+    const mainX = cells.filter((c) => c.g < 9).map((c) => c.x);
+    return { rows: rows.join(','), groups: Object.keys(byG).length, sizes: [...new Set(Object.values(byG).map((g) => g.length))].join(','), rectGroups,
+      inside: minX >= Math.min(...mainX) - 0.5 && maxX <= Math.max(...mainX) + 0.5, foot: (dimLast && dimLast.foot) || '',
+      verdict: document.getElementById('dimResult').textContent.slice(0, 160) };
+  };
+  const out = { plus12: one('Bomber Plus 15kW', 72, 12, 'square-23', '21700-50e'),
+    sg: one('Bomber Plus 15kW', 72, 12, 'square-23', '21700-50sg') };
+  const fr = bomberFrame(vehicleByName('Bomber Plus 15kW'));
+  out.stacks = Object.fromEntries(['21700-50e', '21700-50sg', '21700-50pl', '21700-50s'].map((k) => [k, bomberStacks(fr, DIM_CELLS[k])]));
+  if (SELF) { bomberFold = realFold; bomberStacks = realStacks; }
+  document.getElementById('dimCell').value = '21700-50e'; clearDimVehicle();
+  return out;
+}, SELFTEST);
+{
+  const p = fold.plus12;
+  check('the Plus 20S12P on H 23: nine rows of 12, then the last group as a 2×6 block above them', p.rows === '12,12,12,12,12,12,12,12,12,6,6' && p.groups === 10 && p.sizes === '12', p);
+  check('…every group a rectangle of its own, none sticking out of the rows\' window', p.rectGroups && p.inside, p);
+  check('…and the label says how: "9 שורות של 12 ו-קבוצה אחת כבלוק 2×6"', /9 שורות של 12 ו-קבוצה אחת כבלוק 2×6 בכל ערימה/.test(p.foot), p.foot);
+  check('two stacks of every 21700 in the Plus, the 70.6mm 50SG among them', Object.values(fold.stacks).every((n) => n === 2), fold.stacks);
+  check('so ADVANCED (50SG) builds the same 20S12P there', fold.sg.rows === p.rows && fold.sg.groups === 10, fold.sg);
+}
+
 await browser.close();
 srv.close();
 // finish() RETURNS the code, it does not exit. Bare, every check in this file could fail and

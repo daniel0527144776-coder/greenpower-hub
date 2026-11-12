@@ -11268,6 +11268,13 @@ function bomberSide(v) {
 //
 // The builds are the frame's shape here, not something the page shows: "זה לא מעניין שתכתוב מה
 // בניתי" — no build list, no labels, no history on the page.
+// How many stacks of lying cells the frame takes across. 0.5mm of tolerance (Daniel, 2026-11-12: two stacks of the
+// 70.6mm cells, the 50SG and the 60Q, go in the Bomber Plus's 152mm, where the sum said 152.2): the frame's width is
+// a tape measure's and the holder's caps an estimate, so a fraction of a millimetre does not take a stack away.
+const LYING_TOL = 0.5;
+function bomberStacks(fr, c) {
+  return Math.max(0, Math.floor(((fr && fr.across || 0) - 2 * DIM_WALL + LYING_TOL) / (c.len + DIM_CAP)));
+}
 function bomberFrame(v) {
   const side = bomberSide(v);
   const rect = () => (side ? { rect: true, L: side.L, H: side.H, across: side.across } : null);
@@ -11485,7 +11492,7 @@ function bomberHtml(v, c, fmt, holder, V, N, pairOf) {
   const fr = bomberFrame(v);
   // No title: the chip right above it already names the vehicle (2026-10-04, "יש כאן תוכן כפול").
   if (!fr) return { html: '<div class="dim-rec">אין מידות לשלדה הזו — מדוד ושמור ב"הוסף מדידה של מגש".</div>', label: {} };
-  const stacks = Math.max(0, Math.floor(((fr.across || 0) - 2 * DIM_WALL) / (c.len + DIM_CAP)));
+  const stacks = bomberStacks(fr, c);
   if (!stacks) return { html: `<div class="dim-rec"><span style="color:var(--danger);">צר מדי לתא שוכב (${fr.across} מ"מ)</span></div>`, label: {} };
   const S = seriesForV(V), chosenP = Math.round(N / S);
   const shown = (HOLDERS_SHOWN[fmt] || HOLDERS_SHOWN[21700]).concat(holder === 'custom' ? ['custom'] : []);
