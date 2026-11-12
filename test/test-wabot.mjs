@@ -47,7 +47,9 @@ const DATA = {
         { at: NOW - 360000, c: '972507777777@c.us', n: 'רון', in: 'יש 52V?', r: 'hours', later: NOW + 7200000 }],
   later: [{ c: '972507777777@c.us', n: 'רון', first: NOW - 360000, due: NOW + 7200000 }],
   paused: [{ c: '972504444444@c.us', n: 'משה', until: NOW + 3600000, manual: false }],
-  questions: [{ id: 'q1', at: NOW - 30000, c: '972501234567@c.us', n: 'יוסי', q: 'יש מטען 84V? ' + EVIL, msg: 'יש לכם מטען?', draft: 'כן, יש מטען 84V. ' + EVIL, done: false },
+  questions: [{ id: 'q1', at: NOW - 30000, c: '972501234567@c.us', n: 'יוסי', q: 'יש מטען 84V? ' + EVIL, msg: 'יש לכם מטען?', draft: 'כן, יש מטען 84V. ' + EVIL, done: false, missing: ['המחיר של מטען 84V ' + EVIL] },
+              { id: 'q2', at: NOW - 20000, c: '972501234567@c.us', n: 'יוסי', q: 'וכמה עולה שזירה?', msg: 'וכמה שזירה?', draft: 'השזירה במחירון.', done: false, missing: ['המחיר של מטען 84V ' + EVIL, 'זמן אספקה'] },
+              { id: 'q3', at: NOW - 10000, c: '972508888888@c.us', n: 'אבי', q: 'יש בקר 72V?', msg: 'בקר?', draft: '', done: false },
               { id: 'q0', at: NOW - 900000, c: '972501234567@c.us', n: 'יוסי', q: 'ישנה', done: true }],
   teach: [{ id: 't1', q: 'עובדים בשישי?', a: 'לא' }],
   knowledge: { text: 'ידע ' + EVIL, at: new Date(NOW).toISOString(), edited: false },
@@ -76,6 +78,8 @@ await page.route('**/rest/v1/**', (route) => route.fulfill({ status: 200, body: 
 await page.goto('http://localhost:4362/index.html', { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.renderWaBot === 'function', null, { timeout: 30000 });
 if (SELFTEST) await page.evaluate(() => { window.escPunch = (s) => String(s == null ? '' : s); window.waNum = (c) => String(c); });
+// --selftest: one box a question again, the way the hub showed them before 2026-11-12
+if (SELFTEST) await page.evaluate(() => { window.waQuestionGroups = () => (waBot.questions || []).filter((q) => !q.done).map((q) => [q]); });
 if (SELFTEST) delete DATA.photos;
 if (SELFTEST) await page.evaluate(() => { window.waLaterHtml = () => ''; });   // who waits for the opening, not shown   // the bot's count of photos waiting, gone
 
@@ -121,7 +125,7 @@ check('it is shown as text instead', t1.includes('כמה עולה <img src=x') &
 check('who wrote while closed is listed, with when the bot will answer, and the log says it too (2026-10-17)',
   /ייענו כשהמעבדה נפתחת/.test(t1) && t1.includes('רון · 050-777-7777') && /מחוץ לשעות · ייענה ב-/.test(t1), '');
 check('numbers in the local form', t1.includes('050-123-4567') && t1.includes('050-444-4444'), '');
-check('only the open question waits for him', (t1.match(/הבוט שאל אותך/g) || []).length === 1 && /שאלות שמחכות לך\s*1/.test(t1), '');
+check('only the open questions wait for him, counted by customer', (t1.match(/הבוט שאל אותך/g) || []).length === 3 && /שאלות שמחכות לך\s*2/.test(t1), '');
 check('the log, with why it did or did not answer', /✅ ענה/.test(t1) && /שתק — ענית בעצמך/.test(t1), '');
 check('including a message too late to answer, and a chat it could not place', /הגיעה באיחור — לא נענתה/.test(t1) && /שיחה שהבוט לא זיהה/.test(t1), '');
 check('and a saved contact left to him, with the setting to choose it', /איש קשר שמור — עליך/.test(t1) && /לאנשי קשר שמורים — רק ללקוחות המעבדה/.test(t1) && /שמורים שהבוט עונה להם/.test(t1)
@@ -154,17 +158,25 @@ p = await lastPost(2);
 check('a blocked number is added to the ones there', p && p.op === 'settings' && p.settings.blocked.length === 2 && p.settings.blocked[1].p === '052-333-4444' && p.settings.blocked[1].n === 'ספק', p);
 
 // answering what it did not know: the bot's draft is in the box, as text, ready to send, polish or drop
-const draft = await page.evaluate(() => document.getElementById('wbAns0').value);
-check('the bot\'s draft waits in the box, as text', draft === 'כן, יש מטען 84V. <img src=x onerror="window.__xss=1">' && await page.evaluate(() => window.__xss === undefined), draft);
-await page.evaluate(() => { document.getElementById('wbAns0').value = 'כן, יש במלאי'; waAnswer(0); });
+// One box a customer (2026-11-12): the newest customer first, each one's questions together, what the bot is missing
+// listed once, and one draft that answers all of them.
+const boxes = await page.evaluate(() => [...document.querySelectorAll('[data-wa-group]')].map((el) => ({
+  k: el.dataset.waGroup, who: el.querySelector('.wb-who').textContent, qa: el.querySelectorAll('.wb-qa').length,
+  missing: [...el.querySelectorAll('.wb-missing li')].map((li) => li.textContent) })));
+check('one box a customer, the newest first: two questions together, and one alone', boxes.length === 2 && /אבי/.test(boxes[0].who) && boxes[0].qa === 1 && /יוסי/.test(boxes[1].who) && boxes[1].qa === 2, boxes);
+check('what the bot is missing to answer everything is listed once, as text', boxes[1] && boxes[1].missing.length === 2 && boxes[1].missing[0].includes('<img src=x') && boxes[1].missing[1] === 'זמן אספקה' && await page.evaluate(() => window.__xss === undefined), boxes[1]);
+const draft = await page.evaluate(() => document.getElementById('wbAns1').value);
+check('the bot\'s draft waits in the box, as text, one answer for all his questions', draft === 'כן, יש מטען 84V. <img src=x onerror="window.__xss=1">\n\nהשזירה במחירון.' && await page.evaluate(() => window.__xss === undefined), draft);
+await page.evaluate(() => { document.getElementById('wbAns1').value = 'כן, יש במלאי'; waAnswer(1); });
 p = await lastPost(3);
 check('answering a question sends it to the customer and teaches the bot', p && p.op === 'answer' && p.id === 'q1' && p.a === 'כן, יש במלאי' && p.send === true && p.keep === true, p);
+check('and one answer closes all of that customer\'s questions, not another\'s', p && Array.isArray(p.ids) && p.ids.join(',') === 'q1,q2', p && p.ids);
 
 // "נסח": his few words go to the bot with the customer's chat, and what it wrote comes back into the box — nothing sent
-await page.evaluate(() => { document.querySelector('details[data-fold="q"]').open = true; document.getElementById('wbAns0').value = 'יש, מחר'; });
-await page.evaluate(() => waPolishQ(0));
+await page.evaluate(() => { document.querySelector('details[data-fold="q"]').open = true; document.getElementById('wbAns1').value = 'יש, מחר'; });
+await page.evaluate(() => waPolishQ(1));
 const polishPost = posts[posts.length - 1];
-const polished = await page.evaluate(() => document.getElementById('wbAns0').value);
+const polished = await page.evaluate(() => document.getElementById('wbAns1').value);
 check('"נסח" sends his words and the customer\'s chat, and puts the message in the box', polishPost.op === 'polish' && polishPost.chat === '972501234567@c.us' && polishPost.text === 'יש, מחר'
   && polished.startsWith('שלום! המטען במלאי') && await page.evaluate(() => window.__xss === undefined), [polishPost, polished]);
 const sentBefore = posts.filter((x) => x.op === 'send' || x.op === 'answer').length;

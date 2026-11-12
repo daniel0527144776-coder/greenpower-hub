@@ -95,6 +95,51 @@ check('and it is packed to the label width, not the raster width',
   widthGuard.oneOver.head && widthGuard.oneOver.head.split('BITMAP')[1]);
 check('a raster that is genuinely too wide is still refused', widthGuard.wayOver.ok === false, widthGuard.wayOver);
 
+// ---- 1c. the printer's offset moves the picture, both ways (2026-11-12) ----------------
+// The label Daniel photographed off his new phone sat 2.8mm to the RIGHT of the paper, the right-hand
+// titles cut. REFERENCE takes no negative, so the offset is applied to the raster: a pixel moves by the
+// offset in dots, REFERENCE stays 0,0, and a phone with nothing stored prints at -2.8. --selftest moves
+// the probe by the opposite sign, which must turn these red.
+const offset = await page.evaluate((selftest) => {
+  const W = 1181, H = 4;
+  const img = () => { const d = new Uint8ClampedArray(W * H * 4).fill(255); const i = (1 * W + 100) * 4; d[i] = d[i + 1] = d[i + 2] = 0; return { width: W, height: H, data: d }; };
+  const inkAt = (bytes, x, y) => {
+    const head = 'BITMAP 0,0,148,' + H + ',0,';
+    let txt = ''; for (let i = 0; i < 400; i++) txt += String.fromCharCode(bytes[i]);
+    const start = txt.indexOf(head) + head.length;
+    return ((bytes[start + y * 148 + (x >> 3)] >> (7 - (x & 7))) & 1) === 0;
+  };
+  const left = TSPL.buildLabel(img(), { widthMm: 100, heightMm: 50, offsetXmm: selftest ? 2.8 : -2.8 });
+  const right = TSPL.buildLabel(img(), { widthMm: 100, heightMm: 50, offsetXmm: 2.8 });
+  let head = ''; for (let i = 0; i < 160; i++) head += String.fromCharCode(left[i]);
+  const store = (o) => ({ getItem: (k) => (k in o ? o[k] : null), setItem: (k, v) => { o[k] = String(v); }, removeItem: (k) => { delete o[k]; } });
+  const empty = TSPL.optsFromStorage(store({}));
+  // the account's copy: taken by a phone with nothing, refused by a phone changed later, taken over undated values
+  const K = TSPL.PRINTER_KEYS;
+  const fresh = {}; const tookFresh = TSPL.calFromAccount(store(fresh), { offx: -3.1, offy: 0.5, gap: 2, density: 8, speed: 2, at: 1000 });
+  const newer = { [K.offx]: '-2', [TSPL.CAL_AT_KEY]: '2000' }; const tookNewer = TSPL.calFromAccount(store(newer), { offx: -3.1, at: 1000 });
+  const undated = { [K.offx]: '0' }; const tookUndated = TSPL.calFromAccount(store(undated), { offx: -3.1, at: 1000 });
+  const back = TSPL.calToAccount(store({ [K.offx]: '-2.5', [TSPL.CAL_AT_KEY]: '3000' }));
+  const pattern = String.fromCharCode.apply(null, TSPL.buildAlignmentPattern({ offsetXmm: -2.8 }));
+  return {
+    shift: TSPL.offsetDots({ offsetXmm: -2.8 }).dx,
+    leftMoved: inkAt(left, 100 - 33, 1), leftOld: inkAt(left, 100, 1), rightMoved: inkAt(right, 133, 1),
+    reference: (head.match(/REFERENCE [^\r]*/) || [''])[0], emptyOffx: empty.offsetXmm,
+    tookFresh, freshOffx: fresh[K.offx], freshOffy: fresh[K.offy], tookNewer, newerOffx: newer[K.offx], tookUndated, undatedOffx: undated[K.offx],
+    back, patternFirstBar: (pattern.match(/BAR [^\r]*/) || [''])[0], patternRef: (pattern.match(/REFERENCE [^\r]*/) || [''])[0],
+  };
+}, SELFTEST);
+check('-2.8mm is 33 dots', offset.shift === -33, offset.shift);
+check('a negative offset moves the picture LEFT by that many dots', offset.leftMoved && !offset.leftOld, offset);
+check('a positive offset moves it right', offset.rightMoved, offset.rightMoved);
+check('REFERENCE stays 0,0 (it takes no negative)', offset.reference === 'REFERENCE 0,0', offset.reference);
+check('a phone with nothing stored prints at -2.8mm', offset.emptyOffx === -2.8, offset.emptyOffx);
+check('a phone with nothing takes the account\'s calibration', offset.tookFresh && offset.freshOffx === '-3.1' && offset.freshOffy === '0.5', offset);
+check('a phone changed after the account\'s copy keeps its own', !offset.tookNewer && offset.newerOffx === '-2', offset);
+check('undated values on the phone give way to the account\'s dated copy', offset.tookUndated && offset.undatedOffx === '-3.1', offset);
+check('the phone\'s values go to the account with their date', offset.back && offset.back.offx === -2.5 && offset.back.at === 3000, offset.back);
+check('the alignment pattern moves with the label and is clipped to it', offset.patternFirstBar === 'BAR 0,0,1148,6' && offset.patternRef === 'REFERENCE 0,0', [offset.patternFirstBar, offset.patternRef]);
+
 // ---- 2. the real label ---------------------------------------------------------------
 const label = await page.evaluate(async (selftest) => {
   const canvas = await captureStickerCanvas();
