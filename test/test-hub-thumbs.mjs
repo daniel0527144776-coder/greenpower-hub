@@ -198,7 +198,7 @@ console.log('4. the technical spec line');
   check('a battery states volts, capacity, energy and cell count',
     has(r.batt, 'V', 'Ah', 'Wh', 'תאים') && /\d+S\d+P/.test(r.batt || ''), r.batt);
   check('and names the actual cell it is built from',
-    /EVE|Tenpower/.test(r.batt || ''), r.batt);
+    /EVE|Tenpower|Great Power/.test(r.batt || ''), r.batt);
   check('a controller states real current ratings, not a model code',
     has(r.ctrl, '150A', '450A'), r.ctrl);
 

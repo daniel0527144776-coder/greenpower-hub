@@ -107,7 +107,11 @@ const surronRow = (light) => page.evaluate((light) => {
   // A Sur-Ron row is named 'Light Bee 72V 45Ah', not '72V 45Ah' — match on the V/Ah part or
   // the comparison row is never found and the check passes vacuously on a null.
   const size = m[0];
-  const j = PRICING.findIndex((x) => x.name === size && /^סוללות אינדורו/.test(x.cat) && /PRO/.test(x.cat));
+  // The enduro PRO row of that voltage at the largest capacity not over it: PRO's capacities are multiples of 6 since
+  // 2026-11-12, so 55Ah has no row of its own, and a smaller pack only makes the gap a safer lower bound.
+  const rows = PRICING.map((x, k) => ({ x, k, a: +((x.name.match(/^(\d+)V (\d+)Ah$/) || [])[2] || 0), v: +((x.name.match(/^(\d+)V/) || [])[1] || 0) }))
+    .filter((r) => r.v === +m[1] && r.a && r.a <= +m[2] && /^סוללות אינדורו/.test(r.x.cat) && /PRO/.test(r.x.cat));
+  const j = rows.length ? rows.reduce((b, r) => (r.a > b.a ? r : b)).k : -1;
   const caseLine = batteryCostParts(it, false).parts.find((x) => /מארז/.test(x.k)) || null;
   return { name: it.name, cat: it.cat, surron: estimateBatteryCost(it, false),
     heavy: j < 0 ? null : estimateBatteryCost(PRICING[j], false), V: +m[1], caseLine };

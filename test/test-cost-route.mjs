@@ -60,7 +60,7 @@ await page.evaluate(() => {
   Store.set('supplier_prices', [
     { who: 'ספק תאים', cat: 'ספק תאים · 21700 · 🚢 ימי', name: 'EVE 50E — CLASSIC · 21700', ils: 5.83 },
     { who: 'ספק תאים', cat: 'ספק תאים · 21700 · ✈️ אווירי', name: 'EVE 50E — CLASSIC · 21700', ils: 9.2 },
-    { who: 'ספק תאים', cat: 'ספק תאים · 21700 · ✈️ אווירי', name: 'EVE 50PL — PRO · 21700 Tabless', ils: 12.4 },
+    { who: 'ספק תאים', cat: 'ספק תאים · 21700 · ✈️ אווירי', name: 'Great Power 60Q — PRO · 21700', ils: 14.4 },
     { who: 'חנות מקומית', cat: 'חנות מקומית · 21700', name: 'EVE 21700 50E', ils: 13.9 },
   ]);
   Store.set('costs', {}); Store.set('bms_pick', {});
@@ -68,7 +68,8 @@ await page.evaluate(() => {
 });
 const idx = (catRe, name) => page.evaluate(([c, n]) => PRICING.findIndex((x) => new RegExp(c).test(x.cat) && x.name === n), [catRe, name]);
 const CLASSIC = await idx('^סוללות אינדורו וטרקטורונים - 88V CLASSIC$', '88V 20Ah');
-const PRO = await idx('^סוללות אינדורו וטרקטורונים - 88V PRO$', '88V 20Ah');
+// PRO's capacities are multiples of 6 since 2026-11-12 (the 6Ah Great Power 60Q): 18Ah beside the CLASSIC's 20Ah.
+const PRO = await idx('^סוללות אינדורו וטרקטורונים - 88V PRO$', '88V 18Ah');
 check('the two rows from his screenshot exist', CLASSIC >= 0 && PRO >= 0, { CLASSIC, PRO });
 
 // ---- 1. the window says what a cell cost, and why
@@ -123,7 +124,7 @@ const pro = await page.evaluate((i) => {
   closeModal();
   return r;
 }, PRO);
-check('PRO on the local route: no local 50PL, so the sea price, said in words', pro.route === 'sea' && /אין מחיר/.test(pro.text) && /× ₪9\.66/.test(pro.text), pro);
+check('PRO on the local route: no local 60Q, so the sea price, said in words', pro.route === 'sea' && /אין מחיר/.test(pro.text) && /× ₪12\.12/.test(pro.text), pro);
 
 // ---- 3. the spec line: fields in reading order, none broken across lines
 const spec = await page.evaluate((i) => {

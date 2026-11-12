@@ -198,8 +198,9 @@ const priced = await page.evaluate(() => {
     try { closeModal(); } catch (e) { /* none */ }
     return out;
   };
-  const bike = at('סוללות אופניים - 72V PRO', '72V 40Ah');
-  const enduro = at('סוללות אינדורו וטרקטורונים - 88V PRO', '88V 40Ah');
+  // PRO's capacities are multiples of 6 since 2026-11-12 (the 6Ah Great Power 60Q): 42Ah, not 40.
+  const bike = at('סוללות אופניים - 72V PRO', '72V 42Ah');
+  const enduro = at('סוללות אינדורו וטרקטורונים - 88V PRO', '88V 42Ah');
   const r = {
     jk: read(bike, 'JK BD6A24S20P 200A'),
     daly: read(bike, 'DALY 20S 72V 100A'),

@@ -436,7 +436,18 @@ console.log('\n12. the sticker opens FILLED from the repair or the sale it was o
     c1.cells === (SELFTEST ? 'EVE 21700 50PL' : 'EVE 21700 50E'), c1.cells);
   await sale('o-cat2', 'סוללות אופניים - 72V PRO');
   const c2 = await read();
-  check('a PRO line from the catalogue: the 50PL', c2.cells === 'EVE 21700 50PL', c2.cells);
+  check('a PRO line from the catalogue, sold before 2026-11-12: the 50PL it was built on', c2.cells === 'EVE 21700 50PL', c2.cells);
+  // PRO is built on the Great Power 60Q since 2026-11-12: a sale from that day prints it.
+  await page.evaluate(() => {
+    const row = PRICING.find((x) => x.cat === 'סוללות אופניים - 72V PRO' && /Ah/.test(x.name));
+    const orders = JSON.parse(localStorage.getItem('gp_orders') || '[]');
+    orders.push({ id: 'o-cat2b', date: '2026-11-13T09:00:00.000Z', customer: 'לקוח דוגמה', phone: '050-0001234', status: 'שולם', total: 1000,
+                  items: [{ name: row.name, cat: row.cat, qty: 1, unit: 1000 }] });
+    localStorage.setItem('gp_orders', JSON.stringify(orders));
+    window.openStickerFor('order', 'o-cat2b');
+  });
+  const c2b = await read();
+  check('a PRO line sold from 2026-11-12: the Great Power 60Q', c2b.cells === (SELFTEST ? 'EVE 21700 50PL' : 'Great Power 21700 60Q'), c2b.cells);
   await sale('o-cat3', 'סוללות כלי עבודה - 18V');
   const c3 = await read();
   check('a power-tool line: the EVE 25P it is built on', c3.cells === 'EVE 18650 25P', c3.cells);
