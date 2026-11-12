@@ -112,6 +112,7 @@ const R = await page.evaluate(() => {
   const seed = () => Store.set('inventory', [
     { name: 'תאי EVE 21700 50E', qty: 1000 },
     { name: 'EVE 50PL', qty: 500 },
+    { name: 'תאי Great Power 21700 60Q', qty: 500 },
     { name: 'תאי EVE 18650 26V', qty: 350 },
     { name: 'תאי EVE 18650 25P', qty: 100 },
     { name: 'BMS 20S 100A', qty: 10 },
@@ -272,8 +273,9 @@ check('the cells come off — 20S6P is 120 of them',
   R.sale.after['תאי EVE 21700 50E'] === 880, R.sale.after);
 check('the board comes off too, named by series count and amps',
   R.sale.after['BMS 20S 100A'] === 9, R.sale.after);
+// PRO is the 6Ah Great Power 60Q since 2026-11-12: a 72V 30Ah PRO is 20S5P, 100 of them; the 50PL on the shelf stays.
 check('a PRO pack takes PRO cells, not CLASSIC ones',
-  R.salePro.after['EVE 50PL'] === 380 && R.salePro.after['תאי EVE 21700 50E'] === 1000, R.salePro.after);
+  R.salePro.after['תאי Great Power 21700 60Q'] === 400 && R.salePro.after['EVE 50PL'] === 500 && R.salePro.after['תאי EVE 21700 50E'] === 1000, R.salePro.after);
 // 48V is 13S and takes the 60A board — the amps step with voltage, as in cost-model.
 check('a 48V pack takes the 13S 60A board, not the 20S 100A',
   R.sale48.after['BMS 13S 60A'] === 9 && R.sale48.after['BMS 20S 100A'] === 10, R.sale48.after);

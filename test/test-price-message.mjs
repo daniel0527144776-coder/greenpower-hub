@@ -83,7 +83,7 @@ check('it holds every CLASSIC, ADVANCED and PRO price of 60V, each as the page s
   cl.length > 5 && ad.length > 5 && pro.length > 5 && [...cl, ...ad, ...pro].every((x) => has(x.ah, x.p))
   && lines.filter((l) => /•/.test(l)).length === cl.length + ad.length + pro.length, { cl: cl.length, ad: ad.length, pro: pro.length, bullets: lines.filter((l) => /•/.test(l)).length });
 check('…cheapest series first, each named with its cells', m.indexOf('*CLASSIC*') < m.indexOf('*ADVANCED*') && m.indexOf('*ADVANCED*') < m.indexOf('*PRO*')
-  && /\*CLASSIC\* · תאי EVE 50E/.test(m) && /\*PRO\* · תאי EVE 50PL/.test(m), m.slice(0, 300));
+  && /\*CLASSIC\* · תאי EVE 50E/.test(m) && /\*PRO\* · תאי Great Power 60Q/.test(m), m.slice(0, 300));
 check('…with each series\' page on the site, the warranty and the address', /energylabgreen\.com\/product\/heavy-classic/.test(m) && /energylabgreen\.com\/product\/heavy-pro/.test(m)
   && /אחריות 12 חודשים/.test(m) && /ניסים גאון 8/.test(m), m.slice(-300));
 check('every line opens right to left', lines.filter(Boolean).every((l) => l.startsWith('‏')), lines.find((l) => l && !l.startsWith('‏')));
