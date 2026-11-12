@@ -491,6 +491,7 @@
                         <option value="Tenpower 21700 50SG" data-ah="5">Tenpower 21700 50SG — ADVANCED (4C/10C)</option>
                         <option value="EVE 21700 50PL" data-ah="5">EVE 21700 50PL — PRO (25C/36C)</option>
                         <option value="Samsung 21700 50S" data-ah="5">Samsung 21700 50S — 5.0Ah (5C/9C)</option>
+                        <option value="Great Power 21700 60Q" data-ah="6">Great Power 21700 60Q — 6.0Ah (10C/25C)</option>
                         </optgroup>
                         <optgroup label="18650">
                         <option value="EVE 18650 26V" data-ah="2.6">EVE 18650 26V — 2.6Ah (3C/4C)</option>
@@ -1467,6 +1468,11 @@
                 }
                 if (cellsText.includes("35V")) {
                     return { cont: 3, peak: 5, cellCode: "35V" };
+                }
+                // Great Power 60Q (2026-11-12) — the Sur-Ron PRO cell: 60A continuous (10C) and 150A for 2 s (25C) on 6Ah, the
+                // maker's figures as a reseller's datasheet page gives them (to confirm against the sheet with the cells).
+                if (cellsText.includes("60Q")) {
+                    return { cont: 10, peak: 25, cellCode: "60Q" };
                 }
                 // EVE 50PL — PRO extreme cell (25C cont / 36C peak, per datasheet 125A/180A).
                 if (cellsText.includes("50PL")) {
