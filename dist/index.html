@@ -11395,6 +11395,65 @@ function bomberRect(cells, P, G, p) {
   }
   return null;
 }
+// When no rectangle takes the stack's groups: his fold (Daniel, 2026-11-11, with photos of a 72V 60Ah enduro pack:
+// "מסודרת, בלי איזה שפיצים שיוצאים, בלי כל מיני טורים ארוכים ... אחד על השני"). As many whole rows of one group each
+// as a column window takes, from the bottom up, and the groups left over as compact blocks of k rows of P/k (two rows
+// first) in the rows above, inside that window where they go and side by side where two do. No group sticks out of
+// its block. Returns { rows, R, C, blocks: { n, k, w } } as bomberRect does, or null: the frame's own shape then.
+function bomberFold(cells, P, G, p) {
+  if (!(P > 0) || !(G > 1) || !(p > 0)) return null;
+  const rows = [];
+  for (const c of cells.slice().sort((a, b) => b.y - a.y || a.x - b.x)) {
+    const r = rows[rows.length - 1];
+    if (r && Math.abs(r.y - c.y) < 1) r.cells.push(c); else rows.push({ y: c.y, cells: [c] });
+  }
+  // the cells of row j from the slot at x on (the same slot, or the one half a pitch over on a staggered nickel), w long
+  const seg = (j, x, w) => {
+    const rc = rows[j].cells, i0 = rc.findIndex((c) => c.x >= x - 0.5 && c.x <= x + p / 2 + 0.5);
+    if (i0 < 0 || i0 + w > rc.length) return null;
+    const sg = rc.slice(i0, i0 + w);
+    return sg.some((c, t) => t && Math.abs(c.x - sg[t - 1].x - p) > 0.5) ? null : sg;
+  };
+  const shapes = [];
+  for (let k = 2; k <= P; k++) if (P % k === 0) shapes.push({ k, w: P / k });
+  for (let R0 = Math.min(G - 1, rows.length - 1); R0 >= Math.ceil(G / 2); R0--) {
+    const rem = G - R0;
+    for (const start of rows[0].cells) {
+      const main = [];
+      for (let j = 0; j < R0; j++) { const sg = seg(j, start.x, P); if (!sg) break; main.push({ y: rows[j].y, cells: sg }); }
+      if (main.length < R0) continue;
+      const lo = main[R0 - 1].cells[0].x - p / 2 - 0.5, hi = main[R0 - 1].cells[P - 1].x + p / 2 + 0.5;
+      for (const { k, w } of shapes) {
+        // bands of k rows above the main rows; in each, blocks side by side, inside the window first
+        const blocks = [];
+        for (let j = R0; j + k <= rows.length && blocks.length < rem; j += k) {
+          const used = [];
+          const tryAt = (inside) => {
+            for (const st of rows[j].cells) {
+              if (blocks.length >= rem) return;
+              if (inside && (st.x < lo || st.x + (w - 1) * p > hi)) continue;
+              if (used.some((u) => Math.abs(u - st.x) < w * p - 0.5)) continue;
+              const band = [];
+              for (let t = 0; t < k; t++) { const sg = seg(j + t, st.x, w); if (!sg) break; band.push({ y: rows[j + t].y, cells: sg }); }
+              if (band.length === k) { used.push(st.x); blocks.push(band); }
+            }
+          };
+          tryAt(true);
+          tryAt(false);
+        }
+        if (blocks.length < rem) continue;
+        // the groups: one a row, bottom up; then each block, its cells bottom up and left to right
+        const out = new Map();
+        const put = (y, c, g) => { const key = Math.round(y); if (!out.has(key)) out.set(key, { y, cells: [] }); out.get(key).cells.push({ ...c, g }); };
+        main.forEach((r, g) => r.cells.forEach((c) => put(r.y, c, g)));
+        blocks.forEach((b, i) => b.forEach((r) => r.cells.forEach((c) => put(r.y, c, R0 + i))));
+        const list = [...out.values()].sort((a, b) => b.y - a.y).map((r) => ({ y: r.y, n: r.cells.length, cells: r.cells.sort((a, b) => a.x - b.x) }));
+        return { rows: list, R: R0, C: P, blocks: { n: rem, k, w } };
+      }
+    }
+  }
+  return null;
+}
 function bomberGroups(cells, P, G) {
   const rows = [];
   for (const c of cells.slice().sort((a, b) => b.y - a.y || a.x - b.x)) {
@@ -11472,7 +11531,7 @@ function bomberHtml(v, c, fmt, holder, V, N, pairOf) {
   // whole groups — 13S or 23S in two — the series is laid on, stack after stack, and the group the first stack ends in
   // goes on in the second; the card already counted both stacks together. Until then the label drew no groups there.
   // A rectangle first, the same in every stack, when one takes the stack's groups; the frame's own shape after.
-  const rect = sel.fits ? bomberRect(sel.cells, chosenP, perStack, pairOf(sel.h)[0]) : null;
+  const rect = sel.fits ? (bomberRect(sel.cells, chosenP, perStack, pairOf(sel.h)[0]) || bomberFold(sel.cells, chosenP, perStack, pairOf(sel.h)[0])) : null;
   const span = !rect && sel.fits && !bomberGroups(sel.cells, chosenP, perStack) ? bomberSpan(sel.cells, chosenP, S, stacks) : null;
   const map = !sel.fits ? null : rect ? rect.rows : span ? span.rows : bomberGroups(sel.cells, chosenP, perStack);
   const ranges = [];
@@ -11493,7 +11552,7 @@ function bomberHtml(v, c, fmt, holder, V, N, pairOf) {
       plan: labelPlan,
       head: `${S}S${chosenP}P · ${V}V ${ah(chosenP)}Ah` + (v.m ? ' · ' + v.m : ''),
       line: `${N} תאי ${c.label || ''} · ${/^ניקל/.test(name) ? name : 'ניקל ' + name}` + (stacks > 1 ? ` · ${stackWord} זהות` : ''),
-      foot: `${chosenP} במקביל בכל קבוצה · ${ranges.join(' · ')}` + (rect ? ` · מלבן ${rect.R} שורות של ${rect.C} בכל ערימה` : '')
+      foot: `${chosenP} במקביל בכל קבוצה · ${ranges.join(' · ')}` + (rect ? (rect.blocks ? ` · ${rect.R} שורות של ${rect.C} ו-${rect.blocks.n === 1 ? 'קבוצה אחת כבלוק' : rect.blocks.n + ' קבוצות כבלוקים'} ${rect.blocks.k}×${rect.blocks.w} בכל ערימה` : ` · מלבן ${rect.R} שורות של ${rect.C} בכל ערימה`) : '')
         + ' · 1 = B−' + (map.some((r) => r.cells.some((x) => x.empty)) ? ' · ✕ ריק' : ''),
     } : { plan: plan(sel), line: `צד אחד · ${sel.perSide} תאים × ${stackWord} · ${name}`,
       foot: `צד השלדה ${Math.round(fr.L)}×${Math.round(fr.H)} מ״מ · ${sel.n} תאים` },
