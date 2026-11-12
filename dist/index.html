@@ -2069,7 +2069,7 @@ const Store = {
       else if (MAP_KEYS.includes(key)) stampMap(key, val);
       localStorage.setItem('gp_' + key, JSON.stringify(val));
       if (typeof Sync !== 'undefined' && SYNC_KEYS.includes(key)) Sync.push(key, val);
-      if (key === 'jobs' || key === 'orders' || key === 'customers') scheduleBotIndex();
+      if (key === 'jobs' || key === 'orders' || key === 'customers' || key === 'inventory') scheduleBotIndex();
       if (typeof Sync !== 'undefined' && MAP_KEYS.includes(key)) {
         try { Sync.push('fs_' + key, JSON.parse(localStorage.getItem('gp_fs_' + key) || '{}')); } catch (e) { /* storage refused */ }
       }
@@ -2855,7 +2855,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v539';
+const HUB_BUILD = 'v540';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -12714,7 +12714,10 @@ function botIndex() {
       t: Math.round(paid),
       we: day(saleWarrantyEnd(o)) };
   });
-  return { v: 1, customers, jobs, orders };
+  // What is on the shelf (2026-11-12, Daniel: the bot tells a customer whether a product is in stock or ordered from
+  // abroad, up to 14 business days): the names of the stock rows with a count above zero. Names only, never a count.
+  const stock = [...new Set(getInventory().filter((r) => r && r.name && Number(r.qty) > 0).map((r) => String(r.name).trim()))].slice(0, 400);
+  return { v: 1, customers, jobs, orders, stock };
 }
 // Not through Store.set: his phone's storage runs close to full, and Store.set ALERTS when a write
 // fails — for a copy nobody types, that would be an error box over his real work. The local copy
