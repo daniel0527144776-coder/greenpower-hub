@@ -626,11 +626,11 @@
                         <label class="flex flex-col text-xs text-gray-600">מרווח מדבקות מ"מ
                             <input type="number" id="calGap" min="0" max="10" step="0.5" class="border rounded p-2 text-base">
                         </label>
-                        <label class="flex flex-col text-xs text-gray-600">היסט לרוחב מ"מ
-                            <input type="number" id="calOffX" step="0.5" class="border rounded p-2 text-base">
+                        <label class="flex flex-col text-xs text-gray-600">היסט לרוחב מ"מ (מינוס = שמאלה)
+                            <input type="number" id="calOffX" step="0.1" class="border rounded p-2 text-base">
                         </label>
-                        <label class="flex flex-col text-xs text-gray-600">היסט לאורך מ"מ
-                            <input type="number" id="calOffY" step="0.5" class="border rounded p-2 text-base">
+                        <label class="flex flex-col text-xs text-gray-600">היסט לאורך מ"מ (מינוס = למעלה)
+                            <input type="number" id="calOffY" step="0.1" class="border rounded p-2 text-base">
                         </label>
                     </div>
                     <button type="button" id="print-cal-btn" class="w-full mt-2 bg-gray-700 hover:bg-gray-800 text-white py-2 rounded-lg text-sm">
@@ -2331,6 +2331,13 @@
                         const v = parseFloat(el.value);
                         if (isNaN(v)) localStorage.removeItem(key);
                         else localStorage.setItem(key, String(v));
+                        // The calibration follows the account (2026-11-12): a phone that is replaced
+                        // must not print at the defaults again. The hub keeps the copy; alone in a
+                        // tab (no hub around it) the numbers stay on the device as before.
+                        TSPL.calTouched(localStorage);
+                        try {
+                            if (window.parent && window.parent !== window && typeof window.parent.savePrinterCal === 'function') window.parent.savePrinterCal();
+                        } catch (e) { /* a frame the hub cannot be reached from keeps its own numbers */ }
                     });
                 });
                 const btn = document.getElementById('print-cal-btn');

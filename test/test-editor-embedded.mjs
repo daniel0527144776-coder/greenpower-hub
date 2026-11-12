@@ -185,6 +185,30 @@ if (frame) {
   check('and it has ink on it', label.ink > 20000, label.ink);
 }
 
+// ---- the printer's calibration follows the account (2026-11-12) ---------------------
+// It lived in the phone's storage alone, so a replaced phone printed at the defaults: 2.8mm off the
+// label. The account's copy reaches a phone with nothing on boot, and a change in the editor's
+// calibration panel goes back to the account. (Run against a hub without syncPrinterCal, it throws.)
+if (frame) {
+  const cal = await page.evaluate(() => {
+    Object.values(TSPL.PRINTER_KEYS).forEach((k) => localStorage.removeItem(k));
+    localStorage.removeItem(TSPL.CAL_AT_KEY);
+    const st = Store.get('settings') || {};
+    st.printerCal = { offx: -3.3, offy: 0.5, gap: 2, density: 9, speed: 2, at: 1000 };
+    Store.set('settings', st);
+    syncPrinterCal();
+    return { offx: localStorage.getItem(TSPL.PRINTER_KEYS.offx), density: localStorage.getItem(TSPL.PRINTER_KEYS.density) };
+  });
+  check('a phone with no calibration takes the account\'s on boot', cal.offx === '-3.3' && cal.density === '9', cal);
+  await frame.evaluate(() => {
+    const el = document.getElementById('calOffX');
+    el.value = '-2.6';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const saved = await page.evaluate(() => (Store.get('settings') || {}).printerCal || null);
+  check('a change in the editor\'s calibration panel goes to the account', saved && saved.offx === -2.6 && saved.at > 1000, saved);
+}
+
 // ---- a label filled in from a job, and from a sale ------------------------------------
 // The point of the feature is that a battery already described once is not described again,
 // so what is asserted is that the values ARRIVE — not merely that the editor opened. It fills

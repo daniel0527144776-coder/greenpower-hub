@@ -34,8 +34,12 @@
    * backwards here. Getting it backwards does not error: it prints a solid black label and
    * eats a metre of ribbon. So the buffer starts as 0xFF (all white) and bits are cleared.
    */
-  function packMono(imageData, threshold, useWidth) {
+  function packMono(imageData, threshold, useWidth, shiftX, shiftY) {
     const { width, height, data } = imageData;
+    // shiftX/shiftY move the picture inside the raster, in dots: negative is left/up, positive right/down.
+    // What leaves the raster is dropped and what it uncovers stays blank. This is the printer's offset
+    // (2026-11-12): REFERENCE takes no negative number, and the label came out 2.8mm to the RIGHT.
+    const dx = Math.round(shiftX || 0), dy = Math.round(shiftY || 0);
     // useWidth lets the caller pack fewer columns than the raster holds — see buildLabel,
     // where a raster one dot too wide is trimmed instead of refused.
     const cols = Math.min(useWidth || width, width);
@@ -44,9 +48,13 @@
     const cut = typeof threshold === 'number' ? threshold : 160;
 
     for (let y = 0; y < height; y++) {
+      const srcY = y - dy;
+      if (srcY < 0 || srcY >= height) continue;
       const row = y * widthBytes;
       for (let x = 0; x < cols; x++) {
-        const i = (y * width + x) * 4;
+        const srcX = x - dx;
+        if (srcX < 0 || srcX >= width) continue;
+        const i = (srcY * width + srcX) * 4;
         // A fully transparent pixel is white here: html2canvas is given a white
         // backgroundColor, but an un-composited corner would otherwise read as luminance 0
         // and print as a black block.
@@ -86,12 +94,16 @@
    * back "too dark". When a working configuration for this exact printer is sitting on the
    * machine, read it instead of picking a number.
    *
-   * REFERENCE moves the origin. It exists here because the label came out shifted and no
-   * amount of reasoning from this side can say by how much — that is what the pattern is for.
+   * REFERENCE stays 0,0 since 2026-11-12. The offset is applied to the picture itself (offsetDots):
+   * the first labels off Daniel's new phone came out 2.8mm to the right with the right-hand titles
+   * cut, the correction is to the LEFT, and REFERENCE has no negative. A positive offset moved in the
+   * raster prints exactly what REFERENCE printed, so one mechanism serves both directions.
    */
+  function offsetDots(o) {
+    return { dx: Math.round((o.offsetXmm || 0) * DOTS_PER_MM), dy: Math.round((o.offsetYmm || 0) * DOTS_PER_MM) };
+  }
   function jobHeader(o, widthMm, heightMm, gapMm) {
-    const refX = Math.round((o.offsetXmm || 0) * DOTS_PER_MM);
-    const refY = Math.round((o.offsetYmm || 0) * DOTS_PER_MM);
+    const refX = 0, refY = 0;
     return 'SIZE ' + widthMm + ' mm,' + heightMm + ' mm\r\n' +
       (gapMm > 0 ? 'GAP ' + gapMm + ' mm,0 mm\r\n' : 'GAP 0,0\r\n') +
       'DIRECTION ' + (o.direction === undefined ? 1 : o.direction) + ',0\r\n' +
@@ -125,22 +137,30 @@
     const TICK = Math.round(5 * DOTS_PER_MM);
 
     let s = jobHeader(o, widthMm, heightMm, gapMm);
+    // The pattern is moved by the same offset as a label, or it would measure a job nobody prints.
+    // A bar is clipped to the declared label: what the offset pushes outside is not sent.
+    const { dx, dy } = offsetDots(o);
+    const bar = (x, y, w, h) => {
+      const x0 = Math.max(0, x + dx), y0 = Math.max(0, y + dy);
+      const x1 = Math.min(W, x + dx + w), y1 = Math.min(H, y + dy + h);
+      if (x1 > x0 && y1 > y0) s += 'BAR ' + x0 + ',' + y0 + ',' + (x1 - x0) + ',' + (y1 - y0) + '\r\n';
+    };
     // Frame on the declared edge. Any edge missing from the label is an edge the printer
     // places outside the paper.
-    s += 'BAR 0,0,' + W + ',' + T + '\r\n';
-    s += 'BAR 0,' + (H - T) + ',' + W + ',' + T + '\r\n';
-    s += 'BAR 0,0,' + T + ',' + H + '\r\n';
-    s += 'BAR ' + (W - T) + ',0,' + T + ',' + H + '\r\n';
+    bar(0, 0, W, T);
+    bar(0, H - T, W, T);
+    bar(0, 0, T, H);
+    bar(W - T, 0, T, H);
     // Corner ticks pointing inwards, 5mm long: they survive even when an edge is off the paper.
-    s += 'BAR ' + T + ',' + T + ',' + TICK + ',' + T + '\r\n';
-    s += 'BAR ' + T + ',' + T + ',' + T + ',' + TICK + '\r\n';
-    s += 'BAR ' + (W - T - TICK) + ',' + (H - 2 * T) + ',' + TICK + ',' + T + '\r\n';
-    s += 'BAR ' + (W - 2 * T) + ',' + (H - T - TICK) + ',' + T + ',' + TICK + '\r\n';
+    bar(T, T, TICK, T);
+    bar(T, T, T, TICK);
+    bar(W - T - TICK, H - 2 * T, TICK, T);
+    bar(W - 2 * T, H - T - TICK, T, TICK);
     // A centre cross: if the frame is off the paper entirely, this still says which way.
-    s += 'BAR ' + Math.round(W / 2 - TICK) + ',' + Math.round(H / 2) + ',' + (2 * TICK) + ',3\r\n';
-    s += 'BAR ' + Math.round(W / 2) + ',' + Math.round(H / 2 - TICK) + ',3,' + (2 * TICK) + '\r\n';
+    bar(Math.round(W / 2 - TICK), Math.round(H / 2), 2 * TICK, 3);
+    bar(Math.round(W / 2), Math.round(H / 2 - TICK), 3, 2 * TICK);
     // ASCII only: the built-in fonts have no Hebrew, and this is for me, not for a customer.
-    s += 'TEXT 40,' + Math.round(H / 2 - 60) + ',"3",0,1,1,"' + widthMm + 'x' + heightMm + 'mm gap' + gapMm + ' d'
+    s += 'TEXT ' + Math.max(0, 40 + dx) + ',' + Math.max(0, Math.round(H / 2 - 60) + dy) + ',"3",0,1,1,"' + widthMm + 'x' + heightMm + 'mm gap' + gapMm + ' d'
       + (o.density === undefined ? 8 : o.density) + ' ref' + Math.round((o.offsetXmm || 0) * 10) / 10
       + ',' + Math.round((o.offsetYmm || 0) * 10) / 10 + '"\r\n';
     s += 'PRINT 1,1\r\n';
@@ -179,7 +199,8 @@
         maxDots + ' dots at 300dpi — the label would be cut off'
       );
     }
-    const mono = packMono(imageData, o.threshold, over > 0 ? maxDots : imageData.width);
+    const { dx, dy } = offsetDots(o);
+    const mono = packMono(imageData, o.threshold, over > 0 ? maxDots : imageData.width, dx, dy);
 
     const header = jobHeader(o, widthMm, heightMm, gapMm) +
       'BITMAP 0,0,' + mono.widthBytes + ',' + mono.height + ',0,';
@@ -218,7 +239,16 @@
   // density 8: what the Windows driver uses for this printer, and it has printed these labels
   // correctly for months. speed 2 ips: slow on purpose (Daniel, 2026-08-23) — thermal transfer
   // is heat and time, and a slower head releases the ribbon more completely.
-  const PRINTER_DEFAULTS = { gap: 2, density: 8, offx: 0, offy: 0, speed: 2 };
+  // offx -2.8 (2026-11-12): measured on the label Daniel photographed off his new phone, which had no
+  // stored offset. Against the label's own edges the divider sat at 36.5mm where the artboard puts it at
+  // 33.8, and the left rule at 5.6mm for 2.6: the printer lays the raster about 2.8mm to the right of the
+  // label, so the right-hand titles (1.95mm from the edge) lost their first letter. A device that stored
+  // its own offset keeps it; the calibration panel still moves it by half millimetres.
+  const PRINTER_DEFAULTS = { gap: 2, density: 8, offx: -2.8, offy: 0, speed: 2 };
+  // The calibration that follows the account (the hub's synced settings), not the phone: the five numbers
+  // and when they were last changed on this device.
+  const CAL_FIELDS = ['gap', 'density', 'offx', 'offy', 'speed'];
+  const CAL_AT_KEY = 'gp_printer_cal_at';
   function optsFromStorage(storage) {
     const num = (k, dflt) => {
       let v = NaN;
@@ -236,6 +266,47 @@
     };
   }
 
+  /*
+   * The printer's calibration belongs to the printer, and the phone is only where it was typed.
+   * It lived in the phone's localStorage alone, so the phone Daniel replaced on 2026-10-29 took it
+   * along and the new one printed at the defaults: the label 2.8mm to the right. These two keep a
+   * copy in the hub's synced settings (settings.printerCal), newest change winning:
+   *   calToAccount(storage)        -> { gap, density, offx, offy, speed, at } of this device, or null
+   *   calFromAccount(storage, cal) -> true when the device took the account's values
+   * A device that has values but no date (set before this existed) counts as older than any dated copy.
+   */
+  function calRead(storage) {
+    const out = {}; let any = false;
+    CAL_FIELDS.forEach((k) => {
+      let v = NaN;
+      try { v = parseFloat(storage.getItem(PRINTER_KEYS[k])); } catch (e) { v = NaN; }
+      if (!isNaN(v)) { out[k] = v; any = true; }
+    });
+    let at = 0;
+    try { at = parseInt(storage.getItem(CAL_AT_KEY), 10) || 0; } catch (e) { at = 0; }
+    return any ? Object.assign(out, { at }) : null;
+  }
+  function calToAccount(storage) { return calRead(storage); }
+  function calFromAccount(storage, cal) {
+    if (!cal || typeof cal !== 'object') return false;
+    const mine = calRead(storage);
+    if (mine && mine.at >= (cal.at || 0)) return false;
+    let wrote = false;
+    try {
+      CAL_FIELDS.forEach((k) => {
+        const v = parseFloat(cal[k]);
+        if (isNaN(v)) storage.removeItem(PRINTER_KEYS[k]);
+        else { storage.setItem(PRINTER_KEYS[k], String(v)); wrote = true; }
+      });
+      storage.setItem(CAL_AT_KEY, String(cal.at || 1));
+    } catch (e) { return false; }
+    return wrote;
+  }
+  function calTouched(storage, now) {
+    try { storage.setItem(CAL_AT_KEY, String(now || Date.now())); } catch (e) { /* the values are saved; only the date is lost */ }
+  }
+
   return { DOTS_PER_MM, packMono, buildLabel, buildAlignmentPattern, fromCanvas, toBase64,
-    PRINTER_KEYS, PRINTER_DEFAULTS, optsFromStorage };
+    PRINTER_KEYS, PRINTER_DEFAULTS, optsFromStorage, offsetDots,
+    CAL_FIELDS, CAL_AT_KEY, calToAccount, calFromAccount, calTouched };
 });
