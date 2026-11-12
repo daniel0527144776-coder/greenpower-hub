@@ -43,7 +43,7 @@ await page.goto('http://localhost:4361/index.html', { waitUntil: 'domcontentload
 await page.waitForFunction(() => typeof window.botIndex === 'function', null, { timeout: 30000 });
 
 const r = await page.evaluate(async (SELF) => {
-  if (SELF) { const real = window.botIndex; window.botIndex = () => ({ ...real(), jobs: Store.get('jobs') }); }
+  if (SELF) { const real = window.botIndex; window.botIndex = () => ({ ...real(), jobs: Store.get('jobs'), stock: getInventory() }); }
   const now = Date.now(), day = 86400000;
   const PHOTO = 'data:image/jpeg;base64,' + 'A'.repeat(200000);
   localStorage.setItem('gp_customers', JSON.stringify([{ id: 'c1', name: 'יוסי', phone: '050-123-4567', altPhones: ['052-999-8888'] }, { id: 'c2', name: 'בלי טלפון' }]));
@@ -64,6 +64,8 @@ const r = await page.evaluate(async (SELF) => {
     { id: 'j2', date: new Date(now - 700 * day).toISOString(), customerPhone: '050-123-4567', jobs: ['full'], price: 900 },
     { id: 'j3', date: new Date(now - 5 * day).toISOString(), customerName: 'בלי טלפון', jobs: ['full'], price: 100 },
   ]);
+  // the shelf: one row in stock, one at zero (2026-11-12)
+  Store.set('inventory', [{ name: 'בקר דוגמה 72V 60A', qty: 2, cat: 'בקרים' }, { name: 'מטען דוגמה 84V', qty: 0, cat: 'מטענים' }]);
   await new Promise((res) => setTimeout(res, 1900));
   const idx = JSON.parse(localStorage.getItem('gp_bot_index') || 'null');
   return { idx, synced: SYNC_KEYS.includes('bot_index'), raw: (localStorage.getItem('gp_jobs') || '').length,
@@ -86,6 +88,8 @@ check('an order: items, status, total, and twelve months of warranty once paid',
 const disc = (idx.orders || []).find((x) => x.i && x.i[0] === 'מטען 54.6V 4A x2') || {};
 check('a sale with a discount: the amount he paid (540), not the price before it (600)', disc.t === 540, disc);
 check('a quote has no warranty yet', ((idx.orders || []).find((x) => x.s === 'הצעה') || {}).we === '', idx.orders);
+check('the shelf: what has a count above zero, by name, and never the count',
+  JSON.stringify(idx.stock) === JSON.stringify(['בקר דוגמה 72V 60A']) && !/"qty"/.test(text), idx.stock);
 check('every number the hub knows for a customer is in it', (idx.customers || []).some((c) => c.p.includes('050-123-4567') && c.p.includes('052-999-8888')), idx.customers);
 // His phone's storage runs close to full, and Store.set raises an error box when a write fails.
 // The bot's copy is nobody's typed work: when the phone has no room, no box — the cloud copy goes.
