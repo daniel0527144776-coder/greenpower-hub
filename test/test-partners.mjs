@@ -198,6 +198,13 @@ const R = await page.evaluate(() => {
   out.tag = (() => { navigateTo('orders'); return !!document.querySelector('#ordersList [data-partner-tag]'); })();
   return out;
 });
+// On his phone's width every view of the strip is on the screen: the fifth, this one, sat half off its edge.
+await page.setViewportSize({ width: 390, height: 900 });
+await page.evaluate(() => navigateTo('partners'));
+const chips = await page.evaluate(() => [...document.querySelectorAll('#page-partners [data-view]')].map((e) => {
+  const r = e.getBoundingClientRect();
+  return { view: e.dataset.view, left: Math.round(r.left), right: Math.round(r.right) };
+}));
 await browser.close();
 srv.close();
 
@@ -230,6 +237,7 @@ check('the page: his card, the sum, the customers, a row a sale', R.page && R.pa
 check('the page is a view of לקוחות ועבודות', R.chip);
 check('the WhatsApp summary carries the same sum', R.text.includes('סה"כ מגיע לך: ' + R.shekOwed), R.text);
 check('a sale of his says so on its row', R.tag);
+check('at 390px every view of the strip is whole on the screen', chips.length === 5 && chips.every((c) => c.left >= 0 && c.right <= 390), chips);
 check('no page errors', errs.length === 0, errs.join(' | '));
 if (SELFTEST) console.log(`\n[selftest ${MODE}] ${MODE === 'auto' ? 'a marked customer\'s next sale is no one\'s' : 'a sale\'s share read off today\'s catalogue'}; the checks it breaks above must be red.`);
 process.exit(finish());

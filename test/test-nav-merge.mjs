@@ -62,11 +62,12 @@ const views = (p) => page.evaluate((p) => [...document.querySelectorAll('#page-'
 check('the home card opens לקוחות ועבודות', cards.some((c) => c[0] === 'לקוחות ועבודות' && c[1] === "navigateTo('orders')"), cards);
 check('one page: no tab strip, its title says both', (await strip('orders')).length === 0
   && await page.evaluate(() => document.querySelector('#page-orders .page-title').textContent.includes('לקוחות ועבודות')), await strip('orders'));
-check('its views: עבודות lit, then אחריות, מדבקות, עסקיים', JSON.stringify(await views('orders')) === JSON.stringify(['*📋 עבודות', '🛡️ אחריות', '🏷️ מדבקות', '🏢 עסקיים']), await views('orders'));
-for (const [p, i] of [['warranties', 1], ['stickerlog', 2], ['bizdocs', 3]]) {
+// 🤝 שותפים joined them on 2026-11-13 (v541): the partner who sends customers
+check('its views: עבודות lit, then אחריות, מדבקות, עסקיים, שותפים', JSON.stringify(await views('orders')) === JSON.stringify(['*📋 עבודות', '🛡️ אחריות', '🏷️ מדבקות', '🏢 עסקיים', '🤝 שותפים']), await views('orders'));
+for (const [p, i] of [['warranties', 1], ['stickerlog', 2], ['bizdocs', 3], ['partners', 4]]) {
   await strip(p);
   const v = await views(p);
-  check(`…and on ${p} the same four, that one lit`, v.length === 4 && v[i].startsWith('*'), v);
+  check(`…and on ${p} the same five, that one lit`, v.length === 5 && v[i].startsWith('*'), v);
 }
 check('an old link to the customers page lands on the one page', await page.evaluate(() => { navigateTo('customers'); return document.getElementById('page-orders').classList.contains('active') && !document.getElementById('page-customers'); }), '');
 

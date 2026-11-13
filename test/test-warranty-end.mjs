@@ -281,8 +281,9 @@ const I = await page.evaluate(() => {
 check('the catalogue has the two inspections, and the rule names exactly them',
   !I.missing && I.none.length === 2 && I.none.some((n) => /^אבחון/.test(n)) && I.none.some((n) => /^בדיקת קיבולת/.test(n)), [I.none, I.missing]);
 if (!I.missing) {
+  // and since v541 its business price of the day, for a partner's share (test-partners)
   check('a sold line keeps name, category, quantity and price, so the rule reads the name',
-    I.saved[0] === 'cat,name,qty,unit' && I.saved[1] === 2, I.saved);
+    I.saved[0] === 'b2b,cat,name,qty,unit' && I.saved[1] === 2, I.saved);
   check('a diagnosis sold alone is not on the warranties page', !I.alone.entry, I.alone.entry);
   check('…nor under warranty on the customer\'s card, nor in the bot', !I.alone.card && !I.alone.bot, [I.alone.card, I.alone.bot]);
   const lines = I.alone.quote.split('\n').filter((l) => /אחריות/.test(l));
