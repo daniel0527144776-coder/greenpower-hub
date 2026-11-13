@@ -213,7 +213,7 @@ html.gp-edge { --sys-top: max(env(safe-area-inset-top, 0px), 32px); --sys-bottom
 .page-header.grouped { flex-wrap: wrap; gap: 8px; }
 .page-header.grouped .page-title { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .page-header.grouped .page-group-tabs { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
-.view-chips { margin-bottom: 12px; }
+.view-chips { margin-bottom: 12px; flex-wrap: wrap; }
 .view-chips:empty { display: none; }
 @media (max-width: 560px) { .page-header.grouped .page-group-tabs { flex-basis: 100%; order: -1; } }
 .page-subtitle { font-size: 12px; color: var(--text-muted); margin: 0; }
@@ -1607,6 +1607,25 @@ html.gp-edge { --sys-top: max(env(safe-area-inset-top, 0px), 32px); --sys-bottom
   </div>
 </section>
 
+<!-- ============ PARTNERS PAGE ============ -->
+<section id="page-partners" class="page">
+  <div class="page-header">
+    <h2 class="page-title">🤝 שותפים</h2>
+    <div class="btn-group">
+      <button class="btn btn-primary btn-sm" onclick="openPartnerEditor()">＋ שותף</button>
+    </div>
+  </div>
+  <div class="sub-tabs view-chips" data-views="orders"></div>
+  <div class="card">
+    <div class="wt-monthbar" style="margin-bottom:0;">
+      <button class="btn btn-sm btn-secondary" onclick="stepMonth('ptMonth',-1)" aria-label="חודש קודם">‹</button>
+      <select id="ptMonth" class="form-select" onchange="renderPartners()"></select>
+      <button class="btn btn-sm btn-secondary" onclick="stepMonth('ptMonth',1)" aria-label="חודש הבא">›</button>
+    </div>
+  </div>
+  <div id="partnersMonth"></div>
+</section>
+
 <!-- ============ STICKER LOG PAGE ============ -->
 <section id="page-stickerlog" class="page">
   <div class="page-header">
@@ -2560,7 +2579,7 @@ const PAGE_GROUPS = [
 ];
 // The views inside a tab, as one row of chips at the top of each of them.
 const PAGE_VIEWS = {
-  orders: [['orders', '📋 עבודות'], ['warranties', '🛡️ אחריות'], ['stickerlog', '🏷️ מדבקות'], ['bizdocs', '🏢 עסקיים']],
+  orders: [['orders', '📋 עבודות'], ['warranties', '🛡️ אחריות'], ['stickerlog', '🏷️ מדבקות'], ['bizdocs', '🏢 עסקיים'], ['partners', '🤝 שותפים']],
 };
 function renderViewChips(page) {
   document.querySelectorAll('[data-views]').forEach((box) => {
@@ -2620,6 +2639,7 @@ function navigateTo(page) {
   if (page === 'orders') renderOrders();
   if (page === 'dims') { calcPackDims(); calcFromOldPack(); setDimTab(dimTab); }
   if (page === 'bizdocs') renderBizDocs();
+  if (page === 'partners') renderPartners();
   if (page === 'stickers') openStickerEditor();
   if (page === 'stickerlog') renderStickerLog();
   if (page === 'diag') renderDiag();
@@ -2855,7 +2875,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v540';
+const HUB_BUILD = 'v541';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4247,6 +4267,7 @@ function openCustomerDetails(idx) {
         ${c.vatId ? ' · ח.פ ' + c.vatId : ''}</div>
       ${(c.city || c.address) ? `<div style="font-size:12px;color:var(--text-muted);">📍 ${[c.address, c.city].filter(Boolean).join(', ')}</div>` : ''}
       ${c.notes ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">📝 ${c.notes}</div>` : ''}
+      ${partnersList().length || c.referredBy ? `<div class="form-row" style="margin-top:6px;"><label>🤝 הופנה ע״י</label><select class="form-select" id="custRef" style="width:150px;" onchange="setCustomerPartner(${idx}, this.value)">${partnerOptsHtml(c.referredBy || '')}</select></div>` : ''}
     </div>
     <div class="stats-grid" style="margin-bottom:14px;">
       <div class="stat-box"><div class="stat-label">סך הכל</div><div class="stat-value" style="color:var(--primary);">${shek(led.spent)}</div></div>
@@ -7324,6 +7345,7 @@ function openOrderEditor(id) {
   const o = id ? orders.find(x => x.id === id) : null;
   if (o) {
     orderDraft = { id: o.id, date: o.date, customer: o.customer, phone: o.phone, custQuery: '', bms: o.bms || '', bmsBrand: o.bmsBrand || '', bmsAmps: o.bmsAmps || '', isBusiness: o.isBusiness, status: o.status,
+      referredBy: o.referredBy || '', customB2b: o.customB2b != null ? String(o.customB2b) : '', refTouched: true,
       discVal: o.discountPct || Number(o.discount) || '', discUnit: o.discountPct ? 'pct' : 'nis',
       items: (o.items || []).map(it => {
         if (it.custom) return { custom: true, name: it.name, unit: it.unit, qty: it.qty };
@@ -7336,10 +7358,12 @@ function openOrderEditor(id) {
         // income at October's prices. `sold` holds for the price list it was sold on (`soldMode`); a
         // line added now, or the sale moved to the other list, takes the list's price (orderItemInfo).
         const sold = it.unit != null && Number.isFinite(Number(it.unit)) ? { sold: Number(it.unit), soldMode: o.isBusiness ? 'b2b' : 'retail' } : {};
+        // its business price of the day it was saved, for the partner's share (salePartnerShare)
+        if (it.b2b != null && Number.isFinite(Number(it.b2b))) sold.soldB2b = Number(it.b2b);
         return ci >= 0 ? { ci, qty: it.qty, ...sold } : { custom: true, name: it.name, unit: Number(it.unit) || 0, qty: it.qty };
       }) };
   } else {
-    orderDraft = { id: null, date: new Date().toISOString(), customer: '', phone: '', custQuery: '', bms: '', bmsBrand: '', bmsAmps: '', isBusiness: false, status: 'הצעה', items: [], discVal: '', discUnit: 'nis' };
+    orderDraft = { id: null, date: new Date().toISOString(), customer: '', phone: '', custQuery: '', bms: '', bmsBrand: '', bmsAmps: '', isBusiness: false, status: 'הצעה', items: [], discVal: '', discUnit: 'nis', referredBy: '', customB2b: '', refTouched: false };
   }
   renderOrderModal();
 }
@@ -7351,7 +7375,9 @@ function syncOrderFields() { const n = document.getElementById('ordName'); if (n
   const dt = document.getElementById('ordDate'); if (dt && dt.value) orderDraft.date = mergeCalendarDate(dt.value, orderDraft.date);
   const cq = document.getElementById('ordCustSearch'); if (cq) orderDraft.custQuery = cq.value;
   const dv = document.getElementById('ordDisc'); if (dv) orderDraft.discVal = dv.value;
-  const du = document.getElementById('ordDiscUnit'); if (du) orderDraft.discUnit = du.value; }
+  const du = document.getElementById('ordDiscUnit'); if (du) orderDraft.discUnit = du.value;
+  const rf = document.getElementById('ordRef'); if (rf && rf.value !== orderDraft.referredBy) { orderDraft.referredBy = rf.value; orderDraft.refTouched = true; }
+  const rb = document.getElementById('ordCustomB2b'); if (rb) orderDraft.customB2b = rb.value; }
 // The sale's sum, its discount and what is paid, from the draft (the modal and the save both read it).
 function orderSums(items, mode) {
   const sub = items.reduce((s, it) => s + orderItemInfo(it, mode).unit * it.qty, 0);
@@ -7366,8 +7392,11 @@ function orderTotalHtml(t) {
 // Typing a discount redraws only the total, never the modal: a redraw would take the focus out of the box.
 function onOrderDisc() {
   syncOrderFields();
+  const sums = orderSums(orderDraft.items, orderDraft.isBusiness ? 'b2b' : 'retail');
   const box = document.getElementById('ordTotal');
-  if (box) box.innerHTML = orderTotalHtml(orderSums(orderDraft.items, orderDraft.isBusiness ? 'b2b' : 'retail'));
+  if (box) box.innerHTML = orderTotalHtml(sums);
+  const pt = document.getElementById('ordPartner');
+  if (pt) pt.innerHTML = orderPartnerLine(sums);
 }
 // The BMS is picked from BMS_PRICES — the same brands and amp ratings the repair
 // calculator already prices — instead of being typed. Free text meant a quote could
@@ -7389,6 +7418,13 @@ function orderItemInfo(it, mode) {
   const p = PRICING[it.ci];
   // a line of a saved sale, on the list it was sold on: the price it was sold for (openOrderEditor)
   return { name: p.name, unit: it.sold != null && it.soldMode === mode ? it.sold : p[mode] };
+}
+// A draft line's business price: the one it was saved with, else the catalogue's of today; none for a line typed by hand.
+function orderItemB2b(it) {
+  if (it.custom) return null;
+  if (it.soldB2b != null) return it.soldB2b;
+  const b = Number((PRICING[it.ci] || {}).b2b);
+  return Number.isFinite(b) ? b : null;
 }
 // A catalogue category as a main category and a sub-category (2026-10-22, Daniel: "תחלק לי בבקשה את
 // כל המלאי לפי קטגוריות ותת קטגוריות ... אותו דבר גם לגבי מכירות"). The sale picker listed ~95 flat
@@ -7414,6 +7450,7 @@ function catSubCompare(a, b) {
 }
 function renderOrderModal() {
   const mode = orderDraft.isBusiness ? 'b2b' : 'retail';
+  autoOrderPartner();
   // Product picker grouped by category (optgroup) so the long list is easy to scan.
   // Was ONE <select> holding every priced row — 794 options behind 68 optgroups, which
   // on a phone is a scroll you cannot aim. Now category first, then that category's items.
@@ -7442,12 +7479,13 @@ function renderOrderModal() {
     <div class="form-row"><label>לקוח קיים</label><input type="search" class="form-input-wide" id="ordCustSearch" value="${custPickEsc(orderDraft.custQuery || '')}" placeholder="חפש שם או טלפון" style="width:170px;" oninput="onOrderCustSearch()"></div>
     <div class="cust-pick" id="ordCustList"></div>
     <div class="form-row"><label>שם לקוח</label><input class="form-input-wide" id="ordName" value="${custPickEsc(orderDraft.customer || '')}" style="width:170px;"></div>
-    <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="ordPhone" value="${orderDraft.phone || ''}" style="width:170px;"></div>
+    <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="ordPhone" value="${orderDraft.phone || ''}" style="width:170px;" onchange="onOrderPhone()"></div>
     <div class="form-row"><label>תאריך</label><input type="date" class="form-input" id="ordDate" value="${dateInputValue(orderDraft.date)}" style="width:150px;"></div>
     <div class="form-row"><label>דגם BMS</label>
       <select class="form-select" id="ordBmsBrand" style="width:95px;" onchange="syncOrderFields()">${bmsBrandOpts(orderDraft.bmsBrand)}</select>
       <select class="form-select" id="ordBmsAmps" style="width:75px;" onchange="syncOrderFields()">${bmsAmpsOpts(orderDraft.bmsBrand, orderDraft.bmsAmps)}</select>
     </div>
+    <div id="ordPartnerBox">${orderPartnerHtml(sums)}</div>
     <label class="check ${orderDraft.isBusiness ? 'checked' : ''}" onclick="toggleOrderBiz()"><div class="check-box"></div>לקוח עסקי (מחיר B2B)</label>
     ${orderDraft.isBusiness && orderDraft.items.length ? '<div style="font-size:10.5px;color:var(--text-muted);margin:2px 2px 0;">כל השורות מחושבות במחיר סוחר</div>' : ''}
     <div class="divider"></div>
@@ -7495,6 +7533,7 @@ function pickOrderCustomer(i) {
   orderDraft.phone = c.phone || '';
   orderDraft.custQuery = '';
   if (c.isBusiness) orderDraft.isBusiness = true;
+  if (!orderDraft.id && !orderDraft.refTouched && c.referredBy && partnerOf(c.referredBy) && !partnerOf(c.referredBy).removed) orderDraft.referredBy = c.referredBy;
   renderOrderModal();
 }
 function onOrderCatChange() { syncOrderFields(); orderDraft.cat = document.getElementById('ordCat').value; renderOrderModal(); }
@@ -7519,8 +7558,14 @@ function saveOrder() {
     if (it.custom) return { name: it.name, cat: 'מותאם אישית', qty: it.qty, unit: Number(it.unit) || 0, custom: true };
     const p = PRICING[it.ci];
     // the price on the screen, which for a saved line is the one it sold for (orderItemInfo)
-    return { name: p.name, cat: p.cat, qty: it.qty, unit: orderItemInfo(it, mode).unit };
+    const b2b = orderItemB2b(it);
+    return { name: p.name, cat: p.cat, qty: it.qty, unit: orderItemInfo(it, mode).unit, ...(b2b != null ? { b2b } : {}) };
   });
+  autoOrderPartner();
+  const hasCustom = items.some((it) => it.custom);
+  const ref = orderDraft.referredBy
+    ? { referredBy: orderDraft.referredBy, ...(hasCustom && String(orderDraft.customB2b).trim() !== '' && Number.isFinite(Number(orderDraft.customB2b)) ? { customB2b: Number(orderDraft.customB2b) } : {}) }
+    : {};
   // total is what the customer pays — income, profit and every ledger read it — and the
   // discount is kept beside it, so a quote can show the price, the discount and the total
   const sums = orderSums(orderDraft.items, mode);
@@ -7530,11 +7575,11 @@ function saveOrder() {
   if (orderDraft.id) {
     const idx = orders.findIndex(o => o.id === orderDraft.id);
     if (idx >= 0) {
-      const { discount: _d, discountPct: _p, ...rest } = orders[idx];
-      orders[idx] = { ...rest, date: orderDraft.date || orders[idx].date, customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total, ...disc };
+      const { discount: _d, discountPct: _p, referredBy: _r, customB2b: _cb, ...rest } = orders[idx];
+      orders[idx] = { ...rest, date: orderDraft.date || orders[idx].date, customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total, ...disc, ...ref };
     }
   } else {
-    orders.unshift({ id: 'o' + Date.now(), date: orderDraft.date || new Date().toISOString(), customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total, ...disc, status: 'הצעה' });
+    orders.unshift({ id: 'o' + Date.now(), date: orderDraft.date || new Date().toISOString(), customer: orderDraft.customer, phone: orderDraft.phone, bms: orderDraft.bms || '', bmsBrand: orderDraft.bmsBrand || '', bmsAmps: orderDraft.bmsAmps || '', isBusiness: orderDraft.isBusiness, items, total, ...disc, ...ref, status: 'הצעה' });
   }
   Store.set('orders', orders);
   upsertCustomerFromOrder(orders.find((o) => o.id === (orderDraft.id || orders[0].id)) || orders[0]);
@@ -7548,7 +7593,7 @@ function ordersSearch(q) { ORD_QUERY = String(q || ''); salesLimit = 60; renderO
 function jobHaystack(x) {
   const r = x.raw;
   const parts = x.kind === 'sale'
-    ? [r.customer, r.phone, ...(r.items || []).map((it) => it.name + ' ' + (it.cat || '')), r.bms, r.status]
+    ? [r.customer, r.phone, ...(r.items || []).map((it) => it.name + ' ' + (it.cat || '')), r.bms, r.status, r.referredBy ? partnerNameOf(r.referredBy) : '']
     : [r.customerName, r.customerPhone, r.voltage && r.capacity ? r.voltage + 'V ' + r.capacity + 'Ah' : '', jobTypeLabel(r), r.notes, r.jobStatus];
   return parts.filter(Boolean).join(' ').toLowerCase();
 }
@@ -7664,14 +7709,246 @@ function upsertCustomerFromOrder(o) {
     if (o.customer && !existing.name) existing.name = o.customer;
     if (!existing.lastVisit || new Date(o.date) > new Date(existing.lastVisit)) existing.lastVisit = o.date;
     if (o.isBusiness) { existing.isBusiness = true; if (o.customer && !existing.businessName) existing.businessName = o.customer; }
+    if (o.referredBy && existing.referredBy !== o.referredBy) { existing.referredBy = o.referredBy; existing.referredAt = o.date; }
   } else {
     customers.push({
       id: 'c' + Date.now(), name: o.customer || '', phone: o.phone, notes: '',
       isBusiness: !!o.isBusiness, businessName: o.isBusiness ? (o.customer || '') : '',
       firstVisit: o.date, lastVisit: o.date, totalSpent: 0, visitCount: 0,
+      ...(o.referredBy ? { referredBy: o.referredBy, referredAt: o.date } : {}),
     });
   }
   Store.set('customers', customers);
+}
+
+// ==== partners ====
+// A partner who sends customers (2026-11-11, Daniel: a partner "שולח עליי לקוחות ... הוא מקבל את המחיר העסקי כמו
+// שכתוב בקטלוג ... אני צריך כל סוף חודש לדעת כמה לקוחות הגיעו דרכו, ולחשב כמה כסף מגיע לו"). He chose the mark on
+// the sale ("במכירה בלוח הבקרה") and the amount as what was paid less the business price ("מה ששולם פחות המחיר
+// העסקי"). The partners are synced data (settings.partners: id, name, phone, since): this file is public and names
+// none. A sale carries `referredBy` (the partner's id) and each catalogue line its business price of the day it was
+// saved (`b2b`), as a line keeps the price it sold for: a sale opened later to fix a phone does not move what is owed.
+// A line typed by hand has no business price; the sale takes one typed for those lines together (`customB2b`). The
+// customer is marked by his first such sale (`referredBy`), so his next sale is the partner's by itself. A sale
+// counts in its own month once it is paid or delivered (saleIsIncome), as it does in the income.
+function allPartners() { const p = (Store.get('settings') || {}).partners; return Array.isArray(p) ? p.filter((x) => x && x.id) : []; }
+function partnersList() { return allPartners().filter((p) => !p.removed); }
+function partnerOf(id) { return id ? allPartners().find((p) => p.id === String(id)) || null : null; }
+function partnerNameOf(id) { const p = partnerOf(id); return p ? String(p.name || '').trim() || 'שותף' : 'שותף'; }
+function partnerOptsHtml(sel) {
+  const list = partnersList();
+  const cur = partnerOf(sel);
+  if (cur && cur.removed) list.push(cur);
+  return '<option value="">— ללא —</option>' + list.map((p) => `<option value="${custPickEsc(p.id)}"${p.id === sel ? ' selected' : ''}>${custPickEsc(p.name || 'שותף')}</option>`).join('');
+}
+// A sale's share: what was paid, its business price and what the partner is owed. null for a sale that is no
+// partner's; base and owed null while a line typed by hand has no business price.
+function salePartnerShare(o) {
+  if (!o || !o.referredBy) return null;
+  const paid = Number(o.total) || 0;
+  const items = o.items || [];
+  let base = items.length ? 0 : null, custom = false;
+  for (const it of items) {
+    if (base == null) break;
+    if (it.custom) { custom = true; continue; }
+    // a line saved before the field: the catalogue's business price of today
+    const b = Number(it.b2b != null ? it.b2b : (pricingRowOf(it) || {}).b2b);
+    if (!Number.isFinite(b)) { base = null; break; }
+    base += b * (Number(it.qty) || 1);
+  }
+  if (base != null && custom) {
+    const typed = o.customB2b == null || String(o.customB2b).trim() === '' ? NaN : Number(o.customB2b);
+    base = Number.isFinite(typed) ? base + typed : null;
+  }
+  return { paid, base, owed: base == null ? null : Math.max(0, Math.round(paid - base)) };
+}
+// The editor's draft as a sale, for its line "מחיר עסקי · לשותף".
+function draftPartnerShare(sums) {
+  return salePartnerShare({
+    referredBy: orderDraft.referredBy, total: sums.total, customB2b: orderDraft.customB2b,
+    items: orderDraft.items.map((it) => (it.custom ? { custom: true, qty: it.qty } : { qty: it.qty, b2b: orderItemB2b(it) })),
+  });
+}
+function orderPartnerLine(sums) {
+  const s = draftPartnerShare(sums);
+  if (!s) return '';
+  if (s.base == null) return '<span style="color:var(--warning);">חסר מחיר עסקי לפריט המותאם</span>';
+  return `מחיר עסקי ${shek(s.base)} · <b style="color:var(--accent);">לשותף ${shek(s.owed)}</b>`;
+}
+function orderPartnerHtml(sums) {
+  if (!partnersList().length && !orderDraft.referredBy) return '';
+  const sel = `<div class="form-row"><label>🤝 הופנה ע״י</label><select class="form-select" id="ordRef" style="width:170px;" onchange="onOrderRef()">${partnerOptsHtml(orderDraft.referredBy)}</select></div>`;
+  if (!orderDraft.referredBy) return sel;
+  const custom = orderDraft.items.some((it) => it.custom)
+    ? `<div class="form-row"><label>מחיר עסקי לפריט המותאם ₪</label><input type="number" class="form-input" id="ordCustomB2b" min="0" value="${custPickEsc(orderDraft.customB2b)}" oninput="onOrderDisc()"></div>`
+    : '';
+  return sel + custom + `<div id="ordPartner" data-partner-line style="font-size:11.5px;color:var(--text-muted);margin:0 2px 6px;">${orderPartnerLine(sums)}</div>`;
+}
+// The select changed by hand: what it says is his choice, "ללא" included.
+function onOrderRef() {
+  const rf = document.getElementById('ordRef');
+  if (rf) { orderDraft.referredBy = rf.value; orderDraft.refTouched = true; }
+  syncOrderFields(); renderOrderModal();
+}
+// A new sale of a customer a partner sent is the partner's by itself, unless he chose otherwise in the editor. Run
+// on every draw of the editor and when the phone is typed, so the select shows it before the save.
+function autoOrderPartner() {
+  if (orderDraft.id || orderDraft.refTouched || orderDraft.referredBy) return false;
+  const f = customerForPhone(orderDraft.phone);
+  const pr = f && f.c.referredBy ? partnerOf(f.c.referredBy) : null;
+  if (!pr || pr.removed) return false;
+  orderDraft.referredBy = pr.id;
+  return true;
+}
+// Only the partner's rows are redrawn: a redraw of the modal as the phone box loses the focus would swallow the
+// tap on שמור that took it.
+function onOrderPhone() {
+  syncOrderFields();
+  if (!autoOrderPartner()) return;
+  const box = document.getElementById('ordPartnerBox');
+  if (box) box.innerHTML = orderPartnerHtml(orderSums(orderDraft.items, orderDraft.isBusiness ? 'b2b' : 'retail'));
+}
+
+// The customer card's mark. Marking him offers to mark his sales already saved since the start of the month the
+// partner was added: the customer is often marked after the sale that brought him.
+function setCustomerPartner(idx, pid) {
+  const customers = Store.get('customers') || [];
+  const c = customers[idx];
+  if (!c) return;
+  customers[idx] = { ...c, referredBy: pid || '', referredAt: pid ? new Date().toISOString() : '' };
+  if (!Store.set('customers', customers)) return;
+  const p = partnerOf(pid);
+  if (!p) return;
+  const sinceD = p.since ? new Date(p.since) : null;
+  const since = sinceD && !isNaN(sinceD) ? new Date(sinceD.getFullYear(), sinceD.getMonth(), 1).getTime() : 0;
+  const phones = new Set(custPhones(c).map(waNumber).filter(Boolean));
+  const orders = Store.get('orders') || [];
+  const waiting = orders.filter((o) => o && !o.referredBy && phones.has(waNumber(o.phone)) && new Date(o.date).getTime() >= since);
+  if (!waiting.length) return;
+  askConfirm(waiting.length === 1 ? 'לסמן גם את המכירה שכבר נשמרה שלו?' : `לסמן גם את ${waiting.length} המכירות שכבר נשמרו שלו?`, () => {
+    const ids = new Set(waiting.map((o) => o.id));
+    if (Store.set('orders', orders.map((o) => (o && ids.has(o.id) ? { ...o, referredBy: p.id } : o)))) renderOrders();
+  });
+}
+
+// One partner's month: his paid sales with their shares, how many customers, what he is owed, the quotes still open.
+function partnerMonth(pid, mk, orders) {
+  const mine = (orders || Store.get('orders') || []).filter((o) => o && o.referredBy === pid && monthKeyOf(o.date) === mk);
+  const sales = mine.filter(saleIsIncome).sort((a, b) => new Date(a.date) - new Date(b.date));
+  const rows = sales.map((o) => ({ o, ...salePartnerShare(o) }));
+  const custs = new Set(sales.map((o) => String(o.phone || '').replace(/[^0-9]/g, '') || String(o.customer || '').trim().toLowerCase()));
+  return {
+    rows, customers: custs.size,
+    owed: rows.reduce((s, r) => s + (r.owed || 0), 0),
+    missing: rows.filter((r) => r.owed == null).length,
+    quotes: mine.filter((o) => !saleIsIncome(o)).length,
+  };
+}
+// Every month he was owed something, newest first.
+function partnerMonths(pid, orders) {
+  const by = {};
+  for (const o of orders) {
+    if (!o || o.referredBy !== pid || !saleIsIncome(o)) continue;
+    const k = monthKeyOf(o.date);
+    by[k] = (by[k] || 0) + ((salePartnerShare(o) || {}).owed || 0);
+  }
+  return Object.entries(by).sort((a, b) => b[0].localeCompare(a[0]));
+}
+function saleItemsShort(o) { return (o.items || []).map((it) => it.name + (Number(it.qty) > 1 ? ' ×' + it.qty : '')).join(' · '); }
+const shortDay = (d) => { const x = new Date(d); return x.getDate() + '.' + (x.getMonth() + 1); };
+function renderPartners() {
+  const box = document.getElementById('partnersMonth');
+  if (!box) return;
+  const mk = ensureMonthInput('ptMonth');
+  const orders = Store.get('orders') || [];
+  const used = new Set(orders.filter((o) => o && o.referredBy).map((o) => o.referredBy));
+  const list = allPartners().filter((p) => !p.removed || used.has(p.id));
+  CUST_IDX = null;
+  if (!list.length) {
+    box.innerHTML = '<div class="card" style="text-align:center;color:var(--text-muted);font-size:13px;">אין עדיין שותפים — <b>＋ שותף</b></div>';
+    return;
+  }
+  box.innerHTML = list.map((p) => {
+    const m = partnerMonth(p.id, mk, orders);
+    const pid = custPickEsc(p.id);
+    const rows = m.rows.map((r) => `<tr data-partner-sale="${custPickEsc(r.o.id)}">
+        <td>${shortDay(r.o.date)}</td>
+        <td style="white-space:normal;">${custLinkHtml(r.o.customer, r.o.phone)}<div style="font-size:10.5px;color:var(--text-muted);">${custPickEsc(saleItemsShort(r.o))}</div></td>
+        <td>${shek(r.paid)}</td>
+        <td>${r.base == null ? `<a href="#" onclick="openOrderEditor('${custPickEsc(r.o.id)}');return false;" style="color:var(--warning);">חסר ✏️</a>` : shek(r.base)}</td>
+        <td data-owed style="font-weight:700;color:var(--accent);">${r.owed == null ? '—' : shek(r.owed)}</td></tr>`).join('');
+    const months = partnerMonths(p.id, orders);
+    return `<div class="card" data-partner="${pid}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+        <h3 class="card-title" style="margin:0;">🤝 ${custPickEsc(p.name || 'שותף')}${p.removed ? ' <span style="font-size:11px;color:var(--text-muted);">(הוסר)</span>' : ''}</h3>
+        <div class="btn-group">
+          <button class="btn btn-sm btn-secondary" style="background:#25D366;color:#fff;border:none;" onclick="sendPartnerMonth('${pid}')">💬 שלח</button>
+          <button class="btn btn-sm btn-secondary" onclick="openPartnerEditor('${pid}')">✏️</button>
+        </div>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat-box"><div class="stat-label">לקוחות</div><div class="stat-value" data-partner-customers>${m.customers}</div></div>
+        <div class="stat-box"><div class="stat-label">מגיע לו</div><div class="stat-value" data-partner-owed style="color:var(--accent);">${shek(m.owed)}</div></div>
+      </div>
+      ${m.missing ? `<div class="alert alert-warning" style="margin-top:8px;">חסר מחיר עסקי ${m.missing === 1 ? 'במכירה אחת' : 'ב-' + m.missing + ' מכירות'} — לא נכלל בסכום</div>` : ''}
+      ${rows ? `<div style="overflow-x:auto;margin-top:10px;"><table class="wt-table"><thead><tr><th>תאריך</th><th>לקוח</th><th>שילם</th><th>עסקי</th><th>לשותף</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : '<div style="text-align:center;color:var(--text-muted);font-size:12.5px;padding:10px;">אין מכירות ששולמו בחודש הזה</div>'}
+      ${m.quotes ? `<div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">⏳ ${m.quotes === 1 ? 'הצעה פתוחה אחת' : m.quotes + ' הצעות פתוחות'} — נספרות כשישולמו</div>` : ''}
+      ${months.length ? `<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:12.5px;color:var(--primary);">כל החודשים</summary>${months.map(([k, v]) =>
+        `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:4px 2px;border-bottom:1px solid var(--border);"><span>${monthLabelHe(k)}</span><b>${shek(v)}</b></div>`).join('')}</details>` : ''}
+    </div>`;
+  }).join('');
+}
+// The month's summary to the partner, in his WhatsApp chat with the text written (openWhatsAppWith).
+function partnerMonthText(p, mk) {
+  const m = partnerMonth(p.id, mk);
+  const first = String(p.name || '').trim().split(/\s+/)[0];
+  const lines = m.rows.map((r) => `• ${shortDay(r.o.date)} · ${r.o.customer || 'לקוח'} · ${saleItemsShort(r.o)}${r.owed == null ? '' : ' · ' + shek(r.owed)}`);
+  return `שלום${first ? ' ' + first : ''}, סיכום ${monthLabelHe(mk)} 🔋\n`
+    + (lines.length ? lines.join('\n') : 'לא היו מכירות החודש.')
+    + `\n\nסה"כ מגיע לך: ${shek(m.owed)}` + (m.missing ? `\n(עוד ${m.missing === 1 ? 'מכירה אחת' : m.missing + ' מכירות'} בבדיקה)` : '')
+    + '\nתודה, דניאל';
+}
+function sendPartnerMonth(pid) {
+  const p = partnerOf(pid);
+  if (!p) return;
+  openWhatsAppWith(p.phone, partnerMonthText(p, ensureMonthInput('ptMonth')));
+}
+let partnerEditId = null;
+function openPartnerEditor(id) {
+  const p = id ? partnerOf(id) : null;
+  partnerEditId = p ? p.id : null;
+  openModal(p ? 'עריכת שותף' : 'שותף חדש',
+    `<div class="form-row"><label>שם</label><input class="form-input-wide" id="ptName" value="${custPickEsc(p ? p.name : '')}" style="width:170px;"></div>
+    <div class="form-row"><label>טלפון</label><input class="form-input-wide" id="ptPhone" inputmode="tel" value="${custPickEsc(p ? p.phone : '')}" style="width:170px;"></div>`,
+    `<button class="btn btn-primary" onclick="savePartner()">💾 שמור</button>${p && !p.removed ? '<button class="btn btn-danger" onclick="removePartner()">🗑️</button>' : ''}<button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
+}
+function writePartners(fn) {
+  const s = Store.get('settings') || {};
+  const list = Array.isArray(s.partners) ? s.partners.slice() : [];
+  fn(list);
+  return Store.set('settings', { ...s, partners: list });
+}
+function savePartner() {
+  const name = String((document.getElementById('ptName') || {}).value || '').trim();
+  const phone = String((document.getElementById('ptPhone') || {}).value || '').trim();
+  if (!name) { showNotice('הזן שם לשותף'); return; }
+  const id = partnerEditId;
+  const ok = writePartners((list) => {
+    const i = id ? list.findIndex((p) => p && p.id === id) : -1;
+    if (i >= 0) list[i] = { ...list[i], name, phone, removed: false };
+    else list.push({ id: 'p' + Date.now(), name, phone, since: new Date().toISOString() });
+  });
+  if (!ok) return;
+  closeModal(); renderPartners();
+}
+// Removed, never deleted: his sales keep his name in their month.
+function removePartner() {
+  const id = partnerEditId;
+  if (!id) return;
+  askConfirm('להסיר את השותף? מכירות שכבר סומנו נשארות שלו.', () => {
+    if (writePartners((list) => { const i = list.findIndex((p) => p && p.id === id); if (i >= 0) list[i] = { ...list[i], removed: true }; })) { closeModal(); renderPartners(); }
+  });
 }
 
 const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
@@ -7711,7 +7988,7 @@ function saleRow(o) {
   return `
     <div class="list-item">
       <div class="list-item-header">
-        <div><div class="list-item-title">${salesBadge('sale')} ${custLinkHtml(o.customer, o.phone)} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}</div>
+        <div><div class="list-item-title">${salesBadge('sale')} ${custLinkHtml(o.customer, o.phone)} ${o.isBusiness ? '<span style="font-size:10px;color:var(--accent);">(עסקי)</span>' : ''}${o.referredBy ? `<span data-partner-tag style="font-size:10px;color:#a78bfa;white-space:nowrap;">🤝 ${custPickEsc(partnerNameOf(o.referredBy))}</span>` : ''}</div>
           <div class="list-item-subtitle">${new Date(o.date).toLocaleDateString('he-IL')}${custPhoneHtml(o.phone)} · ${(o.items || []).length === 1 ? 'פריט אחד' : (o.items || []).length + ' פריטים'}${o.bms ? ' · BMS ' + o.bms : ''}</div>
           <div class="list-item-subtitle" style="font-size:10.5px;">${saleCats(o)}</div>${orderStockFixHtml(o)}</div>
         <div style="text-align:left;"><div class="list-item-value">${shek(o.total)}</div>${Number(o.discount) ? `<div data-discount style="font-size:10.5px;color:var(--accent);">הנחה ${shek(o.discount)}</div>` : ''}${(() => { const pr = saleProfit(o); return pr ? `<div style="font-size:10.5px;color:var(--text-muted);">רווח ${shek(pr.profit)}</div>` : ''; })()}<div style="margin-top:3px;">${saleStatusPill(o.status)}${quoteAgePill(o)}</div></div>
@@ -8292,7 +8569,7 @@ function stepMonth(id, dir) {
     el.insertAdjacentHTML('afterbegin', '<option value="' + k + '">' + monthLabelHe(k) + '</option>');
   }
   el.value = k;
-  if (id === 'wtMonth') renderWorktime(); else renderFinances();
+  if (id === 'wtMonth') renderWorktime(); else if (id === 'ptMonth') renderPartners(); else renderFinances();
 }
 
 function ensureMonthInput(id) {

@@ -260,6 +260,11 @@ jobs:
       - name: A sale opened again keeps its sold prices
         run: node test/test-sale-edit.mjs
 
+      # A partner who sends customers (2026-11-12): the sale names him, the customer is marked, and each month
+      # shows what he is owed — what was paid less the business price each line was saved with.
+      - name: A partner's customers and what he is owed
+        run: node test/test-partners.mjs
+
       # A repair saved is kept, however many came before it (2026-10-22): the 501st repair dropped the
       # first from every device, and a save the storage refused still took the build off the shelf.
       - name: Every repair is kept, and a refused save changes nothing
