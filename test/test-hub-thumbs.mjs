@@ -61,10 +61,14 @@ console.log('1. every catalogue category has a picture');
 {
   const r = await p.evaluate(() => {
     const cats = [...new Set(CATALOG.map((x) => x.cat))];
-    const missing = cats.filter((c) => !thumbFor(c));
-    return { total: cats.length, missing, distinct: new Set(cats.map((c) => thumbFor(c))).size };
+    // A product with no photo of its own yet is named in THUMB_NONE by the generator (2026-11-14: the Inokim riser,
+    // whose picture on the site is the lab's mark): it shows no thumbnail rather than a mark that is not the product.
+    const none = typeof THUMB_NONE !== 'undefined' ? THUMB_NONE : [];
+    const missing = cats.filter((c) => !thumbFor(c) && !none.includes(c));
+    return { total: cats.length, missing, none, distinct: new Set(cats.map((c) => thumbFor(c))).size };
   });
   check('no category is left without one', r.missing.length === (SELFTEST ? 1 : 0), r.missing);
+  check('…but for the ones with no photo yet, named and few', r.none.length <= 1 && r.none.every((c) => /אינוקים/.test(c)), r.none);
   check('and there are many categories, so the check is not vacuous', r.total > 50, r.total);
   check('several distinct images, not one repeated', r.distinct > 15, r.distinct);
 }

@@ -1,7 +1,8 @@
 // The supplier price list arrives by itself after login (2026-10-30).
 //
 //   node test/test-supplier-pull.mjs
-//   node test/test-supplier-pull.mjs --selftest     (the rows taken as they come, unchecked)
+//   node test/test-supplier-pull.mjs --selftest     (the rows taken as they come, unchecked; the landed shekels dropped
+//                                                    beside dollars; a list applied by an older build never read again)
 //
 // Daniel: "עלויות הספקים נכנסות ללוח הבקרה לבד". sync-prices sends the list to the lab's server, and the
 // hub reads it there with his login. What must hold: a list with a stamp not yet applied becomes
@@ -45,7 +46,9 @@ await page.route('**/rest/v1/**', (route) => route.fulfill({ status: 200, body: 
 await page.goto('http://localhost:4365/index.html', { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => typeof window.pullSupplierPrices === 'function', null, { timeout: 30000 });
 await page.evaluate((SELF) => {
-  if (SELF) window.cleanSupplierRows = (d) => d;
+  if (SELF) {
+    window.cleanSupplierRows = (d) => d.map((r) => { const o = { ...r }; if (o.usd != null) delete o.ils; return o; });
+  }
   Sync.session = { access_token: 'tok.' + btoa('{"sub":"u1"}') + '.sig', expires_at: Date.now() + 3600000, email: 't@t' };
   Sync.userId = 'u1';
   Store.set('supplier_prices', [{ who: 'ספק ישן', cat: 'כללי', name: 'פריט ישן', usd: 1 }]);
@@ -75,6 +78,23 @@ check('the same stamp is not applied again: a list he imported by hand after it 
 server.body = { rows: LIST.slice(0, 1), at: '2026-11-01T08:30:00.000Z' };
 r = await pull(); s = await state();
 check('a newer list replaces it', r === true && s.list.length === 1 && s.list[0].name === 'BMS דוגמה 16S' && s.at === '2026-11-01T08:30:00.000Z', { r, at: s.at });
+
+// ---- a row with both prices keeps both (2026-11-14) ----
+// The Sur-Ron charger and boards are listed with the supplier's dollars AND what they land at. The shekels were
+// dropped whenever dollars were there, so the hub landed them again by a share of their value (₪417 for ₪328).
+server.body = { rows: [{ who: 'ספק דוגמה', cat: 'חלקים', name: 'חלק דוגמה', usd: 10, ils: 33 }], at: '2026-11-02T08:30:00.000Z' };
+r = await pull(); s = await state();
+const cost = await page.evaluate(() => Math.round(supplierIls((Store.get('supplier_prices') || [])[0], true, true)));
+check('a row listed with dollars and landed shekels keeps both, and costs its shekels', r === true && s.list[0].usd === 10 && s.list[0].ils === 33 && cost === 33, { row: s.list[0], cost });
+// a device that applied this same list with the older import holds the row without its shekels: it reads the list again, once
+await page.evaluate((SELF) => {
+  Store.set('supplier_prices', [{ who: 'ספק דוגמה', cat: 'חלקים', name: 'חלק דוגמה', usd: 10 }]);
+  const st = Store.get('settings') || {}; delete st.supplierPricesClean; if (SELF) st.supplierPricesClean = 2; Store.set('settings', st);
+}, SELFTEST);
+r = await pull(); s = await state();
+check('a list an older build applied is read again, though its stamp has not moved', r === true && s.list[0].ils === 33, { r, row: s.list[0] });
+r = await pull();
+check('…once', r === false, r);
 
 // ---- nothing to apply ----
 const before = JSON.stringify(await state());
