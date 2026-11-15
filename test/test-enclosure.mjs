@@ -94,6 +94,18 @@ const rest = await page.evaluate(() => {
 check('the scooter and the enduro pack cost the SAME — both are shrink, neither buys a case',
   rest.merged != null && rest.scooter === rest.merged && rest.heavy === rest.merged, rest);
 
+// ---------------------------------------------------------------- 2b. one board for a business and a private customer
+// Daniel, 2026-11-15, asked which board a business's 72V pack gets: one of his three DALY boards, by the customer's
+// controller, the same for a business and a private customer. The cost had been ₪75 lower for a business at 72V.
+const dealer = await page.evaluate((SELF) => {
+  const i = PRICING.findIndex((x) => /^72V 20Ah$/.test(x.name) && /^סוללות קורקינטים, /.test(x.cat) && /CLASSIC/.test(x.cat));
+  if (i < 0) return null;
+  const it = PRICING[i], bms = (b) => (batteryCostParts(it, b).parts.find((x) => /^BMS/.test(x.k)) || {}).v;
+  return { retail: estimateBatteryCost(it, false), business: estimateBatteryCost(it, true) - (SELF ? 75 : 0), bms: [bms(false), bms(true)] };
+}, SELFTEST);
+check('a 72V pack costs a business what it costs a private customer: the same board',
+  !!dealer && dealer.retail === dealer.business && dealer.bms[0] > 0 && dealer.bms[0] === dealer.bms[1], dealer);
+
 // ---------------------------------------------------------------- 3. Sur-Ron, ₪1,500 / ₪1,150
 // This one was already wrong before today: SURRON_CASE went into the model on 2026-09-01 and
 // was applied inside audit-pricing only, so the hub showed every Sur-Ron pack ₪1,500 light.
