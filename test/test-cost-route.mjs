@@ -67,9 +67,9 @@ await page.evaluate(() => {
   const s = Store.get('settings') || {}; s.cellRoute = 'local'; Store.set('settings', s);
 });
 const idx = (catRe, name) => page.evaluate(([c, n]) => PRICING.findIndex((x) => new RegExp(c).test(x.cat) && x.name === n), [catRe, name]);
-const CLASSIC = await idx('^סוללות אינדורו וטרקטורונים - 88V CLASSIC$', '88V 20Ah');
+const CLASSIC = await idx('^סוללות קורקינטים, אינדורו וטרקטורונים - 88V CLASSIC$', '88V 20Ah');
 // PRO's capacities are multiples of 6 since 2026-11-12 (the 6Ah Great Power 60Q): 18Ah beside the CLASSIC's 20Ah.
-const PRO = await idx('^סוללות אינדורו וטרקטורונים - 88V PRO$', '88V 18Ah');
+const PRO = await idx('^סוללות קורקינטים, אינדורו וטרקטורונים - 88V PRO$', '88V 18Ah');
 check('the two rows from his screenshot exist', CLASSIC >= 0 && PRO >= 0, { CLASSIC, PRO });
 
 // ---- 1. the window says what a cell cost, and why

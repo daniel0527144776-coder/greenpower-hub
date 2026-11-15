@@ -317,6 +317,11 @@ jobs:
       - name: Site products have rows, and their costs
         run: node test/test-site-rows.mjs
 
+      # The scooter and the enduro packs are one price-list category (2026-11-15): each pack once, and a sale, a
+      # typed cost and a board pick saved under an old category still find their row.
+      - name: Scooter and enduro packs are one category
+        run: node test/test-cat-merge.mjs
+
       # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
       # reminder only after a week without it; a restore that adds what is missing, and gives back a count
       # only when ticked (2026-10-29).

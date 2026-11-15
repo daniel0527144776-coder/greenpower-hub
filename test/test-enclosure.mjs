@@ -55,7 +55,7 @@ if (SELFTEST) {
   await page.evaluate(() => {
     const orig = window.estimateBatteryCost;
     window.estimateBatteryCost = function (it, b2b) {
-      const flat = { name: it.name, cat: String(it.cat).replace(/^סוללות (אופניים|Sur-Ron[^-]*)/, 'סוללות קורקינטים וקולנועיות') };
+      const flat = { name: it.name, cat: String(it.cat).replace(/^סוללות (אופניים|Sur-Ron[^-]*)/, 'סוללות קורקינטים, אינדורו וטרקטורונים') };
       return orig(flat, b2b);
     };
   });
@@ -84,12 +84,15 @@ const rest = await page.evaluate(() => {
     const i = PRICING.findIndex((x) => /^48V 20Ah$/.test(x.name) && re.test(x.cat) && /CLASSIC/.test(x.cat));
     return i < 0 ? null : estimateBatteryCost(PRICING[i], false);
   };
-  return { scooter: at(/^סוללות קורקינטים/), heavy: at(/^סוללות אינדורו/) };
+  // One category since 2026-11-15 (the scooter and the enduro packs are one pack at one price); a sale of before
+  // that names the category of its day, and is costed as the same build.
+  const old = (fam) => estimateBatteryCost({ cat: 'סוללות ' + fam + ' - 48V CLASSIC', name: '48V 20Ah' }, false);
+  return { merged: at(/^סוללות קורקינטים, /), scooter: old('קורקינטים וקולנועיות'), heavy: old('אינדורו וטרקטורונים') };
 });
 // His answer was that these two are the same build — shrink, same work. The supplier list
 // agrees: the holders an enduro pack uses cost under an agora a cell.
 check('the scooter and the enduro pack cost the SAME — both are shrink, neither buys a case',
-  rest.scooter != null && rest.heavy != null && rest.scooter === rest.heavy, rest);
+  rest.merged != null && rest.scooter === rest.merged && rest.heavy === rest.merged, rest);
 
 // ---------------------------------------------------------------- 3. Sur-Ron, ₪1,500 / ₪1,150
 // This one was already wrong before today: SURRON_CASE went into the model on 2026-09-01 and
@@ -110,7 +113,7 @@ const surronRow = (light) => page.evaluate((light) => {
   // The enduro PRO row of that voltage at the largest capacity not over it: PRO's capacities are multiples of 6 since
   // 2026-11-12, so 55Ah has no row of its own, and a smaller pack only makes the gap a safer lower bound.
   const rows = PRICING.map((x, k) => ({ x, k, a: +((x.name.match(/^(\d+)V (\d+)Ah$/) || [])[2] || 0), v: +((x.name.match(/^(\d+)V/) || [])[1] || 0) }))
-    .filter((r) => r.v === +m[1] && r.a && r.a <= +m[2] && /^סוללות אינדורו/.test(r.x.cat) && /PRO/.test(r.x.cat));
+    .filter((r) => r.v === +m[1] && r.a && r.a <= +m[2] && /^סוללות קורקינטים, /.test(r.x.cat) && /PRO/.test(r.x.cat));
   const j = rows.length ? rows.reduce((b, r) => (r.a > b.a ? r : b)).k : -1;
   const caseLine = batteryCostParts(it, false).parts.find((x) => /מארז/.test(x.k)) || null;
   return { name: it.name, cat: it.cat, surron: estimateBatteryCost(it, false),

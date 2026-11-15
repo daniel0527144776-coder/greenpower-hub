@@ -85,7 +85,7 @@ const R = await page.evaluate(() => {
   };
   const out = [];
   PRICING.forEach((r, ci) => { if (r.cell18650) out.push({ cell: r.cell18650, cat: r.cat, ...sell(ci) }); });
-  const ref = PRICING.findIndex((r) => r.cat === 'סוללות קורקינטים וקולנועיות - 48V CLASSIC');
+  const ref = PRICING.findIndex((r) => r.cat === 'סוללות קורקינטים, אינדורו וטרקטורונים - 48V CLASSIC');
   const charger = PRICING.findIndex((r) => /מטען/.test(r.cat + ' ' + r.name));
   return { rows: out, ref: ref >= 0 ? sell(ref) : null, charger: charger >= 0 ? sell(charger) : null,
     specs: { ...TIER_SPEC, ...(typeof CELL_SPEC_18650 !== 'undefined' ? CELL_SPEC_18650 : {}) } };

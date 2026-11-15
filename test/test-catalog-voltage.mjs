@@ -50,7 +50,7 @@ if (SELFTEST) {
     const real = window.renderCatalog;
     window.renderCatalog = function () { real(); catCatKeys = catCatKeys.slice(1); };
     // and the one long transport topic, every family under each voltage together
-    CATALOG_TOPICS.splice(0, 4, { title: '🔋 סוללות לכלי תחבורה', re: /^סוללות (אופניים|קורקינטים|אינדורו|Sur-Ron)/i });
+    CATALOG_TOPICS.splice(0, 3, { title: '🔋 סוללות לכלי תחבורה', re: /^סוללות (אופניים|קורקינטים|Sur-Ron)/i });
     renderCatalog();
   });
 }
@@ -62,7 +62,9 @@ if (SELFTEST) {
 const fam = await page.evaluate(() => {
   document.querySelectorAll('#catalogList details.fold').forEach((d) => { d.open = true; foldOpen.add(d.dataset.fold); });
   renderCatalog();
-  const FAM = [['אופניים', /^סוללות אופניים/], ['קורקינטים', /^סוללות קורקינטים/], ['אינדורו', /^סוללות אינדורו/], ['Sur-Ron', /^סוללות Sur-Ron/]];
+  // three families since 2026-11-15: the scooter and the enduro packs are one category (catNow in the hub)
+  const FAM = [['אופניים', /^סוללות אופניים/], ['קורקינטים', /^סוללות קורקינטים/], ['Sur-Ron', /^סוללות Sur-Ron/]];
+  const old = PRICING.filter((x) => /^סוללות (קורקינטים וקולנועיות|אינדורו וטרקטורונים) - /.test(x.cat)).length;
   const wrong = [], seen = {};
   for (const el of document.querySelectorAll('#catalogList .price-cat')) {
     const c = el.dataset.cat, f = FAM.find(([, re]) => re.test(c));
@@ -78,10 +80,11 @@ const fam = await page.evaluate(() => {
   const secs = scoot ? [...scoot.querySelectorAll(':scope > .fold-body > details.fold > summary .price-series')].map((e) => e.textContent) : [];
   // the row says what the topic does not: "72V PRO" under אופניים, not the family again. Its label, that is:
   // the 💬 beside it (2026-10-30, the price message for a customer) is a button, not part of what the row reads.
-  const rows = [...document.querySelectorAll('#catalogList .price-cat')].filter((e) => /^סוללות (אופניים|קורקינטים|אינדורו)/.test(e.dataset.cat)).map((e) => (e.querySelector(':scope > span') || e).innerText.replace(/[▾▸]/g, '').trim());
-  return { wrong: wrong.slice(0, 6), n: wrong.length, seen, secs, long: rows.filter((r) => !/^\d+V (CLASSIC|ADVANCED|PRO)$/.test(r)).slice(0, 4) };
+  const rows = [...document.querySelectorAll('#catalogList .price-cat')].filter((e) => /^סוללות (אופניים|קורקינטים)/.test(e.dataset.cat)).map((e) => (e.querySelector(':scope > span') || e).innerText.replace(/[▾▸]/g, '').trim());
+  return { wrong: wrong.slice(0, 6), n: wrong.length, seen, secs, old, long: rows.filter((r) => !/^\d+V (CLASSIC|ADVANCED|PRO)$/.test(r)).slice(0, 4) };
 });
-check('every battery family is a topic of its own, each category under its own family', fam.n === 0 && Object.keys(fam.seen).length === 4, fam);
+check('every battery family is a topic of its own, each category under its own family', fam.n === 0 && Object.keys(fam.seen).length === 3, fam);
+check('no row is left under the scooter or the enduro category of before the merge', fam.old === 0, fam.old);
 check('the scooters: 21700 first, then 18650, each its own section', fam.secs.join(',') === 'סוללות 21700,סוללות 18650', fam.secs);
 check('and a row reads voltage and series only', fam.long.length === 0, fam.long);
 

@@ -55,7 +55,7 @@ await page.evaluate((SELF) => {
   setPriceMode('retail');
 }, SELFTEST);
 
-const CAT = 'סוללות אינדורו וטרקטורונים - 60V PRO';
+const CAT = 'סוללות קורקינטים, אינדורו וטרקטורונים - 60V PRO';
 const open = (cat) => page.evaluate((cat) => {
   closeModal();
   const row = [...document.querySelectorAll('#catalogList .price-cat')].find((r) => r.dataset.cat === cat);
@@ -65,7 +65,7 @@ const open = (cat) => page.evaluate((cat) => {
 }, cat);
 const msg = () => page.evaluate(() => (document.getElementById('waComposeMsg') || {}).value || '');
 const want = (mode) => page.evaluate(({ mode }) => {
-  const cats = ['CLASSIC', 'ADVANCED', 'PRO'].map((t) => 'סוללות אינדורו וטרקטורונים - 60V ' + t);
+  const cats = ['CLASSIC', 'ADVANCED', 'PRO'].map((t) => 'סוללות קורקינטים, אינדורו וטרקטורונים - 60V ' + t);
   return cats.map((c) => PRICING.filter((it) => it.cat === c).map((it) => ({ ah: it.name.replace('60V ', ''), p: priceWithBms(it, mode) })));
 }, { mode });
 
