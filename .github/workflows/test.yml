@@ -312,6 +312,11 @@ jobs:
       - name: BMS boards for sale
         run: node test/test-bms-sale.mjs
 
+      # What the site sells has a row in the price list (2026-11-14: eleven did not), and a row the supplier list
+      # names costs that row: any row by its own name, and the add-on board less the standard board it replaces.
+      - name: Site products have rows, and their costs
+        run: node test/test-site-rows.mjs
+
       # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
       # reminder only after a week without it; a restore that adds what is missing, and gives back a count
       # only when ticked (2026-10-29).

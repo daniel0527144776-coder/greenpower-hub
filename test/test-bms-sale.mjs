@@ -8,6 +8,8 @@
 // is sold under the name the supplier list gives it, so its cost is that row's (supplierQuoteFor finds it by
 // name, as it finds a DHS pack), not 60% of its price. Its spec line names its maker, series and current.
 //
+// Beside the boards, since 2026-11-14, sits "BMS - JK פרימיום, מאזן וצג": JK's premium board, active balancer and
+// display, which the site sells and the hub had no row for (test-site-rows).
 // The supplier row below is made up (a fixture, "דוגמה"): his real prices live in the private list.
 import { chromium } from 'playwright';
 import http from 'http';
@@ -51,7 +53,7 @@ const r = await page.evaluate(() => {
   out.b2bOk = rows.every((x) => typeof x.retail === 'number' && typeof x.b2b === 'number' && x.b2b < x.retail && Math.abs(x.b2b - x.retail * 0.85) <= (x.retail < 100 ? 1 : 5));
   return out;
 });
-check('the catalogue sells the boards, a category per maker', r.n >= 25 && r.cats.join() === ['BMS - ANT', 'BMS - DALY', 'BMS - JBD', 'BMS - JK חכם'].sort().join(), r.cats);
+check('the catalogue sells the boards, a category per maker', r.n >= 25 && r.cats.join() === ['BMS - ANT', 'BMS - DALY', 'BMS - JBD', 'BMS - JK חכם', 'BMS - JK פרימיום, מאזן וצג'].sort().join(), r.cats);
 check('a board\'s cost is its supplier row, found by the name it is sold under', r.withRow === 77, r.withRow);
 check('with no row for it, the cost-% estimate', r.jkNoRow === r.jkPct, [r.jkNoRow, r.jkPct]);
 check('its spec line: maker, cells in series, current', r.spec === 'DALY · 13 תאים בטור · 60A רציף', r.spec);
