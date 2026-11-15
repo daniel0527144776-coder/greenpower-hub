@@ -666,6 +666,35 @@ const cat18 = await page.evaluate(() => {
 check('the catalogue carries 18650 scooter packs', cat18.n >= 20, cat18);
 check('each priced above its cost, with a trade price between', cat18.ok, cat18);
 
+// ---- every list starts at the least a pack can be: one cell in parallel (2026-11-15) ----
+// The owner: "כל סוללה בכל וולט יתחיל מהמינימום הקיבולת האפשרית ... 36 וולט ... יתחיל מ-2.6 אמפר ... גם בפרטי, גם
+// בעסקי". The 18650 lists started at 6P. The rungs under 6P take the 21700 list's price for that capacity, never
+// under 30% on their own cost; on the old rule (the 30Ah row's margin) a 72V 2.6Ah came out dearer than a 72V 5Ah.
+const ladder18 = await page.evaluate((SELF) => {
+  const fresh = () => shallowCatalogRows();
+  let rows = fresh();
+  if (SELF) { const keep = SHALLOW_LADDER.splice(0, 5); rows = fresh(); SHALLOW_LADDER.unshift(...keep); }
+  const by = {};
+  for (const x of rows) (by[x.cat] = by[x.cat] || []).push(x);
+  const out = { cats: Object.keys(by).length, notFromOne: [], notRising: [], thin: [], overFirst: [] };
+  for (const [cat, list] of Object.entries(by)) {
+    const P = (x) => +((x.name.match(/\d+S(\d+)P/) || [])[1] || 0), ah = (x) => parseFloat((x.name.match(/([\d.]+)Ah/) || [])[1]);
+    if (P(list[0]) !== 1) out.notFromOne.push(cat + ' starts at ' + P(list[0]) + 'P');
+    for (let i = 1; i < list.length; i++) if (!(ah(list[i]) > ah(list[i - 1]) && list[i].retail >= list[i - 1].retail + 50 && list[i].b2b > list[i - 1].b2b)) out.notRising.push(cat + ' ' + list[i].name);
+    for (const x of list) { const c = productCost(x); if (!(c > 0) || 1 - c / x.retail < 0.30 - 1e-9 || 1 - c / x.b2b < 0.20 - 1e-9 || x.b2b > x.retail) out.thin.push(cat + ' ' + x.name + ' ' + x.retail + '/' + x.b2b + ' cost ' + c); }
+    // the smallest 18650 pack is not dearer than the 21700 list's first pack of that voltage and series
+    const m = cat.match(/ - (\d+)V (\w+)$/);
+    const first = PRICING.filter((y) => !y.cell18650 && /^סוללות קורקינטים, /.test(y.cat) && y.cat.endsWith(' - ' + m[1] + 'V ' + m[2])).sort((p, q) => p.retail - q.retail)[0];
+    if (first && list[0].retail > first.retail) out.overFirst.push(cat + ' ' + list[0].retail + ' > ' + first.retail);
+  }
+  out.sample = (by['סוללות קורקינטים 18650 - 36V CLASSIC'] || []).slice(0, 3).map((x) => x.name + ' ₪' + x.retail);
+  return out;
+}, SELFTEST);
+check('every 18650 list starts at one cell in parallel (36V CLASSIC from 2.6Ah)', ladder18.cats === 10 && ladder18.notFromOne.length === 0 && /^36V 2\.6Ah · 10S1P/.test(ladder18.sample[0] || ''), [ladder18.notFromOne.slice(0, 3), ladder18.sample]);
+check('…each rung dearer than the one under it, for a customer and for a business', ladder18.notRising.length === 0, ladder18.notRising.slice(0, 4));
+check('…each keeping 30% for a customer and 20% for a business', ladder18.thin.length === 0, ladder18.thin.slice(0, 4));
+check('…and the smallest no dearer than the 21700 list\'s first pack of that voltage', ladder18.overFirst.length === 0, ladder18.overFirst.slice(0, 4));
+
 // ---- his method: the group across the narrow side, the series along the length ----
 const hw = await page.evaluate((SELF) => {
   if (SELF) window.trayFill = () => null;
