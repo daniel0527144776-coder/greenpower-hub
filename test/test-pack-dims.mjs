@@ -673,10 +673,10 @@ check('each priced above its cost, with a trade price between', cat18.ok, cat18)
 const ladder18 = await page.evaluate((SELF) => {
   const fresh = () => shallowCatalogRows();
   let rows = fresh();
-  if (SELF) { const keep = SHALLOW_LADDER.splice(0, 5); rows = fresh(); SHALLOW_LADDER.unshift(...keep); }
+  if (SELF) { const keep = SHALLOW_LADDER.splice(0, 5); SHALLOW_MARGIN_FROM.P = 6; rows = fresh(); SHALLOW_LADDER.unshift(...keep); }
   const by = {};
   for (const x of rows) (by[x.cat] = by[x.cat] || []).push(x);
-  const out = { cats: Object.keys(by).length, notFromOne: [], notRising: [], thin: [], overFirst: [] };
+  const out = { cats: Object.keys(by).length, notFromOne: [], notRising: [], thin: [], overFirst: [], offList: [] };
   for (const [cat, list] of Object.entries(by)) {
     const P = (x) => +((x.name.match(/\d+S(\d+)P/) || [])[1] || 0), ah = (x) => parseFloat((x.name.match(/([\d.]+)Ah/) || [])[1]);
     if (P(list[0]) !== 1) out.notFromOne.push(cat + ' starts at ' + P(list[0]) + 'P');
@@ -686,6 +686,17 @@ const ladder18 = await page.evaluate((SELF) => {
     const m = cat.match(/ - (\d+)V (\w+)$/);
     const first = PRICING.filter((y) => !y.cell18650 && /^סוללות קורקינטים, /.test(y.cat) && y.cat.endsWith(' - ' + m[1] + 'V ' + m[2])).sort((p, q) => p.retail - q.retail)[0];
     if (first && list[0].retail > first.retail) out.overFirst.push(cat + ' ' + list[0].retail + ' > ' + first.retail);
+    // every rung at what the 21700 list of its voltage and series asks for that capacity (2026-11-16, the owner: "ליישר
+    // למחיר CLASSIC"), unless its 30% floor holds it up or the rung above holds it ₪50 under
+    const l21 = PRICING.filter((y) => !y.cell18650 && /^סוללות קורקינטים, /.test(y.cat) && y.cat.endsWith(' - ' + m[1] + 'V ' + m[2]))
+      .map((y) => ({ ah: parseFloat((String(y.name).match(/([\d.]+)Ah/) || [])[1]), p: y.retail })).filter((y) => y.ah > 0).sort((p, q) => p.ah - q.ah);
+    const at = (a) => { for (let i = 1; i < l21.length; i++) if (a >= l21[i - 1].ah && a <= l21[i].ah) return l21[i - 1].p + (l21[i].p - l21[i - 1].p) * (a - l21[i - 1].ah) / (l21[i].ah - l21[i - 1].ah); return null; };
+    list.forEach((x, i) => {
+      const w = at(ah(x)); if (w == null) return;
+      const floor = Math.ceil(productCost(x) / 0.7 / 50) * 50, want = Math.max(Math.round(w / 50) * 50, floor);
+      const held = list[i + 1] && x.retail === list[i + 1].retail - 50 && x.retail >= floor;
+      if (x.retail !== want && !held && !(x.retail === floor)) out.offList.push(cat + ' ' + x.name + ' ₪' + x.retail + ' (list ₪' + want + ')');
+    });
   }
   out.sample = (by['סוללות קורקינטים 18650 - 36V CLASSIC'] || []).slice(0, 3).map((x) => x.name + ' ₪' + x.retail);
   return out;
@@ -694,6 +705,7 @@ check('every 18650 list starts at one cell in parallel (36V CLASSIC from 2.6Ah)'
 check('…each rung dearer than the one under it, for a customer and for a business', ladder18.notRising.length === 0, ladder18.notRising.slice(0, 4));
 check('…each keeping 30% for a customer and 20% for a business', ladder18.thin.length === 0, ladder18.thin.slice(0, 4));
 check('…and the smallest no dearer than the 21700 list\'s first pack of that voltage', ladder18.overFirst.length === 0, ladder18.overFirst.slice(0, 4));
+check('…and every rung at the 21700 list\'s price of its series for that capacity, 6P and up too', ladder18.offList.length === 0, ladder18.offList.slice(0, 4));
 
 // ---- his method: the group across the narrow side, the series along the length ----
 const hw = await page.evaluate((SELF) => {
