@@ -332,6 +332,11 @@ jobs:
       - name: PRO's cell in every calculator
         run: node test/test-pro-cell.mjs
 
+      # A sale's stock follows the sale (2026-11-16): the board picked on it is the one taken, an edit takes or gives
+      # back what it changed, a deletion gives back what it took; and one number however typed is one customer.
+      - name: A sale's stock follows the sale
+        run: node test/test-sale-restock.mjs
+
       # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
       # reminder only after a week without it; a restore that adds what is missing, and gives back a count
       # only when ticked (2026-10-29).

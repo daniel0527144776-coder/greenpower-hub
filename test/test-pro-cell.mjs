@@ -3,7 +3,8 @@
 //   node test/test-pro-cell.mjs
 //   node test/test-pro-cell.mjs --selftest     (the calculators as they were, without the cell; must go red)
 //
-// PRO is built on the Great Power 60Q, a 6Ah cell, since 2026-11-12. The price list, the cost and the label moved
+// PRO is built on the Great Power 60Q, a 6Ah cell, since 2026-11-12. Its figures are the maker's sheet (Ver A, 2026-05-05),
+// which Daniel sent on 2026-11-16. The price list, the cost and the label moved
 // that day. The calculators did not: the repair calculator, the dimensions calculator and the six vehicle
 // calculators (which the site runs too) went on offering only the 5Ah cell PRO was before, so a PRO pack was sized
 // and judged as a different pack (72V 36Ah as 20S8P, 160 cells, where it is 20S6P, 120). What must hold:
@@ -42,7 +43,7 @@ const r = await page.evaluate((SELF) => {
   const g = document.getElementById('loginOverlay'); if (g) g.remove();
   const KEY = '21700-60q';
   if (SELF) {
-    for (const t of [CELL_PRICES, CELL_PRICES_QUOTED, CELL_MAH, CELL_WEIGHTS, DIM_CELLS, RANGE_CELLS]) delete t[KEY];
+    for (const t of [CELL_PRICES, CELL_PRICES_QUOTED, CELL_MAH, CELL_WEIGHTS, DIM_CELLS, RANGE_CELLS, CELL_SHEETS]) delete t[KEY];
     for (const id of ['cellType', 'dimCell']) { const o = [...document.getElementById(id).options].find((x) => x.value === KEY); if (o) o.remove(); }
     for (const v of Object.values(RANGE_VEHICLES)) if (v.cell === KEY) v.cell = '21700-50pl';
   }
@@ -62,7 +63,10 @@ const r = await page.evaluate((SELF) => {
   // the dimensions calculator
   const dc = document.getElementById('dimCell');
   out.dimOffers = [...dc.options].some((o) => o.value === KEY);
-  out.dim = DIM_CELLS[KEY] ? { ah: DIM_CELLS[KEY].ah, dia: DIM_CELLS[KEY].dia, len: DIM_CELLS[KEY].len } : null;
+  out.dim = DIM_CELLS[KEY] ? { ah: DIM_CELLS[KEY].ah, dia: DIM_CELLS[KEY].dia, len: DIM_CELLS[KEY].len, g: DIM_CELLS[KEY].g } : null;
+  // the maker's card on the shelf row (2026-11-16, the sheet Daniel sent)
+  const sh = cellSheetFor('תאי Great Power 21700 60Q');
+  out.sheet = sh && sh.sheet ? { key: sh.key, src: sh.sheet.src, rows: sh.sheet.rows.map((x) => x[0] + ': ' + x[1]).join(' | ') } : (sh ? { key: sh.key } : null);
   if (out.dimOffers) {
     navigateTo('dims'); clearDimVehicle();
     dc.value = KEY; document.getElementById('dimV').value = '72'; dimAhPending = 36; calcPackDims();
@@ -82,12 +86,13 @@ check('the repair calculator offers PRO\'s cell', r.repairOffers === true, r.rep
 check('…and sizes by its 6Ah: 72V 36Ah is 20S6P, 120 cells', r.mah === '6000' && r.config && r.config.s === 20 && r.config.p === 6 && r.config.total === 120, [r.mah, r.config]);
 check('…costs it and quotes it, the quote over the cost', r.cost > 0 && r.quoted > r.cost && r.g > 0, [r.cost, r.quoted, r.g]);
 check('…at the cost the price list builds a PRO pack on', !!r.proRow && r.proRow.cells === 120 && Math.abs(r.proRow.cellPrice - r.cost) < 0.005, [r.proRow, r.cost]);
-check('the dimensions calculator offers it', r.dimOffers === true && !!r.dim && r.dim.ah === 6 && r.dim.dia > 21 && r.dim.len > 70, [r.dimOffers, r.dim]);
+check('the dimensions calculator offers it, at the maker\'s size and weight (21.30 × 70.50 mm, ≤72 g)', r.dimOffers === true && !!r.dim && r.dim.ah === 6 && r.dim.dia === 21.3 && r.dim.len === 70.5 && r.dim.g === 72 && r.g === 72, [r.dimOffers, r.dim, r.g]);
 check('…and sizes by it: 72V 36Ah is 20S 6P', /20S 6P/.test(r.dimText || '') && /^6,12,18/.test(r.dimAh || ''), [r.dimText, r.dimAh]);
 check('the vehicle calculators know it: 6Ah, 10C continuous, 25C peak', !!r.range && r.range.ah === 6 && r.range.cont === 10 && r.range.peak === 25 && /PRO/.test(r.range.label), r.range);
 check('…the figures the quote prints for PRO', r.sticker === '10C~25C', r.sticker);
 check('the vehicles that open on PRO open on it, at a capacity it is built in', r.presets.length >= 5 && r.presets.every(([, cell, ah]) => cell === '21700-60q' && ah % 6 === 0), r.presets);
 check('…and the range model runs on it', !!r.model && r.model.ok, r.model);
+check('the shelf row has the maker\'s card: its sheet, its cycles, its size', !!r.sheet && r.sheet.key === '21700-60q' && /Great Power/.test(r.sheet.src || '') && /800 מחזורים ≥80%/.test(r.sheet.rows || '') && /21\.30/.test(r.sheet.rows || '') && /≤5mΩ/.test(r.sheet.rows || ''), r.sheet);
 check('no page errors', errs.length === 0, errs);
 await browser.close();
 srv.close();
