@@ -66,7 +66,7 @@ const ref = await page.evaluate(() => {
     surronWh: rangeModel(V('surron', { V: 60, ah: 30, speed: 45, use: 'open', terrain: 'flat', surface: 'asphalt' })).whKm,
     // a kids' ATV, 48V 20Ah lead, dirt: around 10-15km
     atvKids: km(V('atv_kids', {})),
-    // an adult ATV, 72V 50Ah, 30km/h on dirt with easy climbs: knobbly low-pressure tyres dominate
+    // an adult ATV, 72V 48Ah, 30km/h on dirt with easy climbs: knobbly low-pressure tyres dominate
     atv: km(V('atv', {})),
     atvWh: rangeModel(V('atv', {})).whKm,
     // a 24V 50Ah lead mobility scooter at 12km/h: 25-45km
@@ -81,7 +81,7 @@ check('a Sur-Ron at 45km/h on the road: 25-40 Wh/km', inBand(ref.surronWh, 25, 4
 check('and 40-65km from 60V 30Ah', inBand(ref.surronRoad, 40, 65), ref.surronRoad.toFixed(1));
 check('a kids\' ATV on lead: 8-18km', inBand(ref.atvKids, 8, 18), ref.atvKids.toFixed(1));
 check('an adult ATV on dirt: 45-90 Wh/km', inBand(ref.atvWh, 45, 90), ref.atvWh.toFixed(1));
-check('and 40-75km from 72V 50Ah', inBand(ref.atv, 40, 75), ref.atv.toFixed(1));
+check('and 40-75km from 72V 48Ah', inBand(ref.atv, 40, 75), ref.atv.toFixed(1));
 check('a lead mobility scooter: 25-45km', inBand(ref.mobility, 25, 45), ref.mobility.toFixed(1));
 
 // ---- 2. it moves the right way ----
@@ -213,7 +213,7 @@ await type('rg_ah', '');
 const empty = await page.evaluate(() => document.getElementById('rangeOut').textContent);
 check('emptied fields fall back, not NaN', !/NaN|Infinity/.test(empty) && /\d+(–\d+)? ק"מ/.test(empty), empty.slice(0, 120));
 await type('rg_speed', '30');
-await type('rg_ah', '50');
+await type('rg_ah', '48');       // the ATV opens on PRO's 6Ah cell: 48Ah is 8 in parallel (50 would be read as 48)
 await type('rg_target', '80');
 const need = await page.evaluate(() => (document.querySelector('.rg-need') || {}).textContent || '');
 check('"how much battery for 80km" answers in Ah and a configuration', /80 ק"מ צריך [\d,.]+Ah/.test(need) && /\d+S\d+P/.test(need), need);
@@ -227,7 +227,7 @@ const wa = await page.evaluate(() => {
   try { rangeWhatsApp(); } finally { window.openExternal = keep; }
   return decodeURIComponent(url.replace(/^[^?]*\?text=/, ''));
 });
-check('the WhatsApp text carries the range and the battery', /טווח צפוי: \d+–\d+ ק"מ/.test(wa) && /72V 50/.test(wa), wa);
+check('the WhatsApp text carries the range and the battery', /טווח צפוי: \d+–\d+ ק"מ/.test(wa) && /72V 48/.test(wa), wa);
 
 // "where do you ride" is one question that sets the stops AND the surface
 await page.selectOption('#rg_veh', 'atv');

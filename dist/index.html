@@ -757,6 +757,7 @@ html.gp-edge { --sys-top: max(env(safe-area-inset-top, 0px), 32px); --sys-bottom
         <option value="18650-25p">18650 EVE 25P (כלי עבודה) — ₪4.10</option>
         <option value="21700-50e">21700 EVE 50E (CLASSIC) — ₪5.83</option>
         <option value="21700-50sg">21700 Tenpower 50SG (ADVANCED) — ₪7.04</option>
+        <option value="21700-60q">21700 Great Power 60Q (PRO) — ₪12.12</option>
         <option value="21700-50pl" selected>21700 EVE 50PL (Tabless) — ₪9.66</option>
         <option value="21700-50s">21700 Samsung 50S — ₪8.52</option>
       </select>
@@ -770,6 +771,7 @@ html.gp-edge { --sys-top: max(env(safe-area-inset-top, 0px), 32px); --sys-bottom
         <option value="3500">3500 mAh</option>
         <option value="4000">4000 mAh</option>
         <option value="5000" selected>5000 mAh</option>
+        <option value="6000">6000 mAh</option>
       </select>
     </div>
     <div class="form-row">
@@ -1148,6 +1150,7 @@ html.gp-edge { --sys-top: max(env(safe-area-inset-top, 0px), 32px); --sys-bottom
       <select class="form-select" id="dimCell" onchange="calcPackDims(); calcFromOldPack()">
         <option value="21700-50e" selected>21700 EVE 50E — 5.0Ah</option>
         <option value="21700-50sg">21700 Tenpower 50SG — 5.0Ah</option>
+        <option value="21700-60q">21700 Great Power 60Q — 6.0Ah</option>
         <option value="21700-50pl">21700 EVE 50PL — 5.0Ah</option>
         <option value="21700-40p">21700 EVE 40P — 4.0Ah</option>
         <option value="21700-50s">21700 Samsung 50S — 5.0Ah</option>
@@ -1795,6 +1798,9 @@ html.gp-edge { --sys-top: max(env(safe-area-inset-top, 0px), 32px); --sys-bottom
 const CELL_PRICES = {
   '18650-6': 6, '18650-7': 7, '18650-25p': 4.1, '21700-12': 12, '21700-13': 13,
   '21700-50e': 5.83, '21700-50sg': 7.04, '21700-50pl': 9.66, '21700-50s': 8.52,
+  // PRO's cell since 2026-11-12, 6Ah. It was missing from this calculator (and from the dimensions and the six
+  // calculators) until 2026-11-15: a repair with PRO's cell was quoted and sized as the 5Ah 50PL.
+  '21700-60q': 12.12,
 };
 // What a repair QUOTE charges for our own cells: the landed cost they were priced on before the
 // June 2026 import cut it (March factor 1.371). Daniel, 2026-09-24: update the cost, not the
@@ -1802,7 +1808,8 @@ const CELL_PRICES = {
 // Mirrors CELL_COST_PRICED in cost-model.mjs.
 // The Samsung 50S (2026-10-29) was never priced on the March figures: its quote marks up its June landed
 // cost WITH the import VAT, ₪9.39, the figure it was quoted at until the cost lost its VAT the same day.
-const CELL_PRICES_QUOTED = { '18650-25p': 5.14, '21700-50e': 7.34, '21700-50sg': 8.86, '21700-50pl': 12.15, '21700-50s': 9.39 };
+// The Great Power 60Q, like the 50S: never priced on the March figures, so its June landed cost with the VAT, ₪13.36.
+const CELL_PRICES_QUOTED = { '18650-25p': 5.14, '21700-50e': 7.34, '21700-50sg': 8.86, '21700-50pl': 12.15, '21700-50s': 9.39, '21700-60q': 13.36 };
 // Landed cost of ONE cell sold on its own (the "תאי ליתיום בודדים" catalog rows).
 // Must match CELL_UNIT_COST in audit-pricing.mjs. Without this the generic "cost = 60%
 // of retail" fallback takes over, and on a quantity ladder it lies in both directions:
@@ -1822,11 +1829,11 @@ const CELL_UNIT_COST = {
 const CELL_MAH = {
   '18650-6': 3000, '18650-7': 3000, '18650-25p': 2500,
   '21700-12': 5000, '21700-13': 5000,
-  '21700-50e': 5000, '21700-50sg': 5000, '21700-50pl': 5000, '21700-50s': 5000,
+  '21700-50e': 5000, '21700-50sg': 5000, '21700-50pl': 5000, '21700-50s': 5000, '21700-60q': 6000,
 };
 const CELL_WEIGHTS = {
   '18650-6': 45, '18650-7': 45, '18650-25p': 45, '21700-12': 70, '21700-13': 70,
-  '21700-50e': 70, '21700-50sg': 70, '21700-50pl': 70, '21700-50s': 72,
+  '21700-50e': 70, '21700-50sg': 70, '21700-50pl': 70, '21700-50s': 72, '21700-60q': 70,
 };
 // Landed (unit) cost per cell type — supplier USD x rate x 1.371 (VAT on CIF + sea freight
 // + fees, an עוסק פטור cannot reclaim the VAT). Shown as a reference on the inventory page.
@@ -2658,6 +2665,7 @@ const STICKER_CELLS = {
   '21700-50e': 'EVE 21700 50E',
   '21700-50sg': 'Tenpower 21700 50SG',
   '21700-50pl': 'EVE 21700 50PL',
+  '21700-60q': 'Great Power 21700 60Q',
   '18650-25p': 'EVE 18650 25P',
   '21700-50s': 'Samsung 21700 50S',
 };
@@ -2877,7 +2885,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v556';
+const HUB_BUILD = 'v558';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -3310,7 +3318,7 @@ function loadPhoto(input, type) {
 function recalc() {
   const cellKey = document.getElementById('cellType').value;
   // "עלות לי" follows the route; the QUOTE marks up CELL_PRICES_QUOTED further down.
-  const RC_CODE = { '21700-50e': '50E', '21700-50sg': '50SG', '21700-50pl': '50PL', '18650-25p': '25P', '21700-50s': '50S' };
+  const RC_CODE = { '21700-50e': '50E', '21700-50sg': '50SG', '21700-50pl': '50PL', '18650-25p': '25P', '21700-50s': '50S', '21700-60q': '60Q' };
   const routedCalc = RC_CODE[cellKey] && typeof routeCellCost === 'function' ? routeCellCost(RC_CODE[cellKey]) : null;
   const cellPrice = routedCalc != null ? routedCalc : CELL_PRICES[cellKey];
   const cellGrams = CELL_WEIGHTS[cellKey];
@@ -5533,6 +5541,10 @@ const RANGE_CTRL = {
 // weight gPerAh × Ah grams. chg: [standard, maximum] charge rate in C, from the sheet (CELL_SHEETS);
 // the generic, LiFePO4, LTO, NiMH and lead rows carry their chemistry's usual figures.
 const RANGE_CELLS = {
+  // Great Power 60Q, PRO's cell since 2026-11-12 (the 50PL below was). The figures of the product page the series is
+  // built on: 6Ah, 60A continuous and 150A for 2 s (10C / 25C), impedance at most 5 mΩ (× 1.5 as for every cell),
+  // charge up to 12A (2C). The maker publishes no sheet: the capacity at 10C is assumed, the 50PL's at its own top.
+  '21700-60q':  { label: 'Great Power 60Q · PRO',     chem: 'nmc', ah: 6,   rdc: 0.0075, cont: 10, peak: 25, g: 70, rate: [[0.2, 1], [10, 0.95]], chg: [0.5, 2] },
   '21700-50pl': { label: 'EVE 50PL',                  chem: 'nmc', ah: 5,   rdc: 0.0105, cont: 25, peak: 36, g: 72, rate: [[0.2, 1], [2, 1], [6, 0.95], [8, 0.95]], chg: [0.5, 2] },
   '21700-50sg': { label: 'Tenpower 50SG · ADVANCED',  chem: 'nmc', ah: 5,   rdc: 0.021,  cont: 4,  peak: 10, g: 71, rate: [[0.2, 1], [0.5, 0.96], [1, 0.94], [2, 0.9]], chg: [0.5, 1.2] },
   '21700-50e':  { label: 'EVE 50E · CLASSIC',         chem: 'nmc', ah: 5,   rdc: 0.027,  cont: 2,  peak: 3,  g: 68, rate: [[0.2, 1], [0.5, 0.97], [1, 0.95], [2, 0.93], [3, 0.9]], chg: [0.2, 2] },
@@ -5585,14 +5597,14 @@ const RANGE_VEHICLES = {
   scooter_dual:{ label: 'קורקינט כבד דו-מנועי',          mass: 38,  cda: 0.65, tire: 'scooter',  wheel: 11,   motor: 'hub',     power: 1500,  motors: 2, top: 75,  ctrl: 'sine',   ctrlA: 80,  regen: true,  acc: 8,  V: 60, ah: 30,  cell: '21700-50sg', rider: 80, speed: 40, use: 'suburb', terrain: 'flat',  surface: 'asphalt' },
   mobility:   { label: 'קלנועית',                         mass: 85,  cda: 0.75, tire: 'caster',   wheel: 13,   motor: 'brushed', power: 800,   motors: 1, top: 15,  ctrl: 'square', ctrlA: 60,  regen: false, acc: 5,  V: 24, ah: 50,  cell: 'lead',       rider: 80, speed: 12, use: 'city',   terrain: 'flat',  surface: 'asphalt' },
   moped:      { label: 'קטנוע חשמלי',                     mass: 75,  cda: 0.65, tire: 'moto',     wheel: 12,   motor: 'hub',     power: 3000,  motors: 1, top: 70,  ctrl: 'sine',   ctrlA: 70,  regen: true,  acc: 25, V: 72, ah: 40,  cell: '21700-50sg', rider: 80, speed: 45, use: 'city',   terrain: 'flat',  surface: 'asphalt' },
-  moto:       { label: 'אופנוע חשמלי (כביש)',             mass: 130, cda: 0.55, tire: 'moto',     wheel: 17,   motor: 'chain',   power: 8000,  motors: 1, top: 110, ctrl: 'foc',    ctrlA: 200, regen: true,  acc: 40, V: 72, ah: 80,  cell: '21700-50pl', rider: 80, speed: 70, use: 'open',   terrain: 'flat',  surface: 'asphalt' },
-  surron:     { label: 'סור-רון / טלריה', mass: 42,  cda: 0.72, tire: 'knobby',   wheel: 19,   motor: 'chain',   power: 4000,  motors: 1, top: 75,  ctrl: 'foc',    ctrlA: 100,  regen: true,  acc: 10, V: 60, ah: 40,  cell: '21700-50pl', rider: 80, speed: 40, use: 'trail',  terrain: 'mild',  surface: 'dirt' },
-  enduro:     { label: 'אופנוע שטח כבד (אנדורו)',         mass: 75,  cda: 0.72, tire: 'knobby',   wheel: 21,   motor: 'chain',   power: 10000, motors: 1, top: 90,  ctrl: 'foc',    ctrlA: 200, regen: true,  acc: 15, V: 72, ah: 60,  cell: '21700-50pl', rider: 80, speed: 45, use: 'trail',  terrain: 'hilly', surface: 'dirt' },
+  moto:       { label: 'אופנוע חשמלי (כביש)',             mass: 130, cda: 0.55, tire: 'moto',     wheel: 17,   motor: 'chain',   power: 8000,  motors: 1, top: 110, ctrl: 'foc',    ctrlA: 200, regen: true,  acc: 40, V: 72, ah: 78,  cell: '21700-60q', rider: 80, speed: 70, use: 'open',   terrain: 'flat',  surface: 'asphalt' },
+  surron:     { label: 'סור-רון / טלריה', mass: 42,  cda: 0.72, tire: 'knobby',   wheel: 19,   motor: 'chain',   power: 4000,  motors: 1, top: 75,  ctrl: 'foc',    ctrlA: 100,  regen: true,  acc: 10, V: 60, ah: 42,  cell: '21700-60q', rider: 80, speed: 40, use: 'trail',  terrain: 'mild',  surface: 'dirt' },
+  enduro:     { label: 'אופנוע שטח כבד (אנדורו)',         mass: 75,  cda: 0.72, tire: 'knobby',   wheel: 21,   motor: 'chain',   power: 10000, motors: 1, top: 90,  ctrl: 'foc',    ctrlA: 200, regen: true,  acc: 15, V: 72, ah: 60,  cell: '21700-60q', rider: 80, speed: 45, use: 'trail',  terrain: 'hilly', surface: 'dirt' },
   atv_kids:   { label: 'טרקטורון ילדים',                  mass: 60,  cda: 0.7,  tire: 'atv',      wheel: 16,   motor: 'brushed', power: 1000,  motors: 1, top: 25,  ctrl: 'square', ctrlA: 35,  regen: false, acc: 5,  V: 48, ah: 20,  cell: 'lead',       rider: 35, speed: 15, use: 'trail',  terrain: 'flat',  surface: 'dirt' },
-  atv:        { label: 'טרקטורון',                        mass: 170, cda: 1.0,  tire: 'atv',      wheel: 23,   motor: 'chain',   power: 5000,  motors: 1, top: 60,  ctrl: 'sine',   ctrlA: 120, regen: true,  acc: 30, V: 72, ah: 50,  cell: '21700-50pl', rider: 90, speed: 30, use: 'trail',  terrain: 'mild',  surface: 'dirt' },
+  atv:        { label: 'טרקטורון',                        mass: 170, cda: 1.0,  tire: 'atv',      wheel: 23,   motor: 'chain',   power: 5000,  motors: 1, top: 60,  ctrl: 'sine',   ctrlA: 120, regen: true,  acc: 30, V: 72, ah: 48,  cell: '21700-60q', rider: 90, speed: 30, use: 'trail',  terrain: 'mild',  surface: 'dirt' },
   utv:        { label: 'באגי / UTV',                      mass: 450, cda: 1.4,  tire: 'atv',      wheel: 25,   motor: 'shaft',   power: 10000, motors: 1, top: 60,  ctrl: 'foc',    ctrlA: 300, regen: true,  acc: 60, V: 72, ah: 100, cell: 'lfp-prism',  rider: 160, speed: 35, use: 'trail', terrain: 'mild',  surface: 'dirt' },
   golf:       { label: 'רכב גולף / רכב שירות',            mass: 350, cda: 1.6,  tire: 'turf',     wheel: 18,   motor: 'shaft',   power: 4000,  motors: 1, top: 25,  ctrl: 'sine',   ctrlA: 250, regen: true,  acc: 20, V: 48, ah: 105, cell: 'lfp-prism',  rider: 160, speed: 20, use: 'suburb', terrain: 'flat', surface: 'asphalt' },
-  kart:       { label: 'קארטינג',                         mass: 75,  cda: 0.7,  tire: 'kart',     wheel: 11,   motor: 'chain',   power: 5000,  motors: 1, top: 70,  ctrl: 'foc',    ctrlA: 150, regen: false, acc: 0,  V: 72, ah: 30,  cell: '21700-50pl', rider: 75, speed: 45, use: 'track',  terrain: 'flat',  surface: 'asphalt' },
+  kart:       { label: 'קארטינג',                         mass: 75,  cda: 0.7,  tire: 'kart',     wheel: 11,   motor: 'chain',   power: 5000,  motors: 1, top: 70,  ctrl: 'foc',    ctrlA: 150, regen: false, acc: 0,  V: 72, ah: 30,  cell: '21700-60q', rider: 75, speed: 45, use: 'track',  terrain: 'flat',  surface: 'asphalt' },
   trike:      { label: 'תלת-אופן / אופני משא',            mass: 45,  cda: 0.9,  tire: 'city',     wheel: 20,   motor: 'geared',  power: 750,   motors: 1, top: 30,  ctrl: 'sine',   ctrlA: 25,  regen: false, acc: 4,  V: 48, ah: 20,  cell: '21700-50e',  rider: 80, speed: 20, use: 'city',   terrain: 'flat',  surface: 'asphalt', cargo: 60 },
   wheelchair: { label: 'כיסא גלגלים ממונע',               mass: 90,  cda: 0.6,  tire: 'caster',   wheel: 12,   motor: 'worm',    power: 300,   motors: 2, top: 10,  ctrl: 'square', ctrlA: 70,  regen: false, acc: 5,  V: 24, ah: 50,  cell: 'lead',       rider: 80, speed: 6,  use: 'city',   terrain: 'flat',  surface: 'asphalt' },
   board:      { label: 'סקייטבורד חשמלי / וואן-וויל',     mass: 7,   cda: 0.6,  tire: 'urethane', wheel: 3.5,  motor: 'hub',     power: 800,   motors: 2, top: 35,  ctrl: 'foc',    ctrlA: 30,  regen: true,  acc: 2,  V: 36, ah: 10,  cell: '18650-25p',  rider: 75, speed: 22, use: 'suburb', terrain: 'flat',  surface: 'asphalt' },
@@ -10603,6 +10615,9 @@ const DIM_CELLS = {
   '21700-50e':  { label: '21700 EVE 50E',        ah: 5.0,  dia: 21.15, len: 70.15, g: 69 },
   '21700-50sg': { label: '21700 Tenpower 50SG',  ah: 5.0,  dia: 21.35, len: 70.6,  g: 71 },
   '21700-50pl': { label: '21700 EVE 50PL',       ah: 5.0,  dia: 21.15, len: 70.15, g: 72 },
+  // 60Q: PRO's cell. Its length is his (as the 50SG's, 70.6: two stacks go in the Bomber Plus); the diameter is taken
+  // as the 50SG's too, the wider of the two bodies, until he puts a caliper on one.
+  '21700-60q':  { label: '21700 Great Power 60Q', ah: 6.0,  dia: 21.35, len: 70.6,  g: 70 },
   // 40P: no datasheet to hand, so the EVE 21700 body is assumed — same case, different chemistry.
   '21700-40p':  { label: '21700 EVE 40P',        ah: 4.0,  dia: 21.15, len: 70.15, g: 70 },
   // 50S: 21.15±0.10 × 70.52±0.15, a distributor's figures (no sheet from Samsung to hand).
@@ -31054,11 +31069,11 @@ InctZnVsbCBwLTMgYm9yZGVyIGJvcmRlci1ncmF5LTMwMCByb3VuZGVkLWxnIGZvY3VzOm91dGxpbmUt
 cmFuZC1ncmVlbiI+CiAgICAgICAgICAgICAgICAgICAgICAgIDxvcHRncm91cCBsYWJlbD0iMjE3MDAiPgogICAgICAgICAgICAgICAgICAgICAgICA8b3B0
 aW9uIHZhbHVlPSJFVkUgMjE3MDAgNTBFIiBkYXRhLWFoPSI1IiBzZWxlY3RlZD5FVkUgMjE3MDAgNTBFIOKAlCBDTEFTU0lDICgyQy8zQyk8L29wdGlvbj4K
 ICAgICAgICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT0iVGVucG93ZXIgMjE3MDAgNTBTRyIgZGF0YS1haD0iNSI+VGVucG93ZXIgMjE3MDAgNTBT
-RyDigJQgQURWQU5DRUQgKDRDLzEwQyk8L29wdGlvbj4KICAgICAgICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT0iRVZFIDIxNzAwIDUwUEwiIGRh
-dGEtYWg9IjUiPkVWRSAyMTcwMCA1MFBMIOKAlCBQUk8gKDI1Qy8zNkMpPC9vcHRpb24+CiAgICAgICAgICAgICAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9
-IlNhbXN1bmcgMjE3MDAgNTBTIiBkYXRhLWFoPSI1Ij5TYW1zdW5nIDIxNzAwIDUwUyDigJQgNS4wQWggKDVDLzlDKTwvb3B0aW9uPgogICAgICAgICAgICAg
-ICAgICAgICAgICA8b3B0aW9uIHZhbHVlPSJHcmVhdCBQb3dlciAyMTcwMCA2MFEiIGRhdGEtYWg9IjYiPkdyZWF0IFBvd2VyIDIxNzAwIDYwUSDigJQgNi4w
-QWggKDEwQy8yNUMpPC9vcHRpb24+CiAgICAgICAgICAgICAgICAgICAgICAgIDwvb3B0Z3JvdXA+CiAgICAgICAgICAgICAgICAgICAgICAgIDxvcHRncm91
+RyDigJQgQURWQU5DRUQgKDRDLzEwQyk8L29wdGlvbj4KICAgICAgICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT0iR3JlYXQgUG93ZXIgMjE3MDAg
+NjBRIiBkYXRhLWFoPSI2Ij5HcmVhdCBQb3dlciAyMTcwMCA2MFEg4oCUIFBSTyAoMTBDLzI1Qyk8L29wdGlvbj4KICAgICAgICAgICAgICAgICAgICAgICAg
+PG9wdGlvbiB2YWx1ZT0iU2Ftc3VuZyAyMTcwMCA1MFMiIGRhdGEtYWg9IjUiPlNhbXN1bmcgMjE3MDAgNTBTIOKAlCA1LjBBaCAoNUMvOUMpPC9vcHRpb24+
+CiAgICAgICAgICAgICAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9IkVWRSAyMTcwMCA1MFBMIiBkYXRhLWFoPSI1Ij5FVkUgMjE3MDAgNTBQTCDigJQgNS4w
+QWggKDI1Qy8zNkMpPC9vcHRpb24+CiAgICAgICAgICAgICAgICAgICAgICAgIDwvb3B0Z3JvdXA+CiAgICAgICAgICAgICAgICAgICAgICAgIDxvcHRncm91
 cCBsYWJlbD0iMTg2NTAiPgogICAgICAgICAgICAgICAgICAgICAgICA8b3B0aW9uIHZhbHVlPSJFVkUgMTg2NTAgMjZWIiBkYXRhLWFoPSIyLjYiPkVWRSAx
 ODY1MCAyNlYg4oCUIDIuNkFoICgzQy80Qyk8L29wdGlvbj4KICAgICAgICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT0iRVZFIDE4NjUwIDM1ViIg
 ZGF0YS1haD0iMy41Ij5FVkUgMTg2NTAgMzVWIOKAlCAzLjVBaCAoM0MvNUMpPC9vcHRpb24+CiAgICAgICAgICAgICAgICAgICAgICAgIDxvcHRpb24gdmFs
