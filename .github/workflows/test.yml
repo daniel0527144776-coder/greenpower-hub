@@ -337,6 +337,11 @@ jobs:
       - name: A sale's stock follows the sale
         run: node test/test-sale-restock.mjs
 
+      # A supplier row opens what its cost is made of (2026-11-16): the sum, the source and its day, the older quotes, and
+      # the price-list item it costs; and an item quoted twice is one line at its newest price.
+      - name: A supplier row opens its cost, at the newest price
+        run: node test/test-supplier-detail.mjs
+
       # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
       # reminder only after a week without it; a restore that adds what is missing, and gives back a count
       # only when ticked (2026-10-29).

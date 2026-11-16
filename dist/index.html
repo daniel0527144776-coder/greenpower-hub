@@ -452,6 +452,20 @@ html.gp-edge { --sys-top: max(env(safe-area-inset-top, 0px), 32px); --sys-bottom
   .sup-price { display: flex; gap: 10px; align-items: center; white-space: nowrap; }
   .sup-rt { font-size: 12px; color: var(--text-muted); }
   .sup-rt.on { font-size: 14px; font-weight: 700; color: var(--primary); }
+  .sup-line[data-sup-line] { cursor: pointer; }
+  .sup-more { font-size: 12px; color: var(--text-muted); }
+  .supd-total { font-size: 16px; margin-bottom: 10px; }
+  .supd-total b { font-size: 20px; color: var(--primary); }
+  .supd-sec { font-size: 12px; font-weight: 700; color: var(--text-muted); margin: 12px 0 4px; }
+  .supd-row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 13px; border-bottom: 1px dashed var(--border); }
+  .supd-row b { white-space: nowrap; }
+  .supd-row b.supd-text { white-space: normal; text-align: left; min-width: 0; overflow-wrap: anywhere; }
+  .supd-row span { min-width: 0; }
+  .supd-sum { border-bottom: none; border-top: 1px solid var(--border); font-weight: 700; }
+  .supd-old { color: var(--text-muted); }
+  .supd-warn { font-size: 12px; color: #f59e0b; margin-top: 4px; }
+  .supd-used { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+  .supd-used span { background: var(--bg-tertiary, rgba(148,163,184,.12)); border-radius: 6px; padding: 2px 8px; }
   .inv-sub { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--primary); margin: 10px 2px 6px; padding-bottom: 3px; border-bottom: 1px dashed var(--border-strong); }
   .inv-sub span:last-child { font-weight: 400; font-size: 11px; color: var(--text-muted); }
   /* the stock page's groups and its one-line rows (2026-10-29) */
@@ -2885,7 +2899,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v562';
+const HUB_BUILD = 'v563';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -5098,6 +5112,81 @@ function supplierIls(r, vat, freight) {
   }
   return vat ? v * (1 + SUPPLIER_VAT) : v;
 }
+// ---- What a supplier row is made of (2026-11-16) -------------------------------------------------
+// Daniel: "שאני אלחץ על כל דבר, על כל מוצר ... פירוט כאילו של כמה זה עלה לי וחישוב של איך זה עלה לי ... מאיפה לקחת את
+// המידע של כמה העלות לי". A tap on a row opens: the cost, the sum that makes it (supplierIlsParts, the same parts the
+// cost is added from), where the price came from and on what day, an old price called old, the earlier quotes of
+// the same item, and what in the price list is costed by it. Everything shown comes from the synced row: this file
+// is public, and holds no supplier's price.
+let SUP_SHOWN = [];
+function supItemKey(r) { return String(r.name || '').trim().toLowerCase(); }
+function supNewestFirst(a, b) { return String(b.on || '').localeCompare(String(a.on || '')); }
+function supDateText(on) {
+  const m = String(on || '').match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
+  return !m ? 'לא רשום' : (m[3] ? `${+m[3]}.${+m[2]}.${m[1]}` : `${+m[2]}.${m[1]}`);
+}
+// Months since the quote, or null with no date. Over a year is an old price.
+function supAgeMonths(on, now = Date.now()) {
+  const t = Date.parse(String(on || '').slice(0, 10));
+  return isNaN(t) ? null : Math.floor((now - t) / (30.44 * 864e5));
+}
+const supUsd = (n) => '$' + (Math.round(Number(n) * 100) / 100);
+// The sum, line by line: [what, ₪]. The lines add up to supplierIls(r, true, true) (test-supplier-detail holds it).
+function supCalcLines(r) {
+  const p = supplierIlsParts(r);
+  if (p.basis === 'ils') {
+    const lines = [];
+    if (r.usd != null) lines.push(['מחיר הספק ' + supUsd(r.usd), '']);
+    lines.push(['עלות כשהגיע אליך, כפי שנרשמה', fmtIls(p.total)]);
+    return lines;
+  }
+  const kgRate = supUsd(freightPerKgFor(r));
+  const freight = {
+    quoted: 'משלוח שהספק נתן: ' + supUsd(r.frUsd) + ' × ' + SUPPLIER_USD,
+    kg: 'משלוח: ' + r.kg + ' ק"ג × ' + kgRate + ' לק"ג × ' + SUPPLIER_USD,
+    typical: 'משלוח: ' + typicalKgFor(r.cat) + ' ק"ג (משקל משוער) × ' + kgRate + ' לק"ג × ' + SUPPLIER_USD,
+    share: 'משלוח: ' + Math.round(freightRateFor(r.cat) * 100) + '% ממחיר הסחורה',
+  }[p.basis];
+  const lines = [['מחיר הספק: ' + supUsd(r.usd) + ' × ' + SUPPLIER_USD + ' (שער הדולר)', fmtIls(p.goods)], [freight, fmtIls(p.freight)]];
+  if (SUPPLIER_VAT) lines.push(['מע"מ ' + Math.round(SUPPLIER_VAT * 100) + '%', fmtIls(p.vat)]);
+  return lines;
+}
+function supSourceHtml(r) {
+  const age = supAgeMonths(r.on);
+  const warn = r.on == null || r.on === '' ? '⚠️ אין תאריך למחיר הזה'
+    : age >= 12 ? `⚠️ מחיר מלפני ${age >= 24 ? Math.floor(age / 12) + ' שנים' : age + ' חודשים'}: כדאי לבקש מחיר חדש`
+    : /ישן|הערכה/.test(r.src || '') ? '⚠️ מחיר משוער' : '';
+  return `<div class="supd-row"><span>ספק</span><b>${r.who}</b></div>
+    <div class="supd-row"><span>מקור</span><b class="supd-text">${r.src || (r.custom ? 'הוספת בעצמך' : 'מחירון הספק')}</b></div>
+    <div class="supd-row"><span>תאריך</span><b>${supDateText(r.on)}</b></div>${warn ? `<div class="supd-warn">${warn}</div>` : ''}`;
+}
+function supCalcHtml(r) {
+  const lines = supCalcLines(r);
+  return lines.map(([t, v]) => `<div class="supd-row"><span>${t}</span><b>${v}</b></div>`).join('')
+    + (lines.length > 1 || lines[0][1] === '' ? `<div class="supd-row supd-sum"><span>סה"כ</span><b>${fmtIls(supplierIls(r, true, true))}</b></div>` : '');
+}
+// Price-list items whose cost this row is (by supplierQuoteFor, as the cost is read).
+function supUsedBy(r) {
+  const same = (q) => q && q.who === r.who && q.name === r.name && String(q.on || '') === String(r.on || '');
+  return [...new Set((typeof PRICING !== 'undefined' ? PRICING : []).filter((it) => it && it.name && same(supplierQuoteFor(it.name))).map((it) => it.name))];
+}
+function openSupDetail(i) {
+  const r = SUP_SHOWN[i];
+  if (!r) return;
+  const routes = r.routes ? [['sea', '🚢 ימי'], ['air', '✈️ אווירי']].filter(([k]) => r.routes[k]) : null;
+  const total = routes
+    ? routes.map(([k, l]) => `<span>${l} <b>${fmtIls(supplierIls(r.routes[k], true, true))}</b></span>`).join(' · ')
+    : `<b>${fmtIls(supplierIls(r, true, true))}</b>`;
+  let body = `<div class="supd-total">העלות שלך: ${total}</div>`;
+  if (routes) routes.forEach(([k, l]) => { body += `<div class="supd-sec">${l}</div>` + supCalcHtml(r.routes[k]) + supSourceHtml(r.routes[k]); });
+  else body += `<div class="supd-sec">איך זה חושב</div>${supCalcHtml(r)}<div class="supd-sec">מאיפה המחיר</div>${supSourceHtml(r)}`;
+  const older = r.older || [];
+  if (older.length) body += `<div class="supd-sec">מחירים קודמים (לא בשימוש)</div>` + older.map((o) =>
+    `<div class="supd-row supd-old"><span>${o.who} · ${supDateText(o.on)}${o.src ? ' · ' + o.src : ''}</span><b>${fmtIls(supplierIls(o.routes ? o.routes.sea || o.routes.air : o, true, true))}</b></div>`).join('');
+  const used = supUsedBy(routes ? (r.routes.sea || r.routes.air) : r);
+  if (used.length) body += `<div class="supd-sec">העלות של</div><div class="supd-used">${used.map((n) => `<span>${n}</span>`).join('')}</div>`;
+  openModal('💲 ' + r.name, body, '<button class="btn btn-secondary" onclick="closeModal()">סגור</button>');
+}
 let SUP_WHO = '', SUP_WHOS = [];
 function setSupWho(i) { SUP_WHO = SUP_WHOS[i] || ''; supOpenCats = new Set(); renderSupplier(); }
 function renderSupplier() {
@@ -5120,6 +5209,17 @@ function renderSupplier() {
     if (!row) { row = { ...r, cat: m[1], routes: {} }; byKey.set(key, row); merged.push(row); }
     row.routes[/ימי/.test(m[2]) ? 'sea' : 'air'] = r;
   }
+  // One row per item, the newest quote (2026-11-16, Daniel: "אני רוצה שיש את העלות המעודכנת האחרונה, שזה לא העלות
+  // שלפני שנתיים"). An item listed twice (two suppliers, or an old quote kept beside a new one) shows its newest; the
+  // older ones are its history in the detail. Newest is supplierQuoteFor's order, the one the costs are read by.
+  const byItem = new Map();
+  for (const r of merged) { const k = supItemKey(r); if (!byItem.has(k)) byItem.set(k, []); byItem.get(k).push(r); }
+  for (const list of byItem.values()) {
+    list.sort(supNewestFirst);
+    list[0].older = list.slice(1);
+  }
+  merged.splice(0, merged.length, ...merged.filter((r) => byItem.get(supItemKey(r))[0] === r));
+  SUP_SHOWN = [];
   SUP_WHOS = [...new Set(merged.map((r) => r.who))];
   if (SUP_WHO && !SUP_WHOS.includes(SUP_WHO)) SUP_WHO = '';
   const wc = document.getElementById('supWhoChips');
@@ -5156,8 +5256,8 @@ function renderSupplier() {
             `<span class="sup-rt on">${ic} ${fmtIls(supplierIls(r.routes[rt], true, true))}</span>`).join(' ')
         : `<span class="sup-rt on">${fmtIls(supplierIls(r, true, true))}</span>`;
       const del = r.custom ? `<span onclick="event.stopPropagation();removeSupplierRow(${r.idx})" style="color:#ef4444;cursor:pointer;">🗑️</span>` : '';
-      html += `<div class="sup-line"><div><div>${r.name}${r.custom ? ' <span class="sup-src">(שלי)</span>' : ''}</div>${src}</div>
-        <div class="sup-price">${price}${del}</div></div>`;
+      html += `<div class="sup-line" data-sup-line onclick="openSupDetail(${SUP_SHOWN.push(r) - 1})"><div><div>${r.name}${r.custom ? ' <span class="sup-src">(שלי)</span>' : ''}</div>${src}</div>
+        <div class="sup-price">${price}${del}<span class="sup-more">ⓘ</span></div></div>`;
     });
   });
   el.innerHTML = html;
@@ -5300,7 +5400,9 @@ function saveSupplierRow() {
   if (!who || !name) { alert('הזן לפחות ספק ושם פריט'); return; }
   if (isNaN(usd) && isNaN(ils)) { alert('הזן מחיר — בדולר או בשקלים'); return; }
   const list = Store.get('supplier_costs') || [];
-  const row = { who, cat: cat || who, name };
+  // Its day goes with it (2026-11-16): the newest price of an item is the one shown and costed, and a row with
+  // no day loses to every dated quote.
+  const row = { who, cat: cat || who, name, on: new Date().toISOString().slice(0, 10), src: 'הוספת בעצמך' };
   if (!isNaN(usd)) row.usd = usd; else row.ils = ils;
   list.push(row);
   Store.set('supplier_costs', list);
