@@ -2885,7 +2885,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v561';
+const HUB_BUILD = 'v562';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -6455,7 +6455,10 @@ const SHALLOW_CELLS = [
 // CLASSIC margin, 25P at the ADVANCED one — at 6/8/10/12 cells in parallel. The PRICE is set
 // on the sea cost so it does not jump with the route; the COST shown follows the route.
 const SHALLOW_LADDER = [1, 2, 3, 4, 5, 6, 8, 10, 12];   // cells in parallel: every rung up to 6P, then the even ones
-const SHALLOW_OLD_FROM = 6;                              // the rungs the list had before 2026-11-15, priced as they were
+// From which rung up a row is priced on the margin of the voltage's 21700 row instead of the 21700 list's price: none
+// since 2026-11-16 (Daniel, shown that the 18650 rows from 6P up stood ₪200-700 under the 21700 list at the same
+// capacity: "ליישר למחיר CLASSIC"). 6P from 2026-11-15, every rung before. An object, so a test can put it back.
+const SHALLOW_MARGIN_FROM = { P: Infinity };
 const SHALLOW_MIN_MARGIN = 0.30;                         // the site's floor for a pack (MARKET_MIN_MARGIN in margins.mjs)
 function shallowCatalogRows() {
   const out = [];
@@ -6473,10 +6476,11 @@ function shallowCatalogRows() {
       if (!ref) continue;
       // The ladder starts at one cell in parallel, the least a pack can be (Daniel, 2026-11-15: "כל סוללה בכל וולט
       // יתחיל מהמינימום הקיבולת האפשרית ... 36 וולט ... יתחיל מ-2.6 אמפר ... גם בפרטי, גם בעסקי"). It started at 6P.
-      // From 6P up a row is priced as before, on the margin of this voltage's 21700 row. On that margin a 72V
-      // 2.6Ah came out dearer than the 21700 list's 72V 5Ah, so the rungs under 6P take what the 21700 list of
-      // the same voltage and series asks for that capacity (one price a Wh), never under 30% on their own cost,
-      // and each at least ₪50 under the rung above it.
+      // Every rung takes what the 21700 list of the same voltage and series asks for that capacity (one price a Wh, as
+      // the market prices a pack), never under 30% on its own cost, and each at least ₪50 under the rung above it.
+      // Under the list's first capacity (2.6Ah against 5Ah) the floor; over its last, the margin of this voltage's
+      // 21700 row. On that margin alone (until 2026-11-16 from 6P up) a 72V 2.6Ah came out dearer than a 72V 5Ah,
+      // and a 48V 26Ah ₪200-700 under the 21700 list's 25Ah.
       const list = PRICING.filter((x) => x && !x.cell18650 && typeof x.retail === 'number' && /^סוללות קורקינטים, /.test(x.cat || '') && x.cat.endsWith(' - ' + V + 'V ' + sc.tier))
         .map((x) => ({ ah: parseFloat((String(x.name).match(/([\d.]+)Ah/) || [])[1]), p: x.retail })).filter((x) => x.ah > 0).sort((x, y) => x.ah - y.ah);
       const listAt = (ah) => {
@@ -6490,10 +6494,12 @@ function shallowCatalogRows() {
         const cost = estimateBatteryCost({ name, cat: 'סוללות · סדרת ' + sc.tier }, false, { price: routeCellCostOn(code, 'sea'), ah: cd.ah });
         if (cost == null) continue;
         const floor = Math.ceil(cost / (1 - SHALLOW_MIN_MARGIN) / 50) * 50, at = listAt(Ah);
-        const retail = P >= SHALLOW_OLD_FROM ? Math.round(cost / (1 - ref.margin) / 50) * 50 : Math.max(floor, at == null ? 0 : Math.round(at / 50) * 50);
+        const onMargin = Math.round(cost / (1 - ref.margin) / 50) * 50;
+        const retail = P >= SHALLOW_MARGIN_FROM.P ? onMargin
+          : at != null ? Math.max(floor, Math.round(at / 50) * 50) : list.length && Ah < list[0].ah ? floor : Math.max(floor, onMargin);
         rungs.push({ P, name, cost, floor, retail });
       }
-      for (let i = rungs.length - 2; i >= 0; i--) if (rungs[i].P < SHALLOW_OLD_FROM) rungs[i].retail = Math.max(rungs[i].floor, Math.min(rungs[i].retail, rungs[i + 1].retail - 50));
+      for (let i = rungs.length - 2; i >= 0; i--) if (rungs[i].P < SHALLOW_MARGIN_FROM.P) rungs[i].retail = Math.max(rungs[i].floor, Math.min(rungs[i].retail, rungs[i + 1].retail - 50));
       for (const r of rungs) {
         // a business: the series' discount, never under 20% on the pack's cost (b2b-rates' floor), never over the price
         const b2b = Math.min(r.retail, Math.max(Math.round(r.retail * RATE[sc.tier] / 10) * 10, Math.ceil(r.cost / (1 - 0.20) / 10) * 10));
