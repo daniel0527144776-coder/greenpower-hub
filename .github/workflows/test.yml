@@ -327,6 +327,11 @@ jobs:
       - name: Contacts in the customer picker
         run: node test/test-contact-pick.mjs
 
+      # PRO's cell (6Ah since 2026-11-12) is in the repair, the dimensions and the vehicle calculators, which went on
+      # sizing a PRO pack on the 5Ah cell the series was before (2026-11-15).
+      - name: PRO's cell in every calculator
+        run: node test/test-pro-cell.mjs
+
       # The daily backup in the cloud (2026-10-06): bk_<weekday>, packed, once a day, never pulled; the
       # reminder only after a week without it; a restore that adds what is missing, and gives back a count
       # only when ticked (2026-10-29).
