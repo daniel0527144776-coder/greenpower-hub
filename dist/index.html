@@ -2885,7 +2885,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v559';
+const HUB_BUILD = 'v561';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -17410,9 +17410,30 @@ const BIDI = (() => {
   const HEB = /[֐-׿יִ-ﭏ]/;
   const LATIN = /[A-Za-zÀ-ÖØ-öø-ɏ]/;
   const STRONG = /[A-Za-z0-9À-ÖØ-öø-ɏ₪$€%°]/;
-  // "@" keeps an email whole; "·" separates items and is not joined over (2026-11-05, the site's bidi.ts: a phone
-  // glued to the email after it printed split around the "@")
-  const JOIN = /[  .,:;/×\-–—+()~≈±|'"_#&*=<>@]/;
+  // "@" keeps an email whole. A list inside a run is laid out item by item (2026-11-16, Daniel: "שאין היפוך בין האותיות
+  // למספרים"): "(60A) / 25C", "DALY 60A, 100A", "72V · 36Ah" were one left-to-right unit, read last item first. Each item
+  // is its own isolate, and the separator between two takes the line's direction. The site's bidi.ts, line for line;
+  // the tools repo's test-bidi-same holds the two to the same output.
+  const JOIN = /[  .,:;/×\-–—+()~≈±|'"_#&*=<>@·]/;
+  const SEP = /\s+\/\s+|\s*\|\s*|\s*·\s*|,\s+|\s+[–—]\s+/y;
+  function splitItems(run) {
+    const out = [];
+    let depth = 0, last = 0;
+    for (let k = 0; k < run.length; k++) {
+      const c = run[k];
+      if (c === '(') depth++;
+      else if (c === ')') depth = Math.max(0, depth - 1);
+      if (depth || k === last) continue;
+      SEP.lastIndex = k;
+      const m = SEP.exec(run);
+      if (!m || !m[0]) continue;
+      out.push(run.slice(last, k), m[0]);
+      k += m[0].length - 1;
+      last = k + 1;
+    }
+    out.push(run.slice(last));
+    return out;
+  }
   function trimRun(s, start, end) {
     let e = end;
     while (e > start && !STRONG.test(s[e - 1])) e--;
@@ -17440,6 +17461,14 @@ const BIDI = (() => {
       if (e <= st) { out += ch; i++; continue; }
       const run = s.slice(st, e);
       out += s.slice(i, st);
+      const inner = /^\((.*)\)$/.test(run) && splitItems(run.slice(1, -1)).length > 1 ? run.slice(1, -1) : null;
+      const items = splitItems(inner != null ? inner : run);
+      if (items.length > 1) {
+        const list = items.map((x, n) => (n % 2 || !STRONG.test(x) ? x : LRI + x + PDI)).join('');
+        out += inner != null ? '(' + list + ')' : list;
+        i = e;
+        continue;
+      }
       const signed = /^[~+±≈]/.test(run) || /\+$/.test(run);
       const mixed = signed || ((LATIN.test(run) || run.includes('×')) && /[^A-Za-z0-9À-ÖØ-öø-ɏ₪$€%°.,:]/.test(run));
       out += mixed ? LRI + run + PDI : run;
