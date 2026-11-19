@@ -240,6 +240,15 @@ jobs:
       - name: The price message for a customer
         run: node test/test-price-message.mjs
 
+      # Batteries waiting to be collected (2026-11-19): every ready job, the longest wait first, counted from the
+      # ready message; after a month the second notice, which says the battery is destroyed if not collected.
+      - name: Batteries waiting to be collected
+        run: node test/test-pickup-waiting.mjs
+
+      # The QR on every sticker opens the warranty page (2026-11-19), not the home page.
+      - name: The sticker QR opens the warranty page
+        run: node test/test-sticker-qr.mjs
+
       # The 💬 on a repair or a sale (2026-10-06): the message for where the job stands, sent through
       # the bot only when he presses send; the repair's own warranty; copyable when the bot is down.
       - name: The customer message through the bot

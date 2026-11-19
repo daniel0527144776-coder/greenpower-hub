@@ -1587,7 +1587,8 @@
                 const newSku = generateSku(voltage, totalCapacity, cellCode);
                 document.getElementById('sku-value').innerText = newSku;
                 
-                const warrantyUrl = "https://energylabgreen.com/?mode=warranty";
+                // the warranty page itself (2026-11-19): "/?mode=warranty" opened the home page, which the site ignored the query on
+                const warrantyUrl = "https://energylabgreen.com/warranty";
                 qrDataInput.value = warrantyUrl;
                 renderQR(warrantyUrl);
 
