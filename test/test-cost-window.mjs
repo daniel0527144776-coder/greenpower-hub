@@ -13,8 +13,8 @@
 // parts are under "פירוט", closed until tapped. A warning (a board that fits nothing) is not an explanation.
 // The supplier quotes here are made up ($20); this repo is public.
 //
-// --selftest strips the 18650 row's own cell before costing it, drops the resale breakdown, and puts the
-// dates back into a battery's window, open.
+// --selftest strips the 18650 row's own cell before costing it, drops the resale breakdown, puts the
+// dates back into a battery's window, open, and a spec line back under a price-list row's name.
 import { chromium } from 'playwright';
 import http from 'http';
 import fs from 'fs';
@@ -121,6 +121,45 @@ const rows = await page.evaluate((SELF) => {
   return { n: rs.length, said: rs.filter((r) => /^(פרטי|עסקי)$/.test(((r.children[1] || {}).textContent || '').trim())).length };
 }, SELFTEST);
 check('a price-list row does not repeat "פרטי" / "עסקי" beside its price', rows.n > 100 && rows.said === 0, rows);
+
+// A row is its name and its price; the rest is in the window a tap opens (2026-11-18, Daniel: "אני רוצה שהשורות יציגו
+// ... בלי הפירוט שיש מתחת ... שהפירוט הזה יהיה רק שאני לוחץ"). He also had "פתח הכל / סגור הכל", "הצג עלות לי ורווח"
+// and the Sur-Ron link taken off ("שעלות ורווח יהיה לי כבר נמצא בתוך הדף"), and the PDFs moved to a tab of their own.
+// The supplier costs the same way: a row is the item and its cost, where the price came from is in its window.
+const bare = await page.evaluate((SELF) => {
+  Store.set('supplier_prices', [{ who: 'ספק א', cat: 'מטענים אלומיניום', name: '72V 5A XLR', usd: 20, on: '2026-09-30', src: 'חשבונית' }]);
+  navigateTo('catalog'); catExpandAll(true);
+  const rs = [...document.querySelectorAll('#catalogList .price-item')];
+  if (SELF && rs[0]) rs[0].querySelector('.price-item-name').insertAdjacentHTML('beforeend', '<div>1,440Wh · EVE 50E</div>');
+  const under = rs.filter((r) => r.querySelector('.price-item-name *')).length;
+  const page = document.getElementById('page-catalog');
+  const gone = {
+    expandAll: page.querySelectorAll('[onclick^="catExpandAll"]').length,
+    costToggle: !!document.getElementById('costToggle'),
+    surron: page.querySelectorAll('[onclick*="Surron"]').length,
+    pdf: page.querySelectorAll('[onclick^="sendPricePdf"]').length,
+  };
+  const bike = PRICING.findIndex((it) => /^סוללות אופניים/.test(it.cat) && /20Ah/.test(it.name));
+  document.querySelector(`.price-item[onclick="openCostEditor(${bike})"]`).click();
+  const m = document.querySelector('.modal');
+  const win = { spec: !!document.querySelector('#costSpec bdi'), profit: (document.getElementById('costProfit') || {}).innerText || '', text: m ? m.innerText : '' };
+  closeModal();
+  navigateTo('supplier');
+  [...document.querySelectorAll('#supplierList .sup-cat')].forEach((c) => c.click());
+  const line = document.querySelector('#supplierList [data-sup-line]');
+  const supUnder = line ? (line.innerText.includes('חשבונית') ? 1 : 0) + line.querySelectorAll(':scope > div:first-child div').length : -1;
+  if (line) line.click();
+  const supWin = (document.querySelector('.modal') || {}).innerText || '';
+  closeModal();
+  return { n: rs.length, under, gone, win, supUnder, supWin };
+}, SELFTEST);
+check('a price-list row is its name and its price, nothing under the name', bare.n > 100 && bare.under === 0, { n: bare.n, under: bare.under });
+check('no "פתח הכל / סגור הכל", no "הצג עלות לי ורווח", no Sur-Ron link and no PDF on the price list',
+  bare.gone.expandAll === 0 && !bare.gone.costToggle && bare.gone.surron === 0 && bare.gone.pdf === 0, bare.gone);
+check('the window a battery row opens has its spec line, its cost and each price with its profit',
+  bare.win.spec && /פרטי/.test(bare.win.profit) && /עסקי/.test(bare.win.profit) && /%/.test(bare.win.profit), bare.win);
+check('a supplier row is the item and its cost; where the price came from is in its window',
+  bare.supUnder === 0 && /חשבונית/.test(bare.supWin), { supUnder: bare.supUnder, supWin: bare.supWin.slice(0, 200) });
 
 // The rest of the hub (2026-10-30): the open quotes say their sum, the income window warns in one line, and
 // the import windows say what to pick; none of them explains the rule behind it any more.

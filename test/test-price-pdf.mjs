@@ -1,4 +1,5 @@
-// The two price lists and the Sur-Ron booklet as PDF from the price-list page (2026-10-30).
+// The two price lists as PDF from the hub (2026-10-30), on a tab of their own beside the price list since 2026-11-18
+// (Daniel: "המחירוני PDF, תעביר אותם לטאב בנפרד").
 //
 //   node test/test-price-pdf.mjs
 //   node test/test-price-pdf.mjs --selftest     (the phone handled like a computer: it opens the address)
@@ -66,18 +67,28 @@ async function open(phone, bot) {
 const notice = (page) => page.evaluate(() => { const n = document.getElementById('noticeBackdrop'); return n && getComputedStyle(n).display !== 'none' ? n.innerText : ''; });
 const press = async (page, kind) => {
   await page.evaluate(() => { try { closeNotice(); } catch (e) {} });
-  await page.evaluate((k) => document.querySelector(`#page-catalog button[onclick="sendPricePdf('${k}')"]`).click(), kind);
+  await page.evaluate((k) => document.querySelector(`#page-pricepdf button[onclick="sendPricePdf('${k}')"]`).click(), kind);
   await page.waitForTimeout(400);
 };
 
-// ---- the buttons are on the price-list page ----
+// ---- the buttons are on their own tab, beside the price list ----
 const bot = { posts: [], up: true };
 const phone = await open(true, bot);
-check('the price-list page has a button for each PDF', await phone.evaluate(() => ['retail', 'b2b'].every((k) =>
-  !!document.querySelector(`#page-catalog button[onclick="sendPricePdf('${k}')"]`))), '');
-// the Sur-Ron booklet went on 2026-11-12 (Daniel: "בלי חוברת PDF"): its button with it, and the link to /surron in its place
-check('and no button for the Sur-Ron booklet, which went', await phone.evaluate(() => !document.querySelector("#page-catalog button[onclick=\"sendPricePdf('surron')\"]")
-  && typeof PRICE_PDFS === 'object' && !('surron' in PRICE_PDFS) && !!document.querySelector('#page-catalog button[onclick="copySurronLink()"]')), '');
+const tab = await phone.evaluate(() => {
+  navigateTo('pricepdf');
+  const strip = [...document.querySelectorAll('.page-group-tabs [onclick]')].map((e) => e.getAttribute('onclick'));
+  return { shown: document.getElementById('page-pricepdf').classList.contains('active'), strip,
+    onCatalog: document.querySelectorAll('#page-catalog button[onclick^="sendPricePdf"]').length };
+});
+check('the PDFs have a tab of their own, beside the price list and the supplier costs',
+  tab.shown && ['catalog', 'supplier', 'pricepdf'].every((p) => tab.strip.some((o) => o.includes(`'${p}'`))), tab);
+check('with a button for each PDF', await phone.evaluate(() => ['retail', 'b2b'].every((k) =>
+  !!document.querySelector(`#page-pricepdf button[onclick="sendPricePdf('${k}')"]`))), '');
+check('and the price list no longer carries them', tab.onCatalog === 0, tab);
+// the Sur-Ron booklet went on 2026-11-12 (Daniel: "בלי חוברת PDF"), and the button that copied a link to /surron on
+// 2026-11-18 ("והקישור לדף של הסורונים, גם כן תבטל אותו")
+check('no button for the Sur-Ron booklet, and none for a link to the Sur-Ron page', await phone.evaluate(() => !document.querySelector("button[onclick=\"sendPricePdf('surron')\"]")
+  && typeof PRICE_PDFS === 'object' && !('surron' in PRICE_PDFS) && !document.querySelector('button[onclick*="SurronLink"]') && typeof window.copySurronLink === 'undefined'), '');
 
 // ---- on the phone: the bot sends it to his WhatsApp ----
 await press(phone, 'retail');
@@ -91,7 +102,7 @@ check('and nothing is opened in place on the phone (it would show an empty page)
 // two taps in a row, the bot slow to answer: one file
 bot.delay = 600;
 const before = bot.posts.length;
-await phone.evaluate(() => { closeNotice(); const b = document.querySelector("#page-catalog button[onclick=\"sendPricePdf('b2b')\"]"); b.click(); b.click(); });
+await phone.evaluate(() => { closeNotice(); const b = document.querySelector("#page-pricepdf button[onclick=\"sendPricePdf('b2b')\"]"); b.click(); b.click(); });
 await phone.waitForTimeout(1000);
 check('two quick taps send the file once', bot.posts.length === before + 1, bot.posts.length - before);
 await press(phone, 'b2b');

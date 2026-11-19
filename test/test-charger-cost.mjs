@@ -62,14 +62,15 @@ const R = await page.evaluate((SELF) => {
   };
 }, SELFTEST);
 
-const SHELF = ['מטען 36V 2A', 'מטען 48V 3A', 'מטען 60V 3A', 'מטען 60V 5A', 'מטען 72V 5A', 'מטען 60V 8A', 'מטען 72V 8A', 'מטען 72V 10A', 'מטען 72V 0-15A'];
-check('the hub sells the nine chargers on the shelf, and only those',
-  R.names.length === 9 && SHELF.every((n) => R.names.includes(n)), R.names);
-for (const n of SHELF.slice(1)) {
+const SHELF = ['מטען 24V 3A', 'מטען 36V 2A', 'מטען 48V 3A', 'מטען 60V 3A', 'מטען 60V 5A', 'מטען 72V 5A', 'מטען 60V 8A', 'מטען 72V 8A', 'מטען 72V 10A', 'מטען 72V 0-15A'];
+// ten since 2026-11-18: the 24V 3A, added at Daniel's word ("תוסיף למחירון מטען 24V"), with no quote yet
+check('the hub sells the ten chargers on the list, and only those',
+  R.names.length === 10 && SHELF.every((n) => R.names.includes(n)), R.names);
+for (const n of SHELF.slice(2)) {
   check(`${n} is costed from its quote, not ${'COST_PCT'}`, R.costs[n] === R.landed, { cost: R.costs[n], quote: R.landed, pct: R.pct[n] });
 }
 // The one with no quote on file says so by falling back, rather than borrowing another's.
-check('the 36V 2A, with no quote yet, keeps the share-of-price estimate', R.costs['מטען 36V 2A'] === R.pct['מטען 36V 2A'], R.costs['מטען 36V 2A']);
+check('the 36V 2A and the 24V 3A, with no quote yet, keep the share-of-price estimate', ['מטען 36V 2A', 'מטען 24V 3A'].every((n) => R.costs[n] === R.pct[n]), [R.costs['מטען 36V 2A'], R.costs['מטען 24V 3A']]);
 
 if (SELFTEST) console.log('\n[selftest] the charger entries were taken out of SUPPLIER_MATCH; the cost checks above must have gone red.');
 check('no page errors', errs.length === 0, errs);
