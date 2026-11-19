@@ -2891,7 +2891,7 @@ function openStickerEditor() {
 
 // Kept in step with dist/sw.js by tools/check-build-tag.mjs, which CI runs — two numbers
 // for one build is exactly the kind of pair that drifts and then lies to you.
-const HUB_BUILD = 'v566';
+const HUB_BUILD = 'v567';
 
 // The escape hatch when a deploy still has not arrived: drop every cache, unregister the
 // worker, and reload past it. The service worker is network-first for the document now, so
@@ -4544,7 +4544,9 @@ function repairMessage(j) {
   if (st === 'מוכן לאיסוף') {
     return [hi, pack + ' מוכנה לאיסוף ✅',
       '🔧 ' + jobTypeLabel(j) + (price ? '\n💰 לתשלום: ' + shek(price) + (Number(j.discount) ? ' (אחרי הנחה של ' + shek(j.discount) + ')' : '') : ''),
-      '📍 ' + (B.address || LAB_ADDRESS) + '\n🕐 ' + LAB_HOURS, sign].join('\n\n');
+      '📍 ' + (B.address || LAB_ADDRESS) + '\n🕐 ' + LAB_HOURS,
+      // 2026-11-19 (Daniel): a battery never collected. A month from this message, one more, then it is destroyed.
+      '⏳ לאסוף תוך חודש מההודעה הזאת. אם לא נאספה, נשלח הודעה נוספת לפני שנשמיד אותה בבטיחות.', sign].join('\n\n');
   }
   if (st === 'נמסר') {
     // the months recorded on the job, beside the end they make: the job types alone said 6 over
@@ -15607,7 +15609,7 @@ function soDelSup(id) {
 }
 function soEditShip(id) {
   const d = soGet(), s = (d.ships || []).find((x) => String(x.id) === String(id)) || { label: '', text: '' };
-  openModal(id ? '✏️ פרטי משלוח' : '➕ פרטי משלוח', `<div class="form-row"><label>שם (רק לך)</label><input class="form-input" id="soShipLabel" value="${soEsc(s.label)}" placeholder="אלעד / איחוד בסין"></div>
+  openModal(id ? '✏️ פרטי משלוח' : '➕ פרטי משלוח', `<div class="form-row"><label>שם (רק לך)</label><input class="form-input" id="soShipLabel" value="${soEsc(s.label)}" placeholder="המעבדה / איחוד בסין"></div>
     <div class="form-row"><label>הטקסט שיישלח</label><textarea class="form-input" id="soShipText" dir="ltr" rows="5" style="width:100%;">${soEsc(s.text)}</textarea></div>`,
     `<button class="btn btn-primary" onclick="soSaveShip(${id ? `decodeURIComponent('${encodeURIComponent(id)}')` : 'null'})">שמור</button>${id ? `<button class="btn btn-danger" onclick="soDelShip(decodeURIComponent('${encodeURIComponent(id)}'))">🗑 מחק</button>` : ''}<button class="btn btn-secondary" onclick="closeModal()">ביטול</button>`);
 }
