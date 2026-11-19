@@ -100,17 +100,19 @@ await open();   // the one-time reset does not run again
 const again = await page.evaluate(() => cellRoute());
 check('after a reload his choice stays — the reset to sea happens once', again === 'local', again);
 
-// ---- 3. the price list says which route it costs on, and offers no chips of its own
+// ---- 3. a battery's cost window says which route it costs on, and offers no chips of its own (the price list's
+// own line went with "הצג עלות לי ורווח" on 2026-11-18; the cost is in the window a row opens)
 const cat = await page.evaluate(() => {
   navigateTo('catalog');
-  if (!showCost) toggleCostView();
-  const box = document.getElementById('catRoute');
-  const r = { hidden: box.hidden, shown: (box.querySelector('[data-route-shown]') || {}).textContent || '', chips: box.querySelectorAll('.sup-chip[onclick*=setCellRoute]').length,
-    toSettings: !!box.querySelector('[onclick*=settings]') };
-  toggleCostView();
+  const i = PRICING.findIndex((it) => /^סוללות אופניים/.test(it.cat));
+  openCostEditor(i);
+  const box = document.getElementById('costRoute');
+  const r = { box: !!box, shown: box ? (box.querySelector('[data-route-shown]') || {}).textContent || '' : '', chips: box ? box.querySelectorAll('.sup-chip[onclick*=setCellRoute]').length : -1,
+    toSettings: !!(box && box.querySelector('[onclick*=settings]')) };
+  closeModal();
   return r;
 });
-check('with the cost shown, the price list names the route', !cat.hidden && /מקומי/.test(cat.shown), cat);
+check('a battery\'s cost window names the route', cat.box && /מקומי/.test(cat.shown), cat);
 check('…and sends a change to the settings instead of offering chips', cat.chips === 0 && cat.toSettings, cat);
 
 check('no page errors', errs.length === 0, errs);

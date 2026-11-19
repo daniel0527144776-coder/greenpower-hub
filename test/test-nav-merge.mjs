@@ -130,7 +130,8 @@ check('"🔧 תיקון חדש" on עבודות opens the repair calculator', aw
 
 // ---- the merged cards' tabs
 check('כלים טכניים: מידות · מחשבונים · אבחון', JSON.stringify(await strip('dims')) === JSON.stringify(['*📐 מידות', '🧰 מחשבונים', '🩺 אבחון']), await strip('dims'));
-check('מחירון: מחירי מכירה · עלויות ספקים', JSON.stringify(await strip('catalog')) === JSON.stringify(['*🏷️ מחירי מכירה', '🔒 עלויות ספקים']), await strip('catalog'));
+// the PDFs a tab of their own since 2026-11-18 ("המחירוני PDF, תעביר אותם לטאב בנפרד")
+check('מחירון: מחירי מכירה · עלויות ספקים · מחירונים PDF', JSON.stringify(await strip('catalog')) === JSON.stringify(['*🏷️ מחירי מכירה', '🔒 עלויות ספקים', '📄 מחירונים PDF']), await strip('catalog'));
 check('בוטים: וואטסאפ · מסחר', JSON.stringify(await strip('wabot')) === JSON.stringify(['*🤖 וואטסאפ', '📈 מסחר']), await strip('wabot'));
 check('מלאי no longer carries חסר להזמנה (v525, Daniel: "תוריד חסר במלאי")', await page.evaluate(() => { navigateTo('inventory'); return !document.querySelector('#page-inventory #needCard'); }), '');
 

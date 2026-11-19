@@ -167,9 +167,14 @@ check('one box a customer, the newest first: two questions together, and one alo
 check('what the bot is missing to answer everything is listed once, as text', boxes[1] && boxes[1].missing.length === 2 && boxes[1].missing[0].includes('<img src=x') && boxes[1].missing[1] === 'זמן אספקה' && await page.evaluate(() => window.__xss === undefined), boxes[1]);
 const draft = await page.evaluate(() => document.getElementById('wbAns1').value);
 check('the bot\'s draft waits in the box, as text, one answer for all his questions', draft === 'כן, יש מטען 84V. <img src=x onerror="window.__xss=1">\n\nהשזירה במחירון.' && await page.evaluate(() => window.__xss === undefined), draft);
-await page.evaluate(() => { document.getElementById('wbAns1').value = 'כן, יש במלאי'; waAnswer(1); });
+// "שהבוט ילמד" is not ticked until he ticks it (2026-11-18): ticked by default, answers to one customer were kept as
+// answers to everyone (his appointment, his name, an answer to a later message). --selftest ticks it from the start.
+if (SELFTEST) await page.evaluate(() => { document.getElementById('wbKeep1').checked = true; });
+const keepAtFirst = await page.evaluate(() => document.getElementById('wbKeep1').checked);
+check('"שהבוט ילמד" is not ticked until he ticks it', keepAtFirst === false, keepAtFirst);
+await page.evaluate(() => { document.getElementById('wbAns1').value = 'כן, יש במלאי'; document.getElementById('wbKeep1').checked = true; waAnswer(1); });
 p = await lastPost(3);
-check('answering a question sends it to the customer and teaches the bot', p && p.op === 'answer' && p.id === 'q1' && p.a === 'כן, יש במלאי' && p.send === true && p.keep === true, p);
+check('answering a question, ticked, sends it to the customer and teaches the bot', p && p.op === 'answer' && p.id === 'q1' && p.a === 'כן, יש במלאי' && p.send === true && p.keep === true, p);
 check('and one answer closes all of that customer\'s questions, not another\'s', p && Array.isArray(p.ids) && p.ids.join(',') === 'q1,q2', p && p.ids);
 
 // "נסח": his few words go to the bot with the customer's chat, and what it wrote comes back into the box — nothing sent

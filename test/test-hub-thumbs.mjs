@@ -182,19 +182,22 @@ console.log('4. the technical spec line');
   await p.evaluate(() => { catExpandAll(true); });
   await p.waitForSelector('.price-item-name', { timeout: 8000 });
 
+  // Since 2026-11-18 the line is in the window a row opens (the row is its name and price): 40 rows are opened.
   const r = await p.evaluate(() => {
-    const rows = [...document.querySelectorAll('.price-item-name')];
+    const rows = [...document.querySelectorAll('.price-item[onclick^="openCostEditor"]')];
     const cover = CATALOG.filter((x) => specOf(x)).length / CATALOG.length;
+    const opened = rows.filter((_, k) => k % Math.max(1, Math.floor(rows.length / 40)) === 0).slice(0, 40).map((el) => {
+      el.click(); const has = !!document.querySelector('.modal #costSpec'); closeModal(); return has; });
     return {
-      rows: rows.length,
-      withSpec: rows.filter((el) => el.querySelector('div')).length,
+      rows: opened.length,
+      withSpec: opened.filter(Boolean).length,
       cover,
       batt: specOf(CATALOG.find((x) => /סוללות אופניים/.test(x.cat))),
       ctrl: specOf(CATALOG.find((x) => x.name === 'ND72450')),
     };
   });
   check('most catalogue rows carry a spec', r.cover > (SELFTEST ? 1 : 0.9), Math.round(r.cover * 100) + '%');
-  check('the specs are rendered on the page, not merely computed', r.withSpec > 5, r.withSpec + ' of ' + r.rows);
+  check('the specs are rendered in a row\'s window, not merely computed', r.withSpec > 5, r.withSpec + ' of ' + r.rows);
 
   // Assert the PARTS are present rather than matching one exact layout, so reordering the
   // line does not fail a spec that is still correct.
@@ -211,13 +214,15 @@ console.log('4. the technical spec line');
   await p.evaluate(() => {
     const row = PRICING.find((x) => specOf(x));
     PRODUCT_SPECS[row.cat + '|' + row.name] = '<img src=x onerror="window.__pwned=1"> & 5 < 6';
-    renderCatalog();
+    openCostEditor(PRICING.indexOf(row));
   });
-  const injected = await p.evaluate(() => ({
-    img: document.querySelectorAll('.price-item-name img').length,
-    pwned: !!window.__pwned,
-    shown: document.body.innerText.includes('onerror'),
-  }));
+  await p.waitForTimeout(200);
+  const injected = await p.evaluate(() => {
+    const r = { img: document.querySelectorAll('.modal #costSpec img').length, pwned: !!window.__pwned,
+      shown: ((document.querySelector('.modal') || {}).innerText || '').includes('onerror') };
+    closeModal();
+    return r;
+  });
   check('markup in a spec is escaped, not executed',
     injected.img === 0 && !injected.pwned && injected.shown, JSON.stringify(injected));
 

@@ -127,19 +127,24 @@ const pro = await page.evaluate((i) => {
 check('PRO on the local route: no local 60Q, so the sea price, said in words', pro.route === 'sea' && /אין מחיר/.test(pro.text) && /× ₪12\.12/.test(pro.text), pro);
 
 // ---- 3. the spec line: fields in reading order, none broken across lines
+// Since 2026-11-18 the line is in the window the row opens (the row is its name and price).
 const spec = await page.evaluate((i) => {
   navigateTo('catalog');
   catExpandAll(true);
   const row = document.querySelector(`.price-item[onclick="openCostEditor(${i})"]`);
   if (!row) return { missing: true };
-  const f = [...row.querySelectorAll('.price-item-name bdi')];
+  row.click();
+  const box = document.getElementById('costSpec');
+  const f = box ? [...box.querySelectorAll('bdi')] : [];
   const eve = f.find((b) => b.textContent.trim() === 'EVE 50E');
   const xs = f.map((b) => b.getBoundingClientRect());
   // right-to-left reading: the first field sits furthest right on the first line
   const firstLineTop = xs.length ? xs[0].top : 0;
   const sameLine = xs.filter((r) => Math.abs(r.top - firstLineTop) < 2);
   const ordered = sameLine.every((r, k) => k === 0 || r.right <= sameLine[k - 1].left + 1);
-  return { n: f.length, first: f[0]?.textContent, all: f.map((b) => b.textContent.trim()), eveLines: eve ? eve.getClientRects().length : -1, nowrap: eve ? getComputedStyle(eve).whiteSpace : '', ordered, lines: new Set(xs.map((r) => Math.round(r.top))).size };
+  const out = { n: f.length, first: f[0]?.textContent, all: f.map((b) => b.textContent.trim()), eveLines: eve ? eve.getClientRects().length : -1, nowrap: eve ? getComputedStyle(eve).whiteSpace : '', ordered, lines: new Set(xs.map((r) => Math.round(r.top))).size };
+  closeModal();
+  return out;
 }, CLASSIC);
 check('the 88V 20Ah row is on the page', !spec.missing, spec);
 // 2026-10-30, "דברים כפולים": the row is named "88V 20Ah", so its line does not say 88V and 20Ah again; it starts at the Wh.

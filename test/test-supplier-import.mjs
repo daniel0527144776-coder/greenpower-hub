@@ -239,18 +239,19 @@ console.log('5. every mapped catalogue name still exists');
     // ומקומי בהגדרות"); the full price list SAYS which route it costs on, beside the cost it moves.
     const setChips = document.querySelectorAll('#setCellRouteBox .sup-chip').length;
     navigateTo('catalog');
-    if (window.__SELF) window.renderCatRoute = () => {};
-    if (!showCost) toggleCostView();
-    const box = document.getElementById('catRoute');
-    const chips = box && !box.hidden ? box.querySelectorAll('.sup-chip[onclick*=setCellRoute]').length : -1;
-    const firstCost = () => { const e = [...document.querySelectorAll('#catalogList .price-item-name div')].find((d) => /עלות ~/.test(d.textContent)); return e ? e.textContent : ''; };
-    catExpandAll(true);
-    setCellRoute('sea'); const seaLine = firstCost();
-    setCellRoute('air'); const airLine = firstCost();
-    const onChip = (document.querySelector('#catRoute [data-route-shown]') || {}).textContent || '';
+    if (window.__SELF) window.costRouteHtml = () => '';
+    // The cost is in the window a row opens since 2026-11-18 (the row is its name and price).
+    const bike = PRICING.findIndex((it) => /^סוללות אופניים.*CLASSIC/.test(it.cat));   // the 50E, which the test gives an air price
+    const inWindow = () => { openCostEditor(bike); const r = { cost: (document.getElementById('costInput') || {}).value || '',
+      box: document.getElementById('costRoute') }; r.chips = r.box ? r.box.querySelectorAll('.sup-chip[onclick*=setCellRoute]').length : -1;
+      r.shown = r.box ? (r.box.querySelector('[data-route-shown]') || {}).textContent || '' : ''; closeModal(); return r; };
+    setCellRoute('sea'); const sea = inWindow();
+    setCellRoute('air'); const air = inWindow();
+    const seaLine = sea.cost, airLine = air.cost, chips = air.chips, onChip = air.shown;
     const onSetting = (document.querySelector('#setCellRouteBox .sup-chip.on') || {}).textContent || '';
-    setCellRoute('sea'); toggleCostView();
-    const hiddenOff = !!(document.getElementById('catRoute') || {}).hidden;
+    setCellRoute('sea');
+    catExpandAll(true);
+    const hiddenOff = document.querySelectorAll('#catalogList .price-item-name div').length === 0;
     return { out, lines, both, supChips, setChips, chips, seaLine, airLine, onChip, onSetting, hiddenOff, calcRows: supplierRows().filter((r) => r.who === 'מחשבון תיקונים').length };
   });
   check('each route gives its own cell cost', rt.out.sea.cell === 5.83 && rt.out.air.cell === 9.2 && rt.out.local.cell === 13.9, rt.out);
@@ -259,9 +260,9 @@ console.log('5. every mapped catalogue name still exists');
   check('a cell with a sea and an air price is ONE row showing both', rt.lines === 1 && /5\.83/.test(rt.both) && /9\.2/.test(rt.both), rt);
   check('the supplier page no longer carries the route choice', rt.supChips === 0, rt.supChips);
   check('the settings carry the three routes, the chosen one lit', rt.setChips === 3 && /אווירי/.test(rt.onSetting), rt);
-  check('the price list names the route it costs on, with no chips of its own', rt.chips === 0 && /אווירי/.test(rt.onChip), rt);
-  check('and a change of route moves the cost shown on a battery', !!rt.seaLine && rt.seaLine !== rt.airLine, [rt.seaLine, rt.airLine]);
-  check('the choice hides again with the cost view', rt.hiddenOff === true, rt.hiddenOff);
+  check('a battery\'s cost window names the route it costs on, with no chips of its own', rt.chips === 0 && /אווירי/.test(rt.onChip), rt);
+  check('and a change of route moves the cost in that window', !!rt.seaLine && rt.seaLine !== rt.airLine, [rt.seaLine, rt.airLine]);
+  check('a price-list row carries no line under its name', rt.hiddenOff === true, rt.hiddenOff);
   check('the repair calculator is no longer listed as a supplier', rt.calcRows === 0, rt);
 }
 
